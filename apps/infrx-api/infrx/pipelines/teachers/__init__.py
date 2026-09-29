@@ -9,7 +9,8 @@ boundaries never move with the rights, so a sample that already left is never se
 Each chunk's worst case is priced at the rate effective at `now` (an upper bound); without an
 approved rate the plan is still a plan, just unpriced. The plan also lists the samples the
 provider may not **currently** send to an external model and train on (`external_judging` and
-`training`, read at every call like N2's exports): a live run skips them.
+`training`, read at every call through N3's `lineage.permitted` like N2's exports, so a
+re-grant never resurrects a tombstoned sample - R193): a live run skips them.
 
 **Live runs are J2's protocol, not a second one** (`judge.submit`): the same live-mode switch
 (R57), the provider's own named PROVIDER_USD payer, one D6J reservation per chunk against its
@@ -42,6 +43,7 @@ from ...contracts import errors
 from ...contracts.limits import MAX_FEEDBACK_TEXT_CHARS, PilotSettings
 from ...contracts.v2.money_units import ProviderUsd
 from ...contracts.v2.records import ProviderCapability
+from ...datasets.lineage import permitted
 from ...datasets.imports import sample_key
 from ...judge.cost import JUDGE_MODE_LIVE, RateTable, TokenCeilings, worst_case
 from ...judge.dryrun import DEFAULT_CEILINGS, MAX_CANDIDATES
@@ -108,23 +110,23 @@ class Collected:
     failures: tuple[tuple[str, str], ...] = ()
 
 
-async def _allowed(batch: TeacherBatch, store) -> set[str]:
+async def _allowed(batch: TeacherBatch, store, objects, now: datetime) -> set[str]:
     allowed = None
     for purpose in PURPOSES:
-        ids = set(await store.accessible_samples(batch.dataset_ref,
-                                                 provider_org_id=batch.provider_org_id,
-                                                 purpose=purpose))
+        ids = await permitted(store, objects, batch.dataset_ref, now=now,
+                              provider_org_id=batch.provider_org_id, purpose=purpose)
         allowed = ids if allowed is None else allowed & ids
     return allowed
 
 
-async def plan(batch: TeacherBatch, *, store, rates: RateTable, now: datetime) -> Plan:
+async def plan(batch: TeacherBatch, *, store, objects, rates: RateTable,
+               now: datetime) -> Plan:
     """P2.a: the dry run. Reads the version and the current rights; prices when it can."""
     if not 1 <= batch.chunk_size <= MAX_CANDIDATES:
         raise errors.InvalidRequest(f"a chunk is 1..{MAX_CANDIDATES} samples")
     manifest = await store.resolve(batch.dataset_ref, provider_org_id=batch.provider_org_id)
     holdout = set(manifest.splits.holdout)
-    allowed = await _allowed(batch, store)
+    allowed = await _allowed(batch, store, objects, now)
     kept, omitted = [], []
     for sample_id in sorted(s.sample_id for s in manifest.samples):
         if sample_id in holdout:
@@ -162,14 +164,16 @@ async def run_batch(batch: TeacherBatch, *, wiring: TeacherWiring) -> BatchRepor
     await _member(batch, wiring.members)
     ledger = wiring.ledger
     now = await ledger.db_now()
-    planned = await plan(batch, store=wiring.store, rates=wiring.rates, now=now)
+    planned = await plan(batch, store=wiring.store, objects=wiring.objects, rates=wiring.rates,
+                         now=now)
     rate = wiring.rates.rate_for(batch.teacher_model, now)
     if rate is None:
         raise errors.BudgetExceeded(f"{batch.teacher_model} has no approved rate: nothing reserved")
     runs: list[LedgerRun] = []
 
     async def recheck(ids) -> None:
-        if not set(ids) <= await _allowed(batch, wiring.store):
+        if not set(ids) <= await _allowed(batch, wiring.store, wiring.objects,
+                                          await ledger.db_now()):
             raise errors.Forbidden("a sample of this chunk may no longer leave")
 
     for n, (run_id, ids) in enumerate(planned.chunks):
@@ -190,7 +194,8 @@ async def run_batch(batch: TeacherBatch, *, wiring: TeacherWiring) -> BatchRepor
         if not mine:
             runs.append(run)      # another call holds (or held) this chunk's intent
             continue
-        items, allowed = [], await _allowed(batch, wiring.store)
+        items, allowed = [], await _allowed(batch, wiring.store, wiring.objects,
+                                            await ledger.db_now())
         for sample in await _samples(batch, wiring.store, run.sample_ids):
             if sample.sample_id not in allowed:
                 continue          # skipped before egress, like J2's missing content
@@ -248,7 +253,8 @@ async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) ->
         return Collected(run)
     run = await _run(ledger, run_id, "submitted")
     polled = await wiring.provider.results(run.external_id)
-    allowed = await _allowed(batch, wiring.store)
+    now = await ledger.db_now()
+    allowed = await _allowed(batch, wiring.store, wiring.objects, now)
     rows, failures, seen = [], [], set()
     for sample_id, text in polled.items:
         if sample_id not in run.sent_ids:
@@ -276,7 +282,7 @@ async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) ->
         await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
     imported = None
     if rows:
-        imported = await wiring.labels(wiring.store, wiring.log,
+        imported = await wiring.labels(wiring.store, wiring.log, objects=wiring.objects, now=now,
                                        provider_org_id=batch.provider_org_id,
                                        actor=batch.requested_by, dataset_ref=batch.dataset_ref,
                                        rubric_ref=batch.rubric_ref, rows=rows)

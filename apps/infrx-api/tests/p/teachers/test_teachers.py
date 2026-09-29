@@ -20,6 +20,7 @@ from infrx.contracts import errors
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.tasklocal import local_services
 from infrx.contracts.v2.money_units import ProviderUsd
+from infrx.datasets import lineage
 from infrx.judge import StaticRateTable, TokenCeilings, worst_case
 from infrx.judge.submit import HttpJudgeProvider, reconcile
 from infrx.pipelines.teachers import (TeacherBatch, TeacherWiring, collect, parse_label, plan,
@@ -84,15 +85,28 @@ class Case:
         return asyncio.run(collect(self.batch, run_id, wiring=self.wiring))
 
     def run_ids(self):
-        return [run_id for run_id, _ in asyncio.run(plan(self.batch, store=self.store,
-                                                         rates=j1.TEST_RATES,
-                                                         now=j2.T0)).chunks]
+        return [run_id for run_id, _ in self.plan().chunks]
+
+    def plan(self, rates=j1.TEST_RATES):
+        return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+
+    def tombstone_regranted(self, *ids):
+        """E7L i04's re-grant (0-E7L-1, R193): revoked, tombstoned by N3, granted again -
+        D7 reads `ids` again, N3's gate never does."""
+        self.store.revoke(*ids)
+        for s in ids:
+            asyncio.run(lineage._stone(self.objects, self.w.A, {
+                "sample_id": s, "grantor_org_id": self.w.A, "request_id": s},
+                "grant_not_current", j2.T0))
+        for purpose in fakes.PURPOSES:
+            self.store.allowed[purpose] |= set(ids)
 
 
 # --- P2.a: the manifest and its dry run ---------------------------------------------------------
 def test_p2__a_dry_run_plans_and_prices_without_a_rate_or_egress():
     case = Case()
-    priced = asyncio.run(plan(case.batch, store=case.store, rates=j1.TEST_RATES, now=j2.T0))
+    priced = case.plan()
     assert [ids for _, ids in priced.chunks] == [(sid(1), sid(2)), (sid(3), sid(4)),
                                                  (sid(5), sid(6))]
     assert len({run_id for run_id, _ in priced.chunks}) == 3
@@ -101,8 +115,7 @@ def test_p2__a_dry_run_plans_and_prices_without_a_rate_or_egress():
     assert priced.not_permitted == (sid(5),)
     assert priced.price_version == j1.TEST_RATE.price_version
     assert priced.worst_case == usd(2) + usd(2) + usd(2)
-    unpriced = asyncio.run(plan(case.batch, store=case.store, rates=StaticRateTable(()),
-                                now=j2.T0))
+    unpriced = case.plan(StaticRateTable(()))
     assert unpriced.chunks == priced.chunks
     assert unpriced.worst_case is None and unpriced.price_version is None
     assert case.provider.calls == [] and case.ledger.runs == {}
@@ -183,6 +196,29 @@ def test_p2__a_revocation_between_the_check_and_egress_releases_the_chunk_and_st
     assert len(case.provider.calls) == 1 and third not in case.ledger.runs
     assert (second, "failed", "permission withdrawn before egress") in case.ledger.audit
     assert case.ledger.committed(case.payer) == usd(2)      # only the chunk that left is held
+
+
+def test_p2__a_regrant_never_sends_a_tombstoned_sample():
+    """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the plan
+    lists the sample as not permitted and no chunk carries it to the teacher."""
+    case = Case()
+    case.tombstone_regranted(sid(1))
+    assert case.plan().not_permitted == (sid(1), sid(5))
+    case.run()
+    assert [[i["sample_id"] for i in items] for _, items in case.provider.calls] == [
+        [sid(2)], [sid(3), sid(4)], [sid(6)]]
+
+
+def test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample():
+    """Oracle (R193): a sample tombstoned (and re-granted) after it left gets no label: its
+    result is a `grant_not_current` failure and only its neighbour imports."""
+    case = Case()
+    case.run()
+    case.tombstone_regranted(sid(1))
+    case.provider.outputs["batch-1"] = [(sid(1), '{"label": "a"}'), (sid(2), '{"label": "b"}')]
+    got = case.collect(case.run_ids()[0])
+    assert [row["sample_id"] for row in case.labels.calls[0]["rows"]] == [sid(2)]
+    assert got.failures == ((sid(1), "grant_not_current"),)
 
 
 def test_p2__a_sample_without_content_is_skipped_before_egress():

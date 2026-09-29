@@ -246,7 +246,8 @@ async def import_labels(x: LabPipelines, who, body: ImportBody) -> dict[str, Any
     asked = _digest(body.model_dump(mode="json"))
     stored = await objects.get(key)
     if stored is None:
-        done = await p1.import_labels(x.port("store"), x.port("log"), provider_org_id=provider,
+        done = await p1.import_labels(x.port("store"), x.port("log"), objects=objects,
+                                      now=await _now(x), provider_org_id=provider,
                                       actor=who.user_id, dataset_ref=body.dataset_ref,
                                       rubric_ref=body.rubric_ref, rows=_rows(body.rows))
         receipt = {"import_id": body.import_id, "dataset_ref": body.dataset_ref,
@@ -449,7 +450,7 @@ async def _teacher_batch(x: LabPipelines, provider: str, stored: dict) -> dict[s
     """The stored batch, its plan as of now and each chunk as P2's ledger records it."""
     wiring, batch = x.port("teachers"), _teacher(stored, provider, stored["requested_by"])
     now = await wiring.ledger.db_now()
-    planned = await p2.plan(batch, store=wiring.store, rates=wiring.rates, now=now)
+    planned = await p2.plan(batch, store=wiring.store, objects=wiring.objects, rates=wiring.rates, now=now)
     rate = wiring.rates.rate_for(batch.teacher_model, now)
     chunks = []
     for run_id, ids in planned.chunks:
@@ -509,7 +510,7 @@ async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any
     wiring, stored = x.port("teachers"), json.loads(found)
     batch = _teacher(stored, provider, who.user_id)
     now = await wiring.ledger.db_now()
-    ceiling = (await p2.plan(batch, store=wiring.store, rates=wiring.rates, now=now)).worst_case
+    ceiling = (await p2.plan(batch, store=wiring.store, objects=wiring.objects, rates=wiring.rates, now=now)).worst_case
     if ceiling is None or ceiling > ProviderUsd(stored["budget_usd"]):
         raise errors.StateConflict("the batch's cost ceiling is unpriced or over its budget")
     if wiring.settings.judge_mode != JUDGE_MODE_LIVE:

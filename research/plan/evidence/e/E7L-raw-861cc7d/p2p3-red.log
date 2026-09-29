@@ -1,0 +1,438 @@
+F.FFFFFFF.FFF.F..F.......FF......                                        [100%]
+=================================== FAILURES ===================================
+_________ test_p2__a_dry_run_plans_and_prices_without_a_rate_or_egress _________
+
+    def test_p2__a_dry_run_plans_and_prices_without_a_rate_or_egress():
+        case = Case()
+>       priced = case.plan()
+                 ^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb9688ca40>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_____________ test_p2__each_chunk_leaves_once_through_the_j2_path ______________
+
+    def test_p2__each_chunk_leaves_once_through_the_j2_path():
+        case = Case()
+        report = case.run()
+        assert [run.state for run in report.runs] == ["submitted"] * 3 and report.stopped is None
+        assert [[item["sample_id"] for item in items] for _, items in case.provider.calls] == [
+            [sid(1), sid(2)], [sid(3), sid(4)], [sid(6)]]
+        assert case.provider.calls[0][1][0] == {"sample_id": sid(1), "content": f"q [redacted] {sid(1)}",
+                                                "prompt_version": "teach-v1"}
+>       assert [case.ledger.runs[r].reserved for r in case.run_ids()] == [usd(2)] * 3
+                                                      ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb943164e0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_____ test_p2__the_budget_stops_the_batch_before_the_chunk_it_cannot_cover _____
+
+    def test_p2__the_budget_stops_the_batch_before_the_chunk_it_cannot_cover():
+        case = Case(budget=usd(2) + usd(2))
+        report = case.run()
+>       assert report.stopped == "budget" and report.unsent == tuple(case.run_ids()[2:])
+                                                                     ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93b6deb0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_ test_p2__an_ambiguous_submit_is_held_never_resubmitted_and_reconciled_from_evidence _
+
+    def test_p2__an_ambiguous_submit_is_held_never_resubmitted_and_reconciled_from_evidence():
+        case = Case(mode="lost")
+        report = case.run()
+        assert [run.state for run in report.runs] == ["ambiguous"] * 3
+        assert case.ledger.committed(case.payer) == usd(2) + usd(2) + usd(2)   # the holds stay
+        case.run()
+        assert len(case.provider.calls) == 3                     # never a second batch
+>       first = case.run_ids()[0]
+                ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93fd6810>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_ test_p2__a_sample_revoked_mid_batch_never_leaves_and_its_label_is_not_imported _
+
+    def test_p2__a_sample_revoked_mid_batch_never_leaves_and_its_label_is_not_imported():
+        case = Case()
+        case.provider.on_submit = lambda n: case.store.revoke(sid(3)) if n == 1 else None
+>       first, second, _ = case.run_ids()
+                           ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93fd7d10>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_ test_p2__a_revocation_between_the_check_and_egress_releases_the_chunk_and_stops _
+
+    def test_p2__a_revocation_between_the_check_and_egress_releases_the_chunk_and_stops():
+        case = Case()
+        # reads: the plan (1-2), chunk 1's filter (3-4) and recheck (5-6), chunk 2's filter
+        # (7-8); sample 4 is revoked as chunk 2's recheck reads (9), after its filter kept it
+        case.store.revoke_at = {9: (sid(4),)}
+>       first, second, third = case.run_ids()
+                               ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd0a40>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+______________ test_p2__a_regrant_never_sends_a_tombstoned_sample ______________
+
+    def test_p2__a_regrant_never_sends_a_tombstoned_sample():
+        """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the plan
+        lists the sample as not permitted and no chunk carries it to the teacher."""
+        case = Case()
+        case.tombstone_regranted(sid(1))
+>       assert case.plan().not_permitted == (sid(1), sid(5))
+               ^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:206: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd27e0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+______ test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample ______
+
+    def test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample():
+        """Oracle (R193): a sample tombstoned (and re-granted) after it left gets no label: its
+        result is a `grant_not_current` failure and only its neighbour imports."""
+        case = Case()
+        case.run()
+        case.tombstone_regranted(sid(1))
+        case.provider.outputs["batch-1"] = [(sid(1), '{"label": "a"}'), (sid(2), '{"label": "b"}')]
+>       got = case.collect(case.run_ids()[0])
+                           ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:219: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd3a70>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+___ test_p2__collected_labels_import_once_as_model_labels_never_ground_truth ___
+
+    def test_p2__collected_labels_import_once_as_model_labels_never_ground_truth():
+        case = Case()
+        case.run()
+>       first = case.run_ids()[0]
+                ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd90d0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_____ test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later ______
+
+    def test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later():
+        case = Case()
+        case.run()
+>       first = case.run_ids()[0]
+                ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:258: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd99d0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_ test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement _
+
+    def test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement():
+        """0-LSI2-F1: the teacher's ids are untrusted; one D8 cannot store stays in the result only."""
+        case = Case()
+        case.run()
+>       first = case.run_ids()[0]
+                ^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:88: in run_ids
+    return [run_id for run_id, _ in self.plan().chunks]
+                                    ^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.p.teachers.test_teachers.Case object at 0x78cb93bd96d0>
+rates = StaticRateTable(rows=(ProviderRate(price_version='test-rates-v1', model='claude-opus-5', input_per_million=Decimal('5.... test input, not an approved price', effective_at=datetime.datetime(2026, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)),))
+
+    def plan(self, rates=j1.TEST_RATES):
+>       return asyncio.run(plan(self.batch, store=self.store, objects=self.objects,
+                                rates=rates, now=j2.T0))
+E       TypeError: plan() got an unexpected keyword argument 'objects'
+
+tests/p/teachers/test_teachers.py:91: TypeError
+_______ test_p2_http__a_batch_round_trips_through_the_local_teacher_fake _______
+
+    def test_p2_http__a_batch_round_trips_through_the_local_teacher_fake():
+        fake = JudgeFake(port=TEACHER_PORT)
+        try:
+            case = Case(provider=HttpJudgeProvider(fake.url))
+            report = case.run()
+            assert [run.state for run in report.runs] == ["submitted"] * 3 and len(fake.posts) == 3
+            assert fake.posts[0]["submit_key"] == report.runs[0].submit_key
+            fake.outputs["batch-1"] = [[sid(1), '{"label": "a"}']]
+>           got = case.collect(report.runs[0].run_id)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/p/teachers/test_teachers.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/teachers/test_teachers.py:85: in collect
+    return asyncio.run(collect(self.batch, run_id, wiring=self.wiring))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00000000004d', provider_org_id='a0000000-0000-4000-8000-00000000000a', ...cccccccccccccccccccc', chunk_size=2, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0))
+run_id = 'd66ac1e6-83de-514d-9e69-e9b4108a80e0'
+wiring = TeacherWiring(members=FakeAccessStore(memberships={('a0000000-0000-4000-8000-00000000000a', 'd0000000-0000-4000-8000-0...d_version='', provider_dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function redact at 0x78cb93f6b560>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        allowed = await _allowed(batch, wiring.store)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+            await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+        imported = None
+        if rows:
+>           imported = await wiring.labels(wiring.store, wiring.log,
+                                           provider_org_id=batch.provider_org_id,
+                                           actor=batch.requested_by, dataset_ref=batch.dataset_ref,
+                                           rubric_ref=batch.rubric_ref, rows=rows)
+E           TypeError: Labels.__call__() missing 2 required keyword-only arguments: 'objects' and 'now'
+
+infrx/pipelines/teachers/__init__.py:279: TypeError
+___ test_p3_a_bundle_pins_only_a_stored_current_export_of_trainable_samples ____
+
+    def test_p3_a_bundle_pins_only_a_stored_current_export_of_trainable_samples() -> None:
+        """Oracle (0-P3-EXPORT-PIN-UNVERIFIED, DATA-RIGHTS): the bundle's export is read back
+        from the store, never taken from the caller: a fabricated one is refused, an unknown id
+        is not found, an expired or cancelled export is gone, bytes or a record that are not
+        what the export recorded are a conflict, and an export (N2's or P1's) taken before a
+        grant was revoked - so it still carries the revoked samples - is refused; a current P1
+        label export pins its stored format, id and digest."""
+        w = World()
+        with pytest.raises(errors.InvalidRequest):
+            w.prepare(export={"format": "anything", "export_id": "not-an-export", "sha256": "0" * 64,
+                              "dataset_ref": w.ref})
+        with pytest.raises(errors.InvalidRequest):
+            w.prepare(export={"format": "anything", "export_id": uid(9, 0xee)})
+        with pytest.raises(errors.NotFound):
+            w.prepare(export={"format": "infrx.dataset_export.1", "export_id": uid(9, 0xee)})
+        rec = w.export()
+        with pytest.raises(errors.Gone):
+            w.prepare(export=rec, now=NOW + timedelta(seconds=3600))
+>       labelled = w.label_export()
+                   ^^^^^^^^^^^^^^^^
+
+tests/p/training/test_training.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/p/training/test_training.py:79: in label_export
+    labels = load(self.store, log, ref, label_rows(self.manifest(ref).splits.train),
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+store = <tests.p.training.world.CheckpointStore object at 0x78cb9376da00>
+log = <tests.p.annotations.world.FakeLabelLog object at 0x78cb9376cad0>
+ref = 'lab:dataset:b0000001-0000-4000-8000-000000000001:000000da-0000-4000-8000-000000000001@sha256:e67f14e27a7569109d6c30ae30fb5d4fad76bb57aa823a1a613a19d91d0d02fc'
+items = [{'sample_id': '51b7c4bb-e365-4d49-849d-55252daf1a63', 'method': 'model', 'method_version': 'labeler-3', 'label': {'an...: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d', 'method': 'model', 'method_version': 'labeler-3', 'label': {'answer': 'a2'}}]
+rubric = 'lab:rubric:b0000001-0000-4000-8000-000000000001:000000cb-0000-4000-8000-000000000001@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+objects = <infrx.media.store.InMemoryObjectStore object at 0x78cb9376c800>
+
+    def load(store, log, ref, items, rubric=RUBRIC, objects=None) -> p1.Imported:
+        """P1.a; `objects` holds N3's lineage (none: nothing is tombstoned)."""
+>       return run(p1.import_labels(store, log, objects=objects or InMemoryObjectStore(), now=NOW,
+                                    provider_org_id=NEMO, actor="dev@nemo",
+                                    dataset_ref=ref, rubric_ref=rubric, rows=items))
+E       TypeError: import_labels() got an unexpected keyword argument 'objects'
+
+tests/p/annotations/test_annotations.py:36: TypeError
+________________ test_p3_a_regrant_bundles_no_tombstoned_sample ________________
+
+    def test_p3_a_regrant_bundles_no_tombstoned_sample() -> None:
+        """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the
+        bundle leaves the tombstoned train sample out (listed as omitted)."""
+        w = World()
+        first = sorted(w.manifest().splits.train)[0]
+        tombstone_regranted(w.store, w.objects, first)
+        bundle = w.prepare()
+>       assert first not in bundle["train"] and first in bundle["omitted"]
+E       AssertionError: assert ('51b7c4bb-e365-4d49-849d-55252daf1a63' not in ['51b7c4bb-e365-4d49-849d-55252daf1a63', '6fe7eb7b-0488-4633-876f-de82e461cb96', 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d'])
+
+tests/p/training/test_training.py:366: AssertionError
+________________ test_p3_a_regrant_submits_no_tombstoned_sample ________________
+
+    def test_p3_a_regrant_submits_no_tombstoned_sample() -> None:
+        """Oracle (R193, E7L i04): a bundle prepared before the tombstone cannot be submitted
+        after the re-grant: Forbidden, still `prepared`."""
+        w = World()
+        bundle = w.prepare()
+        tombstone_regranted(w.store, w.objects, bundle["train"][0])
+>       with pytest.raises(errors.Forbidden):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE Forbidden
+
+tests/p/training/test_training.py:375: Failed
+=========================== short test summary info ============================
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_dry_run_plans_and_prices_without_a_rate_or_egress
+FAILED tests/p/teachers/test_teachers.py::test_p2__each_chunk_leaves_once_through_the_j2_path
+FAILED tests/p/teachers/test_teachers.py::test_p2__the_budget_stops_the_batch_before_the_chunk_it_cannot_cover
+FAILED tests/p/teachers/test_teachers.py::test_p2__an_ambiguous_submit_is_held_never_resubmitted_and_reconciled_from_evidence
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_sample_revoked_mid_batch_never_leaves_and_its_label_is_not_imported
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_revocation_between_the_check_and_egress_releases_the_chunk_and_stops
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_regrant_never_sends_a_tombstoned_sample
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample
+FAILED tests/p/teachers/test_teachers.py::test_p2__collected_labels_import_once_as_model_labels_never_ground_truth
+FAILED tests/p/teachers/test_teachers.py::test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement
+FAILED tests/p/teachers/test_teachers.py::test_p2_http__a_batch_round_trips_through_the_local_teacher_fake
+FAILED tests/p/training/test_training.py::test_p3_a_bundle_pins_only_a_stored_current_export_of_trainable_samples
+FAILED tests/p/training/test_training.py::test_p3_a_regrant_bundles_no_tombstoned_sample
+FAILED tests/p/training/test_training.py::test_p3_a_regrant_submits_no_tombstoned_sample
+15 failed, 18 passed in 2.20s

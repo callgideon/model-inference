@@ -1,0 +1,1175 @@
+FFF.F.FFFFFFFFFFFssss                                                                                                                                                                                                                                                                                                                                                                                    [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+____________________________________________________________________________________________________________________________________________________________________ test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads _____________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads')
+
+    def test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads(lab, workdir):
+        """DATA-LINEAGE: before the revocation the three trace samples were labelled, exported
+        and bundled; after it the annotation queue refuses their rows, the prepared training run
+        cannot submit (it stays prepared: nothing left), both exports serve none of them, N3's
+        gate is empty, reconcile tombstones each with its reason, the provenance view marks them
+        restricted, and the export evidence lists them - delivered, NOT recalled, no unlearning
+        claim."""
+        from infrx.datasets import lineage, versions
+>       r = revoked(lab)
+            ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_faults.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_faults.py:50: in revoked
+    training1(lab)                        # iteration 1's world is built before RACER revokes
+    ^^^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc54d2f920>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+_________________________________________________________________________________________________________________________________________________________________________________ test_i04_a_regrant_leaves_the_n3_gate_closed _________________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>
+
+    def test_i04_a_regrant_leaves_the_n3_gate_closed(lab):
+        """DATA-LINEAGE: D7 reads the samples again under the re-grant, but N3's gate - the
+        tombstones are permanent - stays closed, and a derivation omits them."""
+        from infrx.datasets import versions
+>       r = regranted(lab)
+            ^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_faults.py:103: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_faults.py:94: in regranted
+    r = revoked(lab)
+        ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_faults.py:50: in revoked
+    training1(lab)                        # iteration 1's world is built before RACER revokes
+    ^^^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc52c432e0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+_______________________________________________________________________________________________________________________________________________________________________ test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training _______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training')
+
+    def test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training(lab, workdir):
+        """DATA-LINEAGE (transitive revocation, R193): after the re-grant every training path
+        must still refuse the tombstoned samples - the label queue, a new P1 label export, the
+        earlier export's read and the prepared P3 run's submit (N3: `permitted` is the one gate
+        every export and external submission re-checks). 0-E7L-1 until WR-E7L-3."""
+>       r = regranted(lab)
+            ^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_faults.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_faults.py:94: in regranted
+    r = revoked(lab)
+        ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_faults.py:50: in revoked
+    training1(lab)                        # iteration 1's world is built before RACER revokes
+    ^^^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc52bf5d00>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+______________________________________________________________________________________________________________________________________________________________________ test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted ______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted')
+
+    def test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted(lab, workdir):
+        """PIPELINE-BUDGET: the teacher accepts a chunk and answers 500: the run is ambiguous and
+        its hold stays in the cap; a resumed batch sends nothing; reconcile adopts the teacher's
+        record of the key; collection settles it once at the reported cost."""
+        from infrx.contracts.v2.money_units import ProviderUsd
+        from infrx.judge.submit import reconcile
+        from infrx.pipelines.teachers import collect, run_batch
+        ledger = own_ledger(lab, wc(lab, 12))
+        batch, wiring = lab.batch(lab.benchmark, 6, chunk_size=12), lab.wiring(ledger=ledger)
+        lab.teacher.mode = "error"
+        try:
+            report = run(run_batch(batch, wiring=wiring))
+        finally:
+            lab.teacher.mode = "ok"
+        [held] = report.runs
+        assert held.state == "ambiguous" and ledger.committed(lab.payer) == wc(lab, 12)
+        run(run_batch(batch, wiring=wiring))
+        assert len(posts_for(lab, [held])) == 1, "an ambiguous chunk was resubmitted"
+        adopted = run(reconcile(held.run_id, wiring=wiring))
+        assert adopted.state == "submitted"
+        assert adopted.external_id == lab.teacher.batches[held.submit_key]
+        lab.answer_posts()
+>       done = run(collect(batch, held.run_id, wiring=wiring))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_faults.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000006', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaa', chunk_size=12, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7e704841-e5af-5a98-b565-500898a7f518'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc513a3560>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+_______________________________________________________________________________________________________________________________________________________________________ test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job _______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job')
+
+    def test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job(lab, workdir):
+        """TRAIN-RECOVER / PIPELINE-BUDGET (R184): the automatic connector is used only when
+        advertised; the server accepts and answers after the client's timeout - `ambiguous`,
+        the reservation held; the resume looks the key up and adopts the one job; a poll lost
+        with the server leaves the run submitted and the hold in place; the completed job
+        settles once at its reported cost and nothing is ever submitted again."""
+        import httpx
+        from infrx.pipelines import training as p3
+        from scenarios_iterate import labels1
+        from tests.p.training.world import protocol_app
+>       one = labels1(lab)
+              ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_faults.py:267: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc52c8ed40>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+____________________________________________________________________________________________________________________________________________________________________________ test_i01_labels_keep_their_method_evidence_and_review _____________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i01_labels_keep_their_method_evidence_and_review')
+
+    def test_i01_labels_keep_their_method_evidence_and_review(lab, workdir):
+        """PIPELINE-LINEAGE: the forged ground truth and the stray row are refused by row; every
+        label keeps its method (human rows `imported`, the teacher's `synthetic`), its sample's
+        own evidence and its provenance; the teacher's wrong label is kept rejected beside the
+        reviewer's `human` correction; the original evidence is never overwritten; the export is
+        exactly the fixture's train lines, lineage and omissions - the holdout never ships."""
+>       one = labels1(lab)
+              ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511dd300>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+__________________________________________________________________________________________________________________________________________________________________ test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic ___________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic')
+
+    def test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic(lab, workdir):
+        """PIPELINE-LINEAGE / R57: the teacher batch plans and sends the train and validation
+        samples only, each once, through J2's path; its labels are `synthetic`, never ground
+        truth, pinned to the teacher model and prompt - even once a reviewer accepts them; a
+        malformed answer is a per-item failure; every chunk settles once at the reported cost."""
+>       one = labels1(lab)
+              ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511dd440>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+_____________________________________________________________________________________________________________________________________________________________________ test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout ______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout')
+
+    def test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout(lab, workdir):
+        """TRAIN-RECOVER / PIPELINE-LINEAGE: the manual bundle names the train and dev ids, the
+        export by its digest and the frozen holdout by its size and digest - no holdout id
+        anywhere in it; a replay is the same bundle; the manual connector reserves nothing (the
+        provider's own compute) and the provider declares it done."""
+>       one, first = labels1(lab), training1(lab)
+                     ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:198: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc513a34c0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+______________________________________________________________________________________________________________________________________________________________________ test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation ______________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation')
+
+    def test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation(lab, workdir):
+        """TRAIN-RECOVER: a validated checkpoint whose holdout run has not succeeded is never
+        eligible; candidate 1, evaluated by B1 on exactly the bundle's frozen holdout, is
+        eligible and B2 accepts it as the fixture declares; a redelivered checkpoint is the
+        same outcome and evaluates nothing again."""
+        from infrx.contracts import errors
+>       first = training1(lab)
+                ^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511de3e0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+__________________________________________________________________________________________________________________________________________________________________ test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible __________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>
+
+    def test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible(lab):
+        """TRAIN-RECOVER (holdout leakage): a validated checkpoint whose succeeded evaluation ran
+        on a holdout other than the bundle's frozen one - another pin, or another dataset
+        version's - is never eligible; the same answer on the frozen holdout is."""
+        from infrx.contracts import errors
+>       first = training1(lab)
+                ^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:245: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511df380>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+____________________________________________________________________________________________________________________________________________________________________ test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected _____________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected')
+
+    def test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected(lab, workdir):
+        """TRAIN-RECOVER: the seeded bad checkpoint reports the lower training loss and scores
+        better than the baseline on the train cases, yet B2 over the frozen holdout rejects it:
+        training metrics never decide."""
+>       first = training1(lab)
+                ^^^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:263: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:68: in training1
+    one = labels1(lab)
+          ^^^^^^^^^^^^
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511de700>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+____________________________________________________________________________________________________________________________________________________________________ test_i02_missing_and_late_checkpoints_are_rejected_and_never_evaluated ____________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>
+
+    def test_i02_missing_and_late_checkpoints_are_rejected_and_never_evaluated(lab):
+        """TRAIN-RECOVER: a checkpoint without its artifact, one whose bytes are not the declared
+        digest, and one arriving after its run was cancelled are rejected receipts in D7 and
+        queue no evaluation."""
+        from infrx.pipelines import training as p3
+>       one, first = labels1(lab), training1(lab)
+                     ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:289: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511deb60>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+__________________________________________________________________________________________________________________________________________________________________ test_i03_permitted_traces_become_a_derived_version_over_the_frozen_holdout __________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i03_permitted_traces_become_a_derived_version_over_the_frozen_holdout')
+
+    def test_i03_permitted_traces_become_a_derived_version_over_the_frozen_holdout(lab, workdir):
+        """DATA-LINEAGE: candidate 1's traces become samples under the grantor's current grant,
+        each with its trace lineage (grantor, request, grant, model) and the grantor's D6F
+        correction beside - never merged into - the original output; the derived version keeps
+        iteration 1's holdout exactly and places the traces in train/validation only."""
+        from infrx.datasets import lineage
+>       one, two = labels1(lab), iteration2(lab)
+                   ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:316: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc513a05e0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+_________________________________________________________________________________________________________________________________________________________________ test_i03_the_second_iteration_improves_on_the_same_holdout_with_its_lineage __________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i03_the_second_iteration_improves_on_the_same_holdout_with_its_lineage')
+
+    def test_i03_the_second_iteration_improves_on_the_same_holdout_with_its_lineage(lab, workdir):
+        """DATA-LINEAGE / PIPELINE-LINEAGE: iteration 2's export carries iteration 1's accepted
+        labels (logged under the parent version) and the trace labels of the train traces, no
+        holdout sample; its bundle pins the SAME holdout as iteration 1's; candidate 2 is
+        evaluated on it, eligible, and B2 decides as the fixture declares against candidate 1."""
+>       one, two = labels1(lab), iteration2(lab)
+                   ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:342: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc513a36a0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+__________________________________________________________________________________________________________________________________________________________________________ test_i03_budgets_reconcile_per_unit_across_both_iterations __________________________________________________________________________________________________________________________________________________________________________
+
+lab = <lab_world.Lab object at 0x75fc5844f590>, workdir = PosixPath('/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/research/plan/evidence/e/E7L-raw-861cc7d/run/cases/test_i03_budgets_reconcile_per_unit_across_both_iterations')
+
+    def test_i03_budgets_reconcile_per_unit_across_both_iterations(lab, workdir):
+        """PIPELINE-BUDGET: after both iterations the teacher's PROVIDER_USD, on the provider's
+        one named payer, is exactly the reported cost of each settled chunk with no hold left;
+        the manual training runs reserved nothing; evaluation spent CREDIT on the provider_dev
+        wallet only, the D7 attempts' costs in CREDIT and nothing else."""
+        from infrx.contracts.v2.money_units import ProviderUsd
+>       one = labels1(lab)
+              ^^^^^^^^^^^^
+
+tests/integration/lab_improve/scenarios_iterate.py:371: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/lab_improve/scenarios_iterate.py:47: in labels1
+    collected = [run(collect(batch, r.run_id, wiring=wiring)) for r in report.runs]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/lab_improve/lab_world.py:98: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = TeacherBatch(batch_id='00000000-0000-4000-8000-00e700000001', provider_org_id='b0000001-0000-4000-8000-000000000001', ...aaaaaaaaaaaaaaaaaaaa', chunk_size=4, ceilings=TokenCeilings(input_tokens=1000, output_tokens=1000, reasoning_tokens=0)), run_id = '7ea28c00-7f80-572b-8b89-cfb8b810e393'
+wiring = TeacherWiring(members=<infrx.state.lab_access.PgAccessStore object at 0x75fc52c2a7e0>, ledger=<tests.j.submit.fakes.Fa..._dev_allocation_ceiling_credit=Credit('0.00000000')), redact=<function Lab.wiring.<locals>.<lambda> at 0x75fc511dd6c0>)
+
+    async def collect(batch: TeacherBatch, run_id: str, *, wiring: TeacherWiring) -> Collected:
+        """P2.c: import what has arrived (as `model` labels, through P1); settle once when done."""
+        ledger = wiring.ledger
+        run = await ledger.run(run_id)
+        if run is not None and run.state == "completed":
+            return Collected(run)
+        run = await _run(ledger, run_id, "submitted")
+        polled = await wiring.provider.results(run.external_id)
+        now = await ledger.db_now()
+        allowed = await _allowed(batch, wiring.store, wiring.objects, now)
+        rows, failures, seen = [], [], set()
+        for sample_id, text in polled.items:
+            if sample_id not in run.sent_ids:
+                failures.append((sample_id, "not_sent"))
+                continue
+            if sample_id in seen:
+                failures.append((sample_id, "duplicate"))
+                continue
+            seen.add(sample_id)
+            if sample_id not in allowed:
+                failures.append((sample_id, "grant_not_current"))
+                continue
+            parsed = parse_label(text)
+            if parsed is None:
+                failures.append((sample_id, "malformed_label"))
+                continue
+            row = {"sample_id": sample_id, "method": TEACHER_METHOD,
+                   "method_version": batch.prompt_version, "label": parsed[0],
+                   "model": batch.teacher_model, "prompt": batch.prompt_version}
+            if parsed[1] is not None:
+                row["confidence"] = parsed[1]
+            rows.append(row)
+        logged = [f for f in failures if _is_uuid(f[0])]   # a provider's id D8 cannot store stays
+        if logged:                                          # in the result only (0-LSI2-F1)
+>           await ledger.record_failures(run_id, logged)    # D8's append-only per-item log
+                  ^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+
+apps/infrx-api/infrx/pipelines/teachers/__init__.py:282: AttributeError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i04_a_revocation_stops_the_queue_the_submit_and_the_export_reads - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i04_a_regrant_leaves_the_n3_gate_closed - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_faults.py::test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i01_labels_keep_their_method_evidence_and_review - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i02_the_bundle_trains_on_the_train_export_and_pins_the_holdout - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i02_a_candidate_is_eligible_only_after_its_holdout_evaluation - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i02_an_evaluation_on_another_holdout_never_makes_a_candidate_eligible - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i02_the_bad_checkpoint_with_the_better_training_loss_is_rejected - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i02_missing_and_late_checkpoints_are_rejected_and_never_evaluated - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i03_permitted_traces_become_a_derived_version_over_the_frozen_holdout - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i03_the_second_iteration_improves_on_the_same_holdout_with_its_lineage - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+FAILED tests/integration/lab_improve/scenarios_iterate.py::test_i03_budgets_reconcile_per_unit_across_both_iterations - AttributeError: 'FakeJudgeLedger' object has no attribute 'record_failures'
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[composition-2,WR-P2-4] no annotation worker pass. Steps: start `python -m infrx.lab.workers annotation` on DATABASE; SIGKILL between chunks; restart; one teacher job per chunk, labels imported once; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[composition-2,WR-P2-4] no training worker pass. Steps: start `python -m infrx.lab.workers training` on an ambiguous automatic run; SIGKILL mid-poll; restart; one job at the protocol server, one settlement; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i07
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[LAB_PIPELINES,P3-evaluations] `/lab/v1/pipelines` is composed with the store only (label log, run ledger and P3's evaluation port answer 503). Steps: labels, review, export, bundle, checkpoint and approve through apps/lab/tests/e2e/improve/; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i08
+SKIPPED [1] tests/integration/lab_improve/lab_world.py:85: NOT RUN[staging-target] no private or allocated staging deployment for key e7l. Steps: register candidate 1 through L3, propose/approve it through L4/R2, collect its traces pinned to that serving version, then i03 over them; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_improve/runner.py --out <dir> --only i09
+15 failed, 2 passed, 4 skipped in 16.52s

@@ -32,6 +32,8 @@ PARTIAL = "test_p2__an_unfinished_batch_imports_what_arrived_and_settles_later"
 LABEL = "test_p2__a_label_is_one_short_text_with_an_optional_confidence"
 FOREIGN = "test_p2__a_provider_id_that_is_no_sample_id_never_blocks_the_import_or_the_settlement"
 HTTP = "test_p2_http__a_batch_round_trips_through_the_local_teacher_fake"
+REGRANT_SEND = "test_p2__a_regrant_never_sends_a_tombstoned_sample"
+REGRANT_LABEL = "test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- P2.a: the manifest ------------------------------------------------------------------------
@@ -42,6 +44,11 @@ MUTANTS: tuple[Mutant, ...] = (
        REVOKED),
     _m("training_purpose_only", "leaving for an external model needs external_judging",
        T, 'PURPOSES = ("external_judging", "training")', 'PURPOSES = ("training",)', DRY, ONCE),
+    _m("p2_gate_reads_d7_only", "R193: every P2 read gates on N3's permitted, not D7's alone",
+       T, "ids = await permitted(store, objects, batch.dataset_ref, now=now,\n"
+       "                              provider_org_id=batch.provider_org_id, purpose=purpose)",
+       "ids = set(await store.accessible_samples(batch.dataset_ref, "
+       "provider_org_id=batch.provider_org_id, purpose=purpose))", REGRANT_SEND, REGRANT_LABEL),
     _m("either_purpose_suffices", "both purposes, not either",
        T, "allowed = ids if allowed is None else allowed & ids",
        "allowed = ids if allowed is None else allowed | ids", DRY, ONCE),
@@ -84,7 +91,7 @@ MUTANTS: tuple[Mutant, ...] = (
        dies_by=("TypeError",)),
     _m("no_recheck_before_egress", "the permission is read again immediately before egress",
        T, 'lambda: recheck(item["sample_id"] for item in items)',
-       "lambda: _allowed(batch, wiring.store)", RACE),
+       "lambda: _allowed(batch, wiring.store, wiring.objects, now)", RACE),
     _m("withdrawn_permission_skips_a_chunk", "a withdrawn permission stops the batch",
        T, '            return BatchReport(tuple(runs), "permission", unsent)',
        "            continue", RACE),

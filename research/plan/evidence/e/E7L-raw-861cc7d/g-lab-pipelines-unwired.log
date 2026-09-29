@@ -1,0 +1,238 @@
+....FFFFFFF.....F                                                        [100%]
+=================================== FAILURES ===================================
+____ test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint ____
+
+    def test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint():
+        """Oracle (PIPELINE-LINEAGE): imported labels are `synthetic`, never ground truth; the
+        export lists each train sample's label refs and methods and omits the rest; the run is
+        the export's (id and digest), the config's and the frozen holdout's (a pin, never the
+        ids); a checkpoint is queued for evaluation on exactly that holdout and becomes eligible
+        only once that evaluation succeeded."""
+        w = World()
+        c = w.client()
+>       refs = w.labelled(c)
+               ^^^^^^^^^^^^^
+
+tests/g/lab_pipelines/test_lab_pipelines.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d9200ae960>
+c = <starlette.testclient.TestClient object at 0x74d9200e2030>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d9200e2030>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d9200ae960>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+_________ test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated _________
+
+    def test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated():
+        """Oracle (PIPELINE-LINEAGE): bytes other than the declared digest are `rejected` with
+        the reason and no evaluation; its redelivery is the same outcome."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:310: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d9200ef1d0>
+c = <starlette.testclient.TestClient object at 0x74d9200ec620>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d9200ec620>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d9200ef1d0>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+___ test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row ___
+
+    def test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row():
+        """Oracle: every refused row is in the receipt with its number and P1's reason, an
+        unreadable line as `missing_evidence`; the same import again is the stored receipt (no
+        second label); another body under its id is a 409; the receipts are listed."""
+        w = World()
+        c = w.client()
+        ids = w.train_ids()
+        lines = "\n".join([w.rows(ids[:1]), "", "not json",
+                          json.dumps({"sample_id": ids[1], "method": "human", "method_version": "1",
+                                      "label": 1, "ground_truth": True}), ""])
+        answer = call(c, DEV, "POST", "label-imports", w.importing(lines))
+        expected = {"import_id": IMPORT, "dataset_ref": w.ref, "accepted": 1,
+                    "rejected": [{"row": 2, "reason": "missing_evidence"},
+                                 {"row": 3, "reason": "forged_ground_truth"}]}
+>       assert (answer.status_code, answer.json()) == (201, expected)
+E       AssertionError: assert (503, {'refus...unavailable'}) == (201, {'impor...und_truth'}]})
+E         
+E         At index 0 diff: 503 != 201
+E         Use -v to get more diff
+
+tests/g/lab_pipelines/test_lab_pipelines.py:337: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____ test_lab_pipelines__a_label_export_id_answers_the_export_already_made _____
+
+    def test_lab_pipelines__a_label_export_id_answers_the_export_already_made():
+        """Oracle: the same export again - later, on the store's clock - is the stored record;
+        another adapter or lifetime under its id is a 409."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:352: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f786870>
+c = <starlette.testclient.TestClient object at 0x74d91f7decf0>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d91f7decf0>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f786870>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+_ test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth _
+
+    def test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth():
+        """Oracle (PIPELINE-LINEAGE): a correction (JSON text) rejects the label and adds the
+        reviewer's `human` ground-truth label; two imported labels that disagree are listed as a
+        disagreement, and its adjudication (another assigned reviewer) rejects both and adds a
+        `human` label; a value that is not JSON is a 422 and nothing moves."""
+        w = World()
+        c = w.client()
+        first, second = w.train_ids()[:2]
+    
+        def labels():
+            answer = call(c, DEV, "GET", "labels", query={"dataset_ref": w.ref})
+            assert answer.status_code == 200, answer.json()
+            return {x["annotation_ref"]: x for x in answer.json()["data"]}
+        call(c, DEV, "POST", "label-imports", w.importing(w.rows([first, second])))
+        call(c, DEV, "POST", "label-imports", w.importing(
+            w.rows([second]).replace('"a0"', '"other"'), import_id=uid(2, 0x1b)))
+>       (label,) = [x for x in labels().values() if x["sample_id"] == first]
+        ^^^^^^^^
+E       ValueError: not enough values to unpack (expected 1, got 0)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:378: ValueError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____________ test_lab_pipelines__the_connector_is_never_the_callers ____________
+
+    def test_lab_pipelines__the_connector_is_never_the_callers():
+        """Oracle (P-11): a body naming a connector is a 422 and no run exists; the run is the
+        manual bundle, and its submit reserves nothing (no USD held for provider compute)."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f7dd730>
+c = <starlette.testclient.TestClient object at 0x74d91f7dec90>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d91f7dec90>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f7dd730>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+________________ test_lab_pipelines__an_expired_export_is_gone _________________
+
+    def test_lab_pipelines__an_expired_export_is_gone():
+        """Oracle: a run prepared from an export past its lifetime is `410 gone`, not a 503."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:434: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f785190>
+c = <starlette.testclient.TestClient object at 0x74d9200bf980>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d9200bf980>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x74d91f785190>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____ test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3 _____
+
+    def test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3():
+        """Oracle: a non-JSON content type, an oversized body, an extra key or a limit that is not
+        an exact USD amount is a 422 and nothing is asked."""
+        w = World()
+        c = w.client()
+        text = json.dumps(w.importing())
+        for raw, content_type in ((text, "text/plain"), (text + " " * lp.MAX_BODY_BYTES, None)):
+            answer = call(c, DEV, "POST", "label-imports", raw=raw,
+                          headers={"content-type": content_type} if content_type else None)
+            assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})
+        for path, body in (("label-imports", w.importing(provider_org_id=OTHER)),
+                           ("training-runs", w.preparing(limit="25")),
+                           ("training-runs", w.preparing(limit="25.00000000 CREDIT"))):
+            answer = call(c, DEV, "POST", path, body)
+            assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), body
+        assert untouched(w)
+        padded = text + " " * 20_000                  # over the chat cap, under the import cap
+>       assert call(c, DEV, "POST", "label-imports", raw=padded).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x74d920099d60>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', raw='{"import_id": "0000001b-0000-4000-8000-000000000001", "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-00000000000...                                                                                                                      ')
+
+tests/g/lab_pipelines/test_lab_pipelines.py:484: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_export_id_answers_the_export_already_made
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__the_connector_is_never_the_callers
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__an_expired_export_is_gone
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3
+8 failed, 9 passed, 2 warnings in 1.44s

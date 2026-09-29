@@ -1,0 +1,67 @@
+.......FF................FF......                                        [100%]
+=================================== FAILURES ===================================
+______________ test_p2__a_regrant_never_sends_a_tombstoned_sample ______________
+
+    def test_p2__a_regrant_never_sends_a_tombstoned_sample():
+        """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the plan
+        lists the sample as not permitted and no chunk carries it to the teacher."""
+        case = Case()
+        case.tombstone_regranted(sid(1))
+>       assert case.plan().not_permitted == (sid(1), sid(5))
+E       AssertionError: assert ('00000000-00...00000000005',) == ('00000000-00...000000000005')
+E         
+E         At index 0 diff: '00000000-0000-405a-8000-000000000005' != '00000000-0000-405a-8000-000000000001'
+E         Right contains one more item: '00000000-0000-405a-8000-000000000005'
+E         Use -v to get more diff
+
+tests/p/teachers/test_teachers.py:206: AssertionError
+______ test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample ______
+
+    def test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample():
+        """Oracle (R193): a sample tombstoned (and re-granted) after it left gets no label: its
+        result is a `grant_not_current` failure and only its neighbour imports."""
+        case = Case()
+        case.run()
+        case.tombstone_regranted(sid(1))
+        case.provider.outputs["batch-1"] = [(sid(1), '{"label": "a"}'), (sid(2), '{"label": "b"}')]
+        got = case.collect(case.run_ids()[0])
+>       assert [row["sample_id"] for row in case.labels.calls[0]["rows"]] == [sid(2)]
+E       AssertionError: assert ['00000000-00...000000000002'] == ['00000000-00...000000000002']
+E         
+E         At index 0 diff: '00000000-0000-405a-8000-000000000001' != '00000000-0000-405a-8000-000000000002'
+E         Left contains one more item: '00000000-0000-405a-8000-000000000002'
+E         Use -v to get more diff
+
+tests/p/teachers/test_teachers.py:220: AssertionError
+________________ test_p3_a_regrant_bundles_no_tombstoned_sample ________________
+
+    def test_p3_a_regrant_bundles_no_tombstoned_sample() -> None:
+        """Oracle (R193, 0-E7L-1): after a revocation, N3's tombstone and a re-grant, the
+        bundle leaves the tombstoned train sample out (listed as omitted)."""
+        w = World()
+        first = sorted(w.manifest().splits.train)[0]
+        tombstone_regranted(w.store, w.objects, first)
+        bundle = w.prepare()
+>       assert first not in bundle["train"] and first in bundle["omitted"]
+E       AssertionError: assert ('51b7c4bb-e365-4d49-849d-55252daf1a63' not in ['51b7c4bb-e365-4d49-849d-55252daf1a63', '6fe7eb7b-0488-4633-876f-de82e461cb96', 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d'])
+
+tests/p/training/test_training.py:366: AssertionError
+________________ test_p3_a_regrant_submits_no_tombstoned_sample ________________
+
+    def test_p3_a_regrant_submits_no_tombstoned_sample() -> None:
+        """Oracle (R193, E7L i04): a bundle prepared before the tombstone cannot be submitted
+        after the re-grant: Forbidden, still `prepared`."""
+        w = World()
+        bundle = w.prepare()
+        tombstone_regranted(w.store, w.objects, bundle["train"][0])
+>       with pytest.raises(errors.Forbidden):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE Forbidden
+
+tests/p/training/test_training.py:375: Failed
+=========================== short test summary info ============================
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_regrant_never_sends_a_tombstoned_sample
+FAILED tests/p/teachers/test_teachers.py::test_p2__a_regrant_imports_no_teacher_label_of_a_tombstoned_sample
+FAILED tests/p/training/test_training.py::test_p3_a_regrant_bundles_no_tombstoned_sample
+FAILED tests/p/training/test_training.py::test_p3_a_regrant_submits_no_tombstoned_sample
+4 failed, 29 passed in 1.49s

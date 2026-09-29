@@ -38,6 +38,8 @@ INVALID = "test_p3_invalid_artifacts_are_rejected_and_never_evaluated"
 LATE = "test_p3_a_late_checkpoint_after_cancel_is_rejected"
 HOLDOUT = "test_p3_only_the_frozen_holdout_evaluation_makes_a_candidate_eligible"
 LOST = "test_p3_a_checkpoint_outcome_lost_in_a_crash_keeps_the_receipts_state"
+REGRANT_BUNDLE = "test_p3_a_regrant_bundles_no_tombstoned_sample"
+REGRANT_SUBMIT = "test_p3_a_regrant_submits_no_tombstoned_sample"
 
 RESULT = ('result.get("state"), result.get("dataset_ref"), result.get("split"),\n'
           '            result.get("holdout_sha256")) != ("succeeded", bundle["dataset_ref"], '
@@ -84,7 +86,12 @@ MUTANTS: tuple[Mutant, ...] = (
       'return {"format": record["format"], "export_id": export_id, '
       '"sha256": export.get("sha256")}, ids', PIN),
     m("p3_bundle_gate_is_access", "the bundle reads the training gate",
-      'purpose="training"))\n    train = ', 'purpose="provider_sharing"))\n    train = ', REFUSE),
+      'purpose="training")\n    train = ', 'purpose="provider_sharing")\n    train = ', REFUSE),
+    m("p3_bundle_reads_d7_gate", "R193: a bundle gates on N3's permitted, not D7's alone",
+      "allowed = await permitted(store, objects, dataset_ref, now=now,\n"
+      '                              provider_org_id=provider_org_id, purpose="training")',
+      "allowed = set(await store.accessible_samples(dataset_ref, provider_org_id=provider_org_id,"
+      ' purpose="training"))', REGRANT_BUNDLE),
     m("p3_revoked_train_bundled", "train ids are under a current training grant",
       "train = [i for i in manifest.splits.train if i in allowed]",
       "train = list(manifest.splits.train)", REFUSE),
@@ -125,10 +132,16 @@ MUTANTS: tuple[Mutant, ...] = (
     m("p3_viewer_is_a_member", "the role must hold run_evaluation",
       "membership.permits(ProviderCapability.run_evaluation, now,",
       "membership.permits(ProviderCapability.read_aggregate_health, now,", MANUAL),
+    m("p3_submit_reads_d7_gate", "R193: a submit gates on N3's permitted, not D7's alone",
+      'allowed = await permitted(store, objects, bundle["dataset_ref"],\n'
+      "                              now=await members.db_now(),\n"
+      '                              provider_org_id=provider_org_id, purpose="training")',
+      'allowed = set(await store.accessible_samples(bundle["dataset_ref"], '
+      'provider_org_id=provider_org_id, purpose="training"))', REGRANT_SUBMIT),
     m("p3_consent_unchecked", "a submission re-reads the grants",
       'if set(bundle["train"] + bundle["dev"]) - allowed:', "if False:", CONSENT),
     m("p3_consent_gate_is_access", "the submission gate is training",
-      'purpose="training"))\n    if set(bundle', 'purpose="provider_sharing"))\n    if set(bundle',
+      'purpose="training")\n    if set(bundle', 'purpose="provider_sharing")\n    if set(bundle',
       CONSENT),
     m("p3_budget_unreserved", "an automatic submission reserves its budget first",
       '        await ledger.reserve(key, provider_org_id=provider_org_id, payer_ref=run["payer_ref"],'

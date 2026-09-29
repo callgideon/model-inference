@@ -1,0 +1,11 @@
+...................ss..................................ss............... [ 80%]
+..............sss                                                        [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/p/annotations/test_annotations_pg.py:63: task-local PostgreSQL unavailable: PostgreSQL only on an explicit task-local key (INFRX_D_TASK=p1)
+SKIPPED [1] tests/p/annotations/test_annotations_pg.py:108: task-local PostgreSQL unavailable: PostgreSQL only on an explicit task-local key (INFRX_D_TASK=p1)
+SKIPPED [1] tests/p/teachers/test_teachers_pg.py:93: task-local services unavailable: real services only on p2's task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/p/teachers/test_teachers_pg.py:120: task-local services unavailable: real services only on p2's task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/p/training/test_training_services.py:110: task-local services unavailable: real services only on p3's task-local key (INFRX_D_TASK=p3)
+SKIPPED [1] tests/p/training/test_training_services.py:144: task-local services unavailable: real services only on p3's task-local key (INFRX_D_TASK=p3)
+SKIPPED [1] tests/p/training/test_training_services.py:181: task-local services unavailable: real services only on p3's task-local key (INFRX_D_TASK=p3)
+82 passed, 7 skipped in 83.34s (0:01:23)

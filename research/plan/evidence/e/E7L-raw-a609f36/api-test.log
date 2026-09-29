@@ -1,0 +1,614 @@
+cd apps/infrx-api && uv run --frozen pytest -q
+.........ss.........................................................ssss [  1%]
+sssss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss..ss.ss.ss.ss.ss [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+.....................................................x.................. [ 24%]
+........................................................................ [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+.......xx....x.......................................................... [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+x....................................................................... [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 46%]
+........................................................................ [ 47%]
+.....................................s.................................. [ 48%]
+xx....x................................................................. [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+...........................s...............FFFFFFF.....Fs..FFFFFFFFF.... [ 54%]
+.........s..........................s................................... [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+.......................ssss............................................. [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+.......................................s.............F...FF..ssss....... [ 66%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+.................................................x...................... [ 69%]
+........................................................................ [ 70%]
+....................................................s................... [ 71%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+.........................................s.............................. [ 76%]
+...s.................................................................... [ 77%]
+........................................................................ [ 79%]
+.......................................................s................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+.....................................................s.s.s.s.s.s.s.sssss [ 83%]
+..s......s.....s...ss................................................... [ 84%]
+................sssssssss............................................... [ 85%]
+........................................................................ [ 86%]
+....................................................................ss.. [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+...............................sss..........................s........... [ 92%]
+.............ss.s.s.s..s........sssssssssss.............s.s.s.s..s.s.s.s [ 93%]
+.s................s.s.s.s.s.s.s..s.s.................................... [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+.....................................................sss........s....... [ 97%]
+........................................................................ [ 98%]
+.........................s...sss....................................ssss [ 99%]
+..........................ss                                             [100%]
+=================================== FAILURES ===================================
+____ test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint ____
+
+    def test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint():
+        """Oracle (PIPELINE-LINEAGE): imported labels are `synthetic`, never ground truth; the
+        export lists each train sample's label refs and methods and omits the rest; the run is
+        the export's (id and digest), the config's and the frozen holdout's (a pin, never the
+        ids); a checkpoint is queued for evaluation on exactly that holdout and becomes eligible
+        only once that evaluation succeeded."""
+        w = World()
+        c = w.client()
+>       refs = w.labelled(c)
+               ^^^^^^^^^^^^^
+
+tests/g/lab_pipelines/test_lab_pipelines.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92b0b30>
+c = <starlette.testclient.TestClient object at 0x7319c917e720>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c917e720>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92b0b30>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+_________ test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated _________
+
+    def test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated():
+        """Oracle (PIPELINE-LINEAGE): bytes other than the declared digest are `rejected` with
+        the reason and no evaluation; its redelivery is the same outcome."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:310: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92fa960>
+c = <starlette.testclient.TestClient object at 0x7319c918cb00>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c918cb00>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92fa960>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+___ test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row ___
+
+    def test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row():
+        """Oracle: every refused row is in the receipt with its number and P1's reason, an
+        unreadable line as `missing_evidence`; the same import again is the stored receipt (no
+        second label); another body under its id is a 409; the receipts are listed."""
+        w = World()
+        c = w.client()
+        ids = w.train_ids()
+        lines = "\n".join([w.rows(ids[:1]), "", "not json",
+                          json.dumps({"sample_id": ids[1], "method": "human", "method_version": "1",
+                                      "label": 1, "ground_truth": True}), ""])
+        answer = call(c, DEV, "POST", "label-imports", w.importing(lines))
+        expected = {"import_id": IMPORT, "dataset_ref": w.ref, "accepted": 1,
+                    "rejected": [{"row": 2, "reason": "missing_evidence"},
+                                 {"row": 3, "reason": "forged_ground_truth"}]}
+>       assert (answer.status_code, answer.json()) == (201, expected)
+E       AssertionError: assert (503, {'refus...unavailable'}) == (201, {'impor...und_truth'}]})
+E         
+E         At index 0 diff: 503 != 201
+E         Use -v to get more diff
+
+tests/g/lab_pipelines/test_lab_pipelines.py:337: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____ test_lab_pipelines__a_label_export_id_answers_the_export_already_made _____
+
+    def test_lab_pipelines__a_label_export_id_answers_the_export_already_made():
+        """Oracle: the same export again - later, on the store's clock - is the stored record;
+        another adapter or lifetime under its id is a 409."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:352: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c95d49b0>
+c = <starlette.testclient.TestClient object at 0x7319c96939e0>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c96939e0>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c95d49b0>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+_ test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth _
+
+    def test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth():
+        """Oracle (PIPELINE-LINEAGE): a correction (JSON text) rejects the label and adds the
+        reviewer's `human` ground-truth label; two imported labels that disagree are listed as a
+        disagreement, and its adjudication (another assigned reviewer) rejects both and adds a
+        `human` label; a value that is not JSON is a 422 and nothing moves."""
+        w = World()
+        c = w.client()
+        first, second = w.train_ids()[:2]
+    
+        def labels():
+            answer = call(c, DEV, "GET", "labels", query={"dataset_ref": w.ref})
+            assert answer.status_code == 200, answer.json()
+            return {x["annotation_ref"]: x for x in answer.json()["data"]}
+        call(c, DEV, "POST", "label-imports", w.importing(w.rows([first, second])))
+        call(c, DEV, "POST", "label-imports", w.importing(
+            w.rows([second]).replace('"a0"', '"other"'), import_id=uid(2, 0x1b)))
+>       (label,) = [x for x in labels().values() if x["sample_id"] == first]
+        ^^^^^^^^
+E       ValueError: not enough values to unpack (expected 1, got 0)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:378: ValueError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____________ test_lab_pipelines__the_connector_is_never_the_callers ____________
+
+    def test_lab_pipelines__the_connector_is_never_the_callers():
+        """Oracle (P-11): a body naming a connector is a 422 and no run exists; the run is the
+        manual bundle, and its submit reserves nothing (no USD held for provider compute)."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92e64b0>
+c = <starlette.testclient.TestClient object at 0x7319c9169d60>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c9169d60>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92e64b0>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+________________ test_lab_pipelines__an_expired_export_is_gone _________________
+
+    def test_lab_pipelines__an_expired_export_is_gone():
+        """Oracle: a run prepared from an export past its lifetime is `410 gone`, not a 503."""
+        w = World()
+        c = w.client()
+>       w.labelled(c)
+
+tests/g/lab_pipelines/test_lab_pipelines.py:434: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92466f0>
+c = <starlette.testclient.TestClient object at 0x7319c91d8200>
+
+    def labelled(self, c) -> list[str]:
+        """Every train sample labelled once and accepted by DEV (assigned by ADMIN)."""
+>       assert call(c, DEV, "POST", "label-imports", self.importing()).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c91d8200>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'})
+E        +      where {'import_id': '0000001b-0000-4000-8000-000000000001', 'dataset_ref': 'lab:dataset:b0000001-0000-4000-8000-000000000001... "d609a7c8-7aed-46c6-8a57-6927c5df6a2d", "method": "model", "method_version": "labeler-3", "label": {"answer": "a3"}}'} = importing()
+E        +        where importing = <tests.g.lab_pipelines.test_lab_pipelines.World object at 0x7319c92466f0>.importing
+
+tests/g/lab_pipelines/test_lab_pipelines.py:137: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+____ test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3 _____
+
+    def test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3():
+        """Oracle: a non-JSON content type, an oversized body, an extra key or a limit that is not
+        an exact USD amount is a 422 and nothing is asked."""
+        w = World()
+        c = w.client()
+        text = json.dumps(w.importing())
+        for raw, content_type in ((text, "text/plain"), (text + " " * lp.MAX_BODY_BYTES, None)):
+            answer = call(c, DEV, "POST", "label-imports", raw=raw,
+                          headers={"content-type": content_type} if content_type else None)
+            assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})
+        for path, body in (("label-imports", w.importing(provider_org_id=OTHER)),
+                           ("training-runs", w.preparing(limit="25")),
+                           ("training-runs", w.preparing(limit="25.00000000 CREDIT"))):
+            answer = call(c, DEV, "POST", path, body)
+            assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), body
+        assert untouched(w)
+        padded = text + " " * 20_000                  # over the chat cap, under the import cap
+>       assert call(c, DEV, "POST", "label-imports", raw=padded).status_code == 201
+E       assert 503 == 201
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+E        +    where <Response [503 Service Unavailable]> = call(<starlette.testclient.TestClient object at 0x7319c917ca40>, 'a0000002-0000-4000-8000-000000000002', 'POST', 'label-imports', raw='{"import_id": "0000001b-0000-4000-8000-000000000001", "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-00000000000...                                                                                                                      ')
+
+tests/g/lab_pipelines/test_lab_pipelines.py:484: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    infrx.gateway.lab:lab_auth.py:109 lab route failed: TypeError
+________________ test_the_named_cases_pass_on_the_pristine_tree ________________
+
+    def test_the_named_cases_pass_on_the_pristine_tree():
+        """R83 (b): a case that fails on its own would 'kill' every mutant naming it."""
+        cases = tuple(sorted({case for mutant in ALL for case in mutant.cases}))
+>       assert shared.pristine(cases, mutation_list.RUNNER) is None
+E       assert Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']") is None
+E        +  where Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']") = <function pristine at 0x7319cf1db6a0>(('test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3', 'test_lab_pipelines__a_consumer_only_user_is...ed_checkpoint_is_never_evaluated', 'test_lab_pipelines__a_viewer_reads_nothing_and_only_an_administrator_assigns', ...), Runner(name='lab-pipelines', targets=('tests/g/lab_pipelines/test_lab_pipelines.py',), extra_args=('-m', 'not pg'), pa... require_every_case=False, targets_for=None, layout=<function _layout at 0x7319cc772200>, env=('INFRX_LAB_API_STACK',)))
+E        +    where <function pristine at 0x7319cf1db6a0> = shared.pristine
+E        +    and   Runner(name='lab-pipelines', targets=('tests/g/lab_pipelines/test_lab_pipelines.py',), extra_args=('-m', 'not pg'), pa... require_every_case=False, targets_for=None, layout=<function _layout at 0x7319cc772200>, env=('INFRX_LAB_API_STACK',)) = mutation_list.RUNNER
+
+tests/g/lab_pipelines/test_mutants.py:49: AssertionError
+______________ test_mutant_is_killed[mounted_without_the_switch] _______________
+
+mutant = Mutant(name='mounted_without_the_switch', invariant='LAB_PIPELINES off (no rt.lab_pipelines): no route', file='gateway...n        return None', cases=('test_lab_pipelines__nothing_is_mounted_without_the_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: mounted_without_the_switch is broken_runner (LAB_PIPELINES off (no rt.lab_pipelines): no route): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__nothing_is_mounted_without_the_switch'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_________________ test_mutant_is_killed[body_before_identity] __________________
+
+mutant = Mutant(name='body_before_identity', invariant='a body is read only after the session and membership', file='gateway/ro...lity)\n', cases=('test_lab_pipelines__every_route_needs_the_session_before_anything_else',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: body_before_identity is broken_runner (a body is read only after the session and membership): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__every_route_needs_the_session_before_anything_else'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+__________________ test_mutant_is_killed[viewer_reads_labels] __________________
+
+mutant = Mutant(name='viewer_reads_labels', invariant='label values are content: every route needs run_evaluation', file='gatew...:', cases=('test_lab_pipelines__a_viewer_reads_nothing_and_only_an_administrator_assigns',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: viewer_reads_labels is broken_runner (label values are content: every route needs run_evaluation): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__a_viewer_reads_nothing_and_only_an_administrator_assigns'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_________________ test_mutant_is_killed[connector_not_manual] __________________
+
+mutant = Mutant(name='connector_not_manual', invariant='every run is the manual bundle until P-11', file='gateway/routes/lab_pi...nector="protocol-test")', cases=('test_lab_pipelines__the_connector_is_never_the_callers',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: connector_not_manual is broken_runner (every run is the manual bundle until P-11): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__the_connector_is_never_the_callers'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_______________ test_mutant_is_killed[import_conflict_unchecked] _______________
+
+mutant = Mutant(name='import_conflict_unchecked', invariant='another import under an import id is a 409', file='gateway/routes/...se:\n', cases=('test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: import_conflict_unchecked is broken_runner (another import under an import id is a 409): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_________________ test_mutant_is_killed[run_holdout_unpinned] __________________
+
+mutant = Mutant(name='run_holdout_unpinned', invariant="a run shows the frozen holdout's pin", file='gateway/routes/lab_pipelin...t": {},', cases=('test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: run_holdout_unpinned is broken_runner (a run shows the frozen holdout's pin): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+__________________ test_mutant_is_killed[gone_is_unavailable] __________________
+
+mutant = Mutant(name='gone_is_unavailable', invariant='an expired export is 410 gone, not a retryable 503', file='gateway/route...       except errors.NotFound:\n', cases=('test_lab_pipelines__an_expired_export_is_gone',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: gone_is_unavailable is broken_runner (an expired export is 410 gone, not a retryable 503): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__an_expired_export_is_gone'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_____________ test_mutant_is_killed[body_bounded_by_the_chat_cap] ______________
+
+mutant = Mutant(name='body_bounded_by_the_chat_cap', invariant='an import body is bounded by the pipelines cap', file='gateway/... model))', cases=('test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: body_bounded_by_the_chat_cap is broken_runner (an import body is bounded by the pipelines cap): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated', 'tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']. The cases ['test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...sts/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row']").killed
+
+tests/g/lab_pipelines/test_mutants.py:55: AssertionError
+_ test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down _
+
+tmp_path = PosixPath('/tmp/pytest-of-rey/pytest-7470/test_i2l__the_live_lab_edge_re0')
+
+    def test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down(tmp_path):
+        """The edge site run for real (pinned Caddy, host network, e3l ports) in front of a stub
+        control service: a Lab session token reaches `/lab/v1/*`; a consumer `/v1` key is 401 on
+        every path and never reaches it; other paths 404; with the control service down the Lab
+        answers 503, never an App route. Oracle: a consumer key reaching a control operation."""
+        if not (_free(EDGE_PORT) and _free(UPSTREAM_PORT)):
+            pytest.skip(f"NOT RUN: e3l ports {EDGE_PORT}/{UPSTREAM_PORT} are held")
+>       server = http.server.ThreadingHTTPServer(("127.0.0.1", UPSTREAM_PORT), _Upstream)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/i/lab/test_lab_packaging.py:350: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py:457: in __init__
+    self.server_bind()
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/http/server.py:140: in server_bind
+    socketserver.TCPServer.server_bind(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <http.server.ThreadingHTTPServer object at 0x73199beb9640>
+
+    def server_bind(self):
+        """Called by constructor to bind the socket.
+    
+        May be overridden.
+    
+        """
+        if self.allow_reuse_address and hasattr(socket, "SO_REUSEADDR"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Since Linux 6.12.9, SO_REUSEPORT is not allowed
+        # on other address families than AF_INET/AF_INET6.
+        if (
+            self.allow_reuse_port and hasattr(socket, "SO_REUSEPORT")
+            and self.address_family in (socket.AF_INET, socket.AF_INET6)
+        ):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+>       self.socket.bind(self.server_address)
+E       OSError: [Errno 98] Address already in use
+
+/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/socketserver.py:478: OSError
+_____________ test_mutant_is_killed[lab_unit_part_of_the_gateway] ______________
+
+mutant = Mutant(name='lab_unit_part_of_the_gateway', invariant='a Lab unit has no lifecycle link to an App unit', file='deploy/...y.service\n', cases=('test_i2l__no_app_runtime_unit_depends_on_a_lab_unit_or_the_reverse',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: lab_unit_part_of_the_gateway is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down']").killed
+
+tests/i/lab/test_mutants.py:43: AssertionError
+__________________ test_mutant_is_killed[control_public_bind] __________________
+
+mutant = Mutant(name='control_public_bind', invariant='the control service listens on loopback only', file='deploy/lab/app/infr...', cases=('test_i2l__the_control_service_is_loopback_least_privilege_bounded_and_its_own',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: control_public_bind is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/i/lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'.../lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down']").killed
+
+tests/i/lab/test_mutants.py:43: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/d/test_code_mutants_d6f.py::test_sql_mutant_is_killed[d6f_concurrent_duplicate_fails]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-103 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/tests/d/test_d6f_feedback.py", line 276, in <lambda>
+      "second", call(second, "accept_feedback", accept_args(key, n=41))))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/tests/d/test_d6f_feedback.py", line 69, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "idempotency_pkey"
+  DETAIL:  Key (org_id, operation, key)=(0a000000-0000-4000-8000-00000000000a, feedback, race-11597a53-c479-4d39-862e-e12f0936b3ae) already exists.
+  CONTEXT:  SQL statement "insert into infrx.idempotency (org_id, operation, key, payload_digest, feedback_id)
+    values (v_org, p_args->'idem'->>'operation', p_args->'idem'->>'key',
+            p_args->'idem'->>'payload_hash', f.feedback_id)"
+  PL/pgSQL function accept_feedback(jsonb) line 47 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/d/test_code_mutants_l2sql.py::test_sql_mutant_is_killed[l2_writers_race]
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-135 (<lambda>)
+  
+  Traceback (most recent call last):
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/tests/d/test_l2sql_access.py", line 256, in <lambda>
+      "second", call(second, "lab_put_access_grant", pair)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/tests/d/test_l2sql_access.py", line 71, in call
+      return conn.execute(f"select infrx.{name}(%s)", (Jsonb(args),)).fetchone()[0]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-pipelines-lineage/apps/infrx-api/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 304, in execute
+      raise ex.with_traceback(None)
+  psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "lab_access_grants_one_pair"
+  DETAIL:  Key (grantor_org_id, recipient_provider_org_id, version)=(96c1260b-8056-49a2-84a5-864b9c456c16, b0000001-0000-4000-8000-000000000001, 1) already exists.
+  CONTEXT:  SQL statement "insert into infrx.lab_access_grants (grant_id, version, grantor_org_id,
+        recipient_provider_org_id, model_ids, categories, purposes, retention_days,
+        effective_at, expires_at, written_by)
+      values (coalesce(prev.grant_id, gen_random_uuid()), coalesce(prev.version, 0) + 1,
+        (p_args->>'grantor_org_id')::uuid, v_provider, v_models,
+        array(select jsonb_array_elements_text(p_args->'categories')),
+        array(select jsonb_array_elements_text(p_args->'purposes')),
+        (p_args->>'retention_days')::int, infrx.now(), (p_args->>'expires_at')::timestamptz,
+        (p_args->>'actor_user_id')::uuid)
+      returning *"
+  PL/pgSQL function lab_put_access_grant(jsonb) line 15 at SQL statement
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__lineage_runs_from_labels_to_an_eligible_checkpoint
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_rejected_checkpoint_is_never_evaluated
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_import_is_write_once_with_every_rejected_row
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_label_export_id_answers_the_export_already_made
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__review_corrections_and_adjudications_are_human_ground_truth
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__the_connector_is_never_the_callers
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__an_expired_export_is_gone
+FAILED tests/g/lab_pipelines/test_lab_pipelines.py::test_lab_pipelines__a_body_is_json_bounded_and_valid_before_p1_and_p3
+FAILED tests/g/lab_pipelines/test_mutants.py::test_the_named_cases_pass_on_the_pristine_tree
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[mounted_without_the_switch]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[body_before_identity]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[viewer_reads_labels]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[connector_not_manual]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[import_conflict_unchecked]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[run_holdout_unpinned]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[gone_is_unavailable]
+FAILED tests/g/lab_pipelines/test_mutants.py::test_mutant_is_killed[body_bounded_by_the_chat_cap]
+FAILED tests/i/lab/test_lab_packaging.py::test_i2l__the_live_lab_edge_refuses_consumer_keys_and_is_unavailable_not_open_when_down
+FAILED tests/i/lab/test_mutants.py::test_mutant_is_killed[lab_unit_part_of_the_gateway]
+FAILED tests/i/lab/test_mutants.py::test_mutant_is_killed[control_public_bind]
+20 failed, 6469 passed, 154 skipped, 9 xfailed, 5 warnings in 7878.03s (2:11:18)
+make: *** [Makefile:13: api-test] Error 1
+exit 2

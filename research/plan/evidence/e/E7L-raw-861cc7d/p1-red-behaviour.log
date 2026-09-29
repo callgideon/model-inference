@@ -1,0 +1,71 @@
+...............FFFF                                                      [100%]
+=================================== FAILURES ===================================
+__________ test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample __________
+
+    def test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample() -> None:
+        """Oracle (R193, DATA-LINEAGE): after the re-grant a label row for the tombstoned
+        sample is refused `grant_not_current` and nothing is logged; its neighbours import."""
+        store, log, objects, ref, train, _ = regranted_world()
+        events = len(log.rows)
+        got = load(store, log, ref, label_rows(train, method="human"), objects=objects)
+>       assert got.rejected == [{"row": 1, "reason": "grant_not_current"}], got
+E       AssertionError: Imported(accepted=['lab:annotation:b0000001-0000-4000-8000-000000000001:9e29af63-585f-41b1-96ff-63041974b439@sha256:b6...7fa-5a06-4a4d-85ae-dc3242e9ca23@sha256:0583a8979a1511562b152c58213563170ec8778c987ec31d1fd6a5f5ab25363c'], rejected=[])
+E       assert [] == [{'row': 1, '...not_current'}]
+E         
+E         Right contains one more item: {'row': 1, 'reason': 'grant_not_current'}
+E         Use -v to get more diff
+
+tests/p/annotations/test_annotations.py:490: AssertionError
+________________ test_p1_a_regrant_selects_no_tombstoned_sample ________________
+
+    def test_p1_a_regrant_selects_no_tombstoned_sample() -> None:
+        """Oracle (R193): a selection after the re-grant leaves the tombstoned sample out."""
+        store, _, objects, ref, train, _ = regranted_world()
+        new = run(p1.select(store, objects=objects, now=NOW, provider_org_id=NEMO,
+                            actor="dev@nemo", dataset_ref=ref, sample_ids=train,
+                            dataset_id=uid(8, 0xda), version=1, created_at="2026-09-27T14:00:00Z"))
+>       assert {s.sample_id for s in manifest(store, new).samples} == set(train[1:])
+E       AssertionError: assert {'6fe7eb7b-04...6927c5df6a2d'} == {'d609a7c8-7a...6927c5df6a2d'}
+E         
+E         Extra items in the left set:
+E         '6fe7eb7b-0488-4633-876f-de82e461cb96'
+E         Use -v to get more diff
+
+tests/p/annotations/test_annotations.py:500: AssertionError
+________________ test_p1_a_regrant_exports_no_tombstoned_sample ________________
+
+    def test_p1_a_regrant_exports_no_tombstoned_sample() -> None:
+        """Oracle (R193): a new training export after the re-grant omits the tombstoned sample
+        (`grant_not_current`) and ships its neighbours."""
+        store, log, objects, ref, train, _ = regranted_world()
+        later = export(store, log, objects, ref, export_id=uid(6, 0xe7))
+>       assert [x["sample_id"] for x in later["lineage"]] == train[1:]
+E       AssertionError: assert ['6fe7eb7b-04...6927c5df6a2d'] == ['d609a7c8-7a...6927c5df6a2d']
+E         
+E         At index 0 diff: '6fe7eb7b-0488-4633-876f-de82e461cb96' != 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d'
+E         Left contains one more item: 'd609a7c8-7aed-46c6-8a57-6927c5df6a2d'
+E         Use -v to get more diff
+
+tests/p/annotations/test_annotations.py:508: AssertionError
+_________________ test_p1_a_regrant_rereads_no_tombstoned_line _________________
+
+    def test_p1_a_regrant_rereads_no_tombstoned_line() -> None:
+        """Oracle (R193): an export made before the tombstone serves, after the re-grant, every
+        line but the tombstoned sample's."""
+        store, _, objects, _, train, rec = regranted_world()
+        whole = run(objects.get(rec["examples_key"])).splitlines(keepends=True)
+        assert [x["sample_id"] for x in rec["lineage"]] == train
+>       assert run(p1.read_export(store, objects, provider_org_id=NEMO,
+                                  export_id=rec["export_id"], now=NOW)) == b"".join(whole[1:])
+E       assert b'{"completio...pt":"q 0?"}\n' == b'{"completio...pt":"q 0?"}\n'
+E         
+E         At index 26 diff: b'0' != b'1'
+E         Use -v to get more diff
+
+tests/p/annotations/test_annotations.py:518: AssertionError
+=========================== short test summary info ============================
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_imports_no_label_for_a_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_selects_no_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_exports_no_tombstoned_sample
+FAILED tests/p/annotations/test_annotations.py::test_p1_a_regrant_rereads_no_tombstoned_line
+4 failed, 15 passed in 0.68s
