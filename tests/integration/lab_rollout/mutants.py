@@ -133,6 +133,8 @@ D44 = "../app/supabase/migrations/0044_lab_control_reads.sql"
 D45 = "../app/supabase/migrations/0045_lab_serving_ref_identity.sql"
 D48 = "../app/supabase/migrations/0048_lab_release_listing.sql"
 L3S = "infrx/state/lab_control.py"
+LW = "infrx/lab/workers/__main__.py"
+WM = "infrx/worker/__main__.py"
 
 K01 = "test_k01_routing_off_serves_todays_request_over_a_live_release"
 K01_IDENTITY = "test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation"
@@ -145,6 +147,7 @@ K03_OUTAGE = "test_k03_a_release_store_outage_is_a_503_never_the_baseline"
 K04_ONCE = "test_k04_a_breach_rolls_back_once_under_two_controllers_for_future_admissions"
 K04_RESTART = "test_k04_a_controller_killed_before_the_alias_cas_converges_on_restart"
 K09_PROCESS = "test_k09_the_controller_process_restarted_mid_rollout"
+K09_PASS = "test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas"
 K05_ACCEPT = "test_k05_an_accepting_report_after_the_horizon_is_approved_once"
 K05_HOLD = "test_k05_an_inconclusive_report_blocks_promotion"
 K05_SLICE = "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back"
@@ -213,6 +216,29 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "the real PgControlStore (pilot.control_serving, WR-E8L-7)", G,
        "                   PgControlStore(connect),\n", "                   PgControlStore(None),\n",
        K09_PROCESS),
+    # WR-C5-K09: the bare rollout role (WR-R2-3) converges a rollback killed before the CAS
+    _m("st_pass_skips_the_rolled_back", "the pass steps rolled-back releases too (R216/R228: "
+       "a rollback killed before the alias CAS is converged)", LW,
+       'releases.releases_in(("running", "rolled_back"),', 'releases.releases_in(("running",),',
+       K09_PASS),
+    _m("st_pass_reads_another_plan", "the plan is the one stored beside the release "
+       "(lab/<p>/releases/<policy_id>/plan.json, D9's digest)", LW,
+       'return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"',
+       'return f"lab/{provider_org_id}/releases/{policy_id}/plan"', K09_PASS),
+    _m("st_pass_rolled_back_needs_live", "a rolled-back release only converges: it needs no "
+       "R1 aggregate (R228)", LW,
+       'current = await live(item) if item.release.state == "running" else None',
+       "current = await live(item)", K09_PASS),
+    _m("st_step_leaves_the_rolled_back", "R2's step converges a rolled-back release (R216)", R2,
+       "            await self._converge(policy, policy_ref)\n", "            pass\n", K09_PASS),
+    _m("st_pass_waits_a_cadence_first", "the first pass runs at start, not a cadence later",
+       WM, "    while True:\n        try:\n            await step()",
+       "    while True:\n        await sleep(interval_s)\n        try:\n            await step()",
+       K09_PASS),
+    _m("st_pass_held_is_failed", "a running release without R1's aggregates is held, not a "
+       "failure (NoLive, WR-C5-LIVE)", LW,
+       "            except errors.DependencyUnavailable:\n                done[\"held\"] += 1\n",
+       "", K09_PASS),
     _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
        "(R216, E8L-F2): L3's promotion mints a fresh deployment revision", R2,
        "    return f\"{head.rpartition(':')[0]}@{digest}\"", "    return ref", K06_PROMOTED),

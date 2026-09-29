@@ -5,7 +5,8 @@ health, latency and spend; the B2 reports are `reports.compare` over owned case 
 (`lab_world.records`: their declared scores are the expectation).
 
 The I7 unit's process (`python -m infrx.lab.workers rollout`) is composition-2's: a "restart"
-here is a fresh `Controller` over the same durable rows, in process (k09 is the process).
+here is a fresh `Controller` over the same durable rows, in process (k09 is the process: the
+operator's emergency-rollback subcommand and the bare rollout role's pass loop, WR-C5-K09).
 """
 from __future__ import annotations
 
@@ -375,8 +376,8 @@ def test_k09_the_controller_process_restarted_mid_rollout(lab, workdir):
     `pilot.control_serving`, whose reads are now the real `PgControlStore` (merge #30,
     WR-E8L-7): the first invocation records D9's decision and moves the alias back to the
     baseline deployment (exit 0); the restarted one finds the work done - the CAS backstop's
-    reread, no second decision, the alias left alone (exit 0). The continuous pass loop waits
-    on WR-R2-3 (below)."""
+    reread, no second decision, the alias left alone (exit 0). The continuous pass loop is the
+    next case."""
     import os
     import subprocess
     import sys
@@ -421,11 +422,117 @@ def test_k09_the_controller_process_restarted_mid_rollout(lab, workdir):
         assert listing_second == listing_first, "the restarted process moved the alias again"
     finally:
         lab.restore_alias(listed[0])
-    lw.not_run("k09", "WR-R2-3", why="the pass loop `python -m infrx.lab.workers rollout` (no "
-               "subcommand) refuses by name (composition-2's own `_rollout`: \"the rollout "
-               "pass needs every running or rolled-back D9 release with its frozen plan, R1's "
-               "live aggregates, the stored B2 report and L3's alias reads\"). Steps once "
-               "WR-R2-3 (lab-sql + R1) lands the pass loop's read models: start the bare "
-               "`rollout` role against this stack's Lab database, let it see a breach, "
-               "`kill -9` it between D9's decision and the alias CAS, restart it, require one "
-               "decision, the alias converged and `infrx_lab_rollout_alias_converged` set")
+
+
+#: R2's pass cadence (`ROLLOUT_PASS_S`): a pass starts at spawn, the next one this much later,
+#: so an alias converged sooner was converged by the first pass.
+FIRST_PASS_S = 30.0
+
+
+def free_port() -> int:
+    """A spare port of the e8l block for the worker's loopback health listener."""
+    import socket
+    for port in lw._gate().SPARE_PORTS:
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+    raise OSError("no free spare port in the e8l block")
+
+
+def test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas(lab, workdir):
+    """WR-C5-K09 (R216, R228): a controller records D9's rollback and dies before L3's alias
+    CAS - the alias still serves the candidate the policy names. The bare `python -m
+    infrx.lab.workers rollout` (WR-R2-3, nothing injected: LAB_S3_BUCKET + LAB_OPERATOR_ID)
+    reads the plan stored beside the release (`lab/<p>/releases/<policy_id>/plan.json`, D9's
+    digest) and converges the alias to the baseline on its FIRST pass, with no second
+    decision. A running release beside it is held, never evaluated: R1's aggregates are
+    unreadable (NoLive) - the breach half waits on WR-C5-LIVE (evidence, not this case)."""
+    import contextlib
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+    import uuid
+    harness = lw.harness
+    s3, prefix = harness.s3_client(), f"{harness.OBJECT_PREFIX}{uuid.uuid4().hex}/"
+    with contextlib.suppress(Exception):                # already there
+        s3.create_bucket(Bucket=harness.S3_BUCKET)
+
+    def store_plan(policy_id: str) -> None:
+        s3.put_object(Bucket=harness.S3_BUCKET, ContentType="application/json",
+                      Key=f"{prefix}lab/{lab.NEMO}/releases/{policy_id}/plan.json",
+                      Body=lw.plan().model_dump_json().encode())
+
+    listed = lab.listing()
+    base = lab.sql("select infrx.lab_serving_ref(%s)", listed[1])[0][0]
+    promoted = lab.promote(lab.q8.W["serving_2"], 0x9a)
+    candidate = lab.sql("select infrx.lab_serving_ref(%s)", promoted)[0][0]
+    # the policy names the candidate as L3's alias reads it: a later pass matches named refs
+    # only (R216); a promotion under another deployment revision is the operator's stop's
+    policy, ref = lab.launch({**lab.policy(weights=(5_000,), candidates=(candidate,)),
+                              "baseline_ref": base}, lw.plan())
+    now = lab.now()
+    counts = {(policy.policy_id, "candidate"): 20, (policy.policy_id, "baseline"): 20}
+    killed = lab.controller(Partitioned(lab.serving(), fail=1))
+    process = None
+    try:
+        with pytest.raises(ConnectionError):
+            run(killed.step(policy, ref, lw.plan(),
+                            lw.live(counts, policy.policy_id, now=now, p99=5_001), now=now))
+        decided = lab.decisions(ref)
+        assert run(lab.releases().release(ref)).state == "rolled_back"
+        assert decided == [("rollback", "rolled_back", lw.CONTROLLER, ["latency"])]
+        assert lab.listing()[1] == promoted, "the killed controller's alias left the candidate"
+        store_plan(policy.policy_id)
+        # a running release beside it (one live per endpoint): R1's aggregates are unreadable
+        held, held_ref = lab.launch(lab.policy(weights=(5_000,), candidates=(lab.CAND,)),
+                                    lw.plan())
+        store_plan(held.policy_id)
+        env = {**{k: v for k, v in os.environ.items()
+                  if not k.startswith(("AWS_", "LAB_", "DATABASE_", "S3_", "INFRX_"))},
+               **lw.stack.s3_env(), "LAB_DATABASE_URL": lab.dsn,
+               "LAB_WORKER_HEALTH_PORT": str(free_port()), "LAB_S3_BUCKET": harness.S3_BUCKET,
+               "LAB_S3_ENDPOINT": harness.s3_endpoint(), "LAB_S3_PREFIX": prefix,
+               "LAB_OPERATOR_ID": lw.CONTROLLER}
+        log = open(workdir / "rollout.log", "wb")
+        began = time.monotonic()
+        process = subprocess.Popen([sys.executable, "-m", "infrx.lab.workers", "rollout"],
+                                   cwd=lw.API, env=env, stdout=log, stderr=subprocess.STDOUT)
+        converged_after = None
+        while time.monotonic() - began < FIRST_PASS_S and process.poll() is None:
+            if lab.listing()[1] == listed[1]:
+                converged_after = round(time.monotonic() - began, 2)
+                break
+            time.sleep(0.2)
+        exited_early = process.poll()
+        process.send_signal(signal.SIGTERM)
+        stopped = process.wait(30)
+        log.close()
+        lw.save(workdir, "pass.json", {
+            "listing_before": listed, "promoted": promoted, "policy_candidate": candidate,
+            "listing_after": lab.listing(), "converged_after_s": converged_after,
+            "exited_early": exited_early, "exit_on_sigterm": stopped,
+            "decisions": lab.decisions(ref), "held": {
+                "state": run(lab.releases().release(held_ref)).state,
+                "decisions": lab.decisions(held_ref)}})
+        text = (workdir / "rollout.log").read_text(errors="replace")
+        tail = text[-1500:]
+        assert exited_early is None, f"the rollout role exited {exited_early}: {tail}"
+        assert converged_after is not None, (
+            f"the alias did not converge within the first pass ({FIRST_PASS_S}s): "
+            f"{lab.listing()} is not the baseline {listed}: {tail}")
+        assert lab.decisions(ref) == decided, "the pass recorded a second decision"
+        assert run(lab.releases().release(held_ref)).state == "running" and \
+            lab.decisions(held_ref) == [], "a running release was evaluated without R1's data"
+        assert stopped == 0, f"SIGTERM did not stop the role cleanly ({stopped}): {tail}"
+        assert "rollout pass failed" not in text, text[-3000:]
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait(30)
+        lab.quiesce()
+        lab.restore_alias(listed[0])
+        for item in s3.list_objects_v2(Bucket=harness.S3_BUCKET,
+                                       Prefix=prefix).get("Contents", []):
+            s3.delete_object(Bucket=harness.S3_BUCKET, Key=item["Key"])
