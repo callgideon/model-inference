@@ -1,0 +1,20 @@
+apps/infrx-api/.venv/bin/python tests/integration/lab_operate/runner.py --out /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate-2/research/plan/evidence/e/E3L-raw-5bec250c
+[ok  ] preflight: {"docker": "29.6.2", "images": {"postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb678…
+[ok  ] services: {"containers": ["infrx-e3l-clickhouse", "infrx-e3l-postgres", "infrx-e3l-s3", "infrx-e3l-valkey"], "versions": {"postgres": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit", "valkey": "8.1.1…
+[ok  ] migrate: {"applied": [["0001_init.sql", "b31ab5ad6117a88005cfa9dfbb878b15bcefba135b5d3151eaf2d8171831d2bc"], ["0002_seed_models.sql", "9f186e47ad8c88a1b7a97555f5ad0d6a49c3c3d5b8a66b78247e823fca629d38"], ["0003_pilot_durable_schem…
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e3l-clickhouse", "infrx-e3l-postgres", "infrx-e3l-s3", "infrx-e3l-valkey"], "still_named_ours_but_not_ours": []}
+    PASS  l01  two providers: own workspace only; every cross-provider operation refused; revoked membership refused next call
+    PASS  l02  private dev revisions excluded from App discovery and admission
+    PASS  l03  registry validation: artifact, schema, runtime, digest, ownership
+    PASS  l04  production publication: operator approval, audit, rate snapshot
+    PASS  l05  App discovery and a metered call on the published revision
+    PASS  l06  rollback during a queued request keeps its serving and rate pins
+    PASS  l07  consumer keys reach no provider control and are no Lab session
+    PASS  l08  consumer data denied without a current, purpose-matching grant
+    PASS  l09  fault injection on the publish/rollback CAS
+    PASS  l10  control-service restart mid-operation
+    PASS  l11  App inference with the Lab down, crash-looping and rolled back
+    PASS  l12  consumer keys refused by every control-service operation
+cells {'LAB-ACCESS': 'PASS', 'LAB-PUBLISH': 'PASS', 'SPLIT-CONTRACT': 'PASS'}
+gate PASS -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-operate-2/research/plan/evidence/e/E3L-raw-5bec250c/verdict.json
