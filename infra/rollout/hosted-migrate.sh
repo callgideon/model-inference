@@ -32,7 +32,7 @@ git diff --quiet "$RELEASE" HEAD -- "${INPUTS[@]}" || { echo "HEAD $(git rev-par
 [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
-EXPECTED_PENDING="0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026"   # rollout.md W7: 0001-0018 -> 0001-0026
+EXPECTED_PENDING="0027, 0028, 0029, 0030, 0031, 0032, 0033, 0034, 0035, 0036, 0037, 0038, 0039, 0040, 0041, 0042, 0043, 0044, 0045, 0046, 0047, 0048, 0049, 0050, 0051"   # R151/R201 window 2026-09-29 (operator: "deploy v1"): 0001-0026 -> 0001-0051, the Lab migrations
 EXPECTED_FLAGS="credit_admission=false legacy_usd_admission=true signup_grant=true"
 PORT=${PGPORT_LOCAL:-55697}
 BACKUP_ROOT=${BACKUP_ROOT:-$HOME/infrx-backups}
@@ -95,7 +95,7 @@ export MIGRATE_DATABASE_URL="$HOSTED"
 HOSTED_PLAN=$($PY apps/infrx-api/deploy/migrate.py plan 2>>"$LOG") || { say "stop: hosted plan refused (nothing changed): 91-abort.sh, 93-restore-edge.sh"; exit 10; }
 printf '%s\n' "$HOSTED_PLAN" | tee -a "$LOG"
 HOSTED_APPLIED=$(sed -n 's/^applied: //p' <<<"$HOSTED_PLAN")
-case "$HOSTED_APPLIED" in *"0018 terminal_settlement") ;; *) say "stop: hosted applied list does not end at 0018 terminal_settlement (unrecorded hosted change)"; exit 10;; esac
+case "$HOSTED_APPLIED" in *"0026 fenced_result") ;; *) say "stop: hosted applied list does not end at 0026 fenced_result (unrecorded hosted change)"; exit 10;; esac
 SEED=$(sed 's/, /\n/g' <<<"$HOSTED_APPLIED" | sed "s/'/''/g" | sed -E "s/^([0-9]{4}) ?(.*)$/('\1', '\2')/" | paste -sd, -)
 docker exec "$CONTAINER" psql -q -U postgres -d infrx_rollout_copy -v ON_ERROR_STOP=1 -c "create schema supabase_migrations" -c "create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text)" -c "insert into supabase_migrations.schema_migrations (version, name) values $SEED" >/dev/null
 export MIGRATE_DATABASE_URL="postgresql://postgres:$LOCALPW@127.0.0.1:$PORT/infrx_rollout_copy"
@@ -125,7 +125,7 @@ printf '%s\n' "$PLAN" | tee -a "$LOG"
 [ "$(sed -n 's/^plan digest: //p' <<<"$PLAN")" = "$COPY_DIGEST" ] || { say "stop: hosted plan digest ≠ COPY_DIGEST (nothing changed): 91-abort.sh, 93-restore-edge.sh"; exit 10; }
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://marlin2b.callbill.ai/health || true)
 [ "$code" = 503 ] || { say "stop: public /health is '$code', not 503 just before the hosted apply (nothing changed)"; exit 10; }
-say "W7 hosted apply --expect $COPY_DIGEST (0019–0026; never reverted afterwards)"
+say "W7 hosted apply --expect $COPY_DIGEST (0027–0051, the Lab migrations under the R151/R201 window; never reverted afterwards)"
 WROTE=1
 APPLY_OUT=$($PY apps/infrx-api/deploy/migrate.py apply --expect "$COPY_DIGEST" 2>>"$LOG") && rc=0 || rc=$?
 printf '%s\n' "$APPLY_OUT" | tee -a "$LOG"
@@ -137,7 +137,7 @@ esac
 [ "$(sed -n 's/^applied: //p' <<<"$APPLY_OUT")" = "$EXPECTED_PENDING" ] || { say "W7: the apply printed '$APPLY_OUT' (a concurrent migrator?). restore.md A8"; exit 20; }
 POST=$($PY apps/infrx-api/deploy/migrate.py plan 2>>"$LOG") || { say "W7: hosted plan failed after the apply. restore.md A8, maintenance stays"; exit 20; }
 printf '%s\n' "$POST" | tee -a "$LOG"
-case "$POST" in *"0026 fenced_result"$'\n'"nothing pending") ;; *) say "W7: hosted is not 0001-0026 with nothing pending. restore.md A8"; exit 20;; esac
+case "$POST" in *"0051 lab_import_jobs"$'\n'"nothing pending") ;; *) say "W7: hosted is not 0001-0051 with nothing pending. restore.md A8"; exit 20;; esac
 HSTATE=$($PY - 2>>"$LOG" <<'PY'
 import os, psycopg
 with psycopg.connect(os.environ["MIGRATE_DATABASE_URL"]) as c:
@@ -149,4 +149,4 @@ PY
 ) || HSTATE="read failed"
 say "hosted after apply: $HSTATE"
 [ "$HSTATE" = "$EXPECTED_FLAGS; drift_rows 0" ] || { say "W7: hosted flags/drift differ from the copy. restore.md A8"; exit 20; }
-say "W7 PASS: hosted 0001-0026, nothing pending; MIGRATION_DIGEST=$COPY_DIGEST"
+say "W7 PASS: hosted 0001-0051, nothing pending; MIGRATION_DIGEST=$COPY_DIGEST"
