@@ -14,14 +14,13 @@ host processes inside the e7l block - nothing else.
   export each iteration must produce, each synthetic endpoint's right answers, each
   checkpoint's reported training loss, the traces and the decisions. The expectations are
   the fixture's, never the implementation's.
-* **Stand-ins** (said so in the verdict): D8's `LabelLog`/`RunLedger` and J2/D6J's judge
-  ledger are the P lanes' fakes (`FakeLabelLog`, `FakeRunLedger`, P2's `TeacherLedger` = J2's
-  `FakeJudgeLedger` + D8's per-item failure log, which P2's collect writes since d91cce76): the
-  lab-sql-integration-2 lane swaps them for `infrx.state.lab_pipeline`'s adapters. P3's
-  `Evaluations` port (B3's, not on the base: WR-E7L-1) is `Evaluations` below over the real
-  B1 runner. N3's content port is N3's `FakeContent` over the real L2 directory and T3's
-  real `Retention` (C2's adapter is not composed: WR-N3-1); the T3 projections are in memory
-  (no ClickHouse projection writer on this key).
+* **Stand-ins** (said so in the verdict, WR-E7L-4): D8's `LabelLog`/`RunLedger`/`TeacherLedger`
+  are the real `infrx.state.lab_pipeline` adapters over `0042_lab_d8_ledgers.sql`, on this
+  session's own Postgres - not the P lanes' in-memory fakes. P3's `Evaluations` port (B3's,
+  not on the base: WR-E7L-1) is `Evaluations` below over the real B1 runner. N3's content
+  port is N3's `FakeContent` over the real L2 directory and T3's real `Retention` (C2's
+  adapter is not composed: WR-N3-1); the T3 projections are in memory (no ClickHouse
+  projection writer on this key).
 * **Endpoints**: B1's `DevWallet` served as `/v1/chat/completions` on
   `runner.ENDPOINT_PORTS`, reached through B1's `HttpDevEndpoint`; each answers a benchmark
   question right only for the ids the fixture declares for it.
@@ -122,13 +121,13 @@ class Lab:
         from infrx.state.lab_data import PgLabDataStore, grant_ref
 
         import pgstate
+        from infrx.state.lab_consent import PgLabConsentStore
+        from infrx.state.lab_pipeline import PgLabelLog, PgRunLedger, PgTeacherLedger
+        from tests.d import checks as checks_ids
         from tests.d import checks_credit as cc
         from tests.d import test_d7_lab_data as d7
         from tests.d import test_l2sql_access as l2
         from tests.j import fakes as j1
-        from tests.p.annotations.world import FakeLabelLog
-        from tests.p.teachers.fakes import TeacherLedger
-        from tests.p.training.world import FakeRunLedger
         self.cc, self.d7, self.l2, self.j1, self.errors = cc, d7, l2, j1, errors
         self.NEMO, self.DEV, self.ADMIN = cc.NEMO, cc.PROVIDER_DEV_USER, cc.PROVIDER_ADMIN_USER
         self.C1, self.TRACER, self.RACER = cc.CONSUMER_1, cc.CONSUMER_2, cc.RACER
@@ -141,6 +140,15 @@ class Lab:
         self.conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
                           "values ('feedback', true, 'e7l', 'D6F rows behind N3') on conflict "
                           "(name) do update set enabled = true")
+        self.conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
+                          "values ('lab_submission', true, 'e7l', 'D8/D6J ledgers, WR-E7L-4') "
+                          "on conflict (name) do update set enabled = true")
+        self.OPERATOR = checks_ids.USER_OPERATOR    # R184: only a profile with is_operator
+        self.conn.execute(
+            "insert into auth.users (id, email) values (%s, 'e7l-operator@example.com') "
+            "on conflict do nothing", (self.OPERATOR,))
+        self.conn.execute("update public.profiles set is_operator = true where id = %s",
+                          (self.OPERATOR,))
         widened = l2.ok(self.conn, "lab_put_access_grant", l2.scope(
             self.conn, purposes=["provider_sharing", "training", "external_judging"]))
         self.grant = grant_ref(v2.AccessGrant.model_validate(widened))
@@ -160,11 +168,15 @@ class Lab:
         self.directory = PgAccessStore(connector(self.dsn))
         self.access = LabAccess(self.directory)
         self.feedback_service = PgFeedbackService(connector(self.dsn))
-        self.log, self.runs = FakeLabelLog(), FakeRunLedger()
+        self.log = PgLabelLog(connector(self.dsn))
+        self.runs = PgRunLedger(connector(self.dsn))
         self.payer = f"lab:payer:{self.NEMO}:{uid(1, 0x9a7)}@sha256:{'a' * 64}"
         self.rubric = f"lab:rubric:{self.NEMO}:{uid(1, 0xcb7)}@sha256:{'c' * 64}"
         self.teacher_budget = ProviderUsd("50.00000000")
-        self.judge = TeacherLedger({self.payer: self.teacher_budget}, now=self.db_now())
+        run(PgLabConsentStore(connector(self.dsn)).put_budget(
+            provider_org_id=self.NEMO, payer_ref=self.payer,
+            limit=str(self.teacher_budget), actor=self.DEV, reason="e7l seed"))
+        self.judge = PgTeacherLedger(connector(self.dsn))
         self.teacher = self.teacher_fake()
         self.evals = Evaluations(self)
         self.frozen: dict[tuple[str, str], object] = {}
@@ -186,6 +198,37 @@ class Lab:
 
     def db_now(self):
         return self.sql("select infrx.now()")[0][0]
+
+    # ------------------------------------------------------------ D8/D6J ledgers (WR-E7L-4)
+    def reservation(self, key: str) -> dict | None:
+        """D8's `infrx.lab_run_reservations` row for this session's provider and `key` (P3's
+        `submit_key`), as `PgRunLedger.reserve`/`.settle` answer it - `amount`/`state`/`cost`,
+        eight fractional digits - or None if `key` was never reserved."""
+        rows = self.sql("select payer_ref, amount::text, state, cost::text from "
+                        "infrx.lab_run_reservations where provider_org_id = %s and key = %s",
+                        self.NEMO, key)
+        if not rows:
+            return None
+        payer_ref, amount, state, cost = rows[0]
+        return {"payer_ref": payer_ref, "amount": amount, "state": state, "cost": cost}
+
+    def judge_settled(self, run_ids: list[str]) -> str:
+        """D8's `infrx.lab_judge_runs.actual`, summed for exactly these run ids (PROVIDER_USD,
+        eight fractional digits) - never the payer's whole pool, which P3's training runs also
+        settle against (`infrx.lab_budgets` is one payer, one pooled cap, across every
+        regime)."""
+        return self.sql(
+            "select coalesce(sum(actual), 0)::text from infrx.lab_judge_runs "
+            "where run_id = any(%s::uuid[])", run_ids)[0][0]
+
+    def budget(self) -> dict:
+        """D6J's `infrx.lab_budgets` row for this session's payer (PROVIDER_USD, eight
+        fractional digits): `limit`, `reserved` (open holds) and `settled` (paid so far,
+        pooled across the teacher and every training run of this payer)."""
+        limit, reserved, settled = self.sql(
+            "select limit_value::text, reserved::text, settled::text from infrx.lab_budgets "
+            "where provider_org_id = %s and payer_ref = %s", self.NEMO, self.payer)[0]
+        return {"limit": limit, "reserved": reserved, "settled": settled}
 
     def put_trace_grant(self, owner: str, *, categories=None) -> dict:
         """(Re)grant NEMO the owner's request/response (+ feedback for TRACER) content of

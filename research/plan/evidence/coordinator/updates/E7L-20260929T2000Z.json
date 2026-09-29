@@ -1,0 +1,45 @@
+{
+  "task": "E7L",
+  "lane": "lab-improve-2",
+  "slice": "fix round: findings 0-F1/1-F1 (gate rerun headline mistranscribed as 19/6, actual 18/4)",
+  "activity": "fix-round",
+  "at": "2026-09-29T20:00:00Z",
+  "head": "9474cfc5",
+  "base": "01728df6",
+  "worktree": ".claude/worktrees/codex-w5-lab-improve-2",
+  "branch": "codex/w5-lab-improve-2",
+  "owned_paths": [
+    "research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md",
+    "research/plan/evidence/coordinator/updates/"
+  ],
+  "commands": [
+    {"cmd": "python3 -c \"...Counter(st for s in verdict['scenarios'] for st in s['cases'].values())\" over the unmodified research/plan/evidence/e/E7L-raw-a8e1d1f/run/verdict.json", "exit": 0, "summary": "Counter({'PASS': 18, 'NOT RUN': 4}) - confirms the headline should read 18/0/4, not 19/0/6; no code changed, artifact untouched"},
+    {"cmd": "pytest tests/integration --co -q", "exit": 0, "summary": "652 collected, unchanged"},
+    {"cmd": "pytest tests/integration/lab_improve -q (no stack)", "exit": 1, "summary": "17 passed, 1 failed (st_tombstones_ignored, pre-existing baseline), 1 skipped - unchanged"},
+    {"cmd": "pytest tests/integration/lab_rollout tests/integration/lab_improve -q (no stack, together)", "exit": 1, "summary": "32 passed, 3 failed (same pre-existing baselines as WR-E7L-5's evidence), 2 skipped - unchanged"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.2,
+    "pessimistic_h": 0.5,
+    "confidence": "high",
+    "basis": "transcription-only correction, no code touched; the fast owned-path suites and a direct recount from the already-committed raw verdict.json fully verify it"
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md"
+  ],
+  "fix_round": [
+    {
+      "finding": "0-F1",
+      "fixed": true,
+      "summary": "Corrected '19 PASS / 0 FAIL / 6 NOT RUN' to '18 PASS / 0 FAIL / 4 NOT RUN' in WR-E7L-4-a8e1d1f9.md (lines 110, 195) and E7L-20260929T1730Z.json's commands[5].summary; recount verified directly against the unmodified E7L-raw-a8e1d1f/run/verdict.json (18 PASS, 4 NOT RUN); no code changed."
+    },
+    {
+      "finding": "1-F1",
+      "fixed": true,
+      "summary": "Same defect as 0-F1 (duplicate report, same file/lines/JSON field); fixed together. See 0-F1's summary."
+    }
+  ]
+}

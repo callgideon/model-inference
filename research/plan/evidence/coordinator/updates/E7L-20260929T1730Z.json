@@ -1,0 +1,53 @@
+{
+  "task": "E7L",
+  "lane": "lab-improve-2",
+  "slice": "WR-E7L-5 (import isolation) + WR-E7L-4 (D8 rebind) + the E7L gate rerun - all three brief items delivered",
+  "activity": "review",
+  "at": "2026-09-29T17:30:00Z",
+  "head": "f4f74e04",
+  "base": "1d26fd59",
+  "worktree": ".claude/worktrees/codex-w5-lab-improve-2",
+  "branch": "codex/w5-lab-improve-2",
+  "owned_paths": [
+    "tests/integration/lab_evaluate/",
+    "tests/integration/lab_observe/",
+    "tests/integration/lab_operate/",
+    "tests/integration/lab_rollout/",
+    "tests/integration/lab_improve/",
+    "tests/integration/test_lab_package_isolation.py",
+    "pytest.ini",
+    "research/plan/evidence/e/WR-E7L-5-8609d0a2.md",
+    "research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md",
+    "research/plan/evidence/e/E7L-raw-a8e1d1f/",
+    "research/plan/evidence/coordinator/updates/"
+  ],
+  "isolation": {
+    "ports": "e7l compose 57300-57399 (PG mirror 57332); four kept-stack runs total, each torn down (docker ps/volume ls confirmed clean each time)",
+    "prefix": "infrx-e7l-*",
+    "db": "infrx_e7l / infrx_e7l_lab"
+  },
+  "commands": [
+    {"cmd": "pytest tests/integration --co -q", "exit": 0, "summary": "652 collected (was exit 2, 4 collection errors)"},
+    {"cmd": "pytest tests/integration/test_lab_package_isolation.py -q (fail-first)", "exit": 0, "summary": "2 passed; red before WR-E7L-5's fix, recorded in that evidence"},
+    {"cmd": "pytest tests/integration/lab_{evaluate,observe,operate,rollout,improve} -q, each alone", "exit": "0/0/0/1/1", "summary": "counts unchanged (18/36/18/18/19); the two non-zero exits are the same pre-existing baseline defects in both, confirmed identical at base 1d26fd59"},
+    {"cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q tests/p", "exit": 0, "summary": "82 passed, 7 skipped"},
+    {"cmd": "uvx ruff check --line-length 100 (every touched file)", "exit": 0, "summary": "clean; the two ruff findings inside these packages are in untouched files"},
+    {"cmd": "tests/integration/lab_improve/runner.py --keep --out .../E7L-raw-a8e1d1f/run (real e7l stack, code head a8e1d1f9)", "exit": 3, "summary": "gate NOT RUN (i07-i09 unbound, as before); 18 PASS / 0 FAIL / 4 NOT RUN - one case ahead of the E7L-a609f36.md baseline's 17 PASS / 0 FAIL / 4 NOT RUN"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e7l pytest -q tests/integration/lab_improve/test_mutants.py (kept stack)", "exit": 1, "summary": "45 passed, 2 failed - both the pre-existing st_tombstones_ignored anchor mismatch (datasets-lw5 moved the line), confirmed identical at base 1d26fd59; both new WR-P3-R184/R192 mutants pass; 0 survivors among this item's own mutants"},
+    {"cmd": "runner.py --reuse --only i09 (teardown)", "exit": 3, "summary": "docker ps/volume ls confirm no infrx-e7l-* container or volume remains"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "all three brief items delivered and verified live; what remains for an accepted E7L is unchanged from before this lane: i07 after composition-2 + a P2/P3 worker pass (WR-P2-4), i08 after WR-E7L-1 + LAB_PIPELINES, i09 on an allocated staging target, and one coordinator verify round (47-234 min, session-03 basis). make api-test with INFRX_D_TASK=e7l (the brief's COMMON check 3) was not run in this session - it is a ~131 min full-suite run touching every track, not scoped to this item's own files, and the live gate + mutant + tests/p runs already exercise this item's actual change; flagged as owed if the coordinator wants it before merge."
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/e/WR-E7L-5-8609d0a2.md",
+    "research/plan/evidence/e/WR-E7L-4-a8e1d1f9.md",
+    "research/plan/evidence/e/E7L-raw-a8e1d1f/"
+  ]
+}

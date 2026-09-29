@@ -38,6 +38,22 @@ REPO = HERE.parents[2]
 API_DIR = REPO / "apps" / "infrx-api"
 
 
+def _sibling(name: str):
+    """Loaded under a name unique to this package's own directory: `lab_world` is also every
+    sibling lab_*/'s module name (WR-E7L-5) - with two such packages in one process, a bare
+    `import lab_world` resolves to whichever package's directory sorts first in sys.path, not
+    to the importing file's own package."""
+    key = f"{HERE.name}.{name}"
+    cached = sys.modules.get(key)
+    if cached is not None:
+        return cached
+    spec = importlib.util.spec_from_file_location(key, HERE / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _shared():
     path = API_DIR / "tests" / "contracts" / "mutants.py"
     spec = importlib.util.spec_from_file_location("e7l_shared_mutants", path)
@@ -98,8 +114,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '            "test_ids": ["PIPELINE-BUDGET"], "lanes": []},',
        '            "test_ids": ["PIPELINE-BUDGET"], "lanes": ["composition-2"]},', MATRIX),
     _m("a_required_case_renamed", "the required cases are the modules' cases", R,
-       '    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",),',
-       '    "i06": ("test_i06_a_lost_poll",),', REQUIRED),
+       '    "i06": ("test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job",',
+       '    "i06": ("test_i06_a_lost_poll",', REQUIRED),
     _m("another_namespace", "e7l runs in its own reserved block", R,
        'NAMESPACE = "e7l"', 'NAMESPACE = "e6l"', NAMESPACE),
     _m("an_endpoint_on_a_service_port", "the endpoints avoid E2's service ports", R,
@@ -127,6 +143,8 @@ P2 = "infrx/pipelines/teachers/__init__.py"
 P3 = "infrx/pipelines/training/__init__.py"
 N3 = "infrx/datasets/lineage/__init__.py"
 B2 = "infrx/evaluation/reports/__init__.py"
+M = "../app/supabase/migrations/"
+M42 = M + "0042_lab_d8_ledgers.sql"
 
 I01_LABELS = "test_i01_labels_keep_their_method_evidence_and_review"
 I01_TEACHER = "test_i01_the_teacher_never_sees_the_holdout_and_its_labels_stay_synthetic"
@@ -144,6 +162,7 @@ I05_DUP = "test_i05_a_duplicate_teacher_submit_is_one_paid_job"
 I05_AMBIGUOUS = "test_i05_an_ambiguous_teacher_submit_is_held_and_never_resubmitted"
 I05_BUDGET = "test_i05_the_budget_stops_the_batch_before_the_chunk_it_cannot_cover"
 I06 = "test_i06_a_timeout_after_accept_and_a_lost_poll_are_one_paid_job"
+I06_CONFIRM = "test_i06_an_ambiguous_run_ends_only_on_an_operators_written_confirmation"
 I04_REGRANT = "test_i04_a_regrant_resurrects_no_tombstoned_sample_into_training"
 #: cases that fail on this base (none since WR-E7L-3 fixed 0-E7L-1)
 FAILING: tuple[str, ...] = ()
@@ -219,9 +238,18 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_corrections_dropped", "the grantor's D6F feedback rides beside the original as "
        "corrections", N3, "for f in await feedback(grantor_org_id, request)] if joined else []",
        "for f in await feedback(grantor_org_id, request)] if False else []", I03_TRACES),
+    # WR-N3-5 (datasets-lw5) holds the tombstone twice: 0041's lab_permitted_samples and the
+    # object records `blocked` reads; ignoring it means the gate skips both, keeping expiry.
     _m("st_tombstones_ignored", "a tombstone is permanent: a re-grant resurrects nothing",
-       N3, '    stones = {_id(k) for k in await objects.keys(f"{base}/tombstones/")} & wanted',
-       "    stones = set()", I04_GATE),
+       N3, "    allowed = set(await (store.accessible_samples if restrictions is None\n"
+       "                         else restrictions.permitted)(\n"
+       "        dataset_ref, provider_org_id=provider_org_id, purpose=purpose))\n"
+       "    return allowed - set(await blocked(objects, provider_org_id=provider_org_id,\n"
+       "                                       sample_ids=allowed, now=now))",
+       "    allowed = set(await store.accessible_samples(\n"
+       "        dataset_ref, provider_org_id=provider_org_id, purpose=purpose))\n"
+       "    return allowed - set(await _expired(objects, provider_org_id, allowed, now))",
+       I04_GATE),
     _m("st_pipelines_read_d7_gate", "R193: a P1 export gates on N3's permitted, never D7's "
        "grant read alone (missing transitive revocation)", P1,
        "allowed = await permitted(store, objects, dataset_ref, now=now,\n"
@@ -246,6 +274,17 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "decides)", B2,
        '    inferior = [f"{name} inferior" for name, v in verdicts if v == "inferior"]',
        "    inferior = []", I02_BAD),
+    _m("st_ambiguous_fails_without_an_operator", "WR-P3-R184: only a profile with "
+       "is_operator ends an ambiguous run", M42,
+       "    if not exists (select 1 from public.profiles pr\n"
+       "                    where pr.id::text = v_fields->>'operator' and pr.is_operator) "
+       "then\n",
+       "    if false then\n", I06_CONFIRM),
+    _m("st_confirmed_failure_keeps_the_hold", "WR-P3-R192: the confirmed failure releases "
+       "the run's hold in the same move", M42,
+       "  if v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
+       "  if false and v_from = 'ambiguous' and v_target = 'failed' and exists (\n",
+       I06_CONFIRM),
 )
 STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 SCENARIO_FILES = ("scenarios_iterate.py", "scenarios_faults.py")
@@ -298,7 +337,7 @@ def claim_the_kept_stack() -> str | None:
     """Point the copies at the kept e7l stack; None if there is one, else why not."""
     os.environ["INFRX_E2_NAMESPACE"] = "e7l"
     sys.path[:0] = [str(HERE), str(HERE.parent), str(HERE.parent / "backend")]
-    import lab_world
+    lab_world = _sibling("lab_world")
     if lab_world.harness.NAMESPACE != "e7l":
         return (f"this process loaded E2's harness as {lab_world.harness.NAMESPACE!r}: run the "
                 "stack list in its own process with INFRX_E2_NAMESPACE=e7l")
