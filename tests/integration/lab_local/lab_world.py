@@ -445,7 +445,9 @@ def lab_web(workdir: Path, api_url: str, supabase_url: str, control: str | None 
                  lab_web_env(api_url, supabase_url, control), workdir, lab)
     try:
         with lab_tls(workdir) as origin:
-            why = wait_ready(proc, f"http://127.0.0.1:{LAB_PORT}/", 90.0)
+            # the terminator binds its port after `next start` is up (o07 at 1a5be321)
+            why = wait_ready(proc, f"http://127.0.0.1:{LAB_PORT}/", 90.0) or \
+                wait_ready(proc, f"{origin}/", 30.0, verify=False)
             yield types.SimpleNamespace(proc=proc, origin=origin, why=why)
     finally:
         proc.stop()

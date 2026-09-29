@@ -360,7 +360,8 @@ def pins() -> dict:
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=REPO, capture_output=True,
                               text=True).stdout.strip()
-    return {"head": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
+    return {"head": git("rev-parse", "HEAD"),        # the run's own evidence is not dirt
+            "dirty": bool(git("status", "--porcelain", "--", ".", ":!research/plan/evidence"))}
 
 
 def main(argv: list[str] | None = None) -> int:

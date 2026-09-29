@@ -68,6 +68,8 @@ R222_RECORDED = "test_lab_local_r222_the_recorded_28c9c2cc_verdict_is_not_accept
 R222_CLASSES = "test_lab_local_r222_excuses_only_the_ruled_classes"
 R222_E4 = "test_lab_local_r222_the_e4_stage_is_excused_only_for_its_by_design_case"
 AS_OWNER = "test_lab_local_the_control_login_answers_as_the_owner_login"
+TLS_READY = "test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers"
+PIN_CLEAN = "test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -163,6 +165,14 @@ MUTANTS: tuple[Mutant, ...] = (
        '            "LAB_CHECKPOINT_KEYS"', SWITCHES),
     _m("lab_web_without_control", "the Lab web reaches the control factory", W,
        'return {"LAB_CONTROL_URL": control or control_url(), ', 'return {', WEB),
+    _m("lab_web_ready_before_its_origin", "the Lab web is ready once its https origin "
+       "answers (o07's race)", W, ' or \\\n                wait_ready(proc, f"{origin}/", 30.0, verify=False)',
+       "", TLS_READY),
+    _m("evidence_is_dirt", "the run's own evidence never makes the pin dirty", R,
+       '"--porcelain", "--", ".", ":!research/plan/evidence"))}', '"--porcelain"))}', PIN_CLEAN),
+    _m("anything_is_clean", "a stray file outside the evidence is dirty", R,
+       '"dirty": bool(git("status", "--porcelain",', '"dirty": False and bool(git("status", "--porcelain",',
+       PIN_CLEAN),
     _m("a_served_role_pending", "eval, judge and datasets must start; only named lanes "
        "pend", W, '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n',
        '    "rollout": ("WR-LSQ-9", "the rollout pass needs"),\n'

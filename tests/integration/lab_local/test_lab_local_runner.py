@@ -312,3 +312,37 @@ def test_lab_local_the_control_login_answers_as_the_owner_login():
     assert set(lw.judge_login({"datasets": failed}, {"datasets": failed}, {"datasets"})[0]) \
         == {"datasets"}
     assert set(lw.judge_login({"control": typed}, {"control": typed}, {"evals"})[0]) == {"control"}
+
+
+def test_lab_local_the_lab_web_is_ready_only_once_its_tls_origin_answers(tmp_path, monkeypatch):
+    """o07 at 1a5be321/950a570b: `next start` was ready in 125 ms while the TLS terminator had
+    not bound its port yet (ConnectError). The Lab web is ready only when its https origin
+    answers through the terminator too, not only its loopback http."""
+    import contextlib
+    import types
+    lw = world()
+    (tmp_path / "apps" / "lab" / ".next").mkdir(parents=True)
+    (tmp_path / "apps" / "lab" / ".next" / "BUILD_ID").write_text("x")
+    monkeypatch.setattr(lw.harness, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(lw, "spawn", lambda *a, **k: types.SimpleNamespace(stop=lambda: None))
+    monkeypatch.setattr(lw, "lab_tls", lambda workdir: contextlib.nullcontext(lw.LAB_ORIGIN))
+    waited = []
+    monkeypatch.setattr(lw, "wait_ready", lambda proc, url, timeout=60.0, verify=True:
+                        waited.append((url, verify)))
+    with lw.lab_web(tmp_path, "http://gw", "http://sb") as web:
+        assert web.why is None
+    assert (f"{lw.LAB_ORIGIN}/", False) in waited, waited
+
+
+def test_lab_local_the_evidence_it_writes_never_makes_the_pin_dirty(tmp_path, monkeypatch):
+    """The verdict dir lives under research/plan/evidence (make lab-local): the run's own
+    output is not a dirty tree (every earlier verdict said dirty: true); anything else is."""
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    monkeypatch.setattr(runner, "REPO", tmp_path)
+    raw = tmp_path / "research" / "plan" / "evidence" / "e" / "E4ON-raw-x"
+    raw.mkdir(parents=True)
+    (raw / "verdict.json").write_text("{}")
+    assert runner.pins()["dirty"] is False
+    (tmp_path / "stray.py").write_text("")
+    assert runner.pins()["dirty"] is True
