@@ -1,0 +1,269 @@
+{
+  "task": "E8L",
+  "gate": "LAB-ROLLOUT-LOCAL",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "cells": {
+    "ROLLOUT-PIN": "PASS",
+    "ROLLOUT-RECOVER": "PASS",
+    "OPT-PARITY": "NOT RUN"
+  },
+  "r222": {
+    "accepted": true,
+    "open": {}
+  },
+  "label": "real PostgreSQL (every migration: D9 0033/0039/0043, D7, L3 0032), the merged R1/R2/R3/B2 code, G2's relay on its contract fakes, owned case records and synthetic endpoints; no real-model quality claim (P-07), no GPU parity, no public shadow/canary (P-12), not hosted behaviour",
+  "pins": {
+    "base": "33547abd",
+    "head": "e65bbecf91b836c3b2316d1e6f1a3befc1730d78",
+    "dirty": true,
+    "images": {
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+    },
+    "fixtures_sha256": {
+      "lab_world.py": "86d1d9864863a7c09e94a1b76227bea0b9d3433cfbd27264737ef7f28ec02989",
+      "scenarios_parity.py": "dbfeb99938447b8a68e59e6e1cc5e13d0cf7f1f8240f6d7b3905e0abc892a21f",
+      "scenarios_pending.py": "3b83f79accd02976ef52960e02af6841405c7169e9fe01199254a8f96cee0191",
+      "scenarios_recover.py": "a7ff507cbb70d950293b3bbfeb266e51f397182910bcb52b8a23045b10c81cca",
+      "scenarios_route.py": "c0d80a07f690de4e75ce99f53968095df3bd6d89e4763cd3e7450c8b0f455840"
+    }
+  },
+  "namespace": "e8l",
+  "ports": {
+    "postgres": 57432,
+    "valkey": 57479,
+    "clickhouse_http": 57423,
+    "clickhouse_native": 57490,
+    "s3": 57400,
+    "fake_vllm": 57480
+  },
+  "started": "2026-09-29T21:14:25+00:00",
+  "seconds": 175.7,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 2.2
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 20.2
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 1.4
+      },
+      {
+        "stage": "backend-teardown",
+        "status": "PASS",
+        "seconds": 142.2
+      },
+      {
+        "stage": "teardown",
+        "status": "PASS",
+        "seconds": 9.6
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "k01",
+      "title": "R1 off: a live 100% canary on D9 changes nothing - the composed gateway keeps the relay's own accept, D9 is never asked, no assignment row",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k01_routing_off_serves_todays_request_over_a_live_release": "PASS",
+        "test_k01_a_candidate_ref_resolves_through_0045_and_matches_l3s_own_computation": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k01",
+      "scope": {}
+    },
+    {
+      "id": "k02",
+      "title": "shadow on D9 through G2's relay: the user's answer, job, hold and settlement are today's; the candidate duplicate runs bounded on the provider-funded endpoint and is dropped",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k02_a_shadow_changes_nothing_the_user_sees_or_pays": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k02",
+      "scope": {}
+    },
+    {
+      "id": "k03",
+      "title": "canary and A/B on D9: stable arms across retries, bounded by weight, a raised weight keeps promised subjects (R179), pins, ineligible and session subjects never routed (R180), a store outage is 503 (R181)",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k03_a_subject_keeps_its_arm_and_each_admission_is_one_d9_row": "PASS",
+        "test_k03_candidate_traffic_is_bounded_and_a_raised_weight_keeps_its_subjects": "PASS",
+        "test_k03_an_ab_split_serves_each_candidate_within_its_weight": "PASS",
+        "test_k03_pins_ineligible_and_session_subjects_are_never_routed": "PASS",
+        "test_k03_a_release_store_outage_is_a_503_never_the_baseline": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k03",
+      "scope": {}
+    },
+    {
+      "id": "k04",
+      "title": "a guardrail breach rolls back exactly once through D9's CAS under two controllers; future admissions only; a controller killed before L3's alias CAS converges on restart with no second decision",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k04_a_breach_rolls_back_once_under_two_controllers_for_future_admissions": "PASS",
+        "test_k04_a_controller_killed_before_the_alias_cas_converges_on_restart": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k04",
+      "scope": {}
+    },
+    {
+      "id": "k05",
+      "title": "non-inferiority and cost (B2): an accepting report is approved once; inconclusive blocks promotion; stale metrics or missing evidence hold; a slice regression under an aggregate gain rolls back; overspend rolls back and units never mix",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k05_an_accepting_report_after_the_horizon_is_approved_once": "PASS",
+        "test_k05_an_inconclusive_report_blocks_promotion": "PASS",
+        "test_k05_missing_or_stale_evidence_never_expands": "PASS",
+        "test_k05_a_slice_regression_under_an_aggregate_gain_rolls_back": "PASS",
+        "test_k05_overspend_rolls_back_and_units_never_mix": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k05",
+      "scope": {}
+    },
+    {
+      "id": "k06",
+      "title": "a promoted candidate's alias rolls back through L3's CAS: the policy R1 routes is the one R2 converges",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k06_an_emergency_rollback_moves_a_promoted_alias_back": "PASS",
+        "test_k06_the_worlds_alias_read_is_the_real_control_store_on_its_login": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k06",
+      "scope": {}
+    },
+    {
+      "id": "k07",
+      "title": "R3: a variant registered through W3's probe over HTTP, compared on a B2 report, stored through D7; incompatible variants and unmeasured load claims refused",
+      "test_ids": [
+        "OPT-PARITY"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k07_a_variant_is_probed_compared_and_stored": "PASS",
+        "test_k07_incompatible_variants_and_unmeasured_claims_are_refused": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k07",
+      "scope": {}
+    },
+    {
+      "id": "k08",
+      "title": "R3 parity measured on an allocated supported GPU target",
+      "test_ids": [
+        "OPT-PARITY"
+      ],
+      "lanes": [
+        "P-08"
+      ],
+      "status": "NOT RUN",
+      "cases": {
+        "test_k08_parity_on_an_allocated_gpu_target": "NOT RUN"
+      },
+      "reasons": [
+        "test_k08_parity_on_an_allocated_gpu_target: NOT RUN[P-08] no allocated GPU target and no measured results on this base. Steps: serve.sh + bench.py for base and variant on the target, commit marlin2b/results/R3-parity-*, then k07 with those loads; rerun after the merge: apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08 /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rol"
+      ],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k08",
+      "scope": {
+        "P-08": "GPU (P-08 staging target)"
+      }
+    },
+    {
+      "id": "k09",
+      "title": "the I7 controller process killed and restarted mid-rollout: the real emergency-rollback subcommand twice; the bare rollout role converges a rollback killed before the alias CAS on its first pass",
+      "test_ids": [
+        "ROLLOUT-RECOVER"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k09_the_controller_process_restarted_mid_rollout": "PASS",
+        "test_k09_the_rollout_pass_process_converges_a_rollback_killed_before_the_cas": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k09",
+      "scope": {}
+    },
+    {
+      "id": "k10",
+      "title": "the Lab releases page over the composed route: verdict, proposal, the operator's decision through D9 (`rollout decide`) and emergency rollback",
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "lanes": [],
+      "status": "PASS",
+      "cases": {
+        "test_k10_the_release_listing_reads_d9s_rows_and_r2s_latest_verdict": "PASS",
+        "test_k10_the_composed_releases_route_proposes_and_the_operator_decides": "PASS",
+        "test_k10_the_releases_ui_over_the_real_route": "PASS"
+      },
+      "reasons": [],
+      "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir> --only k10",
+      "scope": {}
+    }
+  ],
+  "sub_cells": [],
+  "lock": {
+    "path": "/tmp/infrx-e8l.runner.lock",
+    "held": true
+  },
+  "runs": {
+    "scenarios": {
+      "argv": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs --import-mode=prepend -o junit_family=xunit1 --junitxml=/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/scenarios.xml /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/tests/integration/lab_rollout/scenarios_parity.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/tests/integration/lab_rollout/scenarios_pending.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/tests/integration/lab_rollout/scenarios_recover.py /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/tests/integration/lab_rollout/scenarios_route.py",
+      "exit": 0,
+      "seconds": 142.2,
+      "summary": "24 passed, 1 skipped, 2 warnings in 141.42s (0:02:21)",
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/scenarios.log"
+    }
+  },
+  "evidence": {
+    "junit": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/scenarios.xml",
+    "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/scenarios.log",
+    "case_artifacts": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/cases"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out <dir>"
+}

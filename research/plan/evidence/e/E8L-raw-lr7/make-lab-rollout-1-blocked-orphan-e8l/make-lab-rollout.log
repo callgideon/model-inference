@@ -1,0 +1,19 @@
+apps/infrx-api/.venv/bin/python tests/integration/lab_rollout/runner.py --out /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf
+[FAIL] preflight: {"refusing to touch resources this checkout did not create": [{"kind": "container", "name": "infrx-e8l-clickhouse", "project": "infrx-e8l", "checkout": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--clau…
+[ok  ] backend-teardown: {"removed": []}
+[FAIL] teardown: refusing to provision or tear down: these carry this project's names or label but were not created by this checkout - stop them yourself, nothing here will touch them: [{'kind': 'container', 'name': 'infrx-e8l-clickhouse…
+ BLOCKED  k01  R1 off: a live 100% canary on D9 changes nothing - the composed gateway keeps the relay's own accept, D9 is never asked, no assignment row
+ BLOCKED  k02  shadow on D9 through G2's relay: the user's answer, job, hold and settlement are today's; the candidate duplicate runs bounded on the provider-funded endpoint and is dropped
+ BLOCKED  k03  canary and A/B on D9: stable arms across retries, bounded by weight, a raised weight keeps promised subjects (R179), pins, ineligible and session subjects never routed (R180), a store outage is 503 (R181)
+ BLOCKED  k04  a guardrail breach rolls back exactly once through D9's CAS under two controllers; future admissions only; a controller killed before L3's alias CAS converges on restart with no second decision
+ BLOCKED  k05  non-inferiority and cost (B2): an accepting report is approved once; inconclusive blocks promotion; stale metrics or missing evidence hold; a slice regression under an aggregate gain rolls back; overspend rolls back and units never mix
+ BLOCKED  k06  a promoted candidate's alias rolls back through L3's CAS: the policy R1 routes is the one R2 converges
+ BLOCKED  k07  R3: a variant registered through W3's probe over HTTP, compared on a B2 report, stored through D7; incompatible variants and unmeasured load claims refused
+ BLOCKED  k08  R3 parity measured on an allocated supported GPU target
+ BLOCKED  k09  the I7 controller process killed and restarted mid-rollout: the real emergency-rollback subcommand twice; the bare rollout role converges a rollback killed before the alias CAS on its first pass
+ BLOCKED  k10  the Lab releases page over the composed route: verdict, proposal, the operator's decision through D9 (`rollout decide`) and emergency rollback
+cells {'ROLLOUT-PIN': 'BLOCKED', 'ROLLOUT-RECOVER': 'BLOCKED', 'OPT-PARITY': 'BLOCKED'}
+r222 {'accepted': False, 'open': {'k01': 'BLOCKED', 'k02': 'BLOCKED', 'k03': 'BLOCKED', 'k04': 'BLOCKED', 'k05': 'BLOCKED', 'k06': 'BLOCKED', 'k07': 'BLOCKED', 'k08': 'BLOCKED', 'k09': 'BLOCKED', 'k10': 'BLOCKED'}}
+gate BLOCKED -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-rollout-7/research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json
+make: *** [Makefile:213: lab-rollout] Error 3
+exit 2
