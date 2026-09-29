@@ -52,7 +52,9 @@ export type VariantRow = { id: string; base: string; variant: string; changes: s
 
 // R3's `Load.source`: an experiment branch's results at a commit. Anything else is a fixture.
 const RESULTS = /^(?:models\/)?(?:deepseek41f|deepseek41fnvfp4|qwen3827b|kimik3|marlin2b)\/results\/\S+@[0-9a-f]{7,40}$/;
-const scope = (i: Variant["base"]) => `${i.engine} ${i.engineVersion} on ${i.hardware} · ${i.quantization} · ${i.capabilities.join(", ")}`;
+// R252: an identity R3 has not persisted yet (absent or null) shows the serving ref instead.
+const scope = (i: Variant["base"], servingRef: string) =>
+  i ? `${i.engine} ${i.engineVersion} on ${i.hardware} · ${i.quantization} · ${i.capabilities.join(", ")}` : servingRef;
 
 export function variantRows(variants: Variant[]): VariantRow[] {
   return variants.map((v) => {
@@ -61,7 +63,7 @@ export function variantRows(variants: Variant[]): VariantRow[] {
     const measured = perf !== null && perf.sources.every((s) => RESULTS.test(s));
     const outcome = c ? `${c.outcome}${c.reasons.length ? `: ${c.reasons.join(", ")}` : ""}` : "not compared";
     return {
-      id: v.variantRef, base: scope(v.base), variant: scope(v.variant), changes: v.changes.join(", "), outcome,
+      id: v.variantRef, base: scope(v.base, v.baseServingRef), variant: scope(v.variant, v.variantServingRef), changes: v.changes.join(", "), outcome,
       performance: perf === null ? "not measured" : !measured ? "synthetic fixture, not a measurement"
         : `measured: throughput ×${perf.throughputRatio.toFixed(2)} · p99 ${perf.p99MsDelta} ms · memory ${perf.memoryGibDelta.toFixed(1)} GiB (${perf.sources.join(", ")})`,
       claim: c?.outcome === "equivalent" && c.optimizationClaimed && measured ? "optimization claimed for this scope only" : "no optimization claimed",

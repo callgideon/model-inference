@@ -61,6 +61,13 @@ export async function startImport(port: DatasetsPort, w: Membership, form: FormD
   return result.ok ? { status: "ok", value: result.value } : failed(result);
 }
 
+/** "Import again" (R252): the failed import as a new job; the answer's importId is the page to open. */
+export async function requeueImport(port: DatasetsPort, w: Membership, form: FormData): Promise<ActionState<ImportJob>> {
+  if (!writer(w)) return refused(FAILURE_COPY.denied);
+  const result = await port.requeue(w.providerId, String(form.get("import_id") ?? ""));
+  return result.ok ? { status: "ok", value: result.value } : failed(result);
+}
+
 function integer(form: FormData, name: string, min: number, max: number): number | null {
   const raw = String(form.get(name) ?? "").trim();
   const n = /^-?\d+$/.test(raw) ? Number(raw) : NaN;

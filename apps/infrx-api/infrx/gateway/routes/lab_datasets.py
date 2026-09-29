@@ -1,7 +1,7 @@
 """WR-N4-1: the Lab's datasets surface, `/lab/v1/providers/{provider}/datasets`, over N1/N2/N3.
 
-    POST imports/preview  POST imports  GET imports/{id}  GET versions  GET versions/{ref}
-    POST versions         POST exports  GET exports/{id}/parts/{n}
+    POST imports/preview  POST imports  GET imports/{id}  POST imports/{id}/requeue
+    GET versions  GET versions/{ref}  POST versions  POST exports  GET exports/{id}/parts/{n}
 
 `router()` is N4's proposed production router (`apps/lab/tests/n/backend.py`, the Lab journey's
 backend) moved here, with three changes for a public process: the user is the verified Lab
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: F401 - the mutants' stand-in session reader
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -129,6 +130,34 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
             if found["state"] == "published":
                 note(provider, found["report"]["dataset_ref"])
             return found
+        return await guarded(request, provider, work)
+
+    @api.post("/imports/{import_id}/requeue")
+    async def requeue(request: Request, provider: str, import_id: str):
+        """WR-C6-REQUEUE (0055): a failed job again as a new job (R243: the failed id stays
+        terminal). The job is read first (the provider's own, else 404): only a `failed` one
+        has its upload's rows copied to the new id - before 0055 queues it, because the pool
+        reads a job's rows by its id - so a refused requeue copies nothing (0055 names the
+        state). The new id is derived from the provider and the failed id, so a retry is the
+        same job; one another import already holds is replaced by a random id, never a
+        blocked requeue (a replay still answers the one successor).
+        ponytail: the copy re-reads the upload (<= MAX_BODY_BYTES) through the gateway; a
+        taken derived id leaves one unused copy of the rows under it."""
+        async def work(provider, user):
+            jobs = queue()
+            failed = shown(await jobs.job(import_id, provider_org_id=provider))["state"] == "failed"
+            rows = await objects.get(imports.rows_key(provider, import_id)) if failed else None
+            derived = str(uuid.uuid5(uuid.NAMESPACE_URL, f"requeue:{provider}:{import_id}"))
+            for again in (derived, str(uuid.uuid4())):
+                try:
+                    if rows is not None:
+                        await imports.write_once(objects, imports.rows_key(provider, again),
+                                                 rows, "application/x-ndjson")
+                    return shown(await jobs.requeue(import_id, new_job_id=again,
+                                                    provider_org_id=provider, actor=user))
+                except errors.Conflict:
+                    if not failed or again != derived:
+                        raise                   # 0055's refusal naming the state
         return await guarded(request, provider, work)
 
     @api.get("/versions")

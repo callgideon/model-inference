@@ -81,6 +81,11 @@ test("R4-V07 a variant row names the hardware and runtime scope of both sides an
   assert.deepEqual([v.id, v.base, v.variant, v.changes], [ref("variant", "8"), "vllm 0.11.2 on B300 · bf16 · text", "vllm 0.11.2 on B300 · nvfp4 · text", "quantization:nvfp4"]);
 });
 
+test("R4-V12 a variant without its identities (R3 has not persisted them, R252) shows its serving refs", () => {
+  const [v] = variantRows([variant({ base: null, variant: undefined })]);
+  assert.deepEqual([v.base, v.variant], [variant().baseServingRef, variant().variantServingRef]);
+});
+
 test("R4-V08 performance is a measurement only when every source is an experiment results path at a commit", () => {
   const perf = (sources: string[] | null) =>
     variantRows([variant({}, { performance: sources && { ...variant().comparison!.performance!, sources } })])[0].performance;

@@ -32,6 +32,8 @@ export interface DatasetsPort {
   preview(provider: string, spec: unknown, head: string): Promise<Result<Preview>>;
   startImport(provider: string, spec: unknown, body: string, acceptRejects: boolean): Promise<Result<ImportJob>>;
   importJob(provider: string, importId: string): Promise<Result<ImportJob>>;
+  /** WR-C6-REQUEUE (R252): a failed import again as a new job (its id is the answer's importId); the failed one stays failed. */
+  requeue(provider: string, importId: string): Promise<Result<ImportJob>>;
   versions(provider: string): Promise<Result<VersionSummary[]>>;
   version(provider: string, ref: string): Promise<Result<VersionStatus>>;
   derive(provider: string, request: DeriveRequest): Promise<Result<Derived>>;
@@ -180,6 +182,7 @@ export function httpDatasets({ baseUrl, token, fetch: send = fetch }: HttpOption
     preview: (p, spec, head) => call(p, "/imports/preview", parsePreview, { spec, head }),
     startImport: (p, spec, body, acceptRejects) => call(p, "/imports", parseJob, { spec, body, accept_rejects: acceptRejects }),
     importJob: (p, importId) => call(p, `/imports/${id(importId)}`, parseJob),
+    requeue: (p, importId) => call(p, `/imports/${id(importId)}/requeue`, parseJob, {}),
     versions: (p) => call(p, "/versions", parseVersions),
     version: (p, ref) => call(p, `/versions/${id(ref)}`, parseStatus),
     derive: (p, r) =>
@@ -195,7 +198,7 @@ export function httpDatasets({ baseUrl, token, fetch: send = fetch }: HttpOption
 /** The port when the backend is not configured or the session has no token: every call is unavailable. */
 export function offlineDatasets(detail = "the datasets service is not configured"): DatasetsPort {
   const down = async (): Promise<Failure> => unavailable(detail);
-  return { preview: down, startImport: down, importJob: down, versions: down, version: down, derive: down, exportVersion: down, readPart: down };
+  return { preview: down, startImport: down, importJob: down, requeue: down, versions: down, version: down, derive: down, exportVersion: down, readPart: down };
 }
 
 /** The HTTP status a Lab route answers with for a failure (a download never fakes a 200). */

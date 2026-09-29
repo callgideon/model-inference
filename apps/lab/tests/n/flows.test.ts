@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Membership } from "../../lib/auth/access.ts";
-import { deriveVersion, exportVersion, MAX_UPLOAD_BYTES, PREVIEW_BYTES, previewImport, startImport } from "../../lib/services/datasets/flows.ts";
+import { deriveVersion, exportVersion, MAX_UPLOAD_BYTES, PREVIEW_BYTES, previewImport, requeueImport, startImport } from "../../lib/services/datasets/flows.ts";
 import { fail, recordingPort } from "./fake.ts";
 
 const DEV: Membership = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "Acme", role: "developer" };
@@ -27,6 +27,7 @@ test("N4-F01 a viewer is refused before any backend call", async () => {
     await startImport(port, VIEWER, form({ spec: SPEC, file: file("{}\n") })),
     await deriveVersion(port, VIEWER, derive()),
     await exportVersion(port, VIEWER, form({ dataset_ref: "d", ttl_s: "60" }), UUID),
+    await requeueImport(port, VIEWER, form({ import_id: UUID })),
   ]) assert.equal(state.status, "error");
   assert.equal(calls.length, 0);
 });
@@ -35,7 +36,9 @@ test("N4-F02 the provider is the guarded workspace's, never a submitted field", 
   const { port, calls } = recordingPort();
   await startImport(port, DEV, form({ spec: SPEC, file: file('{"q":1}\n'), providerId: "33333333-3333-4333-8333-333333333333", accept_rejects: "on" }));
   await exportVersion(port, DEV, form({ dataset_ref: "lab:dataset:d", ttl_s: "60", provider_org_id: "x" }), UUID);
-  assert.deepEqual(calls.map((c) => c.args[0]), [DEV.providerId, DEV.providerId]);
+  await requeueImport(port, DEV, form({ import_id: UUID, provider_org_id: "x" }));
+  assert.deepEqual(calls.map((c) => c.args[0]), [DEV.providerId, DEV.providerId, DEV.providerId]);
+  assert.deepEqual(calls[2], { method: "requeue", args: [DEV.providerId, UUID] });
   assert.deepEqual(calls[0].args.slice(1), [{ format: "infrx.dataset_import.1" }, '{"q":1}\n', true]);
   assert.deepEqual(calls[1].args.slice(1), ["lab:dataset:d", UUID, 60]);
 });

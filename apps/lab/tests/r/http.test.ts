@@ -73,13 +73,20 @@ test("R4-H03 one unreadable release, decision, proposal or variant fails the who
   ];
   for (const over of unreadable) assert.deepEqual(await answers(records(over)).releases(A), { ok: false, reason: "unavailable" }, JSON.stringify(over).slice(0, 100));
   const variants = [
-    { ...VARIANT, comparison: { ...VARIANT.comparison, outcome: "better" } }, drop(VARIANT, "base"), { ...VARIANT, variant: drop(VARIANT.variant, "quantization") },
+    { ...VARIANT, comparison: { ...VARIANT.comparison, outcome: "better" } }, drop(VARIANT, "baseServingRef"), drop(VARIANT, "variantServingRef"),
+    { ...VARIANT, variant: drop(VARIANT.variant!, "quantization") },
     { ...VARIANT, comparison: { ...VARIANT.comparison, performance: { ...VARIANT.comparison!.performance, throughputRatio: "1.4" } } },
     { ...VARIANT, comparison: drop(VARIANT.comparison!, "optimizationClaimed") },
   ];
   for (const v of variants) assert.deepEqual(await answers({ data: snake([VARIANT, v]) }).variants(A), { ok: false, reason: "unavailable" }, JSON.stringify(v).slice(0, 100));
   assert.deepEqual(await answers({ data: snake(VARIANT) }).variants(A), { ok: false, reason: "unavailable" }, "not a list");
   assert.deepEqual(await answers(snake(drop(PROPOSAL, "proposalId"))).propose(A, "rollback", "p", 1), { ok: false, reason: "unavailable" });
+});
+
+test("R4-H06 a variant whose identities R3 has not persisted (absent or null) still lists, its serving refs intact (R252)", async () => {
+  const bare = Object.fromEntries(Object.entries(VARIANT).filter(([k]) => k !== "base" && k !== "variant"));
+  const listed = [bare, { ...VARIANT, base: null, variant: null }];
+  assert.deepEqual(await server(() => json({ data: snake(listed) })).port.variants(A), { ok: true, value: listed });
 });
 
 test("R4-H04 without a session token nothing is sent and every call is unavailable", async () => {
