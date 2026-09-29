@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 275,
- "updated": "2026-09-29T07:34:02Z",
+ "revision": 276,
+ "updated": "2026-09-29T07:41:35Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -7690,11 +7690,11 @@
     "prefix": "infrx-p2-",
     "db": "p2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-09-29T03:55:57Z",
-   "updated": "2026-09-29T06:39:35Z",
+   "updated": "2026-09-29T07:41:35Z",
    "blocker": null,
-   "next_action": "merge batch #36 (Opus; WR-C4-PREFLIGHT, WR-C4-MK, R217–R219) → composition-5 (WR-B3-3/WR-C4-B3-SUITES, the lab-sql-lw6 Python halves) → lab-evaluate-2 (E6L j09 checkpoint half)",
+   "next_action": "composition-5 carries WR-B3-3/WR-C4-B3-SUITES",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -7836,22 +7836,22 @@
   {
    "id": "W5-MERGE-36",
    "task": null,
-   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219); workflow wf_feaa3652-8ec",
+   "slice": "merge batch #36 (Opus): composition-4 6bffa2e8 (+WR-C4-PREFLIGHT, WR-C4-MK, R217–R219); workflow wf_feaa3652-8ec; integrated",
    "agent": "opus",
    "branch": "codex/w5-merge-36",
    "worktree": ".claude/worktrees/codex-w5-merge-36",
    "base": "e35ea4dd",
-   "head": null,
+   "head": "5ed53a41",
    "isolation": {
     "ports": "p3 57530/57531; p2 57528/57529; l4 57503",
     "prefix": "infrx-p3-",
     "db": "p3"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T06:39:35Z",
-   "updated": "2026-09-29T06:39:35Z",
+   "updated": "2026-09-29T07:41:35Z",
    "blocker": null,
-   "next_action": "verify lens → coordinator merge onto claude/consumer-v1 (R216 before R217 at integration)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
