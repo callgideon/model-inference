@@ -126,7 +126,7 @@ def fund(provider: str = OTHER, amount: str = "250",
             "actor": "ops@infrx", "reason": "preview budget"}
 
 
-def reject(revision: str = P2, **over) -> dict:
+def reject(revision: str = NEW, **over) -> dict:
     return {"deployment_revision_id": revision, "actor": "operator:ops", "reason": "not ready",
             **over}
 
@@ -404,26 +404,32 @@ def check_an_operator_rejects_only_an_open_proposal(conn) -> str:
     `retired` (its row keeps the immutable `public`: the store reads it back private), audited
     as the operator's `lab_transition` with the reason; no listing moves; a blank reason or an
     unattributed rejection is refused and moves nothing; a listed, a dev or an unknown revision
-    is refused; a rejected proposal is never rejected again nor published."""
+    is refused; a rejected proposal is never rejected again nor published. (Its own proposal
+    NEW of D2: the publish race commits P2 or P3, whichever wins.)"""
+    validated(conn)
+    ok(conn, "lab_control_propose", {"proposal": proposal(), "source_revision_id": D2,
+                                     "actor": "admin@nemo"})
     for bad in (reject(reason=" "), reject(actor="")):
         assert refusal(conn, "lab_control_reject", bad) == "invalid_request", bad
-    assert state(conn, P2) == "proposed_public", "a refused rejection moved the proposal"
-    got = {r: refusal(conn, "lab_control_reject", reject(r)) for r in (P1, D2, NEW)}
-    assert got == {P1: "state_conflict", D2: "state_conflict", NEW: "not_found"}, got
-    versions = "select count(*) from infrx.catalog_listings"
-    before, seen = conn.execute(versions).fetchone()[0], listed(conn)
+    assert state(conn, NEW) == "proposed_public", "a refused rejection moved the proposal"
+    seen = listed(conn)
+    got = {r: refusal(conn, "lab_control_reject", reject(r)) for r in (seen, D2, RETRY_ID)}
+    assert got == {seen: "state_conflict", D2: "state_conflict", RETRY_ID: "not_found"}, got
+    versions = "select max(version), count(*) from infrx.catalog_listings"
+    before = conn.execute(versions).fetchone()
     row = ok(conn, "lab_control_reject", reject())
     assert (row["deployment_revision_id"], row["state"], row["visibility"]) == (
-        P2, "retired", "public"), row
-    assert (state(conn, P2), state(conn, P1)) == ("retired", "active")
-    assert listed(conn) == seen and conn.execute(versions).fetchone()[0] == before
+        NEW, "retired", "public"), row
+    assert (state(conn, NEW), state(conn, seen), state(conn, D2)) == (
+        "retired", "active", "ready_private")
+    assert listed(conn) == seen and conn.execute(versions).fetchone() == before
     e = events(conn)[-1]
     assert (e["action"], e["actor"], e["subject"], e["before"], e["after"]) == (
-        "lab_transition", "operator:ops", P2, {"state": "proposed_public"},
+        "lab_transition", "operator:ops", NEW, {"state": "proposed_public"},
         {"state": "retired", "reason": "not ready"}), e
     assert refusal(conn, "lab_control_reject", reject()) == "state_conflict", "rejected twice"
-    assert refusal(conn, "lab_control_publish", publish()) == "state_conflict", \
-        "a rejected proposal was published"
+    assert refusal(conn, "lab_control_publish", publish(NEW, "rc_rejected", expected=before[0])) \
+        == "state_conflict", "a rejected proposal was published"
     return "open proposals only -> retired, audited with the reason; listings untouched"
 
 
@@ -433,6 +439,9 @@ def check_the_operator_door_is_the_profiles_bit_on_the_control_login(conn) -> st
     says so (a provider administrator, a consumer or an unknown user is not); the control
     factory's own login and the platform role execute both 0052 doors (a browser session
     neither: `check_browser_roles_reach_nothing`)."""
+    validated(conn)
+    ok(conn, "lab_control_propose", {"proposal": proposal(), "source_revision_id": D2,
+                                     "actor": "admin@nemo"})
     conn.execute("insert into auth.users (id, email) values (%s, 'ops-l3@example.com')", (OPS,))
     conn.execute("update public.profiles set is_operator = true where id = %s", (OPS,))
     who = {OPS: True, l2.ADMIN: False, l2.C1: False, l2.NOBODY: False}
