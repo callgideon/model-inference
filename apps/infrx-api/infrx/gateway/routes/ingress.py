@@ -84,6 +84,9 @@ class IngressDeps:
     consent_for: Callable | None = None
     entitlement_version: Callable[[str], int] | None = None
     catalog: object | None = None               # contracts.v2.ports.CatalogDirectory
+    # WR-C6-CAPTURE (`TRACE_PUMPS`, off by default: None): the per-key consent policy a
+    # request is admitted with, and the capture of its answer (`gateway.capture`).
+    capture: object | None = None
     # One per process, shared by every request: the bound is on the process's loop.
     large_bodies: "intake.LargeBodies | None" = None
     new_request_id: Callable[[], str] = ids.new_request_id
@@ -160,6 +163,9 @@ class Ingress:
             body = intake.parse_object(text)
             normalized = await self.validator.normalize(body, auth, request_id,
                                                         request.headers)
+            if self.deps.capture is not None:        # WR-C6-CAPTURE (a): consent, not off
+                normalized = normalized.model_copy(update={
+                    "trace_policy": await self.deps.capture.policy(auth, normalized.created_at)})
             idem = idempotency(auth, request.headers, identity_digest(normalized), CHAT_OPERATION)
             return auth, normalized, idem
         finally:
