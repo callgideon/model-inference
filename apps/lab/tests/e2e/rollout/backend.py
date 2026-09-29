@@ -18,8 +18,8 @@ jobs they name as rows (tests/d's job fixture; no R1 traffic on l4) and B4's exp
 B2's report of the release's two runs. Nothing is laid over the records. Test-only doors:
 `/_test/probe` (the records port's own refusal), `/_test/launch`, `/_test/stop`,
 `/_test/traffic`, `/_test/step` (R2's rollback pass on R1's aggregates as given),
-`/_test/decide`. `composed` names the ports of `pilot._lab`'s `lab_releases` factory, the one
-the control unit mounts (R186) - read here from a second call of it (LR6-RV-4).
+`/_test/decide`. `composed` names the ports of the composition the control unit mounts
+(`stack.unit_app`, LR6-RV-4).
 
     INFRX_D_TASK=l4 uv run --frozen --project apps/infrx-api python apps/lab/tests/e2e/rollout/backend.py
 """
@@ -70,14 +70,12 @@ def main() -> None:
     # the Lab objects of the control unit's composition and of `rollout launch|decide`, in
     # process; R2's stop converges the release's own alias (the d9 world lists no endpoint)
     objects, serving = InMemoryObjectStore(), [None]
-    lab_workers.lab_objects = lambda mode, env: objects
     pilot.control_serving = lambda connect, principal: serving[0]
-    os.environ["LAB_S3_BUCKET"] = "l4-in-memory"
-    app = stack.control_app(dsn, url)
+    app, unit = stack.unit_app(dsn, url, "lab_releases", objects)
     users = {"admin": l2.ADMIN, "dev": l2.DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
     stack.door(app, dsn, users)
-    gateway = stack.composed("lab_releases", dsn, url, objects)["lab_releases"]
+    gateway = unit.own
     composed = {name: getattr(gateway, name) is not None for name in PORTS}
 
     async def suite() -> dict:
