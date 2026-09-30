@@ -232,8 +232,13 @@ No lane code changed, so the lw9 mutant list and E4 carry over from the handback
   the lane's three; `page_progress_withheld` re-cut onto
   `"progress": _progress(live, None if live is None else`); `test_code_mutants_lw8.py`
   GRANTED one sorted union; `tests/integration/test_harness.py` pins 0052..0056, 0058, 0059
-  (0057 slots before 0058 at merge #63). 0058 and 0059 both grant `lab_release_live` to
-  `infrx_lab_control`: a harmless duplicate grant, recorded.
+  (0057 slots before 0058 at merge #63).
+- **The duplicate `lab_release_live` grant:** 0058 and 0059 both granted it to
+  `infrx_lab_control`. Harmless at runtime, but it left both drop-the-grant mutants
+  (`lw9_live_ungranted`, `lr7_drop_live`) surviving at the merge head. The wirings commit
+  keeps 0059's grant (merged first, WR-LR7-GRANT) and drops 0058's grant, its ROLLBACK
+  revoke line and `lw9_live_ungranted` (`lr7_drop_live` covers the grant). `test_lw9.py`'s
+  ROLES check still asserts the login executes Live (0059's grant).
 - **WR-LW9-0:** `LAB-SQL-LW9-wiring-upgrade.patch` applied (`NEW_TABLES` gains
   `infrx.lab_variant_identities`).
 - **F2:** `lw9_shape_engine_version_unchecked`, `lw9_shape_quantization_unchecked` (SQL),

@@ -20,7 +20,7 @@ ROLES = "check_browser_roles_reach_nothing"
 IDENT = "check_a_variant_lists_the_identities_r3_stored"
 TALLY = "check_the_tally_counts_each_servings_terminal_requests_by_pin"
 GRANT = ("grant execute on function infrx.lab_optimization_variant_listing(jsonb),\n"
-         "  infrx.lab_release_tally(jsonb), infrx.lab_release_live(jsonb) to infrx_lab_control;")
+         "  infrx.lab_release_tally(jsonb) to infrx_lab_control;")
 
 
 def _s(name, old, new, check, why, **kw):
@@ -29,16 +29,15 @@ def _s(name, old, new, check, why, **kw):
 
 MUTANTS = (
     # --- R251: the control login's route reads (a dropped grant: the page answers 503)
-    _s("lw9_tally_ungranted", GRANT, GRANT.replace("  infrx.lab_release_tally(jsonb), ", "  "),
+    _s("lw9_tally_ungranted", GRANT, GRANT.replace(",\n  infrx.lab_release_tally(jsonb)", ""),
        ROLES, "the releases page answers 503 on the unit once a job is assigned"),
-    _s("lw9_live_ungranted", GRANT, GRANT.replace(", infrx.lab_release_live(jsonb)", ""), ROLES,
-       "the releases page answers 503 on the unit (WR-LIVE-PAGE reads 0054's Live)"),
+    # 0054's Live is 0059's grant (merge #65): its drop is lr7_drop_live (test_code_mutants_lr7)
     _s("lw9_listing_ungranted", GRANT,
        GRANT.replace("infrx.lab_optimization_variant_listing(jsonb),\n  ", ""), ROLES,
        "the optimizations page answers 503 on the unit"),
     _s("lw9_write_granted_to_unit", GRANT,
-       GRANT.replace("infrx.lab_release_live(jsonb)",
-                     "infrx.lab_release_live(jsonb), infrx.lab_put_variant_identities(jsonb)"),
+       GRANT.replace("infrx.lab_release_tally(jsonb)",
+                     "infrx.lab_release_tally(jsonb), infrx.lab_put_variant_identities(jsonb)"),
        ROLES, "the route login rewrites R3's identities (R251: a route never writes them)"),
     _s("lw9_listing_browser", GRANT,
        GRANT + "\ngrant usage on schema infrx to authenticated;\ngrant execute on function "

@@ -23,15 +23,15 @@
 --         (or an unknown revision) is [].
 --
 -- EXECUTE: service_role through 0004's defaults (SECURITY DEFINER). R251: the control unit's
--- login `infrx_lab_control` also executes the route reads - the listing, the tally, and
--- 0054's `lab_release_live`, which `/lab/v1/releases` calls since WR-LIVE-PAGE (composition-7)
--- - never R3's write.
+-- login `infrx_lab_control` also executes the route reads - the listing and the tally -
+-- never R3's write. 0054's `lab_release_live` (the releases page's Live since WR-LIVE-PAGE)
+-- is granted to it by 0059 (WR-LR7-GRANT, merge #62), not here: one grant, one owner (merge
+-- #65; a second grant here left both files' drop-the-grant mutants surviving).
 --
 -- ROLLBACK (this file alone; nothing references it): drop function
 --   infrx.lab_release_tally(jsonb), infrx.lab_optimization_variant_listing(jsonb),
 --   infrx.lab_put_variant_identities(jsonb); drop table infrx.lab_variant_identities;
---   drop function infrx.lab_identity_shaped(jsonb), infrx.lab_identity_serving_ref(text, jsonb);
---   revoke execute on function infrx.lab_release_live(jsonb) from infrx_lab_control.
+--   drop function infrx.lab_identity_shaped(jsonb), infrx.lab_identity_serving_ref(text, jsonb).
 --
 -- Re-runnable: `if not exists`, `create or replace`.
 
@@ -135,4 +135,4 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
 $$;
 
 grant execute on function infrx.lab_optimization_variant_listing(jsonb),
-  infrx.lab_release_tally(jsonb), infrx.lab_release_live(jsonb) to infrx_lab_control;
+  infrx.lab_release_tally(jsonb) to infrx_lab_control;

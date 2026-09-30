@@ -46,8 +46,8 @@ GRANTED = frozenset({
     # WR-LW8-3 (0055, merge #56): the variants listing and the import requeue - applied at
     # merge #62 because 0059's list (test_code_mutants_lr7) kills on this check.
     # WR-LR7-GRANT (0059, R251/R259): the release page's Live (0054) and read-time verdict (0043).
-    # lab-sql LW9 (0058, merge #65): the identified listing, the releases tally and 0054's Live
-    # (0058 and 0059 both grant lab_release_live - a harmless duplicate grant)
+    # lab-sql LW9 (0058, merge #65): the identified listing and the releases tally (0054's Live
+    # is 0059's grant alone: the lane's duplicate grant was dropped at merge #65)
     "lab_experiments", "lab_import_requeue", "lab_optimization_variant_listing",
     "lab_optimization_variants", "lab_release_live", "lab_release_tally"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
