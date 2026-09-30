@@ -17,8 +17,8 @@ from ...g.lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/i/lab_control/test_control_routes.py",
                "tests/i/lab_control/test_control_routes_pg.py")
-APP, DS = "lab/control/app.py", "gateway/routes/lab_datasets.py"
-FILES = (APP, DS)
+APP, DS, PILOT = "lab/control/app.py", "gateway/routes/lab_datasets.py", "gateway/pilot.py"
+FILES = (APP, DS, PILOT)
 C = "test_control_routes__"
 MOUNTED = C + "every_lab_family_is_mounted_behind_the_session_with_no_switch"
 LOGIN = C + "a_session_reaches_each_family_on_the_lab_login_never_the_runtimes"
@@ -29,6 +29,7 @@ OBJECTS = C + "the_lab_objects_are_the_workers_bucket_or_a_typed_503"
 AUTH = C + "the_families_verify_sessions_with_the_labs_own_auth_settings"
 PG = "test_control_routes_pg__every_family_is_served_on_the_lab_login_typed_never_a_500"
 PRESENT = "test_control_routes_pg__present_records_answer_alike_on_both_logins"
+VERDICT = "test_control_routes_pg__an_assigned_running_release_reads_its_verdict_on_the_lab_login"
 FAMILIES = "(lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints)"
 
 
@@ -61,6 +62,10 @@ MUTANTS: tuple[Mutant, ...] = (
        APP, "**_families(settings, lab, connect)",
        "**_families(settings, lab, connector(settings.pilot.database_url, set_role=False))",
        LOGIN),
+    _m("releases_read_no_experiments", "the release family's verdict reads B4's experiments on the "
+       "Lab login (R259, 0059) - never an unwired reads port", PILOT,
+       "PgLabVariants(connect), PgLabReads(connect)),", "PgLabVariants(connect), None),",
+       VERDICT),
     _m("families_set_role", "the Lab login never sets role service_role (LDP-F7)", APP,
        "connector(lab[DATABASE_URL], set_role=False)", "connector(lab[DATABASE_URL])",
        LOGIN, PG, PRESENT),
