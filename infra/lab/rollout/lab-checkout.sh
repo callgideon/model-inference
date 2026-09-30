@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# LAB-DEPLOY-PREP step L0 (box): the checkout becomes RELEASE so the Lab ships from it (runbook 08
+# LAB-DEPLOY-PREP step L0 (box; not under steps/ — it runs BEFORE the checkout carries lib.sh): the checkout becomes RELEASE so the Lab ships from it (runbook 08
 # §4: "the Lab ships from the same checkout"). Fetches the integration branch, refuses when the
 # engine's serve.sh or its pin differ from the running checkout (a restart of marlin2b-vllm would
 # then run a script the installed unit does not match — see 40-checkout.sh), then 40-checkout.
-#   infra/rollout/ssm.sh infra/lab/rollout/steps/05-lab-checkout.sh RELEASE=<40 hex>
+#   infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE=<40 hex>
 set -euo pipefail
 : "${RELEASE:?the release commit}"
 repo=/home/ubuntu/model-inference
