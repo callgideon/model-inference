@@ -34,5 +34,10 @@
   },
   "blockers": [],
   "wiring_requests": ["WR-KGR4-1 infra/rollout/README.md RR row + paragraph through 0059", "WR-KGR4-2 15-pending-inputs P-25 row through 0059", "WR-KGR4-3 launch-v1.sh WINDOW_RELEASE_HINT for 0059 = this lane's merge sha", "WR-KGR4-4 operator: first window's commit lands before the second", "WR-KGR4-5 a 0060+ before the window re-opens condition 1", "WR-KGR4-6 pre-existing lab_control every_case failure (not this lane's)"],
-  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md"]
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md"],
+  "merge": {"branch": "codex/w5-merge-66", "base": "ba550eaa", "lane_head": "31e29621",
+    "applied": ["WR-KGR4-1", "WR-KGR4-2", "WR-KGR4-3 (reworded per KGR4-RV-2: empty 0059 hint)", "WR-KGR4-PUSH", "KGR4-RV-1", "KGR4-RV-3", "KGR4-RV-4"],
+    "rulings": ["R264"],
+    "wr_kgr4_6": "already on the tip: coordinator commit 271aff13 (mutant releases_read_no_experiments, killed on l4) is an ancestor of ba550eaa; nothing to do",
+    "wr_kgr4_5": "stands: a migration 0060+ merged before the second window reopens R151 condition 1"}
 }

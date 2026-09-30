@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import runpy
+import subprocess
 import sys
 
 import pytest
@@ -315,3 +316,35 @@ def test_ops_recover__every_evidence_path_the_record_names_exists():
     for real in (r for r in json.loads(RECORD.read_text())["releases"] if r.get("schema_proof")):
         for path in real["evidence"] + real["schema_proof"]["evidence"]:
             assert (support.REPO / path).exists(), (real["sha"], path)
+
+
+def test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them(tmp_path):
+    """KGR4-RV-1: the second window's reviewed patch applies only on hosted-migrate.sh with the
+    first window's patch applied, and leaves EXPECTED_PENDING 0057-0059 and the W7 post-check at
+    0059; launch-v1.sh's THROUGH table maps each window to hosted's prior level and its patch, and
+    `window` pushes the release's commits as launch/window-$THROUGH, never claude/consumer-v1 (R264)."""
+    rollout = support.REPO / "infra" / "lab" / "rollout"
+    (tmp_path / "infra" / "rollout").mkdir(parents=True)
+    script = tmp_path / "infra" / "rollout" / "hosted-migrate.sh"
+    script.write_bytes((support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_bytes())
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+
+    def apply(*args):
+        return subprocess.run(["git", "apply", *args], cwd=tmp_path, capture_output=True, text=True)
+
+    second = str(rollout / "hosted-migrate-0057-0059.patch")
+    assert apply("--check", second).returncode != 0          # not before the first window's
+    done = apply(str(rollout / "hosted-migrate-0052-0056.patch"))
+    assert done.returncode == 0, done.stderr
+    done = apply("--check", second)
+    assert done.returncode == 0, done.stderr
+    assert apply(second).returncode == 0
+    text = script.read_text()
+    assert '\nEXPECTED_PENDING="0057, 0058, 0059"' in text
+    assert """case "$POST" in *"0059 lab_control_grants_2"$'\\n'"nothing pending") ;;""" in text
+    assert 'case "$HOSTED_APPLIED" in *"0056 lab_control_grants") ;;' in text
+    launch = (rollout / "launch-v1.sh").read_text()
+    assert '  0056) HOSTED_AT="0051 lab_import_jobs"; PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch' in launch
+    assert '  0059) HOSTED_AT="0056 lab_control_grants"; PATCH=infra/lab/rollout/hosted-migrate-0057-0059.patch' in launch
+    assert '  git push origin "HEAD:refs/heads/launch/window-$THROUGH"' in launch
+    assert "git push origin claude/consumer-v1" not in launch

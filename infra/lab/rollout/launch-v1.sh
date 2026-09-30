@@ -17,6 +17,18 @@
 #   infra/lab/rollout/launch-v1.sh main            # fast-forward main to the release (the App rebuilds)
 #   infra/lab/rollout/launch-v1.sh all             # preflight window box vercel members main
 #
+# Hosted windows (R151; R264): each window runs from a pinned release whose newest migration is
+# THROUGH, driven by THIS (the tip's) script: line `cd "$(git rev-parse --show-toplevel)"` makes
+# the script operate on the cwd's checkout, so the fixed script drives the older release. The
+# first window (0052-0056):
+#   git worktree add /tmp/launch-0056 a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c && cd /tmp/launch-0056 && \
+#     RELEASE=a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c THROUGH=0056 WINDOW=P-08:<date> \
+#     <the tip checkout>/infra/lab/rollout/launch-v1.sh preflight      # then: window
+# `window` commits on that detached release and pushes HEAD as launch/window-<THROUGH> (never
+# claude/consumer-v1); the coordinator merges that branch onto the tip. The second window's
+# release (THROUGH=0059) is the first claude/consumer-v1 commit carrying both the
+# known-good-reproof-4 merge (#66) and launch/window-0056.
+#
 # Inputs (exported or prompted):
 #   RELEASE       the 40-hex commit to launch (default: the tip of claude/consumer-v1)
 #   WINDOW        the P-08 window reference for the coordinator log, e.g. P-08:2026-09-30
@@ -34,7 +46,8 @@ NEWEST=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | tail 
 # refuses otherwise), so the checkout's newest migration must be the newest RE-PROVEN one
 # (R151 condition 1). Newer LOCAL-ONLY migrations land on the tip before their re-proof: run
 # the window from a worktree at the last release whose newest migration is THROUGH, e.g.
-# `git worktree add /tmp/launch-$THROUGH $WINDOW_RELEASE_HINT && cd /tmp/launch-$THROUGH`.
+# `git worktree add /tmp/launch-$THROUGH $WINDOW_RELEASE_HINT && cd /tmp/launch-$THROUGH`
+# (an empty hint: the coordinator names that release after the previous window; R264).
 # THROUGH picks the window: the re-proven level, hosted's level before it (the applied-list
 # anchor the patched hosted-migrate.sh stops on) and the reviewed patch that gets it there.
 THROUGH=${THROUGH:-0059}
@@ -42,13 +55,17 @@ case "$THROUGH" in
   0056) HOSTED_AT="0051 lab_import_jobs"; PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch   # KNOWN-GOOD-REPROOF-3; WR-KGR3-3
         WINDOW_RELEASE_HINT=a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c ;;
   0059) HOSTED_AT="0056 lab_control_grants"; PATCH=infra/lab/rollout/hosted-migrate-0057-0059.patch   # KNOWN-GOOD-REPROOF-4; applies after the 0056 window's
-        WINDOW_RELEASE_HINT="<the known-good-reproof-4 merge on claude/consumer-v1>" ;;
+        WINDOW_RELEASE_HINT='' ;;   # WR-KGR4-3: no release carries both #66 and launch/window-0056 yet
   *) echo "THROUGH=$THROUGH is not a re-proven level (0056 or 0059)" >&2; exit 2 ;;
 esac
 HOSTED_N=${HOSTED_AT:0:4}
 if [ "${NEWEST:0:4}" != "$THROUGH" ]; then
+  if [ -z "$WINDOW_RELEASE_HINT" ]; then
+    printf "this checkout carries %s (newer than the re-proven %s): the second window's release is the first claude/consumer-v1 commit carrying both merge #66 and the first window's launch/window-0056 branch — the coordinator names it in RESUME-NOW and 09 after the first window\n" "$NEWEST" "$THROUGH" >&2
+    exit 2
+  fi
   printf 'this checkout carries %s (newer than the re-proven %s): run from a worktree at %s\n' "$NEWEST" "$THROUGH" "$WINDOW_RELEASE_HINT" >&2
-  printf '  git worktree add /tmp/launch-%s %s && cd /tmp/launch-%s && RELEASE=%s %s %s\n' "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$WINDOW_RELEASE_HINT" "$0" "${1:-preflight}" >&2
+  printf '  git worktree add /tmp/launch-%s %s && cd /tmp/launch-%s && RELEASE=%s THROUGH=%s %s %s\n' "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$0" "${1:-preflight}" >&2
   exit 2
 fi
 NEWEST_N=${NEWEST:0:4}; NEWEST_NAME=${NEWEST:5}; NEWEST_NAME=${NEWEST_NAME%.sql}
@@ -114,7 +131,8 @@ PY
   infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at "$HOSTED_N" --window "$WINDOW" --through w7 --expect "$DIG" | tee /tmp/launch-v1-w7.log
   infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh
   grep -q "W7 PASS: hosted 0001-$NEWEST_N" /tmp/launch-v1-w7.log && echo "hosted 0001-$NEWEST_N applied (digest $DIG)"
-  git push origin claude/consumer-v1
+  git push origin "HEAD:refs/heads/launch/window-$THROUGH"   # R264: never claude/consumer-v1 from the detached release
+  echo "coordinator: merge launch/window-$THROUGH onto claude/consumer-v1 (between windows the test_ldp case is xfail(strict) naming the next window's patch)"
 }
 
 box() {
@@ -180,5 +198,5 @@ main_ff() {
 case "${1:-}" in
   preflight) preflight ;; window) window ;; box) box ;; vercel) vercel_lab ;; members) members ;; main) main_ff ;;
   all) preflight; window; box; vercel_lab; members; main_ff ;;
-  *) sed -n 2,26p "$0"; exit 2 ;;
+  *) sed -n 2,36p "$0"; exit 2 ;;
 esac

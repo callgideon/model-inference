@@ -266,3 +266,18 @@ diff 0056 -> 0059, the suites and probe carry the proof).
 Lane: 0 h remaining. Coordinator: WR-KGR4-1/2 text patches 0.1/0.2/0.4 h; WR-KGR4-3 hint 0.05/0.1/0.2 h;
 operator windows (WR-KGR4-4) outside this estimate. Confidence high. Basis: WR-KGR3-1/2 were the same
 patches one re-proof earlier; this lane's own wall time ~1.1 h (proofs 30 min in parallel, incl. two reruns).
+
+## Coordinator rulings
+
+- **R264** (numbered 2026-09-30 at this lane's merge on `codex/w5-merge-66`, 08 §10, appended directly after R263): A hosted window's commits (the reviewed EXPECTED_PENDING patch applied to `infra/rollout/hosted-migrate.sh` and the test_ldp case that follows it) are made on the pinned window release and pushed as `launch/window-<THROUGH>`, never to claude/consumer-v1 from the detached worktree; the coordinator merges that branch onto the tip; between two windows the tree-as-it-stands case is xfail(strict) naming the next window's patch; the next window's release is the first tip commit carrying both its re-proof merge and the previous window's branch (with R151/R201/R224; WR-KGR4-4, lens KGR4-RV-2). The lane's "Proposed ruling" (sequential windows, patches picked by `THROUGH`) is carried by the code as merged and is not numbered separately.
+
+## Merge
+
+Merged on `codex/w5-merge-66` (base `ba550eaa`) with the lane head **`31e29621`** recorded; no conflict.
+- **WR-KGR4-1** applied (`infra/rollout/README.md`: RR row, paragraph through 0059, `files` 0019-0059, verification-log line).
+- **WR-KGR4-2** applied (`15-pending-inputs.md` P-25 row: KNOWN-GOOD-REPROOF-4-1c986c6, through 0059, superseded 0056/0052/0051, extend at 0060; log line).
+- **WR-KGR4-3** applied as reworded by lens KGR4-RV-2: the 0059 `WINDOW_RELEASE_HINT` is empty (this merge lacks the first window's hosted-migrate.sh commit, so a worktree here would stop at `git apply --check`); on a checkout newer than 0059 the guard names the second window's release as the first claude/consumer-v1 commit carrying both merge #66 and `launch/window-0056`, which the coordinator names in RESUME-NOW and 09 after the first window. The printed worktree hint (non-empty hints) now also carries `THROUGH=`.
+- **WR-KGR4-PUSH** applied: `window()` pushes `HEAD:refs/heads/launch/window-$THROUGH` and prints the coordinator's merge line; the header documents the first window as the tip's script run from a worktree at `a58eb0d6` (its `cd "$(git rev-parse --show-toplevel)"` operates on the cwd's checkout); the usage range printed on a bad action is lines 2-36.
+- **Lens minors**: KGR4-RV-1 (`test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them` in `tests/i/test_known_good_proof.py`: both patches in order on a temp copy, the doubly patched EXPECTED_PENDING / W7 POST / anchor lines, launch-v1.sh's THROUGH table and push line; mutants `launch_v1_0059_hosted_at_0051`, `launch_v1_pushes_the_tip`; the mutant layout copies `infra/lab/rollout`); KGR4-RV-3 (`shape_added`: "EXECUTE to infrx_runtime (service_role through 0004's defaults)"; the word-for-word cases pin only `superseded`); KGR4-RV-4 (mutant `known_good_record_proves_other_0058`).
+- **WR-KGR4-6** is already on the tip: coordinator commit `271aff13` (mutant `releases_read_no_experiments` in `tests/i/lab_control/mutants.py`, killed on l4) is an ancestor of `ba550eaa`; nothing to do here.
+- **WR-KGR4-5 stands**: any migration 0060+ merged before the second window reopens R151 condition 1 (rerun this lane one migration later).

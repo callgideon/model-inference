@@ -1266,6 +1266,8 @@ MUTANTS += (
 
 # --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
 PROOF_PY = "../../infra/runbooks/schema_proof.py"
+LAUNCH_V1 = "../../infra/lab/rollout/launch-v1.sh"
+WINDOWS = "test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them"
 LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0059"
 KGR_0051_HEAD = ('}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
                  'passed, 14 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0051, '
@@ -1427,6 +1429,12 @@ MUTANTS += (
        "-- login. `gateway.capture.ConsentSource` reads", "-- login.  `gateway.capture.ConsentSource` reads",
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
        "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
+    # KGR4-RV-4: the 0058 bytes are bound as well
+    _m("known_good_record_proves_other_0058", "the proof's 0058 hash is this tree's 0058",
+       "../../apps/app/supabase/migrations/0058_lab_variant_identities.sql",
+       "-- lab-sql LW9 (LAB-SQL-LW7", "-- lab-sql LW9  (LAB-SQL-LW7",
+       LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0059", "the proof's 0059 hash is this tree's 0059",
        "../../apps/app/supabase/migrations/0059_lab_control_grants_2.sql",
        "-- `infrx_lab_control` (0043). Its `progress` reads D9", "-- `infrx_lab_control` (0043).  Its `progress` reads D9",
@@ -1441,6 +1449,12 @@ MUTANTS += (
        '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 383 passed',
        '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 384 passed',
        "test_ops_recover__the_superseded_0056_proof_is_the_recorded_one_word_for_word"),
+    # KGR4-RV-1: launch-v1.sh picks the 0059 window's anchor and pushes launch/window-$THROUGH (R264)
+    _m("launch_v1_0059_hosted_at_0051", "the 0059 window's hosted level is 0056",
+       LAUNCH_V1, '0059) HOSTED_AT="0056 lab_control_grants"', '0059) HOSTED_AT="0051 lab_import_jobs"', WINDOWS),
+    _m("launch_v1_pushes_the_tip", "a window pushes launch/window-$THROUGH, never claude/consumer-v1",
+       LAUNCH_V1, 'git push origin "HEAD:refs/heads/launch/window-$THROUGH"', "git push origin claude/consumer-v1",
+       WINDOWS),
     # KGR3-RV-1: every evidence path the record names exists (the copy carries them, _layout)
     _m("known_good_record_names_missing_evidence", "every evidence path of the record exists",
        "../../infra/rollout/known-good.json", '"models/marlin2b/results/E1B-box-bda1586/bench.jsonl"',
@@ -1824,6 +1838,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "lab", "observe"), ("infra", "alerts"),
+                 ("infra", "lab", "rollout"),   # KGR4-RV-1: launch-v1.sh and the two window patches
                  ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("models", "marlin2b", "profiles"),  # E1B-MUTANTS: the window cases' base profiles
                  ("apps", "app", "supabase", "migrations")):
