@@ -1,0 +1,22 @@
+2026-09-29 22:49:45,171 botocore.credentials Found credentials in environment variables.
+2026-09-29 22:49:45,351 botocore.credentials Found credentials in environment variables.
+2026-09-29 22:49:45,488 botocore.credentials Found credentials in environment variables.
+2026-09-29 22:49:49,821 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,824 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,827 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,830 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,833 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,835 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,838 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-29 22:49:49,842 infrx.gateway.lab lab datasets route failed: InsufficientPrivilege
+2026-09-29 22:49:50,288 infrx.gateway.capture consent read failed; capture is off for this key
+Traceback (most recent call last):
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/infrx/gateway/capture.py", line 101, in policy
+    answer = await self.read(*cached)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/infrx/gateway/capture.py", line 93, in read
+    rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege

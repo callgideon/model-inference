@@ -1,0 +1,494 @@
+{
+  "task": "I2L",
+  "gate": "E4-ON (LAB-LOCAL: every switch ON)",
+  "verdict": "FAIL",
+  "exit": 1,
+  "r222": {
+    "accepted": false,
+    "open": {
+      "o05": "FAIL",
+      "o07": "INVALID",
+      "lab-build": "FAIL",
+      "e4-on": "FAIL",
+      "e4-on@t2f": "NOT RUN"
+    },
+    "by_design": {
+      "test_o05_every_lab_route_family_answers_a_lab_session": "R237/R245 (LDP-F1 (b)): the all-switches App gateway is never the box's Lab server"
+    }
+  },
+  "scope": {
+    "WR-B3-3": "product WR: WR-B3-3 (checkpoints role: registry adapter, L3 dev deployer)",
+    "WR-LSQ-9": "product WR: WR-LSQ-9 (rollout role's pass inputs)",
+    "WR-B4-2": "product WR: WR-B4-2 (evaluations: experiments, catalog, B3 ledger ports)",
+    "WR-LAB2-4": "product WR: WR-LAB2-4 (pipelines: the run listings)",
+    "WR-P4B-1": "product WR: WR-P4B-1 (teacher batches)",
+    "WR-R4-1": "product WR: WR-R4-1 (releases/optimizations read models)",
+    "WR-LL2-5": "product WR: WR-LL2-5 (the control factory's traces port, pilot._lab_traces: unmounted without CLICKHOUSE_URL/S3_TRACE_BUCKET in its env)",
+    "P-10": "external teacher provider (P-10)",
+    "P-11": "external training provider (P-11)",
+    "P-08": "GPU / staging target (P-08)"
+  },
+  "label": "real PostgreSQL/PostgREST/Valkey/ClickHouse/S3-compatible services (e3l block), the merged code with every switch ON, a controlled engine, a judge fake as the teacher, the manual-bundle training connector, a local Lab build behind local TLS and a Supabase stand-in; not Marlin quality, not GPU capacity, not hosted behaviour",
+  "pins": {
+    "head": "c81a03d7e24a007d53feecf8422b987f90ec5d60",
+    "dirty": false
+  },
+  "namespace": "e3l",
+  "key": "lab-on",
+  "started": "2026-09-29T23:37:56+00:00",
+  "seconds": 2539.7,
+  "stack": {
+    "usable": true,
+    "why_not": null,
+    "stages": [
+      {
+        "stage": "preflight",
+        "status": "PASS",
+        "seconds": 1.7
+      },
+      {
+        "stage": "services",
+        "status": "PASS",
+        "seconds": 12.4
+      },
+      {
+        "stage": "migrate",
+        "status": "PASS",
+        "seconds": 0.6
+      }
+    ]
+  },
+  "stages": [
+    {
+      "stage": "lab-build",
+      "status": "FAIL",
+      "exit": 1,
+      "seconds": 0.4,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/lab-build.log",
+      "build_id": null
+    },
+    {
+      "stage": "e4-on",
+      "status": "FAIL",
+      "exit": 1,
+      "seconds": 1514.0,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on.log",
+      "counts": {
+        "tests": 2869,
+        "passed": 2850,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 18,
+        "xfailed": 0,
+        "skip_reasons": {
+          "task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)": 4,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)": 4,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)": 3,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)": 1,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the p1 task-local key (INFRX_D_TASK=p1)": 1,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the p3 task-local key (INFRX_D_TASK=p3)": 1,
+          "no ClickHouse: start infrx-t2i-clickhouse on the tasklocal t2i block and export INFRX_LAB_API_STACK=1": 1,
+          "task-local PostgreSQL unavailable: PostgreSQL only on the r2 (or r1) task-local key (INFRX_D_TASK=r2|r1)": 1,
+          "PostgreSQL only on the j2 task-local key": 1,
+          "WR-T-4 proof needs the t2f key and its stack (INFRX_D_TASK=t2f INFRX_T2F_STACK=1)": 1
+        },
+        "xfail_reasons": {},
+        "failed_ids": [
+          "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
+        ],
+        "empty_params": [
+          "tests.g.lab_releases.test_mutants::test_pg_mutant_is_killed[NOTSET]",
+          "tests.w.test_prep_worker_mutants::test_pg_mutant_is_killed[NOTSET]",
+          "tests.w.test_w5_mutants::test_pg_mutant_is_killed[NOTSET]",
+          "tests.w.test_worker_main_mutants::test_pg_mutant_is_killed[NOTSET]"
+        ]
+      },
+      "reason": "exit 1: 1 failed, 0 errors",
+      "skipped_ids": [
+        "tests.g.lab_evaluations.test_lab_evaluations_pg::test_lab_evaluations_pg__a_launch_is_two_real_d7_runs_once_and_a_finished_run_stays",
+        "tests.g.lab_pipelines.test_lab_pipelines_pg::test_lab_pipelines_pg__labels_to_a_submitted_manual_run_on_the_real_stores",
+        "tests.g.lab_pipelines.test_lab_teachers_composition_pg::test_lab_teachers_composition_pg__the_composed_surface_runs_the_approved_batch",
+        "tests.g.lab_pipelines.test_lab_teachers_pg::test_lab_teachers_pg__a_dry_run_then_an_approved_batch_on_the_real_ledger",
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9",
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate_at_read_time",
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict",
+        "tests.g.lab_releases.test_lab_releases_pg::test_lab_releases_pg__proposals_follow_r2_and_d9s_fence_on_l2s_roles",
+        "tests.g.lab_releases.test_lab_releases_unit_refused_pg::test_lab_releases_unit_refused_pg__a_legacy_usd_release_nulls_only_its_own_row",
+        "tests.g.lab_traces.test_lab_traces_stack::test_lab_traces__the_clickhouse_read_is_final_scoped_and_paged",
+        "tests.w.test_lab_workers_decide_pg::test_lab_workers_pg_an_expansion_is_decided_only_on_r2s_expand_verdict",
+        "tests.w.test_lab_workers_judge_pg::test_lab_workers_judge_pg__the_pass_reconciles_what_the_provider_has_and_collects_it",
+        "tests.w.test_lab_workers_teachers_pg::test_lab_workers_teachers_pg__the_annotation_role_collects_an_approved_batch_once",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__an_eval_run_event_is_worked_to_the_end_and_acknowledged",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__a_redelivery_after_a_revocation_resumes_and_ends_revoked",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__a_redelivery_before_recover_is_not_acknowledged",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__the_eval_relay_never_claims_another_roles_event",
+        "tests.w.test_worker_traces_pg::test_worker_traces_pg__the_composed_pumps_ship_project_and_retain"
+      ],
+      "failures": {
+        "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it": "RuntimeError: the worker exited 2: 2026-09-30 00:01:00,939 INFO botocore.credentials Found credentials in environment variables. | 2026-09-30 00:01:01,138 INFO botocore.credentials Found credentials in environment variables. | infrx.worker: refusing to start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3)"
+      },
+      "switches_on": [
+        "FEEDBACK_API",
+        "TRACE_EXPORT_API",
+        "LAB_CONTROL",
+        "LAB_TRACES",
+        "ROLLOUT_ROUTING",
+        "LAB_EVALS",
+        "LAB_PIPELINES",
+        "LAB_RELEASES",
+        "LAB_CHECKPOINTS",
+        "LAB_DATASETS",
+        "LAB_TEACHERS",
+        "TRACE_PUMPS",
+        "LAB_EVAL_WORKER"
+      ],
+      "pending_switches": {}
+    },
+    {
+      "stage": "e4-on@b3",
+      "cases": [
+        "tests.g.lab_evaluations.test_lab_evaluations_pg::test_lab_evaluations_pg__a_launch_is_two_real_d7_runs_once_and_a_finished_run_stays"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=b3 uv run --frozen pytest -q tests/g/lab_evaluations/test_lab_evaluations_pg.py::test_lab_evaluations_pg__a_launch_is_two_real_d7_runs_once_and_a_finished_run_stays",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 5.1,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@b3.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@p1",
+      "cases": [
+        "tests.g.lab_pipelines.test_lab_pipelines_pg::test_lab_pipelines_pg__labels_to_a_submitted_manual_run_on_the_real_stores"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=p1 uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_pipelines_pg.py::test_lab_pipelines_pg__labels_to_a_submitted_manual_run_on_the_real_stores",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 5.2,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@p1.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@p2",
+      "cases": [
+        "tests.g.lab_pipelines.test_lab_teachers_composition_pg::test_lab_teachers_composition_pg__the_composed_surface_runs_the_approved_batch",
+        "tests.g.lab_pipelines.test_lab_teachers_pg::test_lab_teachers_pg__a_dry_run_then_an_approved_batch_on_the_real_ledger",
+        "tests.w.test_lab_workers_teachers_pg::test_lab_workers_teachers_pg__the_annotation_role_collects_an_approved_batch_once"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=p2 uv run --frozen pytest -q tests/g/lab_pipelines/test_lab_teachers_composition_pg.py::test_lab_teachers_composition_pg__the_composed_surface_runs_the_approved_batch tests/g/lab_pipelines/test_lab_teachers_pg.py::test_lab_teachers_pg__a_dry_run_then_an_approved_batch_on_the_real_ledger tests/w/test_lab_workers_teachers_pg.py::test_lab_workers_teachers_pg__the_annotation_role_collects_an_approved_batch_once",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 12.2,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@p2.log",
+      "counts": {
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@r2",
+      "cases": [
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9",
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate_at_read_time",
+        "tests.g.lab_releases.test_lab_releases_composition_pg::test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict",
+        "tests.g.lab_releases.test_lab_releases_pg::test_lab_releases_pg__proposals_follow_r2_and_d9s_fence_on_l2s_roles"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=r2 uv run --frozen pytest -q tests/g/lab_releases/test_lab_releases_composition_pg.py::test_lab_releases_composition_pg__the_page_proposes_and_the_operator_decides_on_d9 tests/g/lab_releases/test_lab_releases_composition_pg.py::test_lab_releases_composition_pg__a_running_releases_verdict_is_r2s_evaluate_at_read_time tests/g/lab_releases/test_lab_releases_composition_pg.py::test_lab_releases_composition_pg__the_unit_login_reads_a_running_releases_verdict tests/g/lab_releases/test_lab_releases_pg.py::test_lab_releases_pg__proposals_follow_r2_and_d9s_fence_on_l2s_roles",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 10.9,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@r2.log",
+      "counts": {
+        "tests": 4,
+        "passed": 4,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@t2i",
+      "cases": [
+        "tests.g.lab_traces.test_lab_traces_stack::test_lab_traces__the_clickhouse_read_is_final_scoped_and_paged"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_LAB_API_STACK=1 uv run --frozen pytest -q tests/g/lab_traces/test_lab_traces_stack.py::test_lab_traces__the_clickhouse_read_is_final_scoped_and_paged",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 1.0,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@t2i.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@r1",
+      "cases": [
+        "tests.w.test_lab_workers_decide_pg::test_lab_workers_pg_an_expansion_is_decided_only_on_r2s_expand_verdict"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=r1 uv run --frozen pytest -q tests/w/test_lab_workers_decide_pg.py::test_lab_workers_pg_an_expansion_is_decided_only_on_r2s_expand_verdict",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 5.1,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@r1.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@j2",
+      "cases": [
+        "tests.w.test_lab_workers_judge_pg::test_lab_workers_judge_pg__the_pass_reconciles_what_the_provider_has_and_collects_it"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=j2 uv run --frozen pytest -q tests/w/test_lab_workers_judge_pg.py::test_lab_workers_judge_pg__the_pass_reconciles_what_the_provider_has_and_collects_it",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 4.9,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@j2.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@b1",
+      "cases": [
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__an_eval_run_event_is_worked_to_the_end_and_acknowledged",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__a_redelivery_after_a_revocation_resumes_and_ends_revoked",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__a_redelivery_before_recover_is_not_acknowledged",
+        "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__the_eval_relay_never_claims_another_roles_event"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=b1 uv run --frozen pytest -q tests/w/test_worker_lab_eval_pg.py::test_worker_lab_eval_pg__an_eval_run_event_is_worked_to_the_end_and_acknowledged tests/w/test_worker_lab_eval_pg.py::test_worker_lab_eval_pg__a_redelivery_after_a_revocation_resumes_and_ends_revoked tests/w/test_worker_lab_eval_pg.py::test_worker_lab_eval_pg__a_redelivery_before_recover_is_not_acknowledged tests/w/test_worker_lab_eval_pg.py::test_worker_lab_eval_pg__the_eval_relay_never_claims_another_roles_event",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 8.2,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/e4-on@b1.log",
+      "counts": {
+        "tests": 4,
+        "passed": 4,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    },
+    {
+      "stage": "e4-on@t2f",
+      "cases": [
+        "tests.w.test_worker_traces_pg::test_worker_traces_pg__the_composed_pumps_ship_project_and_retain"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 uv run --frozen pytest -q tests/w/test_worker_traces_pg.py::test_worker_traces_pg__the_composed_pumps_ship_project_and_retain",
+      "status": "NOT RUN",
+      "reason": "NOT RUN[KEY-HELD] t2f's postgres port 57549 is bound"
+    },
+    {
+      "stage": "scenarios",
+      "status": "FAIL",
+      "exit": 1,
+      "seconds": 15.5,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/scenarios.log",
+      "junit": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/scenarios.xml"
+    },
+    {
+      "stage": "journey:datasets",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_N_REAL=1 INFRX_D_TASK=lab-on node --test tests/n/journey.test.ts",
+      "exit": 0,
+      "seconds": 5.8,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/journey-datasets.log"
+    },
+    {
+      "stage": "journey:releases",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_R4_REAL=1 INFRX_D_TASK=lab-on node --test tests/r/stack.test.ts",
+      "exit": 0,
+      "seconds": 6.8,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/journey-releases.log"
+    },
+    {
+      "stage": "journey:pipelines",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_P4_REAL=1 INFRX_D_TASK=lab-on node --test tests/p/stack.test.ts",
+      "exit": 0,
+      "seconds": 11.4,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/journey-pipelines.log"
+    },
+    {
+      "stage": "journey:evaluations",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_B4_REAL=1 INFRX_D_TASK=lab-on node --test tests/b/stack.test.ts",
+      "exit": 0,
+      "seconds": 6.2,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/journey-evaluations.log"
+    },
+    {
+      "stage": "journey:traces",
+      "status": "PASS",
+      "rerun": "cd apps/lab && LAB_V1M_REAL=1 INFRX_D_TASK=lab-on node --test tests/v/list/stack.test.ts",
+      "exit": 0,
+      "seconds": 5.7,
+      "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/research/plan/evidence/e/E4ON-raw-c81a03d7/journey-traces.log"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "o01",
+      "title": "the gateway starts with every gateway switch ON on the dedicated runtime login",
+      "status": "PASS",
+      "cases": {
+        "test_o01_the_gateway_is_ready_with_every_switch_on": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o02",
+      "title": "the consumer worker starts with TRACE_PUMPS and LAB_EVAL_WORKER ON",
+      "status": "PASS",
+      "cases": {
+        "test_o02_the_consumer_worker_is_ready_with_its_switches_on": "PASS",
+        "test_o02_the_consumer_workers_lab_seam_refuses_by_name": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o03",
+      "title": "every Lab worker role starts from its own env (or refuses by name)",
+      "status": "NOT RUN",
+      "cases": {
+        "test_o03_the_eval_role_starts": "PASS",
+        "test_o03_the_checkpoints_role_starts": "PASS",
+        "test_o03_the_judge_role_starts": "PASS",
+        "test_o03_the_annotation_role_starts": "PASS",
+        "test_o03_the_training_role_starts": "NOT RUN",
+        "test_o03_the_rollout_role_starts": "PASS",
+        "test_o03_the_datasets_role_starts": "PASS"
+      },
+      "reasons": [
+        "test_o03_the_training_role_starts: NOT RUN[P-11] lab-training refuses by name until its work source lands (R198/R211): botocore.credentials Found credentials in environment variables. | infrx.lab.workers: refusing to start: INFRX_MODE='lab-training': training has no worker pass: the manual-bundle run is prepared, submitted and finished through the Lab route /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/tests/integration/lab_local/scenarios_on.py:105: NOT RUN[P-11] lab-training refuses by name until its work source lands (R198/R211):"
+      ]
+    },
+    {
+      "id": "o04",
+      "title": "the Lab control factory serves a real Lab session",
+      "status": "PASS",
+      "cases": {
+        "test_o04_the_control_factory_serves_a_lab_session": "PASS",
+        "test_o04_the_control_factory_is_ready_on_its_own_login": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o05",
+      "title": "every Lab route family answers a real Lab session and refuses a consumer key",
+      "status": "FAIL",
+      "cases": {
+        "test_o05_every_lab_route_family_answers_a_lab_session": "FAIL",
+        "test_o05_the_lab_routes_gateway_serves_every_family": "NOT RUN",
+        "test_o05_the_control_factory_serves_every_family_on_its_own_login": "NOT RUN",
+        "test_o05_a_consumer_key_is_no_lab_session_on_any_family": "PASS"
+      },
+      "reasons": [
+        "test_o05_every_lab_route_family_answers_a_lab_session: AssertionError: route families not serving a Lab session (all switches ON): {'control': '503 {\"refusal\":\"unavailable\"}', 'traces': '503 {\"refusal\":\"unavailable\"}', 'evals': '503 {\"refusal\":\"unavailable\"}', 'pipelines': '503 {\"refusal\":\"unavailable\"}', 'teacher-batches': '503 {\"refusal\":\"unavailable\"}', 'releases': '503 {\"refusal\":\"unavailable\"}', 'optimizations': '503 {\"refusal\":\"unavailable\"}', 'datasets': '503 {\"detail\":\"the datasets service failed\"}'}\nassert not {'control': '503 {\"refusal\":\"unavailable\"}', 'traces': '503 {\"refusal\":\"unavailable\"}', 'evals': '503 {\"refusal\":\"unavailable\"}', ",
+        "test_o05_the_lab_routes_gateway_serves_every_family: NOT RUN[WR-B4-2,WR-LAB2-4] typed unavailable until the lane lands: ['evals', 'pipelines'] /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/tests/integration/lab_local/scenarios_on.py:59: NOT RUN[WR-B4-2,WR-LAB2-4] typed unavailable until the lane lands: ['evals', 'pipelines']",
+        "test_o05_the_control_factory_serves_every_family_on_its_own_login: NOT RUN[WR-B4-2,WR-LAB2-4,WR-LL2-5,WR-P4B-1] pinned until the lane lands: ['evals', 'pipelines', 'teacher-batches', 'traces'] /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/tests/integration/lab_local/scenarios_on.py:213: NOT RUN[WR-B4-2,WR-LAB2-4,WR-LL2-5,WR-P4B-1] pinned until the lane lands: ['evals', 'pipelines', 'teacher-batches', 'traces']"
+      ]
+    },
+    {
+      "id": "o06",
+      "title": "the consumer App path serves and settles once with every switch ON",
+      "status": "PASS",
+      "cases": {
+        "test_o06_the_consumer_path_serves_and_settles_once": "PASS"
+      },
+      "reasons": []
+    },
+    {
+      "id": "o07",
+      "title": "the Lab web (production build, https origin) renders each page family signed in",
+      "status": "INVALID",
+      "cases": {
+        "test_o07_the_lab_web_renders_every_page_family_signed_in": "INVALID"
+      },
+      "reasons": [
+        "test_o07_the_lab_web_renders_every_page_family_signed_in: INVALID[premise] the Lab web is not built: the runner's lab-build stage makes it /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/tests/integration/backend/e3c/world.py:102: INVALID[premise] the Lab web is not built: the runner's lab-build stage makes it"
+      ]
+    }
+  ],
+  "lock": {
+    "path": "/tmp/infrx-e3l.runner.lock",
+    "held": true
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_local/runner.py --out <dir>"
+}

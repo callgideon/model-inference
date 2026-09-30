@@ -1,0 +1,22 @@
+2026-09-30 00:46:34,721 botocore.credentials Found credentials in environment variables.
+2026-09-30 00:46:34,921 botocore.credentials Found credentials in environment variables.
+2026-09-30 00:46:35,159 botocore.credentials Found credentials in environment variables.
+2026-09-30 00:46:39,875 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,880 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,883 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,887 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,890 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,894 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,897 infrx.gateway.lab lab route failed: InsufficientPrivilege
+2026-09-30 00:46:39,903 infrx.gateway.lab lab datasets route failed: InsufficientPrivilege
+2026-09-30 00:46:40,397 infrx.gateway.capture consent read failed; capture is off for this key
+Traceback (most recent call last):
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/gateway/capture.py", line 101, in policy
+    answer = await self.read(*cached)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/gateway/capture.py", line 93, in read
+    rows = await self.rows(self.connect, CONSENT_SQL, (key_id, org_id))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege

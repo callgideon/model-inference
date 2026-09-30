@@ -1,0 +1,2 @@
+2026-09-29 22:49:47,584 INFO botocore.credentials Found credentials in environment variables.
+infrx.lab.workers: refusing to start: INFRX_MODE='lab-training': training has no worker pass: the manual-bundle run is prepared, submitted and finished through the Lab route

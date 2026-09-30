@@ -1,0 +1,47 @@
+
+> infrx-lab@0.1.0 build /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab
+> next build
+
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 28ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.7s
+  Running TypeScript ...
+  Finished TypeScript in 4.6s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/3) ...
+✓ Generating static pages using 15 workers (3/3) in 174ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /annotations
+├ ƒ /auth/callback
+├ ƒ /datasets
+├ ƒ /datasets/[ref]
+├ ƒ /datasets/exports/[id]/[part]
+├ ƒ /datasets/imports/[id]
+├ ƒ /datasets/imports/[id]/rejected
+├ ƒ /deployments
+├ ƒ /evaluations
+├ ƒ /evaluations/checkpoints
+├ ƒ /experiments/[id]
+├ ƒ /experiments/[id]/report
+├ ƒ /judge
+├ ƒ /models
+├ ƒ /optimizations
+├ ƒ /overview
+├ ƒ /releases
+├ ƒ /requests
+├ ƒ /requests/[id]
+├ ƒ /settings
+└ ƒ /training
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

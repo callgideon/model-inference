@@ -1,0 +1,21 @@
+2026-09-30 00:46:33,638 INFO botocore.credentials Found credentials in environment variables.
+2026-09-30 00:46:33,845 INFO botocore.credentials Found credentials in environment variables.
+2026-09-30 00:46:33,900 INFO infrx.worker reconciliation gauges disabled: no monitor login
+2026-09-30 00:46:33,921 INFO infrx.media.retention retention sweep: 0 deleted, 0 retained, 0 delete failures, 0 lost acks, batch 0, in flight 0, oldest pending delete 0 s
+2026-09-30 00:46:33,927 ERROR infrx.worker feedback projection failed
+Traceback (most recent call last):
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/worker/__main__.py", line 238, in every
+    await step()
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/traces/feedback/projector.py", line 48, in pump
+    events = await self.outbox.pending(worker_id=self.worker_id, limit=self.batch,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/traces/feedback/pg.py", line 45, in pending
+    rows = await pg_rows(self.connect, PENDING, {"worker": worker_id, "limit": limit,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/infrx/traces/ship/pins.py", line 33, in pg_rows
+    raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
+infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: postgres: InsufficientPrivilege
+2026-09-30 00:46:40,511 INFO infrx.worker prepared 9e0bcc2e-45df-44fb-be2f-dfb0cb90ad59: 1337 prompt tokens (engine /tokenize, 3 ms)
+2026-09-30 00:46:40,658 INFO infrx.worker prepared ba9d7078-516e-4306-a300-0933366eb333: 1337 prompt tokens (engine /tokenize, 2 ms)
+2026-09-30 00:46:43,540 WARNING infrx.worker drained: 10 finished, 0 released [], ended []
+2026-09-30 00:46:43,540 WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []

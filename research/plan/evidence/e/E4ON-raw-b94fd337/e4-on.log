@@ -1,0 +1,270 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+.................................................................s...... [  7%]
+..........................sss............................Fss..FFFFFFFF.. [ 10%]
+..............s......................................................... [ 12%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+.....................................................................s.s [ 37%]
+...........s............................................................ [ 40%]
+........................................................................ [ 42%]
+.....s.................................................................. [ 45%]
+......................................s...ssss.......................... [ 47%]
+.............F..............................ss.......................... [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+.....................................................                    [100%]
+=================================== FAILURES ===================================
+_ test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed _
+
+    def test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed():
+        """WR-LIVE-PAGE (R244): `pilot.ReleaseRecords` shows each release's `progress` as D9's Live
+        of that revision (`PgReleaseStore.live(policy_ref)`, 0054) in port.ts's shape - per arm
+        counts and p99, quality coverage, the candidate arm's spend in its own unit (R246), health,
+        the database clock as UTC - and null only while Live is None (nothing assigned yet). No
+        per-serving tally is readable yet: `assignments` is empty, never invented."""
+        import asyncio
+    
+        from infrx.gateway import pilot
+        from infrx.lab.workers.__main__ import plan_key
+        from infrx.media.store import InMemoryObjectStore
+        from infrx.state.lab_rollout import Release, ReleaseListing
+        from tests.r.control import test_control as r2w
+    
+        objects, lives, asked = InMemoryObjectStore(), {}, []
+        refs = [r2w.POLICY_REF, r2w.POLICY_REF.replace("sha256:", "sha256:0", 1)[:-1]]
+        asyncio.run(objects.put_if_absent(plan_key(r2w.P, r2w.POLICY.policy_id),
+                                          r2w.plan().model_dump_json().encode(), "x"))
+    
+        class D9:
+            async def releases_in(self, states=(), *, provider_org_id):
+                return [ReleaseListing(policy_id=r2w.POLICY.policy_id, provider_org_id=r2w.P,
+                                       endpoint_id="e", policy_ref=ref, latest_decision=None,
+                                       release=Release(state="running", fence=1, plan_digest="d",
+                                                       started_at=r2w.START)) for ref in refs]
+    
+            async def live(self, policy_ref):
+                asked.append(policy_ref)
+                return lives.get(policy_ref)
+    
+        class D7:
+            async def resolve(self, ref, *, provider_org_id):
+                return r2w.POLICY
+    
+>       records = pilot.ReleaseRecords(D9(), D7(), objects)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: ReleaseRecords.__init__() missing 1 required positional argument: 'variants'
+
+tests/g/lab_releases/test_lab_releases.py:404: TypeError
+________________ test_the_named_cases_pass_on_the_pristine_tree ________________
+
+    def test_the_named_cases_pass_on_the_pristine_tree():
+        """R83 (b): a case that fails on its own would 'kill' every mutant naming it."""
+        cases = tuple(sorted({case for mutant in ALL for case in mutant.cases}))
+>       assert shared.pristine(cases, mutation_list.RUNNER) is None
+E       assert Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']") is None
+E        +  where Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']") = <function pristine at 0x752a2ff3dd00>(('test_lab_releases__a_body_is_json_and_exactly_a_proposal', 'test_lab_releases__a_consumer_only_user_is_denied_and_an...licy_is_not_found_whatever_the_role', 'test_lab_releases__an_unwired_port_is_unavailable_after_the_access_checks', ...), Runner(name='lab-releases', targets=('tests/g/lab_releases/test_lab_releases.py',), extra_args=('-m', 'not pg'), packa... require_every_case=False, targets_for=None, layout=<function _layout at 0x752a2ff3e200>, env=('INFRX_LAB_API_STACK',)))
+E        +    where <function pristine at 0x752a2ff3dd00> = shared.pristine
+E        +    and   Runner(name='lab-releases', targets=('tests/g/lab_releases/test_lab_releases.py',), extra_args=('-m', 'not pg'), packa... require_every_case=False, targets_for=None, layout=<function _layout at 0x752a2ff3e200>, env=('INFRX_LAB_API_STACK',)) = mutation_list.RUNNER
+
+tests/g/lab_releases/test_mutants.py:49: AssertionError
+______________ test_mutant_is_killed[mounted_without_the_switch] _______________
+
+mutant = Mutant(name='mounted_without_the_switch', invariant='LAB_RELEASES off (no rt.lab_releases): no route', file='gateway/r...\n        return None', cases=('test_lab_releases__nothing_is_mounted_without_the_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: mounted_without_the_switch is broken_runner (LAB_RELEASES off (no rt.lab_releases): no route): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__nothing_is_mounted_without_the_switch'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+_________________ test_mutant_is_killed[body_before_identity] __________________
+
+mutant = Mutant(name='body_before_identity', invariant='a proposal body is read after the session and membership', file='gatewa...opose`\n', cases=('test_lab_releases__every_route_needs_the_session_before_anything_else',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: body_before_identity is broken_runner (a proposal body is read after the session and membership): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__every_route_needs_the_session_before_anything_else'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+__________________ test_mutant_is_killed[developer_proposes] ___________________
+
+mutant = Mutant(name='developer_proposes', invariant='only an administrator proposes', file='gateway/routes/lab_releases.py', o...ment)\n', cases=('test_lab_releases__every_role_reads_and_only_an_administrator_proposes',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: developer_proposes is broken_runner (only an administrator proposes): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__every_role_reads_and_only_an_administrator_proposes'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+__________________ test_mutant_is_killed[proposals_withheld] ___________________
+
+mutant = Mutant(name='proposals_withheld', invariant="the provider's proposals are served", file='gateway/routes/lab_releases.p...proposals": []}', cases=('test_lab_releases__the_records_are_the_providers_own_as_stored',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: proposals_withheld is broken_runner (the provider's proposals are served): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__the_records_are_the_providers_own_as_stored'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+_______________ test_mutant_is_killed[fence_from_the_read_model] _______________
+
+mutant = Mutant(name='fence_from_the_read_model', invariant="the fence is D9's now, not the listing's", file='gateway/routes/la... wanted.fence:\n', cases=('test_lab_releases__a_proposal_names_the_revision_d9_holds_now',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: fence_from_the_read_model is broken_runner (the fence is D9's now, not the listing's): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__a_proposal_names_the_revision_d9_holds_now'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+___________ test_mutant_is_killed[expand_without_an_expand_verdict] ____________
+
+mutant = Mutant(name='expand_without_an_expand_verdict', invariant='an inconclusive (hold) verdict cannot be expanded', file='g..., cases=('test_lab_releases__only_an_expand_verdict_on_a_running_release_can_be_proposed',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: expand_without_an_expand_verdict is broken_runner (an inconclusive (hold) verdict cannot be expanded): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__only_an_expand_verdict_on_a_running_release_can_be_proposed'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+_______________________ test_mutant_is_killed[kind_open] _______________________
+
+mutant = Mutant(name='kind_open', invariant='a proposal is expand or rollback', file='gateway/routes/lab_releases.py', old='   ...', new='    kind: str', cases=('test_lab_releases__a_body_is_json_and_exactly_a_proposal',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: kind_open is broken_runner (a proposal is expand or rollback): pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/g/lab_releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']. The cases ['test_lab_releases__a_body_is_json_and_exactly_a_proposal'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'..._releases/test_lab_releases.py::test_lab_releases__a_releases_progress_is_d9s_live_null_only_before_one_is_observed']").killed
+
+tests/g/lab_releases/test_mutants.py:55: AssertionError
+__ test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it __
+
+box = <tests.w.test_worker_main.Box object at 0x7529f8b64ef0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7529f8b64d40>
+
+    def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(box, monkeypatch):
+        """E3B's pilot box on this lane's services: `start("worker")` returns once `python -m
+        infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
+        pilotbox = pilotbox_module(monkeypatch)
+        box.start_engine()
+        pilot = pilotbox.PilotBox(dict(box.settings), f"http://127.0.0.1:{box.engine_port}",
+                                  box.log.parent, 1)
+        try:
+>           pilot.start("worker", timeout=60)
+
+tests/w/test_worker_main.py:1024: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../tests/integration/backend/pilotbox.py:217: in start
+    self._wait_ready(role, ready, timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <infrx_i2b_pilotbox.PilotBox object at 0x7529f8b64530>, role = 'worker'
+url = 'http://127.0.0.1:58771/readyz', timeout = 60
+
+    def _wait_ready(self, role: str, url: str, timeout: float) -> None:
+        import httpx
+        end, last = time.monotonic() + timeout, ""
+        while time.monotonic() < end:
+            if self.processes[role].poll() is not None:
+>               raise RuntimeError(f"the {role} exited {self.processes[role].returncode}: "
+                                   f"{self.tail(role)}")
+E               RuntimeError: the worker exited 2: 2026-09-29 22:28:47,354 INFO botocore.credentials Found credentials in environment variables. | 2026-09-29 22:28:47,807 INFO botocore.credentials Found credentials in environment variables. | infrx.worker: refusing to start: INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source (WR-B-2(b)) and a dev target source (WR-B-3)
+
+../../tests/integration/backend/pilotbox.py:224: RuntimeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+.venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/apps/infrx-api/.venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/contracts/test_config_and_imports.py::test_each_lab_gate_owns_a_compose_block_below_the_band, argvalues type: enumerate
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/g/lab_evaluations/test_lab_evaluations_pg.py:96: task-local PostgreSQL unavailable: PostgreSQL only on the b3 task-local key (INFRX_D_TASK=b3)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_pipelines_pg.py:81: task-local PostgreSQL unavailable: PostgreSQL only on the p1 task-local key (INFRX_D_TASK=p1)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_teachers_composition_pg.py:87: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/g/lab_pipelines/test_lab_teachers_pg.py:94: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/g/lab_releases/test_lab_releases_composition_pg.py:58: task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)
+SKIPPED [1] tests/g/lab_releases/test_lab_releases_pg.py:78: task-local PostgreSQL unavailable: PostgreSQL only on the r2 task-local key (INFRX_D_TASK=r2)
+SKIPPED [1] tests/g/lab_traces/test_lab_traces_stack.py:70: no ClickHouse: start infrx-t2i-clickhouse on the tasklocal t2i block and export INFRX_LAB_API_STACK=1
+SKIPPED [1] tests/w/test_lab_workers_decide_pg.py:53: task-local PostgreSQL unavailable: PostgreSQL only on the r2 (or r1) task-local key (INFRX_D_TASK=r2|r1)
+SKIPPED [1] tests/w/test_lab_workers_judge_pg.py:35: PostgreSQL only on the j2 task-local key
+SKIPPED [1] tests/w/test_lab_workers_teachers_pg.py:27: task-local PostgreSQL unavailable: PostgreSQL only on the p2 task-local key (INFRX_D_TASK=p2)
+SKIPPED [1] tests/w/test_prep_worker_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_w5_mutants.py:79: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:73: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:87: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:110: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_lab_eval_pg.py:137: task-local PostgreSQL unavailable: PostgreSQL only on the b1 or b3 task-local key (INFRX_D_TASK=b1|b3)
+SKIPPED [1] tests/w/test_worker_main_mutants.py:77: got empty parameter set for (mutant)
+SKIPPED [1] tests/w/test_worker_traces_pg.py:91: WR-T-4 proof needs the t2f key and its stack (INFRX_D_TASK=t2f INFRX_T2F_STACK=1)
+10 failed, 2833 passed, 18 skipped, 3 warnings in 1272.27s (0:21:12)

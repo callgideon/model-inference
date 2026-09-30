@@ -1,0 +1,34 @@
+{
+  "head": {
+    "head": "aa386cf34cb967e0fd1647ff563854240daff9e8",
+    "dirty": false
+  },
+  "input": "E4ON-raw-b94fd337/e4-on.xml skipped_ids (decide_pg)",
+  "command": "runner.e4_keyed(out, runner.e4_env(out, lab_world), [decide_pg]) under the e3l lock on the kept stack",
+  "rows": [
+    {
+      "stage": "e4-on@r1",
+      "cases": [
+        "tests.w.test_lab_workers_decide_pg::test_lab_workers_pg_an_expansion_is_decided_only_on_r2s_expand_verdict"
+      ],
+      "rerun": "cd apps/infrx-api && INFRX_D_TASK=r1 uv run --frozen pytest -q tests/w/test_lab_workers_decide_pg.py::test_lab_workers_pg_an_expansion_is_decided_only_on_r2s_expand_verdict",
+      "status": "PASS",
+      "exit": 0,
+      "seconds": 6.9,
+      "log": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-local-3/research/plan/evidence/e/E4ON-raw-aa386cf3-r1/e4-on@r1.log",
+      "counts": {
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "skip_reasons": {},
+        "xfail_reasons": {},
+        "failed_ids": [],
+        "empty_params": []
+      },
+      "reason": ""
+    }
+  ]
+}

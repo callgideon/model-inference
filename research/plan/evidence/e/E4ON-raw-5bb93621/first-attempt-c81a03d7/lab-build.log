@@ -1,0 +1,7 @@
+
+> infrx-lab@0.1.0 build /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64/apps/lab
+> next build
+
+sh: 1: next: not found
+ ELIFECYCLE  Command failed.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
