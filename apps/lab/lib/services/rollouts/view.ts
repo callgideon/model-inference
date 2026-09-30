@@ -52,9 +52,9 @@ export type VariantRow = { id: string; base: string; variant: string; changes: s
 
 // R3's `Load.source`: an experiment branch's results at a commit. Anything else is a fixture.
 const RESULTS = /^(?:models\/)?(?:deepseek41f|deepseek41fnvfp4|qwen3827b|kimik3|marlin2b)\/results\/\S+@[0-9a-f]{7,40}$/;
-// R252: an identity R3 has not persisted yet (absent or null) shows the serving ref instead.
+// R263: a variant stored before R3 recorded its identities (null) says so, beside the serving ref.
 const scope = (i: Variant["base"], servingRef: string) =>
-  i ? `${i.engine} ${i.engineVersion} on ${i.hardware} · ${i.quantization} · ${i.capabilities.join(", ")}` : servingRef;
+  i ? `${i.engine} ${i.engineVersion} on ${i.hardware} · ${i.quantization} · ${i.capabilities.join(", ")}` : `identity not recorded (${servingRef})`;
 
 export function variantRows(variants: Variant[]): VariantRow[] {
   return variants.map((v) => {
