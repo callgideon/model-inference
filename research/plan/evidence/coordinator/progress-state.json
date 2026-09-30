@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 328,
- "updated": "2026-09-29T23:49:59Z",
+ "revision": 329,
+ "updated": "2026-09-30T00:26:26Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9385,11 +9385,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T18:40:05Z",
-   "updated": "2026-09-29T23:13:41Z",
+   "updated": "2026-09-30T00:26:26Z",
    "blocker": null,
-   "next_action": "merge batch #63 (WR-LC2-RUNTIME + the 0057 pin, minors, the o01 rerun on a kept e5l stack, R261) → TRACE_PUMPS may be enabled locally",
+   "next_action": "TRACE_PUMPS may be enabled locally; hosted enable needs 0057 under an R151 window (re-proof through 0059 first) + an E4-ON run on the enable tree",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9861,22 +9861,22 @@
   {
    "id": "W5-MERGE-63",
    "task": null,
-   "slice": "merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261); workflow wf_c1917f53-beb",
+   "slice": "merge batch #63 (Opus): lab-capture-2 8ddb75f8 (+WR-LC2-RUNTIME, the 0057 pin, minors, the o01 kept-stack rerun, R261); workflow wf_c1917f53-beb; integrated (R261; 0057 LOCAL-ONLY on the tip; o01 PASS on all 4 cases on a kept e5l stack)",
    "agent": "opus",
    "branch": "codex/w5-merge-63",
    "worktree": ".claude/worktrees/codex-w5-merge-63",
    "base": "6738643c",
-   "head": null,
+   "head": "d17742d4",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T23:13:41Z",
-   "updated": "2026-09-29T23:13:41Z",
+   "updated": "2026-09-30T00:26:26Z",
    "blocker": null,
-   "next_action": "integrate (sort §10; harness pins 0057 before 0058/0059) → E5L fully PASS on the tip",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
