@@ -19,7 +19,7 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 330,
+ "revision": 331,
  "updated": "2026-09-30T00:34:55Z",
  "agent_slots": {
   "total": 16,
@@ -9966,6 +9966,77 @@
     "apps/infrx-api/tests/g/lab_releases/",
     "tests/integration/test_harness.py",
     "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-KNOWN-GOOD-REPROOF-4",
+   "task": "I8",
+   "slice": "R151 condition 1 through 0059 for the SECOND window + hosted-migrate-0057-0059.patch + launch-v1.sh THROUGH/patch selection (Opus); workflow wf_e9d0de11-303",
+   "agent": "opus",
+   "branch": "codex/w5-known-good-reproof-4",
+   "worktree": ".claude/worktrees/codex-w5-known-good-reproof-4",
+   "base": "6ca7879f",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-30T00:34:55Z",
+   "updated": "2026-09-30T00:34:55Z",
+   "blocker": null,
+   "next_action": "handback → merge → the operator's second window (0057–0059)",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/lab/rollout/hosted-migrate-0057-0059.patch",
+    "infra/lab/rollout/launch-v1.sh",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-R3-IDENTITIES",
+   "task": "R3",
+   "slice": "WR-LW9-4 + WR-LW9-1: every R3 store caller passes identities + variants; the Lab VARIANT decoder back to required identities with a legacy-null rendering (Opus); workflow wf_6ce51ac5-98d",
+   "agent": "opus",
+   "branch": "codex/w5-lab-r3-identities",
+   "worktree": ".claude/worktrees/codex-w5-lab-r3-identities",
+   "base": "6ca7879f",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-30T00:34:55Z",
+   "updated": "2026-09-30T00:34:55Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
    ],
    "wiring_requests": []
   }
