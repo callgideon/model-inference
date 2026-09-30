@@ -54,6 +54,11 @@ MUTANTS: tuple[Mutant, ...] = (
            invariant="only the registered identities are stored beside the variant",
            old="    if identities is not None and tuple(", new="    if False and tuple(",
            cases=(STORE,)),
+    Mutant(name="lw9_r3_identities_portless", file=R3,
+           invariant="identities without the variants port are refused before publishing "
+                     "(F3, 1-LW9-RV-3)",
+           old="    if identities is not None and variants is None:",
+           new="    if False:", cases=(STORE,)),
     Mutant(name="lw9_r3_identities_unwritten", file=R3,
            invariant="R3 writes both identities when it creates the variant",
            old="    if identities is not None:\n        base, candidate",

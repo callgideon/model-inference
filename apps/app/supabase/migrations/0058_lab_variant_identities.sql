@@ -10,7 +10,9 @@
 --     lab_put_variant_identities {provider_org_id, variant_ref, base, variant, actor}: the
 --         provider's own variant (another provider's or none: `not_found`, R227); a shape
 --         the Lab cannot read or no actor: `invalid_request`; the same identities again are
---         the same answer, different ones `state_conflict` -> {variant_ref, base, variant}.
+--         the same answer, different ones `state_conflict`; a pair whose serving refs
+--         (`lab_identity_serving_ref`, R3's `serving_ref` in SQL) are not the variant's
+--         `invalid_request` (F6, merge #65) -> {variant_ref, base, variant}.
 --     lab_optimization_variant_listing {provider_org_id}: 0055's `lab_optimization_variants`
 --         in its order, each row with `base` and `variant` (null while R3 has not stored
 --         them). 0055's function is not redefined (its mutants stay live).
@@ -28,7 +30,7 @@
 -- ROLLBACK (this file alone; nothing references it): drop function
 --   infrx.lab_release_tally(jsonb), infrx.lab_optimization_variant_listing(jsonb),
 --   infrx.lab_put_variant_identities(jsonb); drop table infrx.lab_variant_identities;
---   drop function infrx.lab_identity_shaped(jsonb);
+--   drop function infrx.lab_identity_shaped(jsonb), infrx.lab_identity_serving_ref(text, jsonb);
 --   revoke execute on function infrx.lab_release_live(jsonb) from infrx_lab_control.
 --
 -- Re-runnable: `if not exists`, `create or replace`.
@@ -41,6 +43,24 @@ language sql immutable set search_path = pg_catalog as $$
     and jsonb_typeof(p->'quantization') = 'string'
     and jsonb_typeof(p->'capabilities') = 'array'
     and not jsonb_path_exists(p, '$.capabilities[*] ? (@.type() != "string")'), false)
+$$;
+
+-- F6 (merge #65): R3's `serving_ref(provider, identity)` - the JCS (RFC 8785) sha256 of the
+-- identity's JSON dump, its first 32 hex digits as a version-4 UUID. ponytail: JCS of a flat
+-- object of strings and string arrays only (R3's `Identity`); any other value keeps its jsonb
+-- spelling, so such an identity never matches a ref R3 registered.
+create or replace function infrx.lab_identity_serving_ref(p_provider text, p jsonb)
+returns text language sql immutable set search_path = pg_catalog as $$
+  select 'lab:serving:' || p_provider || ':' || substr(h, 1, 8) || '-' || substr(h, 9, 4)
+      || '-4' || substr(h, 14, 3) || '-'
+      || substr('89ab', (('x' || substr(h, 17, 1))::bit(4)::int & 3) + 1, 1)
+      || substr(h, 18, 3) || '-' || substr(h, 21, 12) || '@sha256:' || h
+    from (select encode(sha256(convert_to('{' || string_agg(to_jsonb(k)::text || ':' ||
+            case jsonb_typeof(x) when 'array' then '[' || coalesce((select string_agg(
+              e::text, ',' order by n) from jsonb_array_elements(x) with ordinality a(e, n)),
+              '') || ']' else x::text end, ',' order by k collate "C") || '}', 'UTF8')), 'hex') h
+            from jsonb_each(case when jsonb_typeof(p) = 'object' then p else '{}' end) j(k, x)
+         ) d
 $$;
 
 create table if not exists infrx.lab_variant_identities (
@@ -66,6 +86,7 @@ language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   v_ref text := p_args->>'variant_ref';
   v_row infrx.lab_variant_identities%rowtype;
+  v_body jsonb;
 begin
   if not exists (select 1 from infrx.lab_records r where r.ref = v_ref and r.kind = 'variant'
                   and r.provider_org_id = (p_args->>'provider_org_id')::uuid) then
@@ -82,6 +103,12 @@ begin
   select * into v_row from infrx.lab_variant_identities where variant_ref = v_ref;
   if (v_row.base, v_row.variant) is distinct from (p_args->'base', p_args->'variant') then
     perform infrx.refuse('state_conflict', 'this variant''s identities are stored and differ');
+  end if;
+  select r.body::jsonb into v_body from infrx.lab_records r where r.ref = v_ref;
+  if (v_body->>'base_serving_ref', v_body->>'variant_serving_ref') is distinct from
+     (infrx.lab_identity_serving_ref(v_body->>'provider_org_id', p_args->'base'),
+      infrx.lab_identity_serving_ref(v_body->>'provider_org_id', p_args->'variant')) then
+    perform infrx.refuse('invalid_request', 'the identities are not this variant''s serving refs');
   end if;
   return jsonb_build_object('variant_ref', v_ref, 'base', v_row.base, 'variant', v_row.variant);
 end $$;

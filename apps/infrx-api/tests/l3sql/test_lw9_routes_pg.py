@@ -33,7 +33,7 @@ from ..d import test_l2sql_access as l2
 from ..g import support as gsupport
 from ..g.lab_releases.test_lab_releases import Sessions, token
 from ..r.control.test_control import plan
-from .test_lw9 import BASE, NVFP4, put
+from .test_lw9 import BASE, NVFP4, identified, put
 
 _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
@@ -54,8 +54,8 @@ def conn():
 def test_lw9_routes_pg__identities_and_the_tally_reach_the_lab_pages(conn):
     """A viewer of NEMO reads a variant's stored identities (the other variant's null), and a
     release's progress whose assignments are its terminal requests per serving and pin."""
-    identified, bare = v.variant(conn, 0x91), v.variant(conn, 0x92)
-    v.ok(conn, "lab_put_variant_identities", put(identified))
+    stored, bare = identified(conn, 0x91), v.variant(conn, 0x92)
+    v.ok(conn, "lab_put_variant_identities", put(stored))
     candidate = lv.ref_of(conn, cc.DEV_DEPLOYMENT)
     ref, body = lv.launch(conn, 0x94, candidate)
     for i, state in enumerate(("succeeded", "failed", "queued"), start=1):
@@ -79,7 +79,7 @@ def test_lw9_routes_pg__identities_and_the_tally_reach_the_lab_pages(conn):
         return answer.json()["data"]
 
     rows = {r["variant_ref"]: r for r in page(lr.OPTIMIZATIONS_PATH)}
-    assert (rows[identified]["base"], rows[identified]["variant"]) == (BASE, NVFP4)
+    assert (rows[stored]["base"], rows[stored]["variant"]) == (BASE, NVFP4)
     assert (rows[bare]["base"], rows[bare]["variant"]) == (None, None)
     [release] = [r for r in page(lr.RELEASES_PATH)["releases"] if r["policy_ref"] == ref]
     progress = release["progress"]

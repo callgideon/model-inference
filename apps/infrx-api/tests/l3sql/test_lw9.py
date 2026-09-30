@@ -12,8 +12,10 @@ must break.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
+from infrx.rollouts.optimization import serving_ref
 from infrx.state import migrations
 from infrx.state.jobstore import connector
 
@@ -44,6 +46,20 @@ def identity(engine_version: str = "0.11.0", quantization: str = "bf16",
 
 
 BASE, NVFP4 = identity(), identity(quantization="nvfp4")
+
+
+def served(ident, provider: str = NEMO) -> str:
+    """R3's `serving_ref` of an identity's JSON dump (any shape: the probes need refs of
+    identities R3 would never build)."""
+    return serving_ref(provider, SimpleNamespace(model_dump=lambda mode: ident))
+
+
+def identified(conn, tag: int, base=BASE, variant=NVFP4, provider: str = NEMO) -> str:
+    """D7's variant whose two serving refs are R3's of `base` and `variant` (F6)."""
+    return v.t.publish(conn, {"schema": "lab.optimization_variant.1", "provider_org_id": provider,
+                              "variant_id": uid(1, tag), "base_serving_ref": served(base, provider),
+                              "variant_serving_ref": served(variant, provider),
+                              "changes": ["nvfp4 weights"]}, provider)
 
 
 def put(ref: str, provider: str = NEMO, base=BASE, variant=NVFP4, actor="r3") -> dict:
@@ -81,10 +97,11 @@ def check_a_variant_lists_the_identities_r3_stored(conn) -> str:
     identity (null when R3 has not stored them); they are written once per variant (the same
     again is the same answer, different ones `state_conflict`), only for the writer's own
     variant (another provider's or none: `not_found`, R227), and only shaped as the Lab reads
-    them (engine, engine_version, hardware, quantization, capabilities: `invalid_request`);
-    a stored pair is never edited. Publication order, not ref order: the second variant
-    sorts BEFORE the first by ref (lw7's T2 tags)."""
-    first = v.variant(conn, 0x71)
+    them (engine, engine_version, hardware, quantization, capabilities: `invalid_request`),
+    and only when they are the variant's two serving refs (F6: swapped or another revision is
+    `invalid_request`); a stored pair is never edited. Publication order, not ref order: the
+    second variant sorts BEFORE the first by ref (lw7's T2 tags)."""
+    first = identified(conn, 0x71)
     v.t.advance(conn, 5)                                    # the seed's clock is frozen
     second = v.variant(conn, 0x70)
     assert second < first, (second, first)
@@ -103,10 +120,10 @@ def check_a_variant_lists_the_identities_r3_stored(conn) -> str:
                         "where variant_ref = %s", (first,))
     assert edited is not None, "a stored identity pair was edited"
     assert refusal(conn, WRITE, put(uid(9, 0x91))) == "not_found"
-    for wrong in ({**NVFP4, "engine": None}, {k: x for k, x in NVFP4.items() if k != "hardware"},
-                  {**NVFP4, "capabilities": "text"}, {**NVFP4, "capabilities": [1]}, "vllm"):
-        assert refusal(conn, WRITE, put(second, variant=wrong)) == "invalid_request", wrong
     assert refusal(conn, WRITE, put(second, actor=None)) == "invalid_request"
+    for pair in ((BASE, NVFP4), (NVFP4, BASE)):      # F6: refs that are not second's
+        assert refusal(conn, WRITE, put(second, base=pair[0], variant=pair[1])) == \
+            "invalid_request", "identities stored that are not the variant's serving refs"
     listed = ok(conn, "lab_optimization_variant_listing", {"provider_org_id": NEMO})
     plain = ok(conn, "lab_optimization_variants", {"provider_org_id": NEMO})
     assert [r["variant_ref"] for r in listed] == [r["variant_ref"] for r in plain], listed
@@ -118,6 +135,15 @@ def check_a_variant_lists_the_identities_r3_stored(conn) -> str:
         next(r for r in plain if r["variant_ref"] == first), "0055's fields changed"
     other = ok(conn, "lab_optimization_variant_listing", {"provider_org_id": OTHER})
     assert [(r["variant_ref"], r["base"]) for r in other] == [(foreign, None)], other
+    # the shape, each probe on a variant whose refs ARE the probe's (F6 cannot answer for it)
+    for tag, wrong in enumerate(({**NVFP4, "engine": None},
+                                 {k: x for k, x in NVFP4.items() if k != "hardware"},
+                                 {**NVFP4, "engine_version": 11},                  # F2
+                                 {k: x for k, x in NVFP4.items() if k != "quantization"},
+                                 {**NVFP4, "capabilities": "text"},
+                                 {**NVFP4, "capabilities": [1]}, "vllm"), start=0x81):
+        assert refusal(conn, WRITE, put(identified(conn, tag, variant=wrong), variant=wrong)) \
+            == "invalid_request", wrong
     return "listing = 0055's + stored identities (null when absent); own variant, once, shaped"
 
 
@@ -165,7 +191,7 @@ def check_the_stores_compose(conn) -> str:
     from infrx.state.lab_rollout import PgReleaseStore
     from infrx.state.lab_variants import PgLabVariants
     connect = connector(pgharness.dsn(conn.info.dbname))
-    ref = v.variant(conn, 0x97)
+    ref = identified(conn, 0x97)
     store = PgLabVariants(connect)
     asyncio.run(store.put_identities(ref, base=BASE, variant=NVFP4, provider_org_id=NEMO,
                                      actor="r3"))

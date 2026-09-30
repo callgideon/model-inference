@@ -172,6 +172,8 @@ async def store(data, variant: dict[str, Any], comparison: dict[str, Any],
     if comparison["variant_ref"] != lab.ref_of(variant) or \
             comparison["report_digest"] != report.get("report_digest"):
         raise errors.InvalidRequest("the comparison is not of this variant and report")
+    if identities is not None and variants is None:    # F3: never a partial write
+        raise errors.InvalidRequest("identities are stored through the variants port (0058)")
     if identities is not None and tuple(serving_ref(provider_org_id, i) for i in identities) \
             != (variant["base_serving_ref"], variant["variant_serving_ref"]):
         raise errors.InvalidRequest("the identities are not the registered ones")

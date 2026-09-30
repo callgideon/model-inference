@@ -80,3 +80,12 @@ def test_r3_store__writes_both_identities_as_the_variant_is_created() -> None:
                                  actor="dev@p", identities=wrong,
                                  variants=Variants(untouched.calls)))
         assert untouched.calls == [], wrong
+    untouched = r3w.Data()                  # F3 (1-LW9-RV-3): no port, nothing written
+    try:                                    # dies on an assertion, never an AttributeError
+        asyncio.run(r3.store(untouched, r3w.VARIANT, result, rep, provider_org_id=r3w.P,
+                             actor="dev@p", identities=(r3w.BASE, r3w.NVFP4)))
+        refused = None
+    except Exception as answer:             # noqa: BLE001 - the answer is the oracle
+        refused = answer
+    assert isinstance(refused, errors.InvalidRequest) and "variants port" in str(refused) \
+        and untouched.calls == [], (refused, untouched.calls)

@@ -215,3 +215,65 @@ Re-verified at 672bf2ac on l3:
   so the tree is clean.
 
 No lane code changed, so the lw9 mutant list and E4 carry over from the handback (21 killed; 2832/0).
+
+## Coordinator rulings (merge #65, `codex/w5-merge-65`)
+
+- **R263** (08 §10, appended directly after R260; R261 on `codex/w5-merge-63`, R262 on
+  `codex/w5-merge-64`, next free R264): the lane's ruling proposal, numbered with the SQL
+  half of the serving-ref check (F6) and the portless refusal (F3) added.
+
+## Applied at merge
+
+- **Merge commit (conflicts, five files, every side kept):** `pilot.py` (#60's unit-refused
+  row R255, #62's one Live read per release + read-time verdict R259/R260, this lane's tally
+  read only when that Live is not None); `tests/g/lab_releases/test_lab_releases.py` (every
+  case; #62's `_verdict_world` D9 fake gains `tally` returning `[]`);
+  `tests/g/lab_releases/mutants.py` (every #60/#62 mutant; `page_tally_invented` replaced by
+  the lane's three; `page_progress_withheld` re-cut onto
+  `"progress": _progress(live, None if live is None else`); `test_code_mutants_lw8.py`
+  GRANTED one sorted union; `tests/integration/test_harness.py` pins 0052..0056, 0058, 0059
+  (0057 slots before 0058 at merge #63). 0058 and 0059 both grant `lab_release_live` to
+  `infrx_lab_control`: a harmless duplicate grant, recorded.
+- **WR-LW9-0:** `LAB-SQL-LW9-wiring-upgrade.patch` applied (`NEW_TABLES` gains
+  `infrx.lab_variant_identities`).
+- **F2:** `lw9_shape_engine_version_unchecked`, `lw9_shape_quantization_unchecked` (SQL),
+  killed by two new shape probes (`engine_version: 11`, no `quantization`).
+- **F3 / 1-LW9-RV-3:** `optimization.store` refuses identities without a variants port
+  before publishing (no partial write); case in `test_lw9_units.py` (dies on an assertion),
+  mutant `lw9_r3_identities_portless`.
+- **F6:** `infrx.lab_identity_serving_ref(provider, identity)` (R3's `serving_ref` in SQL:
+  JCS sha256, version-4 UUID) and `lab_put_variant_identities` refuses `invalid_request` a pair
+  whose refs are not the variant's (checked after the conflict check, so `state_conflict`
+  stays reachable). Mutants `lw9_identities_any_refs`, `lw9_identities_ref_uuid_unversioned`.
+  The lane's SQL fixtures now publish variants whose refs are the identities' (`identified`,
+  refs from the production `serving_ref`); the shape probes run each on a variant whose refs
+  ARE the probe's, so the shape mutants stay killed independently of F6.
+- **1-LW9-RV-5:** the `_progress(live, assignments)` helper edit is accepted as is.
+
+## Carried
+
+- **WR-LW9-1** (apps/lab): re-cut the Lab's `VARIANT` to required identities once 0058 is
+  hosted and every R3 caller passes identities (R252 (b) until then).
+- **WR-LW9-4 / F4 / 1-LW9-RV-4** (a later R3 lane): the R3 composition passes
+  `identities=(base, variant), variants=PgLabVariants(connect)`.
+- **WR-LW9-5** (research): COMPOSITION-7's "`assignments` is empty until a per-serving tally
+  is read" becomes "`assignments` is D9's per-(serving, pin) tally over terminal jobs (0058,
+  WR-C7-TALLY)".
+- **WR-LW9-6 / F5** (COORDINATOR DECISION: carried, not small at merge - it changes the D9
+  port every #60/#62 fake and page mutant anchors on). Live and the tally are read on two
+  connections, so a settle between them can break sum-to-arms. Both functions are STABLE, so
+  one statement is one snapshot. Exact diff:
+  - `infrx/state/lab_rollout.py`: `PgReleaseStore.live_and_tally(policy_ref)` runs
+    `select infrx.lab_release_live(%s), infrx.lab_release_tally(%s)` once (same Jsonb
+    `{"policy_ref": ...}` twice, `domain_error` mapping as `_call`), parses the first column
+    exactly as `live()` does (empty -> `(None, None)`; R248 unit refusal unchanged) and
+    returns `(Live, tally)`; `live()` and `tally()` stay for their other callers.
+  - `infrx/gateway/pilot.py` `releases()`: `live, refused = await self.d9.live(...), None`
+    becomes `(live, tally), refused = await self.d9.live_and_tally(item.policy_ref), None`
+    (`except errors.InvalidRequest: live, tally, refused = None, None, "unit_refused"`), and
+    `"progress": _progress(live, tally)`.
+  - Tests: every D9 fake in `tests/g/lab_releases/test_lab_releases.py` and
+    `tests/g/test_startup.py` gains `live_and_tally`; page mutants `page_live_of_another`,
+    `page_tally_of_another`, `page_tally_unobserved`, `page_progress_withheld`,
+    `verdict_reads_another_live` re-cut; one PG case in `tests/l3sql/test_lw9.py` asserting
+    sum-to-arms on one call's answer.
