@@ -34,6 +34,7 @@
 #   WINDOW        the P-08 window reference for the coordinator log, e.g. P-08:2026-09-30
 #   SUPABASE_URL  https://<project-ref>.supabase.co  (the App's project)
 #   LAB_DB_HOST   the hosted Postgres host for the transaction pooler (…pooler.supabase.com)
+#   BOX_RELEASE   the consumer release installed on the box (default: origin/main) — its drain.sh pauses/resumes the edge
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 aws() { command env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
@@ -128,10 +129,13 @@ PY
   say "W6 + W6b on a fresh hosted dump (no hosted write)"
   infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at "$HOSTED_N" --window "$WINDOW" --through w6b | tee /tmp/launch-v1-w6b.log
   DIG=$(grep -o 'COPY_DIGEST=[0-9a-f]*' /tmp/launch-v1-w6b.log | tail -1 | cut -d= -f2); [ -n "$DIG" ] || { echo "no COPY_DIGEST in the w6b log" >&2; exit 1; }
-  say "W7 needs the public /health 503: maintenance on, apply, resume (App requests queue for ~1 min)"
-  infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh
+  # 95-maintenance/56-resume run the INSTALLED consumer release's drain.sh on the box (extracted by
+  # 30-pause at its window): that is main's release, not this window's Lab release (window 2026-09-30).
+  BOX_RELEASE=${BOX_RELEASE:-$(git rev-parse origin/main 2>/dev/null || git rev-parse main)}
+  say "W7 needs the public /health 503: maintenance on (box release $BOX_RELEASE), apply, resume (App requests queue for ~1 min)"
+  infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh RELEASE="$BOX_RELEASE"
   infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at "$HOSTED_N" --window "$WINDOW" --through w7 --expect "$DIG" | tee /tmp/launch-v1-w7.log
-  infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh
+  infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh RELEASE="$BOX_RELEASE"
   grep -q "W7 PASS: hosted 0001-$NEWEST_N" /tmp/launch-v1-w7.log && echo "hosted 0001-$NEWEST_N applied (digest $DIG)"
   git push origin "HEAD:refs/heads/launch/window-$THROUGH"   # R264: never claude/consumer-v1 from the detached release
   echo "coordinator: merge launch/window-$THROUGH onto claude/consumer-v1 (between windows the test_ldp case is xfail(strict) naming the next window's patch)"
