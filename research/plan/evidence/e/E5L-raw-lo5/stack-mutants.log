@@ -1,0 +1,34 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-5/apps/infrx-api/.venv/bin/python
+rootdir: /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-5
+configfile: pytest.ini
+plugins: anyio-4.15.1
+collecting ... collected 98 items / 73 deselected / 25 selected
+
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_on_in_the_box] PASSED [  4%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_switch_ignored] PASSED [  8%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_key_opt_in_ignored] PASSED [ 12%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_capture_scrub_off] PASSED [ 16%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_job_output_dropped] PASSED [ 20%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_job_scrub_off] PASSED [ 24%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_ship_without_pins] PASSED [ 28%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_find_of_any_org] PASSED [ 32%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_feedback_ack_before_commit_status] PASSED [ 36%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_first_grant_version] PASSED [ 40%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_in_any_mode] PASSED [ 44%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_sends_one_sample] PASSED [ 48%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_no_recheck_before_egress] PASSED [ 52%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_judge_reads_the_raw_projection] PASSED [ 56%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_deleted_request_found] PASSED [ 60%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_sweep_keeps_objects] PASSED [ 64%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_failed_insert_acked] PASSED [ 68%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_timeout_is_a_failure] PASSED [ 72%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_claim_window_ignored] PASSED [ 76%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_worker_never_restarted] PASSED [ 80%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_route_content_without_a_grant] PASSED [ 84%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_route_shows_a_deleted_request] PASSED [ 88%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_pg_reserve_another_payer] PASSED [ 92%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_j3_limited_results_calibrate] PASSED [ 96%]
+tests/integration/lab_observe/test_mutants.py::test_stack_mutant_is_killed[st_traces_route_ignores_deletion] PASSED [100%]
+
+================ 25 passed, 73 deselected in 614.12s (0:10:14) =================
