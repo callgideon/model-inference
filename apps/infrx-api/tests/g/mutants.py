@@ -45,6 +45,7 @@ M = "gateway/routes/models.py"          # G7: public discovery, one projection
 BUILD_CASE = "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
 DATASETS_C6 = "test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_enabled"
 RELEASES_C6 = "test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals"
+OPTIMIZATIONS = "test_lab_optimizations__r3_stores_both_identities_through_d7_and_0058_on_the_pool"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -1159,6 +1160,19 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lab_releases_time_not_utc", "a database time is shown as UTC",
        P, '    return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")',
        '    return at.strftime("%Y-%m-%dT%H:%M:%SZ")', RELEASES_C6),
+    _m("lab_optimizations_other_function", "the composition is R3's store (WR-LW9-4)",
+       P, "functools.partial(optimization.store,", "functools.partial(optimization.compare,",
+       OPTIMIZATIONS),
+    _m("lab_optimizations_data_off_the_pool", "R3 stores through D7 on this pool",
+       P, "optimization.store, PgLabDataStore(connect),",
+       "optimization.store, PgLabDataStore(None),", OPTIMIZATIONS),
+    _m("lab_optimizations_variants_off_the_pool", "R3's identities go to 0058 on this pool",
+       P, "variants=PgLabVariants(connect))", "variants=PgLabVariants(None))", OPTIMIZATIONS),
+    _m("lab_optimizations_portless", "R3 is composed with 0058's identities port",
+       P, "variants=PgLabVariants(connect))", "variants=None)", OPTIMIZATIONS),
+    _m("lab_optimizations_identities_bound", "the caller names the identities, never the "
+       "composition", P, "variants=PgLabVariants(connect))",
+       "variants=PgLabVariants(connect), identities=None)", OPTIMIZATIONS),
     _m("lab_releases_variants_absent", "R3's variants are 0055's listing (WR-C6-VARIANTS)",
        P, "        return await self.lab_variants.variants(provider_org_id)",
        "        return []", RELEASES_C6),

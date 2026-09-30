@@ -19,13 +19,14 @@ from infrx.rollouts import optimization as r3
 from infrx.state import migrations
 from infrx.state.jobstore import connector
 from infrx.state.lab_data import PgLabDataStore
+from infrx.state.lab_variants import PgLabVariants
 
 from ...d import pgharness
 from ...d import test_d7_lab_data as d7
 from .test_optimization import BASE, NVFP4, engine, report
 
-_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") in ("r2", "r1") else \
-    "PostgreSQL only on the r2 (or r1) task-local key (INFRX_D_TASK=r2|r1)"
+_reason = pgharness.unavailable() if os.environ.get("INFRX_D_TASK") in ("r2", "r1", "l3") else \
+    "PostgreSQL only on the r2 (or r1, l3) task-local key (INFRX_D_TASK=r2|r1|l3)"
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_r3"
@@ -60,10 +61,11 @@ def test_r3_pg_a_comparison_rests_on_the_stored_variant_and_report(world) -> Non
     early = {**result, "report_digest": report("inconclusive", runs=runs)["report_digest"]}
     with pytest.raises(errors.NotFound):
         asyncio.run(data.put_variant_comparison(early, provider_org_id=NEMO, actor="dev@nemo"))
+    ids = {"identities": (BASE, NVFP4), "variants": PgLabVariants(connector(pgharness.dsn(DB)))}
     first = asyncio.run(r3.store(data, variant, result, rep, provider_org_id=NEMO,
-                                 actor="dev@nemo"))
+                                 actor="dev@nemo", **ids))
     again = asyncio.run(r3.store(data, variant, result, rep, provider_org_id=NEMO,
-                                 actor="dev@nemo"))
+                                 actor="dev@nemo", **ids))
     assert first == again and first.startswith("sha256:")
     stored = asyncio.run(data.variant_comparisons(rep["report_digest"], provider_org_id=NEMO))
     assert stored == [result]

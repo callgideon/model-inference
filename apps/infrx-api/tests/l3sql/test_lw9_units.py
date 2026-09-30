@@ -61,7 +61,8 @@ class Variants:
 def test_r3_store__writes_both_identities_as_the_variant_is_created() -> None:
     """R3 stores the registered base and variant identities (JSON dumps) right after the
     variant record, before the report and the comparison; identities that are not the
-    registered ones (swapped, or another revision) write nothing."""
+    registered ones (swapped, or another revision), no identities (WR-LW9-4: every variant R3
+    creates carries both) or no port to store them through (F3) write nothing."""
     rep = r3w.report()
     result = r3w.compare(rep=rep)
     data = r3w.Data()
@@ -80,12 +81,14 @@ def test_r3_store__writes_both_identities_as_the_variant_is_created() -> None:
                                  actor="dev@p", identities=wrong,
                                  variants=Variants(untouched.calls)))
         assert untouched.calls == [], wrong
-    untouched = r3w.Data()                  # F3 (1-LW9-RV-3): no port, nothing written
-    try:                                    # dies on an assertion, never an AttributeError
-        asyncio.run(r3.store(untouched, r3w.VARIANT, result, rep, provider_org_id=r3w.P,
-                             actor="dev@p", identities=(r3w.BASE, r3w.NVFP4)))
-        refused = None
-    except Exception as answer:             # noqa: BLE001 - the answer is the oracle
-        refused = answer
-    assert isinstance(refused, errors.InvalidRequest) and "variants port" in str(refused) \
-        and untouched.calls == [], (refused, untouched.calls)
+    for missing in ({"identities": (r3w.BASE, r3w.NVFP4), "variants": None},    # F3
+                    {"identities": None, "variants": Variants([])}):          # WR-LW9-4
+        untouched = r3w.Data()              # nothing written; dies on an assertion, never
+        try:                                # an AttributeError/TypeError
+            asyncio.run(r3.store(untouched, r3w.VARIANT, result, rep, provider_org_id=r3w.P,
+                                 actor="dev@p", **missing))
+            refused = None
+        except Exception as answer:         # noqa: BLE001 - the answer is the oracle
+            refused = answer
+        assert isinstance(refused, errors.InvalidRequest) and "both identities" in str(refused) \
+            and untouched.calls == [], (missing, refused, untouched.calls)
