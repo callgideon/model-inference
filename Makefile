@@ -211,8 +211,9 @@ lab-evaluate:
 
 # E5L: the LAB-OBSERVE gate (tests/integration/lab_observe); not in check. verdict.json lands in the evidence dir.
 # INFRX_E5L_PROJECT=e5l2 runs it under compose project infrx-e5l2 (same ports; the foreign infrx-e5l_* volumes are never touched).
+# GATE_ARGS: "--keep", "--reuse", "--only o01".
 lab-observe:
-	$(API)/.venv/bin/python tests/integration/lab_observe/runner.py --out $(CURDIR)/research/plan/evidence/e/E5L-raw-$(shell git rev-parse --short HEAD)
+	$(API)/.venv/bin/python tests/integration/lab_observe/runner.py --out $(CURDIR)/research/plan/evidence/e/E5L-raw-$(shell git rev-parse --short HEAD) $(GATE_ARGS)
 
 # E8L: the LAB-ROLLOUT gate (tests/integration/lab_rollout); not in check. verdict.json lands in the evidence dir.
 lab-rollout:

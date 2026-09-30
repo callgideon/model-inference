@@ -93,6 +93,8 @@ def holds_no_token(trip, tenant, request_id: str, half: str) -> None:
     where = [name for name, part in (("request line", request_part),
                                      ("answer", answer_part)) if token in part]
     assert not where, f"{half}: the caller's bearer token in the shipped record's {where}"
+    tail_leaked = token[-16:] in content     # LO5-RV1: a scrub that kept the key's tail (HM2)
+    assert not tail_leaked, f"{half}: the secret's tail in the shipped record"
     assert REDACTED in content, f"{half}: the echoed token was not replaced by the redaction"
 
 
