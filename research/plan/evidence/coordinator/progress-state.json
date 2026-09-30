@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "27feb079",
+ "integration_head": "290d70e9",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 332,
- "updated": "2026-09-30T01:13:39Z",
+ "revision": 333,
+ "updated": "2026-09-30T01:15:51Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10023,6 +10023,42 @@
    "updated": "2026-09-30T00:34:55Z",
    "blocker": null,
    "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-LAB-OBSERVE-5",
+   "task": "E5L",
+   "slice": "E5L gate of record on the tip carrying #63: the full `make lab-observe` with o10 (l4 through the e2e gate) at one tip SHA, the stack mutants with the full pristine baseline (Opus); workflow wf_95f80f5a-179",
+   "agent": "opus",
+   "branch": "codex/w5-lab-observe-5",
+   "worktree": ".claude/worktrees/codex-w5-lab-observe-5",
+   "base": "290d70e9",
+   "head": null,
+   "isolation": {
+    "ports": "e5l compose block; l4 via the e2e gate",
+    "prefix": "infrx-e5l",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-09-30T01:15:51Z",
+   "updated": "2026-09-30T01:15:51Z",
+   "blocker": null,
+   "next_action": "handback → merge (E5L row of record at the new head)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
