@@ -198,6 +198,30 @@ def restorable(listing: str) -> str:
     return "\n".join(keep) + "\n"
 
 
+ROLE_REF = re.compile(r"\b(?:TO|FROM|FOR ROLE)\s+([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*)")
+
+
+def referenced_roles(schema_sql: str) -> set[str]:
+    """The migration-created roles (`infrx_*`) a schema dump names in policies and grants.
+    Roles are cluster-level, so a dump never carries them: a fresh target must create them
+    first or `CREATE POLICY ... TO infrx_lab_control` fails the restore (window 2026-09-30)."""
+    names = set()
+    for group in ROLE_REF.findall(schema_sql):
+        names.update(n.strip() for n in group.split(","))
+    return {n for n in names if n.startswith("infrx_")}
+
+
+def precreate_roles(conninfo: str, backup: Path) -> set[str]:
+    schema = run(backup, "pg_restore", "--schema-only", "-f", "-", "/backup/project.dump")
+    roles = referenced_roles(schema)
+    with connect(conninfo) as conn:
+        for name in sorted(roles):
+            conn.execute("do $$ begin if not exists (select 1 from pg_roles where rolname = %(n)s) "
+                         "then execute format('create role %%I nologin', %(n)s); end if; end $$",
+                         {"n": name})
+    return roles
+
+
 def restore(conninfo: str, backup: Path, *, neutralize: bool = True) -> None:
     """Auth rows first (the tenant tables' foreign keys point at them), then the project
     through the filtered table of contents, then the replayed extras (items 2 and 3).
@@ -212,6 +236,7 @@ def restore(conninfo: str, backup: Path, *, neutralize: bool = True) -> None:
         with connect(conninfo) as conn:
             for statement in NEUTRALIZE_DEFAULTS:
                 conn.execute(statement)
+    precreate_roles(conninfo, backup)   # the dump's policies name infrx_* roles the template lacks
     listing = run(backup, "pg_restore", "-l", "/backup/project.dump")
     list_file = backup / "project.list"
     list_file.write_text(restorable(listing))

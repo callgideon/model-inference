@@ -125,6 +125,21 @@ def test_i3b_bk00_the_plain_d_image_is_refused_by_name(monkeypatch):
         needs_pg()
 
 
+def test_i3b_bk00b_the_dumps_migration_roles_are_created_before_the_project_restore():
+    """RST-3 (window 2026-09-30): roles are cluster-level and never in a dump, so a fresh
+    target must create every `infrx_*` role the schema names (policies `TO`, grants `TO`/`FROM`,
+    default privileges `FOR ROLE`) or `CREATE POLICY ... TO infrx_lab_control` fails the
+    restore. Layer 0: the parser over a schema dump; template roles are left alone."""
+    sql = ("CREATE POLICY p ON infrx.catalog_listings FOR SELECT TO infrx_lab_control USING (true);\n"
+           "GRANT SELECT ON TABLE infrx.jobs TO infrx_runtime, infrx_monitor;\n"
+           "REVOKE ALL ON infrx.job_results FROM infrx_runtime;\n"
+           "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES "
+           "FROM anon, authenticated, service_role;\n"
+           "CREATE TABLE infrx_lab_control_like (x int);\n")
+    assert pg.referenced_roles(sql) == {"infrx_lab_control", "infrx_runtime", "infrx_monitor"}
+    assert pg.referenced_roles("CREATE FUNCTION infrx.f() RETURNS int AS $$ select 1 $$ LANGUAGE sql;") == set()
+
+
 def source_db() -> str:
     """The populated database the bk01 cases dump: `harness.PG_DATABASE`, which `run.py`
     migrated and seeded; on the D harness its task database, built the same way once per
