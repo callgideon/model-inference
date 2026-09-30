@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "f2ef6b2e",
+ "integration_head": "e13b1ce7",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 338,
- "updated": "2026-09-30T02:42:25Z",
+ "revision": 339,
+ "updated": "2026-09-30T02:57:01Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10007,7 +10007,7 @@
   {
    "id": "W5-LAB-R3-IDENTITIES",
    "task": "R3",
-   "slice": "WR-LW9-4 + WR-LW9-1: every R3 store caller passes identities + variants; the Lab VARIANT decoder back to required identities with a legacy-null rendering (Opus); workflow wf_6ce51ac5-98d; ACCEPT at aba93c87 (store requires both identities; pilot.lab_optimizations; the Lab reads required-but-nullable identities; 0 survivors across l3sql/r/g/Lab lists; E4 2842/0 on p3)",
+   "slice": "WR-LW9-4 + WR-LW9-1: every R3 store caller passes identities + variants; the Lab VARIANT decoder back to required identities with a legacy-null rendering (Opus); workflow wf_6ce51ac5-98d; ACCEPT at aba93c87 (store requires both identities; pilot.lab_optimizations; the Lab reads required-but-nullable identities; 0 survivors across l3sql/r/g/Lab lists; E4 2842/0 on p3); merged #68",
    "agent": "opus",
    "branch": "codex/w5-lab-r3-identities",
    "worktree": ".claude/worktrees/codex-w5-lab-r3-identities",
@@ -10018,11 +10018,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-30T00:34:55Z",
-   "updated": "2026-09-30T02:42:25Z",
+   "updated": "2026-09-30T02:57:01Z",
    "blocker": null,
-   "next_action": "merge batch #68 (WR-R3I-1 k07 patch + rerun on e8l, RV-2/3, R266–R267)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10157,22 +10157,22 @@
   {
    "id": "W5-MERGE-68",
    "task": null,
-   "slice": "merge batch #68 (Opus): lab-r3-identities aba93c87 (+WR-R3I-1 the E8L k07 patch rerun on e8l, R3I-RV-2/3, WR-R3I-OPEN, R266–R267); workflow: see RESUME-NOW",
+   "slice": "merge batch #68 (Opus): lab-r3-identities aba93c87 (+WR-R3I-1 the E8L k07 patch rerun on e8l, R3I-RV-2/3, WR-R3I-OPEN, R266–R267); workflow: see RESUME-NOW; integrated at e13b1ce7 (R266–R267; k07 PASS on e8l)",
    "agent": "opus",
    "branch": "codex/w5-merge-68",
    "worktree": ".claude/worktrees/codex-w5-merge-68",
    "base": "004f521d",
-   "head": null,
+   "head": "9f3789d2",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-30T02:42:25Z",
-   "updated": "2026-09-30T02:42:25Z",
+   "updated": "2026-09-30T02:57:01Z",
    "blocker": null,
-   "next_action": "integrate → the last implementation lane on the tip; remaining work operator-held",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
