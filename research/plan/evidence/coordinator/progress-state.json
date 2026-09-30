@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 329,
- "updated": "2026-09-30T00:26:26Z",
+ "revision": 330,
+ "updated": "2026-09-30T00:34:55Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9623,11 +9623,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T20:21:25Z",
-   "updated": "2026-09-29T23:49:59Z",
+   "updated": "2026-09-30T00:34:55Z",
    "blocker": null,
-   "next_action": "merge batch #65 (five-file conflict resolution keeping every side, WR-LW9-0, minors, R263)",
+   "next_action": "lab-r3-identities (WR-LW9-4) → WR-LW9-1 the Lab VARIANT re-cut once hosted",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 6,
@@ -9933,22 +9933,22 @@
   {
    "id": "W5-MERGE-65",
    "task": null,
-   "slice": "merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263); workflow wf_20cf986c-4a0",
+   "slice": "merge batch #65 (Opus): lab-sql-lw9 96c5ec2e (+conflicts vs #60/#62 kept every side, WR-LW9-0, minors, R263); workflow wf_20cf986c-4a0; integrated (R263; 0058 LOCAL-ONLY on the tip; pins 0057/0058/0059 in order)",
    "agent": "opus",
    "branch": "codex/w5-merge-65",
    "worktree": ".claude/worktrees/codex-w5-merge-65",
    "base": "80821080",
-   "head": null,
+   "head": "ee06a38d",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T23:49:59Z",
-   "updated": "2026-09-29T23:49:59Z",
+   "updated": "2026-09-30T00:34:55Z",
    "blocker": null,
-   "next_action": "integrate (sort §10; harness pins 0057 before 0058) → known-good-reproof-4 after #63 too",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
