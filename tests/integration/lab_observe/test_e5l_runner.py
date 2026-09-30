@@ -392,3 +392,63 @@ def test_e5l_the_ui_cell_passes_only_a_green_e2e_suite_and_names_its_uncomposed_
         gate.missing(busy)
     with pytest.raises(AssertionError):
         gate.missing({**busy, "harness": None})
+
+
+def test_e5l_the_echo_oracle_rejects_a_partial_scrub():
+    """LO5-RV1 (HM2): o01's echo oracle rejects a record that still holds a 16-byte tail of the
+    secret (a scrub that redacted only the key's head), not only the whole token; the failure
+    names the secret's tail, never its bytes. The full KEY_SHAPE scrub passes."""
+    from types import SimpleNamespace
+    import scenarios_trace
+    sys.path.insert(0, str(REPO / "apps" / "infrx-api"))
+    from infrx.gateway.capture import KEY_SHAPE, REDACTED
+    secret = "sk-infrx-" + "A1b2C3d4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9T0"
+    tenant = SimpleNamespace(org_id="o", secret=secret)
+    record = f'{{"q":"Describe the van. {secret}"}}\nthe van'.encode()
+
+    def trip(content: bytes):
+        async def read_content(_org, _request):
+            return content
+        return SimpleNamespace(traces=SimpleNamespace(
+            retention=SimpleNamespace(read_content=read_content)))
+    scenarios_trace.holds_no_token(trip(KEY_SHAPE.sub(REDACTED, record)), tenant, "r", "async")
+    partial = re.compile(rb"sk-infrx-[A-Za-z0-9_-]{8}").sub(REDACTED, record)
+    assert secret.encode() not in partial and REDACTED in partial     # the old oracle's view
+    with pytest.raises(AssertionError, match="the secret's tail") as failed:
+        scenarios_trace.holds_no_token(trip(partial), tenant, "r", "async")
+    assert secret[-16:] not in str(failed.value)
+
+
+def test_e5l_an_environment_blocked_ui_cell_is_not_run_env_never_a_fail():
+    """LO5-RV2: LAB-E2E's `EnvironmentBlocked` (the Lab checkout without node_modules or a
+    browser) makes o10 NOT RUN[ENV] naming its prerequisite and the rerun, never a product
+    FAIL; it stays open under R222 (the gate is not accepted without o10)."""
+    cases = everything("o10", "failure",
+                       "lab_observe.lab_e2e_gate.EnvironmentBlocked: ENOENT "
+                       "/x/apps/lab/node_modules: run pnpm install --frozen-lockfile in apps/lab")
+    result = runner.classify(junit(*everything("o01"), *cases))
+    o10 = result["o10"]
+    assert o10["status"] == "NOT RUN", o10
+    [reason] = o10["reasons"]
+    assert "NOT RUN[ENV]" in reason and "pnpm install --frozen-lockfile" in reason
+    assert f"{runner.RUNNER} --out <dir> --only o10" in reason
+    assert runner.cells(result)["CONSOLE-FLOWS"] == "NOT RUN"
+    assert "o10" in runner.r222(result)["open"]
+
+
+def test_e5l_the_pinned_base_is_the_merge_base_with_the_integration_branch(monkeypatch):
+    """LO5-RV3: verdict.json's pins.base is `git merge-base HEAD claude/consumer-v1` when that
+    ref resolves, else the runner's build base - never a stale literal on a later tip."""
+    from types import SimpleNamespace
+    asked = []
+
+    def git(argv, **_):
+        asked.append(argv)
+        known = argv[1] == "merge-base" and argv[-1] == "claude/consumer-v1"
+        return SimpleNamespace(stdout="abc123\n" if known else "", returncode=0 if known else 1)
+    harness = SimpleNamespace(compose_images=lambda: {})
+    monkeypatch.setattr(runner.subprocess, "run", git)
+    assert runner.pins(harness)["base"] == "abc123"
+    assert ["git", "merge-base", "HEAD", "claude/consumer-v1"] in asked
+    monkeypatch.setattr(runner, "BASE_REF", "no/such-ref")
+    assert runner.pins(harness)["base"] == runner.BASE

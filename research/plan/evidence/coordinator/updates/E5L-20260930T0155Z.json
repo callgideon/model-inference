@@ -1,0 +1,30 @@
+{
+ "task": "E5L",
+ "slice": "lab-observe-5: the gate of record on the tip carrying merge #63 (o01 async echo as a gate cell), stack mutants with the full pristine baseline, teardown",
+ "activity": "review",
+ "head": "290d70e9",
+ "worktree": ".claude/worktrees/codex-w5-lab-observe-5",
+ "branch": "codex/w5-lab-observe-5",
+ "owned_paths": [
+  "tests/integration/lab_observe/**",
+  "research/plan/evidence/e/E5L-*",
+  "research/plan/consumer-v1/09-path-to-internal-testing.md (E5L row + one log line)"
+ ],
+ "commands": [
+  {"cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py test_i2l_obs.py", "exit": 0, "summary": "32 passed"},
+  {"cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_observe/test_mutants.py -k 'not stack_mutant'", "exit": 0, "summary": "73 passed, 25 deselected"},
+  {"cmd": "runner.py --out research/plan/evidence/e/E5L-raw-290d70e9 --keep (the make lab-observe argv + --keep)", "exit": 0, "summary": "gate PASS at 290d70e9: 19 PASS / 0 FAIL / 0 NOT RUN; o01-o10 PASS (o01 4/4 incl. the async echo case, o10 via l4 e2e gate); 8 cells PASS; r222 {accepted: true, open: {}}; 190.1 s"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e5l pytest tests/integration/lab_observe/test_mutants.py -k stack_mutant (kept e5l)", "exit": 0, "summary": "25/25 stack mutants killed, 0 survivors, full pristine baseline (o10 on l4 included); 614 s"},
+  {"cmd": "runner.py --reuse --only none --out research/plan/evidence/e/E5L-raw-lo5/teardown", "exit": 3, "summary": "teardown: 4 infrx-e5l containers removed; 0 left; l4 released"}
+ ],
+ "gate": {"sha": "290d70e9", "pass": 19, "fail": 0, "not_run": 0, "r222": {"accepted": true, "open": {}}, "stack_mutants": {"killed": 25, "survived": 0}},
+ "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high", "basis": "gate 3 min + stack list 10 min + teardown <1 min on this lane; remaining = coordinator review", "at": "2026-09-30T01:55Z"},
+ "blockers": [],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/e/E5L-290d70e.md",
+  "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json",
+  "research/plan/evidence/e/E5L-raw-lo5/stack-mutants.log",
+  "research/plan/evidence/e/E5L-raw-lo5/teardown.log"
+ ]
+}

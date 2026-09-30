@@ -47,7 +47,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 NAMESPACE = "e5l"
-BASE = "9a48300c"            # the LW5 base this runner was built on (coordinator dispatch)
+BASE = "9a48300c"            # the runner's build base (the LW5 dispatch): pins.base without BASE_REF
+BASE_REF = "claude/consumer-v1"   # LO5-RV3: pins.base is `git merge-base HEAD BASE_REF`
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
@@ -114,6 +115,10 @@ REQUIRED = {
 #: NOT RUN[LAB-E2E] (bound through apps/lab/tests/e2e/gate.py, R238).
 OUT_OF_SCOPE = {"LAB-E2E": "lab-e2e UI", "WR-C6-CAPTURE": "product WR: WR-C6-CAPTURE"}
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError)\b|address already in use")
+#: LO5-RV2: LAB-E2E's environment ENOENT (the Lab checkout without node_modules or node) is
+#: NOT RUN[ENV] with its prerequisite as the rerun, never a product FAIL (as E8L's RV-4)
+ENVIRONMENT = re.compile(r"^(?:[\w.]*\.)?EnvironmentBlocked\b")
+ENV_PREREQUISITE = "apps/lab: pnpm install --frozen-lockfile before the gate"
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
 LOCK = Path("/tmp") / f"infrx-{NAMESPACE}.runner.lock"
@@ -130,6 +135,10 @@ def case_status(case) -> tuple[str, str]:
         node = case.find(tag)
         if node is not None:
             message = (node.get("message") or node.text or "")[:400]
+            if ENVIRONMENT.search(message):
+                sid = CASE.match(case.get("name", ""))
+                return NOT_RUN, (f"NOT RUN[ENV] {message}; rerun: {ENV_PREREQUISITE}, then "
+                                 f"{reproduce(sid and sid.group('sid'))}")
             return (INVALID, "INVALID[harness] " + message) if HARNESS.search(message) \
                 else (FAIL, message)
     node = case.find("skipped")
@@ -257,7 +266,7 @@ def pins(harness) -> dict:
         images = harness.compose_images()
     except Exception as exc:                                   # noqa: BLE001 - recorded
         images = {"error": f"{type(exc).__name__}: {exc}"[:200]}
-    return {"base": BASE, "head": git("rev-parse", "HEAD"),
+    return {"base": git("merge-base", "HEAD", BASE_REF) or BASE, "head": git("rev-parse", "HEAD"),
             "dirty": bool(git("status", "--porcelain")), "images": images}
 
 

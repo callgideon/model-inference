@@ -84,6 +84,10 @@ PROJECT = "test_e5l_a_compose_project_override_moves_only_the_compose_names"
 R222 = "test_e5l_r222_accepts_only_a_not_run_out_of_local_scope"
 RERUN_CUT = "test_e5l_o01s_recorded_reason_keeps_its_rerun_inside_the_cut"
 VERDICT = "test_e5l_the_verdict_carries_r222_and_each_scenarios_scope"
+# the lab-observe-5 merge wirings (LO5-RV1/2/3)
+ECHO = "test_e5l_the_echo_oracle_rejects_a_partial_scrub"
+ENV = "test_e5l_an_environment_blocked_ui_cell_is_not_run_env_never_a_fail"
+BASE_PIN = "test_e5l_the_pinned_base_is_the_merge_base_with_the_integration_branch"
 #: the recorded bd13f72 verdict the R222 case reads (o10 NOT RUN[LAB-E2E], o01 on COMPOSITION)
 RECORDED = "research/plan/evidence/e/E5L-raw-bd13f72/gate/verdict.json"
 #: the recorded df837faf verdict (o01 NOT RUN[WR-C6-CAPTURE], accepted on its own lanes)
@@ -276,6 +280,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r222_lane_subset_loosened", "every lane is a ruled class, not one of them (WR-LO3-RV4)",
        R, "return set(lanes) <= set(OUT_OF_SCOPE) and",
        "return bool(set(lanes) & set(OUT_OF_SCOPE)) and", R222),
+    # --- lab-observe-5 merge wirings (R265)
+    _m("echo_oracle_whole_token_only", "the echo oracle rejects a 16-byte tail of the secret, "
+       "not only the whole token (LO5-RV1)", TRACE_L1, "tail_leaked = token[-16:] in content",
+       "tail_leaked = False", ECHO),
+    _m("env_blocked_is_a_fail", "an environment-blocked UI cell is NOT RUN[ENV], never a FAIL "
+       "(LO5-RV2)", R, "            if ENVIRONMENT.search(message):", "            if False:", ENV),
+    _m("base_is_the_literal", "pins.base is the merge base with claude/consumer-v1 (LO5-RV3)", R,
+       'git("merge-base", "HEAD", BASE_REF) or BASE', "BASE", BASE_PIN),
 )
 
 # ------------------------------------------------------------------ the stack list
@@ -335,6 +347,9 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     _m("st_job_scrub_off", "an echoed minted key is redacted in the shipped async record "
        "(R8, lab-capture-2)", CAPTURE, "    return KEY_SHAPE.sub(REDACTED, data)",
        "    return data", O01_ASYNC),
+    _m("st_job_scrub_partial", "the async scrub redacts the whole minted key, never its head "
+       "only (LO5-RV1; HM2)", CAPTURE, 'KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9_-]+")',
+       'KEY_SHAPE = re.compile(rb"sk-infrx-[A-Za-z0-9_-]{8}")', O01_ASYNC),
     _m("st_ship_without_pins", "a shipped row carries the pins PostgreSQL admitted", SHIP,
        "serving_version_id=pins.serving_version_id if pins else None,",
        "serving_version_id=None,", O01_SHIP),

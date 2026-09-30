@@ -1,0 +1,15 @@
+[ok  ] backend-teardown: {"removed": []}
+[ok  ] teardown: {"removed": ["infrx-e5l-clickhouse", "infrx-e5l-postgres", "infrx-e5l-s3", "infrx-e5l-valkey"], "still_named_ours_but_not_ours": []}
+ NOT RUN  o01  capture -> ship -> search: off by default; a captured request ships once with its pins; only its org finds it; capture on via the switch
+ NOT RUN  o02  feedback acknowledged after commit, owned by its key, projected once
+ NOT RUN  o03  Lab review: a provider reads a grantor's trace only under a current grant, in-process and through the gateway's traces route
+ NOT RUN  o04  judge dry run: default mode sends nothing; a consented run sends once, scores once, charges no customer wallet; the D6J ledger
+ NOT RUN  o05  a grant revoked mid-queue: nothing leaves, the hold is released
+ NOT RUN  o06  content expired or deleted: gone for every read, never sent to the judge
+ NOT RUN  o07  the projection dropped (ClickHouse killed): segment held, App serving, shipped once after
+ NOT RUN  o08  a judge submit timed out and the worker restarted: quarantined, never resent, reconciled
+ NOT RUN  o09  a worker restarted: the feedback projector after its insert, the box worker mid-traffic
+ NOT RUN  o10  the Lab review panel renders the traces route's answer (browser flow)
+cells {'TRACE-BOUNDS': 'NOT RUN', 'TRACE-RECOVER': 'NOT RUN', 'TRACE-TENANT': 'NOT RUN', 'FEEDBACK-ACK': 'NOT RUN', 'JUDGE-BUDGET': 'NOT RUN', 'JUDGE-SCORES': 'NOT RUN', 'LAB-ACCESS': 'NOT RUN', 'CONSOLE-FLOWS': 'NOT RUN'}
+r222 {'accepted': False, 'open': {'o01': 'NOT RUN', 'o02': 'NOT RUN', 'o03': 'NOT RUN', 'o04': 'NOT RUN', 'o05': 'NOT RUN', 'o06': 'NOT RUN', 'o07': 'NOT RUN', 'o08': 'NOT RUN', 'o09': 'NOT RUN', 'o10': 'NOT RUN'}}
+gate NOT RUN -> /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w5-lab-observe-5/research/plan/evidence/e/E5L-raw-lo5/teardown/verdict.json
