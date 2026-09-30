@@ -214,11 +214,12 @@ def referenced_roles(schema_sql: str) -> set[str]:
 def precreate_roles(conninfo: str, backup: Path) -> set[str]:
     schema = run(backup, "pg_restore", "--schema-only", "-f", "-", "/backup/project.dump")
     roles = referenced_roles(schema)
+    from psycopg import sql
     with connect(conninfo) as conn:
         for name in sorted(roles):
-            conn.execute("do $$ begin if not exists (select 1 from pg_roles where rolname = %(n)s) "
-                         "then execute format('create role %%I nologin', %(n)s); end if; end $$",
-                         {"n": name})
+            if conn.execute("select 1 from pg_roles where rolname = %s", (name,)).fetchone():
+                continue
+            conn.execute(sql.SQL("create role {} nologin").format(sql.Identifier(name)))
     return roles
 
 
