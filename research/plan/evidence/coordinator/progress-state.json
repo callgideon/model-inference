@@ -17,10 +17,12 @@
    "LARGE_BODY_LIMIT": "8"
   },
   "regime": "legacy_usd",
-  "target": "pilot box (single L40S)"
+  "target": "pilot box (single L40S)",
+  "hosted_schema": "0001-0056 (2026-09-30T07:38Z window P-08:2026-09-30; MIGRATION_DIGEST 88f9d412e873a7540942ff449f1aa2e5d9e4701f2b6d111777a0d2a2a7feeac6; release a58eb0d6)",
+  "note": "2026-09-30: the first Lab window applied 0052-0056 hosted (launch-v1.sh window THROUGH=0056; launch/window-0056 merged); 0057-0059 pending the second window"
  },
- "revision": 339,
- "updated": "2026-09-30T02:57:01Z",
+ "revision": 340,
+ "updated": "2026-09-30T07:43:04Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
