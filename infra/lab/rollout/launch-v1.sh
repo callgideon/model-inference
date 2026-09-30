@@ -101,7 +101,9 @@ window() {
   fi
   grep -qF "case \"\$HOSTED_APPLIED\" in *\"$HOSTED_AT\")" infra/rollout/hosted-migrate.sh \
     || { echo "hosted-migrate.sh's applied-list anchor is not *\"$HOSTED_AT\"" >&2; exit 2; }
-  if [ "$THROUGH" = 0056 ] && grep -q '^@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the 0052 window' "$XFAIL_TEST"; then
+  # Between windows the tree-as-it-stands case is xfail(strict) naming the next window's patch (R264); every
+  # window drops the one that names its own patch, in the same commit as the patch (else it XPASSes).
+  if grep -q '^@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the' "$XFAIL_TEST"; then
     python3 - "$XFAIL_TEST" <<'PY'   # the strict xfail would XPASS (fail) once the patch lands: drop it in the same commit
 import sys; p=sys.argv[1]; L=open(p).read().split('\n')
 i=L.index('def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():'); j=i-1
@@ -112,7 +114,7 @@ s=s.replace('EXPECTED_PENDING 0052, its W7 post-check `*"0052 lab_control_reject
 open(p,'w').write(s)
 PY
   fi
-  if [ "$THROUGH" = 0059 ]; then   # the tree-as-it-stands case follows hosted to 0056 (no xfail left to drop)
+  if [ "$THROUGH" = 0059 ]; then   # the tree-as-it-stands case follows hosted to 0056
     sed -i 's/"--hosted-at", "0051", "--window", "P-08:dry"/"--hosted-at", "0056", "--window", "P-08:dry"/' "$XFAIL_TEST"
   fi
   git --no-pager diff --stat -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"; git --no-pager diff -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"
