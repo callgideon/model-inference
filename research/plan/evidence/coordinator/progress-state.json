@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "ef37d72a",
+ "integration_head": "27feb079",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 331,
- "updated": "2026-09-30T00:34:55Z",
+ "revision": 332,
+ "updated": "2026-09-30T01:13:39Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9789,7 +9789,7 @@
   {
    "id": "W5-LAB-LOCAL-3",
    "task": "I2L",
-   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5; ACCEPT_WITH_FIXES at 31d61031 (KEYED reruns of the 15 other-key cases all PASS; journeys 5/5; 79 mutants; the run of record FAILed only on 9 lab_releases cases broken on its base — fixed on the tip)",
+   "slice": "`GATE_ARGS=--keep make lab-local` after #61: the pipelines/traces journeys run in the composition, o05 judged against CONTROL_EXPECTED, the 14 e4-on skips on other keys run inside the composition or ruled; the 12 stack mutants on the kept stack (Opus); workflow wf_504e9d9d-7c5; ACCEPT_WITH_FIXES at 31d61031 (KEYED reruns of the 15 other-key cases all PASS; journeys 5/5; 79 mutants; the run of record FAILed only on 9 lab_releases cases broken on its base — fixed on the tip); merged #64 — E4-ON accepted at 5bb93621 (r222.accepted true; by_design R198 + R237 only; ten e4-on@<key> rows PASS; 94 mutants 0 survivors)",
    "agent": "opus",
    "branch": "codex/w5-lab-local-3",
    "worktree": ".claude/worktrees/codex-w5-lab-local-3",
@@ -9800,11 +9800,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-29T21:57:57Z",
-   "updated": "2026-09-29T23:37:06Z",
+   "updated": "2026-09-30T01:13:39Z",
    "blocker": null,
-   "next_action": "merge batch #64: the acceptance rerun on the merged tree (WR-LL3-1 already on the tip) → E4-ON accepted under R257/R262",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -9899,22 +9899,22 @@
   {
    "id": "W5-MERGE-64",
    "task": null,
-   "slice": "merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262); workflow wf_242e3d2c-70f",
+   "slice": "merge batch #64 (Opus): lab-local-3 31d61031 (+the acceptance rerun `GATE_ARGS=--keep make lab-local` on the merged tree, minors, R262); workflow wf_242e3d2c-70f; integrated at 27feb079 (§10 sorted R261/R262/R263; E4-ON accepted under R222/R234/R257/R258/R262 — INTERNAL-TESTING-PREP local half complete)",
    "agent": "opus",
    "branch": "codex/w5-merge-64",
    "worktree": ".claude/worktrees/codex-w5-merge-64",
    "base": "86617819",
-   "head": null,
+   "head": "53cdcbc4",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-29T23:37:06Z",
-   "updated": "2026-09-29T23:37:06Z",
+   "updated": "2026-09-30T01:13:39Z",
    "blocker": null,
-   "next_action": "integrate (sort §10) → E4-ON accepted → INTERNAL-TESTING-PREP local half complete",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
