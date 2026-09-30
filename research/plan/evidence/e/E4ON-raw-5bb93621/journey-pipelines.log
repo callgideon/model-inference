@@ -1,0 +1,108 @@
+TAP version 13
+# (node:1409694) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/p/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+#   from starlette.testclient import TestClient as TestClient  \# noqa
+# refusal: IdempotencyConflict('idempotency_conflict: the import id names another import')
+# refusal: IdempotencyConflict('idempotency_conflict: review:lab:annotation:b0000001-0000-4000-8000-000000000001:12a3cf5f-0791-4040-9cf9-f6bf3ff88756@sha256:8245baf0d9e5a7c3fe9fe36d5c832526ee53dcf84effe899fbb91f6661048748 holds another event')
+# refusal: IdempotencyConflict('idempotency_conflict: the export id names another export')
+# Subtest: P4-S01..S06 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, teacher batches, unauthorized
+    # Subtest: S01 (J01) import → review with a correction → adjudication → train-only export: methods kept apart, lineage and omissions recorded
+    ok 1 - S01 (J01) import → review with a correction → adjudication → train-only export: methods kept apart, lineage and omissions recorded
+      ---
+      duration_ms: 1853.345387
+      type: 'test'
+      ...
+# refusal: StateConflict('state_conflict: external_run 00000030-0000-4000-8000-000000000000 version - is already other bytes')
+# refusal: StateConflict("state_conflict: no succeeded evaluation on this run's frozen holdout")
+# refusal: StateConflict("state_conflict: no succeeded evaluation on this run's frozen holdout")
+    # Subtest: S02 (J02) manual bundle → submit (nothing reserved) → finish → checkpoint → held-out evaluation → eligible, all replay-safe
+    ok 2 - S02 (J02) manual bundle → submit (nothing reserved) → finish → checkpoint → held-out evaluation → eligible, all replay-safe
+      ---
+      duration_ms: 632.787023
+      type: 'test'
+      ...
+# refusal: InvalidRequest("invalid_request: a checkpoint artifact lives under its run's prefix")
+# refusal: StateConflict("state_conflict: no succeeded evaluation on this run's frozen holdout")
+    # Subtest: S03 (J03) a mismatched or missing checkpoint is rejected with its reason and never evaluated; a redelivery keeps the first outcome
+    ok 3 - S03 (J03) a mismatched or missing checkpoint is rejected with its reason and never evaluated; a redelivery keeps the first outcome
+      ---
+      duration_ms: 193.849256
+      type: 'test'
+      ...
+    # Subtest: S04 (J04) an ambiguous submission reads as recorded and is resolved by a lookup (the revoked-grant half closes S05)
+    ok 4 - S04 (J04) an ambiguous submission reads as recorded and is resolved by a lookup (the revoked-grant half closes S05)
+      ---
+      duration_ms: 167.92221
+      type: 'test'
+      ...
+# refusal: IdempotencyConflict('idempotency_conflict: the batch id names another batch')
+# refusal: InvalidRequest("invalid_request: the payer is not this provider's")
+# refusal: InvalidRequest('invalid_request: invalid body')
+# refusal: Forbidden('forbidden: this provider role does not hold manage_members')
+# refusal: NotFound('not_found: no such teacher batch')
+# refusal: NotFound('not_found: no such provider workspace')
+# refusal: Forbidden('forbidden: this provider role does not hold run_evaluation')
+# refusal: StateConflict("state_conflict: the batch's cost ceiling is unpriced or over its budget")
+    # Subtest: S06 (J06) teacher batch on the real D8 ledger: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous and failures read back
+    ok 5 - S06 (J06) teacher batch on the real D8 ledger: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous and failures read back
+      ---
+      duration_ms: 2073.449239
+      type: 'test'
+      ...
+# refusal: NotFound('not_found: no such provider workspace')
+# refusal: NotFound('not_found: no such provider workspace')
+# refusal: NotFound('not_found: no such provider workspace')
+# refusal: NotFound('not_found: no external run 00000030-0000-4000-8000-000000000000')
+# refusal: Forbidden('forbidden: this provider role does not hold run_evaluation')
+# refusal: Forbidden('forbidden: this provider role does not hold run_evaluation')
+# refusal: Forbidden('forbidden: this provider role does not hold run_evaluation')
+# refusal: Forbidden('forbidden: no provider workspace: consumer accounts use the App')
+# refusal: Forbidden('forbidden: this provider role does not hold manage_members')
+# refusal: LabRejected('invalid_request: cross_provider_ref: lab:payer:b0000009-0000-4000-8000-000000000009:0000009a-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa belongs to another provider')
+# refusal: Forbidden("forbidden: a bundled sample's training grant is no longer current")
+    # Subtest: S05 (J05) unauthorized variants: another provider, a viewer, a consumer, a developer assigning, a foreign payer, an expired export
+    ok 6 - S05 (J05) unauthorized variants: another provider, a viewer, a consumer, a developer assigning, a foreign payer, an expired export
+      ---
+      duration_ms: 689.008933
+      type: 'test'
+      ...
+    1..6
+ok 1 - P4-S01..S06 the pipelines journeys on the real route: labels, the manual run to an eligible checkpoint, rejected checkpoints, ambiguous and revoked, teacher batches, unauthorized
+  ---
+  duration_ms: 10726.459231
+  type: 'test'
+  ...
+# Traceback (most recent call last):
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+#     return self._loop.run_until_complete(task)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+#     return future.result()
+#            ^^^^^^^^^^^^^^^
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/p/backend.py", line 190, in serve
+#     await task
+# asyncio.exceptions.CancelledError
+# During handling of the above exception, another exception occurred:
+# Traceback (most recent call last):
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/p/backend.py", line 200, in <module>
+#     main()
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/p/backend.py", line 192, in main
+#     asyncio.run(serve())
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+#     return runner.run(main)
+#            ^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 123, in run
+#     raise KeyboardInterrupt()
+# KeyboardInterrupt
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12101.344587

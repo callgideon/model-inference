@@ -1,0 +1,73 @@
+TAP version 13
+# (node:1424267) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/v/list/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1M-S01..S06 the six L2 cases on the real route: own requests, another provider, consumer-only, revoked, expired, capture off and lost
+    # Subtest: S01 provider A's developer lists its own deployment's requests and reads one; the row links to its page
+    ok 1 - S01 provider A's developer lists its own deployment's requests and reads one; the row links to its page
+      ---
+      duration_ms: 337.948086
+      type: 'test'
+      ...
+    # Subtest: S02 provider B learns nothing: A's request is not_found as B and as A, and B's own list is empty
+    ok 2 - S02 provider B learns nothing: A's request is not_found as B and as A, and B's own list is empty
+      ---
+      duration_ms: 174.85657
+      type: 'test'
+      ...
+    # Subtest: S03 a consumer-only user and a viewer are denied the list and the request
+    ok 3 - S03 a consumer-only user and a viewer are denied the list and the request
+      ---
+      duration_ms: 78.373892
+      type: 'test'
+      ...
+    # Subtest: S04..S06 metadata rows carry no organization, size or content; expired content, capture off and lost capture read honestly
+    ok 4 - S04..S06 metadata rows carry no organization, size or content; expired content, capture off and lost capture read honestly
+      ---
+      duration_ms: 230.204934
+      type: 'test'
+      ...
+    # Subtest: S04 after C1 revokes its grant the next read is metadata only
+    ok 5 - S04 after C1 revokes its grant the next read is metadata only
+      ---
+      duration_ms: 169.758661
+      type: 'test'
+      ...
+    1..5
+ok 1 - V1M-S01..S06 the six L2 cases on the real route: own requests, another provider, consumer-only, revoked, expired, capture off and lost
+  ---
+  duration_ms: 5106.605684
+  type: 'test'
+  ...
+# Traceback (most recent call last):
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+#     return self._loop.run_until_complete(task)
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+#     return future.result()
+#            ^^^^^^^^^^^^^^^
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/v/list/backend.py", line 158, in serve
+#     await task
+# asyncio.exceptions.CancelledError
+# During handling of the above exception, another exception occurred:
+# Traceback (most recent call last):
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/v/list/backend.py", line 168, in <module>
+#     main()
+#   File "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/m64b/apps/lab/tests/v/list/backend.py", line 160, in main
+#     asyncio.run(serve())
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+#     return runner.run(main)
+#            ^^^^^^^^^^^^^^^^
+#   File "/home/rey/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 123, in run
+#     raise KeyboardInterrupt()
+# KeyboardInterrupt
+1..1
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6141.759263

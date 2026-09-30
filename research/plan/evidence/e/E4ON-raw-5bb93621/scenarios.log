@@ -1,0 +1,21 @@
+.......s....Fss..s                                                                                                                                                                                                                                                                                                                                                                                       [100%]
+=================================================================================================================================================================================================== FAILURES ===================================================================================================================================================================================================
+____________________________________________________________________________________________________________________________________________________________________________ test_o05_every_lab_route_family_answers_a_lab_session _____________________________________________________________________________________________________________________________________________________________________________
+
+on = namespace(trip=<pilotbox.Journey object at 0x767bfe55f440>, procs={'lab-eval': Proc(name='lab-eval', process=<Popen: r...al":"unavailable"}', 'pipelines': '503 {"refusal":"unavailable"}', 'teacher-batches': '503 {"refusal":"unavailable"}'})
+
+    def test_o05_every_lab_route_family_answers_a_lab_session(on):
+        """On the gateway with EVERY switch ON (the dedicated runtime login ROLLOUT_ROUTING needs)."""
+        need(on, "gateway")
+        wrong = _families(on.trip.box.url, operate.session(operate.ADMIN_A), lambda s: s == 200)
+>       assert not wrong, f"route families not serving a Lab session (all switches ON): {wrong}"
+E       AssertionError: route families not serving a Lab session (all switches ON): {'control': '503 {"refusal":"unavailable"}', 'traces': '503 {"refusal":"unavailable"}', 'evals': '503 {"refusal":"unavailable"}', 'pipelines': '503 {"refusal":"unavailable"}', 'teacher-batches': '503 {"refusal":"unavailable"}', 'releases': '503 {"refusal":"unavailable"}', 'optimizations': '503 {"refusal":"unavailable"}', 'datasets': '503 {"detail":"the datasets service failed"}'}
+E       assert not {'control': '503 {"refusal":"unavailable"}', 'traces': '503 {"refusal":"unavailable"}', 'evals': '503 {"refusal":"unavailable"}', 'pipelines': '503 {"refusal":"unavailable"}', ...}
+
+tests/integration/lab_local/scenarios_on.py:174: AssertionError
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/integration/lab_local/scenarios_on.py::test_o05_every_lab_route_family_answers_a_lab_session - AssertionError: route families not serving a Lab session (all switches ON): {'control': '503 {"refusal":"unavailable"}', 'traces': '503 {"refusal":"unavailable"}', 'evals': '503 {"refusal":"unavailable"}', 'pipelines': '503 {"refusal":"unavailable"}', 'teacher-batches': '503 {"refusal":"u...
+SKIPPED [1] tests/integration/lab_local/scenarios_on.py:105: NOT RUN[P-11] lab-training refuses by name until its work source lands (R198/R211): botocore.credentials Found credentials in environment variables. | infrx.lab.workers: refusing to start: INFRX_MODE='lab-training': training has no worker pass: the manual-bundle run is prepared, submitted and finished through the Lab route
+SKIPPED [2] tests/integration/lab_local/scenarios_on.py:59: NOT RUN[WR-B4-2,WR-LAB2-4] typed unavailable until the lane lands: ['evals', 'pipelines']
+SKIPPED [1] tests/integration/lab_local/scenarios_on.py:213: NOT RUN[WR-B4-2,WR-LAB2-4,WR-LL2-5,WR-P4B-1] pinned until the lane lands: ['evals', 'pipelines', 'teacher-batches', 'traces']
+1 failed, 13 passed, 4 skipped in 19.58s
