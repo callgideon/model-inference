@@ -1266,7 +1266,9 @@ MUTANTS += (
 
 # --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
 PROOF_PY = "../../infra/runbooks/schema_proof.py"
-LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0056"
+LAUNCH_V1 = "../../infra/lab/rollout/launch-v1.sh"
+WINDOWS = "test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them"
+LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0059"
 KGR_0051_HEAD = ('}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
                  'passed, 14 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0051, '
                  'on plain PostgreSQL + shim AND on the Supabase image; migrate.py history check PASS on both '
@@ -1280,8 +1282,8 @@ MUTANTS += (
        'proven = (bool(proof.get("evidence"))',
        "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
     _m("known_good_record_unproven", "both known-good targets carry their schema proof",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
-       '"schema_proof_withdrawn": {"through": "0056", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
+       '"schema_proof_withdrawn": {"through": "0059", "result": "bda1586',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     _m("schema_proof_trusts_moved_statements", "a migrated history that differs from the files is refused",
        PROOF_PY, "if parts != [files[v]] and not covers(", "if False and not covers(",
@@ -1313,16 +1315,16 @@ MUTANTS += (
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     # KNOWN-GOOD-PROOF-2: the proof reaches 0025, and only those bytes
     _m("known_good_record_stops_at_0023", "both targets are proven through 0056",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "4226315',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "4226315',
        '"schema_proof": {"through": "0023", "result": "4226315',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0025", "the proof's 0025 hash is this tree's 0025",
        "../../apps/app/supabase/migrations/0025_operator_console.sql",
        "-- Re-runnable: `create or replace`, and the grants restated.",
        "-- Re-runnable: `create or replace`, and the grants restated. ",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     # fix round (0-KGP2-RV-1): the committed driver alone reproduces the record's SHAPE set
     _m("schema_proof_drops_a_0025_shape_case", "the driver deselects every SHAPE case the record counts",
        PROOF_PY, '    "tests/d/test_schema_postgres.py::test_dur_rls__the_browser_privilege_surface_is_enumerated":\n'
@@ -1331,28 +1333,28 @@ MUTANTS += (
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
     # KNOWN-GOOD-PROOF-3: the proof reaches 0026 (R147's fenced put_result), and only those bytes
     _m("known_good_record_stops_at_0025", "both targets are proven through 0056",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
        '"schema_proof": {"through": "0025", "result": "bda1586',
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0026", "the proof's 0026 hash is this tree's 0026",
        "../../apps/app/supabase/migrations/0026_fenced_result.sql",
        "--                      The worker of this tree always sends its lease.",
        "--                      The worker of this tree always sends its lease. ",
        "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     # KNOWN-GOOD-REPROOF (R151/R201 condition 1): the proof reaches 0051 (the Lab migrations),
     # and only this checkout's 0027-0051 bytes
     _m("known_good_record_stops_at_0026", "both targets are proven through the Lab's 0051",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
        '"schema_proof": {"through": "0026", "result": "bda1586',
-       LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       LAB, "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0051", "the proof's 0051 hash is this tree's 0051",
        "../../apps/app/supabase/migrations/0051_lab_import_jobs.sql",
        "-- LOCAL-ONLY (R151/R201): never applied hosted; the number is the next free at merge.",
        "-- LOCAL-ONLY (R151/R201): never applied hosted; the number is the next free at merge. ",
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("schema_proof_drops_the_registry_shape_case", "the driver deselects every SHAPE case the record counts",
        PROOF_PY, '    "tests/d/test_pgharness.py::test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged":\n'
        '        "lints the candidate\'s port registry with the old decoy formula (dlab\'s 57540 is t2i\'s "\n'
@@ -1367,20 +1369,20 @@ MUTANTS += (
        "../../apps/app/supabase/migrations/0027_lab_access.sql",
        "-- L2-SQL (wave-5 LW1, lane lab-sql;", "-- L2-SQL  (wave-5 LW1, lane lab-sql;",
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     # KNOWN-GOOD-REPROOF-2 (the next R151 window's condition 1): the proof reaches 0052
     # (lab-control-2's reject), binds this checkout's 0052 bytes, and keeps the through-0051
     # proof it replaces (R224)
     _m("known_good_record_stops_at_0051", "both targets are proven through 0056",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
        '"schema_proof": {"through": "0051", "result": "bda1586',
-       LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       LAB, "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0052", "the proof's 0052 hash is this tree's 0052",
        "../../apps/app/supabase/migrations/0052_lab_control_reject.sql",
        "-- LOCAL-ONLY (R151/R201): never applied hosted; the number is the next free at merge.",
        "-- LOCAL-ONLY (R151/R201): never applied hosted; the number is the next free at merge. ",
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_drops_the_0051_proof", "a re-proof keeps the proof it replaces (R224)",
        "../../infra/rollout/known-good.json", '}, {"through": "0051", "result": "4226315',
        '}, {"through": "0026", "result": "4226315', LAB),
@@ -1397,24 +1399,62 @@ MUTANTS += (
     # (0053-0056 the Lab's), binds this checkout's 0056 bytes, and keeps the through-0052 proof
     # it replaces word for word in front of the through-0051 one (R224)
     _m("known_good_record_stops_at_0052", "both targets are proven through 0056",
-       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0056", "result": "bda1586',
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
        '"schema_proof": {"through": "0052", "result": "bda1586',
-       LAB, "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       LAB, "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_proves_other_0056", "the proof's 0056 hash is this tree's 0056",
        "../../apps/app/supabase/migrations/0056_lab_control_grants.sql",
        "-- `infrx_lab_control` (0043), which held EXECUTE only on the lab_control_* RPCs and L2's reads,",
        "-- `infrx_lab_control` (0043), which held EXECUTE only on the lab_control_* RPCs and L2's reads, ",
        LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
-       "test_ops_recover__both_targets_are_known_good_through_0056_and_not_beyond"),
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
     _m("known_good_record_drops_the_0052_proof", "a re-proof keeps the proof it replaces (R224)",
-       "../../infra/rollout/known-good.json", '"superseded": [{"through": "0052", "result": "4226315',
-       '"superseded": [{"through": "0051", "result": "4226315', LAB,
+       "../../infra/rollout/known-good.json", '}, {"through": "0052", "result": "4226315',
+       '}, {"through": "0051", "result": "4226315', LAB,
        "test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word"),
     _m("known_good_record_rewords_the_0052_proof", "the kept through-0052 proof is word for word",
        "../../infra/rollout/known-good.json",
-       '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 383 passed',
-       '"superseded": [{"through": "0052", "result": "4226315: its own tests/d (26 suites, 384 passed',
+       '}, {"through": "0052", "result": "4226315: its own tests/d (26 suites, 383 passed',
+       '}, {"through": "0052", "result": "4226315: its own tests/d (26 suites, 384 passed',
        "test_ops_recover__the_superseded_0052_proof_is_the_recorded_one_word_for_word"),
+    # KNOWN-GOOD-REPROOF-4 (the second R151 window's condition 1): the proof reaches 0059
+    # (0057 the trace consent read, 0058-0059 the Lab's), binds this checkout's 0057/0059 bytes,
+    # and keeps the through-0056 proof it replaces word for word in front (R224)
+    _m("known_good_record_stops_at_0056", "both targets are proven through 0059",
+       "../../infra/rollout/known-good.json", '"schema_proof": {"through": "0059", "result": "bda1586',
+       '"schema_proof": {"through": "0056", "result": "bda1586',
+       LAB, "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
+    _m("known_good_record_proves_other_0057", "the proof's 0057 hash is this tree's 0057",
+       "../../apps/app/supabase/migrations/0057_trace_consent_read.sql",
+       "-- login. `gateway.capture.ConsentSource` reads", "-- login.  `gateway.capture.ConsentSource` reads",
+       LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
+    # KGR4-RV-4: the 0058 bytes are bound as well
+    _m("known_good_record_proves_other_0058", "the proof's 0058 hash is this tree's 0058",
+       "../../apps/app/supabase/migrations/0058_lab_variant_identities.sql",
+       "-- lab-sql LW9 (LAB-SQL-LW7", "-- lab-sql LW9  (LAB-SQL-LW7",
+       LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
+    _m("known_good_record_proves_other_0059", "the proof's 0059 hash is this tree's 0059",
+       "../../apps/app/supabase/migrations/0059_lab_control_grants_2.sql",
+       "-- `infrx_lab_control` (0043). Its `progress` reads D9", "-- `infrx_lab_control` (0043).  Its `progress` reads D9",
+       LAB, "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema",
+       "test_ops_recover__both_targets_are_known_good_through_0059_and_not_beyond"),
+    _m("known_good_record_drops_the_0056_proof", "a re-proof keeps the proof it replaces (R224)",
+       "../../infra/rollout/known-good.json", '"superseded": [{"through": "0056", "result": "4226315',
+       '"superseded": [{"through": "0052", "result": "4226315', LAB,
+       "test_ops_recover__the_superseded_0056_proof_is_the_recorded_one_word_for_word"),
+    _m("known_good_record_rewords_the_0056_proof", "the kept through-0056 proof is word for word",
+       "../../infra/rollout/known-good.json",
+       '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 383 passed',
+       '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 384 passed',
+       "test_ops_recover__the_superseded_0056_proof_is_the_recorded_one_word_for_word"),
+    # KGR4-RV-1: launch-v1.sh picks the 0059 window's anchor and pushes launch/window-$THROUGH (R264)
+    _m("launch_v1_0059_hosted_at_0051", "the 0059 window's hosted level is 0056",
+       LAUNCH_V1, '0059) HOSTED_AT="0056 lab_control_grants"', '0059) HOSTED_AT="0051 lab_import_jobs"', WINDOWS),
+    _m("launch_v1_pushes_the_tip", "a window pushes launch/window-$THROUGH, never claude/consumer-v1",
+       LAUNCH_V1, 'git push origin "HEAD:refs/heads/launch/window-$THROUGH"', "git push origin claude/consumer-v1",
+       WINDOWS),
     # KGR3-RV-1: every evidence path the record names exists (the copy carries them, _layout)
     _m("known_good_record_names_missing_evidence", "every evidence path of the record exists",
        "../../infra/rollout/known-good.json", '"models/marlin2b/results/E1B-box-bda1586/bench.jsonl"',
@@ -1798,6 +1838,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "lab", "observe"), ("infra", "alerts"),
+                 ("infra", "lab", "rollout"),   # KGR4-RV-1: launch-v1.sh and the two window patches
                  ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("models", "marlin2b", "profiles"),  # E1B-MUTANTS: the window cases' base profiles
                  ("apps", "app", "supabase", "migrations")):

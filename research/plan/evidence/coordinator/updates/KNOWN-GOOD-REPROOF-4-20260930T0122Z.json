@@ -1,0 +1,43 @@
+{
+  "task": "I8",
+  "slice": "KNOWN-GOOD-PROOF (KNOWN-GOOD-REPROOF-4: R151 condition 1 for the second hosted window, 0057-0059)",
+  "activity": "review",
+  "head": "7386b425",
+  "worktree": ".claude/worktrees/codex-w5-known-good-reproof-4",
+  "branch": "codex/w5-known-good-reproof-4",
+  "owned_paths": [
+    "infra/rollout/known-good.json",
+    "infra/lab/rollout/hosted-migrate-0057-0059.patch",
+    "infra/lab/rollout/launch-v1.sh",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/mutants.py",
+    "research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py @1c986c61 (record through 0056)", "exit": 1, "summary": "5 failed, 7 passed (red)"},
+    {"cmd": "schema_proof.py <bda1586|4226315> --candidate 6ca7879f on migrated stand-ins (Supabase image e3b2d, plain+shim d10)", "exit": 0, "summary": "4/4 PASS through 0059: 26/26 suites, 383 passed, 14 SHAPE, 5 xfailed, probe PASS; plain/bda1586 rerun twice after port collisions 55442/55482"},
+    {"cmd": "INFRX_D_TASK=d10 pytest -q tests/i/test_known_good_proof.py @e3da9051", "exit": 0, "summary": "12 passed"},
+    {"cmd": "known-good.py <bda1586|4226315> --applied 0059 / 0060", "exit": 0, "summary": "KNOWN-GOOD at 0059 (exit 0), NOT-KNOWN-GOOD at 0060 (exit 1, migrations only), both targets"},
+    {"cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'known_good or schema_proof'", "exit": 0, "summary": "41 passed, 0 survivors (5 new)"},
+    {"cmd": "git apply --check hosted-migrate-0057-0059.patch (scratch: after the 0052-0056 patch / on today's file)", "exit": 0, "summary": "passes after the first patch; fails on today's file (exit 1); bash -n of both applied: 0"},
+    {"cmd": "lab-migrate.sh --hosted-at 0056 --window P-08:dry with HOSTED_MIGRATE=stub (both patches) + real known-good.py", "exit": 0, "summary": "R151 conditions hold (pending 0057, 0058, 0059); today's lines: condition 2 STOP exit 2"},
+    {"cmd": "INFRX_D_TASK=d10 pytest -q tests/i", "exit": 1, "summary": "1 failed (pre-existing tests/i/lab_control every_case, WR-KGR4-6), 398 passed, 7 skipped (l4/i5 keys), 2 xfailed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.15,
+    "likely_h": 0.3,
+    "pessimistic_h": 0.6,
+    "confidence": "high",
+    "basis": "lane done; remaining = coordinator WR-KGR4-1/2/3 text patches, the same as WR-KGR3-1/2 one re-proof earlier",
+    "at": "2026-09-30T01:22Z"
+  },
+  "blockers": [],
+  "wiring_requests": ["WR-KGR4-1 infra/rollout/README.md RR row + paragraph through 0059", "WR-KGR4-2 15-pending-inputs P-25 row through 0059", "WR-KGR4-3 launch-v1.sh WINDOW_RELEASE_HINT for 0059 = this lane's merge sha", "WR-KGR4-4 operator: first window's commit lands before the second", "WR-KGR4-5 a 0060+ before the window re-opens condition 1", "WR-KGR4-6 pre-existing lab_control every_case failure (not this lane's)"],
+  "evidence": ["research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md"],
+  "merge": {"branch": "codex/w5-merge-66", "base": "ba550eaa", "lane_head": "31e29621",
+    "applied": ["WR-KGR4-1", "WR-KGR4-2", "WR-KGR4-3 (reworded per KGR4-RV-2: empty 0059 hint)", "WR-KGR4-PUSH", "KGR4-RV-1", "KGR4-RV-3", "KGR4-RV-4"],
+    "rulings": ["R264"],
+    "wr_kgr4_6": "already on the tip: coordinator commit 271aff13 (mutant releases_read_no_experiments, killed on l4) is an ancestor of ba550eaa; nothing to do",
+    "wr_kgr4_5": "stands: a migration 0060+ merged before the second window reopens R151 condition 1"}
+}
