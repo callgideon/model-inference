@@ -1,0 +1,3 @@
+2026-09-30 01:20:04,878 botocore.credentials Found credentials in environment variables.
+2026-09-30 01:20:05,434 infrx.gateway /v1/feedback: not_found on request 0bc1e69f-4259-434f-9a76-e6c2e866ca1b
+2026-09-30 01:20:05,436 infrx.gateway /v1/feedback: invalid_request on request e85f4db1-e570-408f-9a9e-fd66dc878843
