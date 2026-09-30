@@ -15,4 +15,5 @@
  "estimate": {"optimistic_h": 0.25, "likely_h": 0.75, "pessimistic_h": 2, "confidence": "medium", "basis": "done with 0 survivors and E4 2842/0; remaining = review + WR-R3I-1 on e8l + one verify round; analogue lab-sql-lw9 0.5/1.25/3", "at": "2026-09-30T02:14Z"},
  "blockers": [],
  "wiring_requests": ["WR-R3I-1: apply research/plan/evidence/r/LAB-R3-IDENTITIES-wiring-e8l-k07.patch (E8L k07 passes identities + PgLabVariants to r3.store); rerun k07 on the e8l stack", "WR-R3I-2 (optional): INFRX_D_TASK=r2 pytest tests/r/optimization/test_optimization_pg.py (ran on l3 here)"],
+ "open": ["WR-R3I-OPEN: pilot.lab_optimizations has no caller yet; any later R3 entry (CLI, worker, route) must compose through it; 'every variant carries both identities' holds by construction because store() refuses without them (recorded at merge #68, codex/w5-merge-68)"],
  "evidence": ["research/plan/evidence/r/LAB-R3-IDENTITIES-cf9d30f.md", "research/plan/evidence/r/LAB-R3-IDENTITIES-wiring-e8l-k07.patch"]}

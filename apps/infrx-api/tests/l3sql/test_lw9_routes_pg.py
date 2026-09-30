@@ -117,6 +117,9 @@ def test_lw9_routes_pg__a_variant_r3_creates_lists_with_both_identities(conn):
     with pytest.raises(errors.InvalidRequest):
         asyncio.run(store(variant, result, rep, provider_org_id=v.NEMO, actor="dev@nemo",
                           identities=(r3w.NVFP4, r3w.BASE)))
+    with pytest.raises(errors.InvalidRequest):  # R3I-RV-3: a wrong variant-side identity
+        asyncio.run(store(variant, result, rep, provider_org_id=v.NEMO, actor="dev@nemo",
+                          identities=(r3w.BASE, r3w.ident(quantization="fp8"))))
     x = pilot.lab_releases(connect, Sessions((l2.VIEWER,)), LabAccess(PgAccessStore(connect)),
                            InMemoryObjectStore())
     app = FastAPI()

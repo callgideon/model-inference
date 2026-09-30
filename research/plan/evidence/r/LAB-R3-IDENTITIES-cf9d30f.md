@@ -5,7 +5,7 @@ Base `6ca7879f` (merge #65 tip). Branch `codex/w5-lab-r3-identities`, worktree
 Commits: `c1bb290a` (step 1, Python), `cf9d30f1` (step 2, Lab), then this evidence commit.
 Every Lab switch OFF throughout (no `LAB_*` / `INFRX_LAB*` variable set in the shell; defaults).
 
-## What changed (16 paths)
+## What changed (18 paths: 15 product/test, 3 evidence)
 
 - **Step 1 — WR-LW9-4 (R3 + pilot).** There is **no production caller** of
   `optimization.store` on the base: `grep -rn 'optimization.store|r3.store(|lab:variant'` over
@@ -127,3 +127,47 @@ pair that does not re-derive to the variant's two serving refs. Nothing ties the
 optimistic 0.25 h / likely 0.75 h / pessimistic 2 h, confidence medium. Basis: code, tests and
 mutants done with 0 survivors; E4 2842/0 on p3. Remaining: coordinator review, WR-R3I-1 applied
 and rerun on e8l (~10 min), one verify round. Analogue: lab-sql-lw9 at 0.5/1.25/3.
+
+## Open item (recorded at merge)
+
+- **WR-R3I-OPEN.** `pilot.lab_optimizations` has no caller yet; any later R3 entry (CLI, worker,
+  route) must compose through it. "Every variant carries both identities" holds by construction
+  because `store()` refuses without them.
+
+## Coordinator rulings
+
+- **R266** — Every variant R3 creates carries both revision identities: `optimization.store`
+  requires `identities=(base, variant)` and a variants port and refuses (`invalid_request`,
+  nothing written) without them or when the pair's serving refs are not the variant's; production
+  composes it through `pilot.lab_optimizations` on the Lab pool (WR-LW9-4; with R263). Proposal 1.
+- **R267** — The Lab reads a variant's `base` and `variant` as required keys that may be null: null
+  is a legacy row rendered "identity not recorded (<serving ref>)"; an answer that omits either
+  key is unavailable (WR-LW9-1; supersedes R252 (b)). Proposal 2.
+
+Numbered in 08 §10 directly after R265 at the lab-r3-identities merge on `codex/w5-merge-68`;
+next free R268.
+
+## Merge
+
+- Lane head `aba93c87` merged `--no-ff` onto `004f521d` (merge #68, `codex/w5-merge-68`); no
+  conflicts (pilot.py's only change is `lab_optimizations`, ReleaseRecords untouched).
+- **WR-R3I-1 applied** (`LAB-R3-IDENTITIES-wiring-e8l-k07.patch`: both `r3.store` calls in
+  `tests/integration/lab_rollout/scenarios_parity.py` pass `identities=(base, nvfp4)` and
+  `variants=PgLabVariants(connector(lab.dsn))`). k07 rerun for real on the e8l key (free: no
+  `infrx-e8l` container before): `runner.py --out <dir> --keep --only k07` → **k07 PASS** (gate
+  NOT RUN / exit 3 only because `--only` leaves k01–k06, k08–k10 unrun). K07's five stack mutants
+  on the kept stack (`INFRX_MUTANTS=all INFRX_E2_NAMESPACE=e8l pytest
+  tests/integration/lab_rollout/test_mutants.py -k 'st_claim_unmeasured or st_version_unprobed or
+  st_tokenizer_ignored or st_any_load_source or st_hardware_unchecked or well_formed or
+  every_case'`; the literal `-k 'k07 or K07'` selects nothing since the ids are mutant names) →
+  **7 passed** (5 killed + 2 list checks). The pristine baseline runs every stack case, so the
+  clone needs `apps/lab/node_modules` for k10's UI half (a first attempt without it was
+  broken_runner on the baseline, not a survivor). Teardown `--reuse --only none`: no e8l
+  container left.
+- **R3I-RV-2 applied:** `infrx/state/lab_variants.py`'s docstring names R267 (required keys that
+  may be null; supersedes R252 (b)).
+- **R3I-RV-3 applied:** `tests/l3sql/test_lw9_routes_pg.py`'s route case also refuses
+  `(r3w.BASE, r3w.ident(quantization="fp8"))` (a wrong variant-side identity); rerun on l3.
+- WR-R3I-OPEN recorded above and in the update JSON.
+- The `tests/i/lab_control` `every_case` failure the lane saw on its base (row 11) is fixed on the
+  tip since `271aff13`.

@@ -3,8 +3,9 @@
 both serving refs, what changed, its newest `infrx.variant_comparison.1` (null: not compared;
 `0055_lab_variants_requeue.sql`) and both revision identities R3 stored (`base`/`variant`,
 null until stored; `0058_lab_variant_identities.sql`, WR-LW7-3a). Another provider's
-variants never appear (R227); none is `[]`, never a 503. The Lab reads the identities as
-optional until 0058 is hosted (R252). The launched composition serves it through
+variants never appear (R227); none is `[]`, never a 503. The Lab reads base and variant as
+required keys that may be null: null is a legacy row ("identity not recorded"); an omitted key
+is unavailable (R267, supersedes R252 (b)). The launched composition serves it through
 `pilot.ReleaseRecords.variants` (WR-LW7-1)."""
 from __future__ import annotations
 
