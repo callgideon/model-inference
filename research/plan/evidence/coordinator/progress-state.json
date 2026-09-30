@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "e13b1ce7",
+ "integration_head": "25e49de5",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -18,11 +18,11 @@
   },
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)",
-  "hosted_schema": "0001-0056 (2026-09-30T07:38Z window P-08:2026-09-30; MIGRATION_DIGEST 88f9d412e873a7540942ff449f1aa2e5d9e4701f2b6d111777a0d2a2a7feeac6; release a58eb0d6)",
-  "note": "2026-09-30: the first Lab window applied 0052-0056 hosted (launch-v1.sh window THROUGH=0056; launch/window-0056 merged); 0057-0059 pending the second window"
+  "hosted_schema": "0001-0059 (2026-09-30T08:01Z, the second Lab window; MIGRATION_DIGEST 9566fa25093c306c4fa4ae79df132d0802326ad1700deefea8b78538860b6c65; release fdd10264)",
+  "note": "2026-09-30: the first Lab window applied 0052-0056 hosted (launch-v1.sh window THROUGH=0056; launch/window-0056 merged); 0057-0059 pending the second window | 2026-09-30T08:01Z: the second Lab window applied 0057-0059 hosted (THROUGH=0059 from the tip; launch/window-0059 = the tip). Every LOCAL-ONLY migration is hosted; next: box → vercel → members → main"
  },
- "revision": 340,
- "updated": "2026-09-30T07:43:04Z",
+ "revision": 341,
+ "updated": "2026-09-30T08:02:32Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
