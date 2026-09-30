@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 import types
 from pathlib import Path
 
@@ -591,3 +592,89 @@ def test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key():
         sorted(skipped)
     assert plan["r1"]["env"] == {"INFRX_D_TASK": "r1"} and len(plan["r1"]["cases"]) == 1
     assert plan["r1"]["cases"][0].startswith("tests.w.test_lab_workers_decide_pg::")
+    # merge #64's run at c81a03d7 skipped an 18th: merge #60's R255 case, only on p3 (R262)
+    unit = "tests.g.lab_releases.test_lab_releases_unit_refused_pg::test_x"
+    assert runner.keyed_plan([unit]) == {"p3": {"cases": [unit], "nodes": [runner.node(unit)],
+                                                "env": {"INFRX_D_TASK": "p3"}}}
+
+
+def test_lab_local_r198s_refusal_is_anchored_to_the_refusal_line():
+    """LL3R-3: R198's pin takes only the worker's ` | `-joined log lines before the refusal
+    line - none a traceback, none across a newline - and nothing after it."""
+    assert runner.by_design(R198_CASE, R198_REFUSAL)
+    head, refusal = R198_REFUSAL.split(" | ")
+    for wrong in (f"{head} | Traceback (most recent call last): x | {refusal}",
+                  f"{head} | ValueError: y\nTraceback (most recent call last) | {refusal}",
+                  f"{head}\nboom | {refusal}", f"{R198_REFUSAL} | exited again",
+                  f"{R198_REFUSAL}\nTraceback (most recent call last)"):
+        assert not runner.by_design(R198_CASE, wrong), wrong
+
+
+def test_lab_local_r222_an_e4_stage_whose_only_skips_passed_on_their_keys_is_discharged():
+    """1-LL3-RV-4 (R262): an e4-on stage BLOCKED only by skips that each PASSed on its own key
+    (`e4-on@<key>` PASS rows) is not open; a skip whose row is held or failed, a skip no row
+    names, or a BLOCKED stage with no skip at all stays open."""
+    stages, scenarios = _green()
+    skip = "tests.w.test_worker_lab_eval_pg::test_worker_lab_eval_pg__x"
+
+    def blocked(*keyed, skipped=(skip,), counted=None):
+        rows = [row for row in stages if row["stage"] != "e4-on"]
+        return rows + [{"stage": "e4-on", "status": runner.BLOCKED,
+                        "counts": {"failed_ids": [], "errors": 0, "xfailed": 0,
+                                   "skipped": len(skipped) if counted is None else counted},
+                        "skipped_ids": list(skipped), "failures": {}}, *keyed]
+    ran = {"stage": "e4-on@b1", "status": runner.PASS, "cases": [skip]}
+    assert runner.r222(blocked(ran), scenarios) == {"accepted": True, "open": {},
+                                                    "by_design": {}}
+    for status in (runner.NOT_RUN, runner.FAIL, runner.INVALID):
+        row = {**ran, "status": status}
+        assert runner.r222(blocked(row), scenarios)["open"] == \
+            {"e4-on": runner.BLOCKED, "e4-on@b1": status}, status
+    assert runner.r222(blocked(), scenarios)["open"] == {"e4-on": runner.BLOCKED}
+    assert runner.r222(blocked(ran, counted=2), scenarios)["open"] == {"e4-on": runner.BLOCKED}
+    assert runner.r222(blocked(skipped=()), scenarios)["open"] == {"e4-on": runner.BLOCKED}
+
+
+def test_lab_local_a_key_with_a_container_of_its_name_is_held(monkeypatch):
+    """LL3R-4: a key with any `infrx-<key>-*` container (running or not) is another lane's;
+    the probe asks docker for exactly that name prefix, and no container means free. Every
+    container the tasklocal key names carries the prefix the probe asks for."""
+    from infrx.contracts.tasklocal import local_services
+    asked = []
+
+    def docker(names):
+        def run(argv, **kwargs):
+            asked.append(argv)
+            return subprocess.CompletedProcess(argv, 0, names, "")
+        return run
+    monkeypatch.setattr(runner.subprocess, "run", docker("3f2a1b\n"))
+    assert runner.key_held("t2i", services={}) == "t2i's containers exist: ['3f2a1b']"
+    assert asked[-1] == ["docker", "ps", "-aq", "--filter", "name=^infrx-t2i-"]
+    monkeypatch.setattr(runner.subprocess, "run", docker(""))
+    assert runner.key_held("t2i", services={}) is None
+    for key, _ in runner.KEYED.values():
+        assert all(svc.container.startswith(f"infrx-{key}-")
+                   for svc in local_services(key).values()), key
+
+
+def test_lab_local_the_containers_started_for_a_key_are_removed_after_its_run(
+        tmp_path, monkeypatch):
+    """LL3R-4: after a keyed rerun (passing or not) every container `aux` started for the key
+    is removed with its volumes; none other is touched."""
+    calls = []
+    monkeypatch.setattr(runner.subprocess, "run",
+                        lambda argv, **k: calls.append(argv) or
+                        subprocess.CompletedProcess(argv, 0, "", ""))
+    monkeypatch.setattr(runner, "key_held", lambda key, wait_s=0: None)
+    monkeypatch.setattr(runner, "aux", lambda key, started: started.extend(
+        [f"infrx-{key}-clickhouse", f"infrx-{key}-s3"]))
+
+    def logged(name, argv, out, cwd, env, timeout):
+        junit = next(a.split("=", 1)[1] for a in argv if a.startswith("--junitxml="))
+        Path(junit).write_text(junit_file(argv))
+        return 0, 0.0, out / f"{name}.log"
+    monkeypatch.setattr(runner, "logged", logged)
+    rows = runner.e4_keyed(tmp_path, {}, ["tests.g.lab_traces.test_lab_traces_stack::test_x"])
+    assert [(r["stage"], r["status"]) for r in rows] == [("e4-on@t2i", runner.PASS)]
+    assert calls == [["docker", "rm", "-f", "-v", "infrx-t2i-clickhouse"],
+                     ["docker", "rm", "-f", "-v", "infrx-t2i-s3"]]

@@ -76,6 +76,10 @@ KEYED = "test_lab_local_an_e4_skip_on_another_key_runs_on_that_key_or_is_not_run
 KEY_FREE = "test_lab_local_a_key_is_free_only_with_its_ports_unbound_and_its_lock_free"
 KEYED_B9 = "test_lab_local_every_e4_skip_at_b94fd337_is_planned_on_its_key"
 KEYED_AUX = "test_lab_local_a_keyed_stack_that_fails_to_start_is_removed_and_recorded"
+R198_ANCHOR = "test_lab_local_r198s_refusal_is_anchored_to_the_refusal_line"
+E4_DISCHARGED = "test_lab_local_r222_an_e4_stage_whose_only_skips_passed_on_their_keys_is_discharged"
+KEY_NAMED = "test_lab_local_a_key_with_a_container_of_its_name_is_held"
+KEYED_RM = "test_lab_local_the_containers_started_for_a_key_are_removed_after_its_run"
 
 MUTANTS: tuple[Mutant, ...] = (
     _m("a_switch_left_off", "EVERY switch is ON in the composition", W,
@@ -159,8 +163,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "    return case in REFUSAL and bool(REFUSAL[case].fullmatch(message or \"\"))",
        "    return case in REFUSAL", R222_CLASSES, R222_E4),
     _m("r222_r198_text_drifted", "R198's pinned text is the recorded one", R,
-       'r"a dev target source \\(WR-B-3\\)", re.S),', 'r"a dev target source", re.S),',
-       R222_FD),
+       'r"a dev target source \\(WR-B-3\\)"),', 'r"a dev target source"),', R222_FD),
+    _m("r198_traceback_before_refusal", "R198's pin admits no traceback before its refusal "
+       "line (LL3R-3)", R, r'r"RuntimeError: the worker exited 2: (?:(?:(?!Traceback)[^|\n])*\| )*"',
+       r'r"RuntimeError: the worker exited 2: .*\| "', R198_ANCHOR),
+    _m("r198_text_after_refusal", "R198's pin admits nothing after its refusal line (LL3R-3)",
+       R, 'r"a dev target source \\(WR-B-3\\)"),', 'r"a dev target source \\(WR-B-3\\).*", re.S),',
+       R198_ANCHOR),
+    _m("r222_o05_datasets_typed", "R237's pin is the recorded text: datasets' untyped store "
+       "503, not the typed refusal (LL3R-5)", R,
+       "\", 'datasets': '503 {\\\"detail\\\":\\\"the datasets service failed\\\"}'}\"",
+       "\", 'datasets': '503 {\\\"refusal\\\":\\\"unavailable\\\"}'}\"", R222_CLASSES, R222_FD),
     _m("r222_o05_text_drifted", "R237's pinned text is the recorded one", R,
        '"optimizations")) +', '"optimizations", "datasets")) +', R222_CLASSES, R222_FD),
     _m("r222_by_design_never_accepted", "only-by-design cells accept the gate (R257)", R,
@@ -183,6 +196,18 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("keyed_aux_failure_aborts", "a keyed stack that fails to start is an INVALID row, not an "
        "abort before verdict.json (0-LL3R-1)", R, "        except Exception as error:",
        "        except KeyError as error:", KEYED_AUX),
+    _m("keyed_started_left_running", "the containers started for a key are removed after its "
+       "run (LL3R-4)", R, '                subprocess.run(["docker", "rm", "-f", "-v", container], '
+       'capture_output=True)', "                pass", KEYED_RM),
+    _m("key_container_unprobed", "a key with a container of its name is another lane's "
+       "(LL3R-4)", R, '        return f"{key}\'s containers exist: {names}" if names else None',
+       "        return None", KEY_NAMED),
+    _m("r222_e4_blocked_never_discharged", "an e4-on stage whose only skips passed on their "
+       "keys is discharged (1-LL3-RV-4, R262)", R,
+       "            continue                     # 1-LL3-RV-4", "            pass  # 1-LL3-RV-4",
+       E4_DISCHARGED),
+    _m("r222_e4_any_row_discharges", "only an e4-on@<key> PASS row discharges a skip (R262)", R,
+       '           and stage["status"] == PASS for case', "           for case", E4_DISCHARGED),
     _m("keyed_t2i_stack_unset", "t2i's case reads its ClickHouse only with "
        "INFRX_LAB_API_STACK=1", R, '("t2i", {"INFRX_LAB_API_STACK": "1"})', '("t2i", {})',
        KEYED),
@@ -194,6 +219,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("keyed_decide_unplanned", "composition-7's decide case runs on r1 (b94fd337's 15th "
        "skip)", R, '    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),', "",
        KEYED_B9),
+    _m("keyed_unit_refused_unplanned", "merge #60's R255 case runs on p3 (c81a03d7's 18th "
+       "skip, R262)", R, '    "tests.g.lab_releases.test_lab_releases_unit_refused_pg": ("p3", '
+       '{"INFRX_D_TASK": "p3"}),', "", KEYED_B9),
     _m("key_port_unprobed", "a key whose port is bound is another lane's", R,
        '                    return f"{key}\'s {name} port {svc.host_port} is bound"',
        "                    pass", KEY_FREE),

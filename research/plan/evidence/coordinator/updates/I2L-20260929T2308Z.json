@@ -113,13 +113,11 @@
     "basis": "one E4-ON rerun after WR-LL3-1 (this run 2455 s) + stack mutants (783 s) + evidence",
     "at": "2026-09-29T23:08:00Z"
   },
-  "blockers": [
-    "WR-LL3-1: tests/g/lab_releases/test_lab_releases.py:404 builds pilot.ReleaseRecords without merge #56's variants (another lane's test code) - e4-on FAIL until it lands"
-  ],
+  "blockers": [],
   "wiring_requests": [
-    "WR-LL3-1: apps/infrx-api/tests/g/lab_releases/test_lab_releases.py:404 `pilot.ReleaseRecords(D9(), D7(), objects)` -> `pilot.ReleaseRecords(D9(), D7(), objects, None)`; test: pytest tests/g/lab_releases (14 + its mutant list) green",
+    "WR-LL3-1: ALREADY on the tip at merge #64 (merges #60/#62 build the 4-argument pilot.ReleaseRecords in tests/g/lab_releases; 1-LL3-RV-1) - nothing to wire",
     "WR-LL3-2: coordinator reruns GATE_ARGS=--keep make lab-local + the stack mutants after WR-LL3-1; expected r222.accepted true, by_design = R198 + R237",
-    "Proposed ruling LL3-KEY-HELD (E4ON-b94fd337.md \u00a76)"
+    "Proposed ruling LL3-KEY-HELD (E4ON-b94fd337.md \u00a76) - numbered R262 at merge #64"
   ],
   "evidence": [
     "research/plan/evidence/e/E4ON-b94fd337.md",

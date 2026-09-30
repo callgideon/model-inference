@@ -131,13 +131,18 @@ BY_DESIGN = {
 }
 #: R257: a by-design FAIL is reported only on its recorded refusal text (a crash or another
 #: traceback in the same case stays open, never by_design): R198's at fd0aba04 (e4-on.log),
-#: R237's o05 message at fd0aba04 (scenarios.xml), each family's typed 503 on infrx_runtime.
+#: anchored (LL3R-3): only the worker's ` | `-joined log lines, none a traceback or a newline,
+#: before the refusal line and nothing after it; R237's o05 message at fd0aba04
+#: (scenarios.xml): seven families' typed 503 on infrx_runtime and datasets' untyped
+#: `503 {"detail":"the datasets service failed"}` exactly as recorded (LL3R-5: the pin is the
+#: recorded text, not a claim that every family is typed).
 REFUSAL = {
     "tests.w.test_worker_main::test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_"
     "waits_for_it": re.compile(
-        r"RuntimeError: the worker exited 2: .*\| infrx\.worker: refusing to start: "
+        r"RuntimeError: the worker exited 2: (?:(?:(?!Traceback)[^|\n])*\| )*"
+        r"infrx\.worker: refusing to start: "
         r"INFRX_MODE='pilot': LAB_EVAL_WORKER needs an evaluator source \(WR-B-2\(b\)\) and "
-        r"a dev target source \(WR-B-3\)", re.S),
+        r"a dev target source \(WR-B-3\)"),
     "test_o05_every_lab_route_family_answers_a_lab_session": re.compile(re.escape(
         "AssertionError: route families not serving a Lab session (all switches ON): {" +
         ", ".join(f"'{f}': '503 {{\"refusal\":\"unavailable\"}}'" for f in
@@ -158,7 +163,10 @@ KEYED = {
     "tests.w.test_lab_workers_teachers_pg": ("p2", {"INFRX_D_TASK": "p2"}),
     "tests.g.lab_releases.test_lab_releases_composition_pg": ("r2", {"INFRX_D_TASK": "r2"}),
     "tests.g.lab_releases.test_lab_releases_pg": ("r2", {"INFRX_D_TASK": "r2"}),
-    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),   # r2|r1 (b94fd337)
+    "tests.g.lab_releases.test_lab_releases_unit_refused_pg": ("p3", {"INFRX_D_TASK": "p3"}),  # R255 (#60)
+    # 1-LL3-RV-3: r1 is a legitimate key for composition-7's decide case - its own skipif
+    # accepts INFRX_D_TASK=r2|r1; r1 is chosen because r2 is the busier key (b94fd337).
+    "tests.w.test_lab_workers_decide_pg": ("r1", {"INFRX_D_TASK": "r1"}),
     "tests.w.test_lab_workers_judge_pg": ("j2", {"INFRX_D_TASK": "j2"}),
     "tests.w.test_worker_lab_eval_pg": ("b1", {"INFRX_D_TASK": "b1"}),
     "tests.g.lab_traces.test_lab_traces_stack": ("t2i", {"INFRX_LAB_API_STACK": "1"}),
@@ -293,8 +301,8 @@ def r222(stages: list[dict], scenarios: dict) -> dict:
             still[sid] = entry["status"]
             excused.update(found)
             only.add(sid)
-    ran = {case for stage in stages if stage["stage"].startswith("e4-on@")
-           for case in stage.get("cases", ())}
+    ran = {case for stage in stages if stage["stage"].startswith("e4-on@")   # R262: PASS rows
+           and stage["status"] == PASS for case in stage.get("cases", ())}   # discharge skips
     for stage in stages:
         name, status = stage["stage"], stage["status"]
         if (name == "scenarios" and scenarios) or status == PASS or (status == NOT_RUN and ruled(stage.get("reason"))):
@@ -302,6 +310,11 @@ def r222(stages: list[dict], scenarios: dict) -> dict:
         counts = stage.get("counts") or {}
         failed = counts.get("failed_ids") or []
         failures = stage.get("failures") or {}
+        skips = stage.get("skipped_ids") or ()
+        if name == "e4-on" and status == BLOCKED and skips and not failed \
+                and not (counts.get("errors") or counts.get("xfailed")) \
+                and set(skips) <= ran and len(skips) == counts.get("skipped", 0):
+            continue                     # 1-LL3-RV-4: every skip passed on its own key
         if name == "e4-on" and status == FAIL and failed \
                 and all(by_design(case, failures.get(case)) for case in failed) \
                 and not counts.get("errors") and not counts.get("xfailed") \
