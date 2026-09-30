@@ -98,7 +98,8 @@ def check_variants_are_the_providers_own_with_their_latest_comparison(conn) -> s
     assert ok(conn, "lab_optimization_variants", {"provider_org_id": uid(99, 0x99)}) == []
     from infrx.state.lab_variants import PgLabVariants
     store = PgLabVariants(connector(pgharness.dsn(conn.info.dbname)))
-    assert asyncio.run(store.variants(NEMO)) == rows
+    assert asyncio.run(store.variants(NEMO)) == [{**r, "base": None, "variant": None}
+                                                 for r in rows], "LW9: 0058's identities"
     return "own provider only, oldest first, newest comparison or null; the store reads it"
 
 

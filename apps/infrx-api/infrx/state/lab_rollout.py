@@ -176,6 +176,11 @@ class PgReleaseStore:
                     spent=records.Amount(**cand["spent"]),
                     candidate_healthy=cand["candidate_healthy"])
 
+    async def tally(self, policy_ref: str) -> list[dict[str, Any]]:
+        """WR-C7-TALLY (0058): the revision's terminal requests per `(serving_ref, pinned_by)`
+        - port.ts's `Progress.assignments`, summing to `live`'s two arms; none is []."""
+        return await self._call("lab_release_tally", {"policy_ref": policy_ref})
+
     async def transition(self, policy_ref: str, *, fence: int, to: str,
                          decision: dict[str, Any], reasons: tuple[str, ...]) -> int:
         records.parse(decision)                 # the contract refuses first (LabRejected)

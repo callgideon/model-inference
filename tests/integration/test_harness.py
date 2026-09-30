@@ -284,6 +284,7 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0055_lab_variants_requeue.sql",
     "0056_lab_control_grants.sql",
     "0057_trace_consent_read.sql",
+    "0058_lab_variant_identities.sql",
     "0059_lab_control_grants_2.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
