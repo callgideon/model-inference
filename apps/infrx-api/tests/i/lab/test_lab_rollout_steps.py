@@ -412,9 +412,6 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
         ["hosted-migrate", "--release", "a" * 40, "--through", "w6b"]
 
 
-@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the 0057–0059 window: hosted-migrate.sh carries the "
-                   "0052-0056 window's patch; infra/lab/rollout/hosted-migrate-0057-0059.patch is applied by "
-                   "launch-v1.sh window THROUGH=0059 (R264); strict so it flips once that patch lands")
 def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
     (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052-0056, its W7 post-check `*"0056 lab_control_grants"`), so condition 2
@@ -422,7 +419,7 @@ def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
     newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
-                           "--hosted-at", "0051", "--window", "P-08:dry"], capture_output=True,
+                           "--hosted-at", "0056", "--window", "P-08:dry"], capture_output=True,
                           text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
                                                     "PY": "/usr/bin/env"})
     assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr
