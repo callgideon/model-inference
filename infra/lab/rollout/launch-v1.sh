@@ -143,6 +143,8 @@ PY
 
 box() {
   need SUPABASE_URL
+  say "L0 the box's checkout becomes $RELEASE (fetch; refuses if the engine script differs)"
+  infra/rollout/ssm.sh infra/lab/rollout/steps/05-lab-checkout.sh RELEASE="$RELEASE"
   say "L1 inventory"; infra/rollout/ssm.sh infra/lab/rollout/steps/10-lab-preflight.sh RELEASE="$RELEASE"
   say "L3 Lab image (up to 1 h)"; TIMEOUT_S=3600 infra/rollout/ssm.sh infra/lab/rollout/steps/20-lab-image.sh RELEASE="$RELEASE"
   say "L4 units (inert)"; infra/rollout/ssm.sh infra/lab/rollout/steps/30-lab-units.sh RELEASE="$RELEASE"
