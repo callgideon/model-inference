@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 333,
- "updated": "2026-09-30T01:15:51Z",
+ "revision": 334,
+ "updated": "2026-09-30T01:45:37Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -9972,22 +9972,22 @@
   {
    "id": "W5-KNOWN-GOOD-REPROOF-4",
    "task": "I8",
-   "slice": "R151 condition 1 through 0059 for the SECOND window + hosted-migrate-0057-0059.patch + launch-v1.sh THROUGH/patch selection (Opus); workflow wf_e9d0de11-303",
+   "slice": "R151 condition 1 through 0059 for the SECOND window + hosted-migrate-0057-0059.patch + launch-v1.sh THROUGH/patch selection (Opus); workflow wf_e9d0de11-303; ACCEPT at 31e29621 (both targets KNOWN-GOOD through 0059 on both images, 41 mutants 0 survivors; hosted-migrate-0057-0059.patch committed, sha256 5954d7ad…)",
    "agent": "opus",
    "branch": "codex/w5-known-good-reproof-4",
    "worktree": ".claude/worktrees/codex-w5-known-good-reproof-4",
    "base": "6ca7879f",
-   "head": null,
+   "head": "31e29621",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-09-30T00:34:55Z",
-   "updated": "2026-09-30T00:34:55Z",
+   "updated": "2026-09-30T01:45:37Z",
    "blocker": null,
-   "next_action": "handback → merge → the operator's second window (0057–0059)",
+   "next_action": "merge batch #66 (WR-KGR4-1/2/3 + the launch/window-<THROUGH> push fix + R264) → the operator's second window (0057–0059)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -10073,6 +10073,45 @@
     "apps/lab/lib/services/rollouts/",
     "apps/lab/tests/r/",
     "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W5-MERGE-66",
+   "task": null,
+   "slice": "merge batch #66 (Opus): known-good-reproof-4 31e29621 (+WR-KGR4-1/2/3, the window() push fix launch/window-<THROUGH>, lens minors KGR4-RV-1/3/4, R264); workflow wf_324ec269-637",
+   "agent": "opus",
+   "branch": "codex/w5-merge-66",
+   "worktree": ".claude/worktrees/codex-w5-merge-66",
+   "base": "ba550eaa",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-09-30T01:45:37Z",
+   "updated": "2026-09-30T01:45:37Z",
+   "blocker": null,
+   "next_action": "integrate → R151 condition 1 for 0057–0059 on the tip → tell the operator the second-window invocation",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
