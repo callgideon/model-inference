@@ -61,10 +61,10 @@ esac
 HOSTED_N=${HOSTED_AT:0:4}
 if [ "${NEWEST:0:4}" != "$THROUGH" ]; then
   if [ -z "$WINDOW_RELEASE_HINT" ]; then
-    printf "this checkout carries %s (newer than the re-proven %s): the second window's release is the first claude/consumer-v1 commit carrying both merge #66 and the first window's launch/window-0056 branch — the coordinator names it in RESUME-NOW and 09 after the first window\n" "$NEWEST" "$THROUGH" >&2
+    printf "this checkout carries %s (its newest migration is not the re-proven %s): the second window's release is the first claude/consumer-v1 commit carrying both merge #66 and the first window's launch/window-0056 branch — the coordinator names it in RESUME-NOW and 09 after the first window\n" "$NEWEST" "$THROUGH" >&2
     exit 2
   fi
-  printf 'this checkout carries %s (newer than the re-proven %s): run from a worktree at %s\n' "$NEWEST" "$THROUGH" "$WINDOW_RELEASE_HINT" >&2
+  printf 'this checkout carries %s (its newest migration is not the re-proven %s): run from a worktree at %s\n' "$NEWEST" "$THROUGH" "$WINDOW_RELEASE_HINT" >&2
   printf '  git worktree add /tmp/launch-%s %s && cd /tmp/launch-%s && RELEASE=%s THROUGH=%s %s %s\n' "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$0" "${1:-preflight}" >&2
   exit 2
 fi
