@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "3ec8139d",
+ "integration_head": "f2ef6b2e",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 336,
- "updated": "2026-09-30T02:13:56Z",
+ "revision": 337,
+ "updated": "2026-09-30T02:28:44Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10043,7 +10043,7 @@
   {
    "id": "W5-LAB-OBSERVE-5",
    "task": "E5L",
-   "slice": "E5L gate of record on the tip carrying #63: the full `make lab-observe` with o10 (l4 through the e2e gate) at one tip SHA, the stack mutants with the full pristine baseline (Opus); workflow wf_95f80f5a-179; ACCEPT at 76d9e7ad (gate 19/0/0 at 290d70e9, r222 open {}, o01 4/4 incl. the async echo, o10 via l4; 25/25 stack mutants on the full baseline; teardown clean)",
+   "slice": "E5L gate of record on the tip carrying #63: the full `make lab-observe` with o10 (l4 through the e2e gate) at one tip SHA, the stack mutants with the full pristine baseline (Opus); workflow wf_95f80f5a-179; ACCEPT at 76d9e7ad (gate 19/0/0 at 290d70e9, r222 open {}, o01 4/4 incl. the async echo, o10 via l4; 25/25 stack mutants on the full baseline; teardown clean); merged #67",
    "agent": "opus",
    "branch": "codex/w5-lab-observe-5",
    "worktree": ".claude/worktrees/codex-w5-lab-observe-5",
@@ -10054,11 +10054,11 @@
     "prefix": "infrx-e5l",
     "db": "task-local"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-09-30T01:15:51Z",
-   "updated": "2026-09-30T02:13:56Z",
+   "updated": "2026-09-30T02:28:44Z",
    "blocker": null,
-   "next_action": "merge batch #67 (LO5-RV1/2/3, the Makefile GATE_ARGS hook, R265)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10118,22 +10118,22 @@
   {
    "id": "W5-MERGE-67",
    "task": null,
-   "slice": "merge batch #67 (Opus): lab-observe-5 76d9e7ad (+the 09 log append kept both lines, LO5-RV1 partial-scrub oracle + st_job_scrub_partial, LO5-RV2 NOT RUN[ENV], LO5-RV3 pins.base, Makefile GATE_ARGS, R265); workflow wf_dfa796c8-f6b",
+   "slice": "merge batch #67 (Opus): lab-observe-5 76d9e7ad (+the 09 log append kept both lines, LO5-RV1 partial-scrub oracle + st_job_scrub_partial, LO5-RV2 NOT RUN[ENV], LO5-RV3 pins.base, Makefile GATE_ARGS, R265); workflow wf_dfa796c8-f6b; integrated at f2ef6b2e (R265)",
    "agent": "opus",
    "branch": "codex/w5-merge-67",
    "worktree": ".claude/worktrees/codex-w5-merge-67",
    "base": "2bfbcc53",
-   "head": null,
+   "head": "70a981e2",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-09-30T02:13:56Z",
-   "updated": "2026-09-30T02:13:56Z",
+   "updated": "2026-09-30T02:28:44Z",
    "blocker": null,
-   "next_action": "integrate → E5L of record 19/0/0 at 290d70e9 on the tip → plan page E5L row",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
