@@ -326,23 +326,25 @@ def test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_
     rollout = support.REPO / "infra" / "lab" / "rollout"
     (tmp_path / "infra" / "rollout").mkdir(parents=True)
     script = tmp_path / "infra" / "rollout" / "hosted-migrate.sh"
-    # The ordering proof starts from the file BEFORE the first window (its release a58eb0d6): the
-    # tree as it stands carries that window's patch since 2026-09-30 (launch/window-0056 merged).
-    before = subprocess.run(["git", "show", "a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c:infra/rollout/hosted-migrate.sh"],
-                            cwd=support.REPO, capture_output=True, check=True).stdout
-    script.write_bytes(before)
+    script.write_bytes((support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_bytes())
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
 
     def apply(*args):
         return subprocess.run(["git", "apply", *args], cwd=tmp_path, capture_output=True, text=True)
 
+    first = str(rollout / "hosted-migrate-0052-0056.patch")
     second = str(rollout / "hosted-migrate-0057-0059.patch")
+    # The ordering proof starts from the file BEFORE the first window: the tree as it stands carries
+    # that window's patch since 2026-09-30 (launch/window-0056 merged), so reverse it first (no git
+    # history is needed: the mutant layout is a plain copy).
+    undone = apply("-R", first)
+    assert undone.returncode == 0, undone.stderr
     assert apply("--check", second).returncode != 0          # not before the first window's
     today = (support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_text()
     assert '\nEXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' in today   # hosted 0001-0056 since 2026-09-30T07:38Z
     assert subprocess.run(["git", "apply", "--check", second], cwd=support.REPO,
                           capture_output=True).returncode == 0            # the second window applies to today's file
-    done = apply(str(rollout / "hosted-migrate-0052-0056.patch"))
+    done = apply(first)
     assert done.returncode == 0, done.stderr
     done = apply("--check", second)
     assert done.returncode == 0, done.stderr
