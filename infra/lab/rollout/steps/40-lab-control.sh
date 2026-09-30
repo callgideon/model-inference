@@ -31,7 +31,7 @@ install -d -m 0755 "$LAB_ETC"
 staged=$(stage_env "$CONTROL_ENV" "INFRX_LAB_IMAGE:=$image" \
   "INFRX_LAB_DATABASE_URL=$CONTROL_DSN_PARAM" "INFRX_LAB_SUPABASE_URL:=$SUPABASE_URL" \
   "INFRX_LAB_SUPABASE_ANON_KEY=$ANON_KEY_PARAM" "INFRX_LAB_ORIGIN:=$LAB_ORIGIN")
-place "$staged" "$CONTROL_ENV" root:root
+place "$staged" "$CONTROL_ENV" ubuntu:ubuntu   # the unit runs docker as User=ubuntu: --env-file is read by that user (box 2026-09-30: root:root was "permission denied", 22 restarts)
 touch "$MARKER"
 systemctl enable infrx-lab-control.service
 systemctl restart infrx-lab-control.service
