@@ -335,15 +335,15 @@ def test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_
     first = str(rollout / "hosted-migrate-0052-0056.patch")
     second = str(rollout / "hosted-migrate-0057-0059.patch")
     # The ordering proof starts from the file BEFORE the first window: the tree as it stands carries
-    # that window's patch since 2026-09-30 (launch/window-0056 merged), so reverse it first (no git
-    # history is needed: the mutant layout is a plain copy).
+    # that window's patch since 2026-09-30 (launch/window-0056 merged) and, after the second window,
+    # both — reverse whatever is there first (no git history: the mutant layout is a plain copy).
+    apply("-R", second)                                          # only after the second window
     undone = apply("-R", first)
     assert undone.returncode == 0, undone.stderr
     assert apply("--check", second).returncode != 0          # not before the first window's
     today = (support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_text()
-    assert '\nEXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' in today   # hosted 0001-0056 since 2026-09-30T07:38Z
-    assert subprocess.run(["git", "apply", "--check", second], cwd=support.REPO,
-                          capture_output=True).returncode == 0            # the second window applies to today's file
+    assert ('\nEXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' in today      # hosted 0001-0056 since 2026-09-30T07:38Z
+            or '\nEXPECTED_PENDING="0057, 0058, 0059"' in today)             # or 0001-0059 after the second window
     done = apply(first)
     assert done.returncode == 0, done.stderr
     done = apply("--check", second)
