@@ -434,6 +434,8 @@ RUNTIME_FUNCTIONS = frozenset({
     # WR-LSQ3-4 (0043, SR-R1-1): the router's port over D9, the runtime's alone
     "infrx.record_rollout_assignment(jsonb)", "infrx.release_active(text)",
     "infrx.release_eligible(uuid,uuid)",
+    # 0057 (lab-capture-2, WR-LC-HOSTED): the gateway's consent read
+    "infrx.trace_consent(uuid,uuid)",
     "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)", "infrx.append(jsonb)",
     "infrx.cancel(jsonb)", "infrx.claim(jsonb)", "infrx.claim_preparation_ready(jsonb)",
     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",

@@ -32,6 +32,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_c6.py
 	# 0054's SQL list (lab-live, R244): needs Docker, skips visibly without it; task-local key r2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_live.py
+	# 0057's SQL list (lab-capture-2, WR-LC-HOSTED): needs Docker, skips visibly without it; task-local key t2f
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=t2f uv run --frozen pytest -q tests/d/test_code_mutants_lc2.py
 	# WR-LC-MAKE: the capture list (lab-capture, R250); its PostgreSQL half needs Docker, skips visibly without it; task-local key t2f
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=t2f uv run --frozen pytest -q tests/t/capture/test_mutants.py
 	# 0056's SQL list (lab-sql LW8, SR-LCR-1): needs Docker, skips visibly without it; task-local key l4

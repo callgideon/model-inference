@@ -1,0 +1,88 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+____________ test_stack_mutant_is_killed[st_capture_switch_ignored] ____________
+
+mutant = Mutant(name='st_capture_switch_ignored', invariant="TRACE_PUMPS on composes the gateway's capture", file='infrx/gatewa...ew='if False else {}', cases=('test_o01_capture_turned_on_through_the_composition_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_capture_switch_ignored is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...: ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+__________ test_stack_mutant_is_killed[st_capture_key_opt_in_ignored] __________
+
+mutant = Mutant(name='st_capture_key_opt_in_ignored', invariant='a key that never opted in leaves no trace', file='infrx/gatewa... TraceMode(org_mode)', cases=('test_o01_capture_turned_on_through_the_composition_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_capture_key_opt_in_ignored is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...: ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+______________ test_stack_mutant_is_killed[st_capture_scrub_off] _______________
+
+mutant = Mutant(name='st_capture_scrub_off', invariant='an echoed bearer token is redacted in the shipped sync record (WR-LO4-R...new='    return data', cases=('test_o01_capture_turned_on_through_the_composition_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_capture_scrub_off is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...: ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+______________ test_stack_mutant_is_killed[st_job_output_dropped] ______________
+
+mutant = Mutant(name='st_job_output_dropped', invariant="an async job's shipped record holds its output (WR-LO4-RV2)", file='in...                pass', cases=('test_o01_capture_turned_on_through_the_composition_switch',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_job_output_dropped is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...: ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+________________ test_stack_mutant_is_killed[st_job_scrub_off] _________________
+
+mutant = Mutant(name='st_job_scrub_off', invariant='an echoed minted key is redacted in the shipped async record (R8, lab-captu...w='    return data', cases=('test_o01_an_async_jobs_shipped_record_holds_no_caller_token',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED_STACK, ids=[m.name for m in SELECTED_STACK])
+    def test_stack_mutant_is_killed(mutant):
+        """On a kept e5l stack (runner.py --keep); a visible skip without one."""
+        why = mutation_list.claim_the_kept_stack()
+        if why:
+            pytest.skip(f"NOT RUN: {why}")
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, f"{mutant.name} is {result.outcome}: {result.detail}"
+E       AssertionError: st_job_scrub_off is broken_runner: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']
+E       assert False
+E        +  where False = Result(outcome=<Outcome.broken_runner: 'broken_runner'>, detail="pristine baseline: the unmutated tree fails the list'...: ['../../tests/integration/lab_observe/scenarios_trace.py::test_o10_the_lab_review_panel_renders_the_routes_answer']").killed
+
+tests/integration/lab_observe/test_mutants.py:88: AssertionError
+5 failed, 93 deselected in 163.91s (0:02:43)

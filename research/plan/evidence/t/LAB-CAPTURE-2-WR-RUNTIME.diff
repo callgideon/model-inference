@@ -1,0 +1,26 @@
+diff --git a/apps/infrx-api/tests/d/checks_operator.py b/apps/infrx-api/tests/d/checks_operator.py
+index 29d871f5..3c91ce5c 100644
+--- a/apps/infrx-api/tests/d/checks_operator.py
++++ b/apps/infrx-api/tests/d/checks_operator.py
+@@ -475,7 +475,7 @@ def check_operator_privileges(conn) -> str:
+         "p.pronamespace where n.nspname in ('infrx', 'public') "
+         "and has_function_privilege('infrx_runtime', p.oid, 'execute') and not exists "
+         "(select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')")}
+-    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 44, sorted(held)
++    assert held == checks_reads.RUNTIME_FUNCTIONS and len(held) == 45, sorted(held)
+     return (f"3 RPCs authenticated-only, helper nobody's, definer/{owner}; 2 views SELECT "
+             f"for authenticated+service_role; runtime set {len(held)} unchanged")
+ 
+diff --git a/apps/infrx-api/tests/d/checks_reads.py b/apps/infrx-api/tests/d/checks_reads.py
+index c47cff85..675801c4 100644
+--- a/apps/infrx-api/tests/d/checks_reads.py
++++ b/apps/infrx-api/tests/d/checks_reads.py
+@@ -434,6 +434,8 @@ RUNTIME_FUNCTIONS = frozenset({
+     # WR-LSQ3-4 (0043, SR-R1-1): the router's port over D9, the runtime's alone
+     "infrx.record_rollout_assignment(jsonb)", "infrx.release_active(text)",
+     "infrx.release_eligible(uuid,uuid)",
++    # 0057 (lab-capture-2, WR-LC-HOSTED): the gateway's consent read
++    "infrx.trace_consent(uuid,uuid)",
+     "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)", "infrx.append(jsonb)",
+     "infrx.cancel(jsonb)", "infrx.claim(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
