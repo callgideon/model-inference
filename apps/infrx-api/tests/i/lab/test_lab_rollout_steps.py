@@ -412,12 +412,9 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
         ["hosted-migrate", "--release", "a" * 40, "--through", "w6b"]
 
 
-@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the 0052 window: the reviewed "
-                   "EXPECTED_PENDING=0052 patch to infra/rollout/hosted-migrate.sh is operator-held "
-                   "(a Production Deploy edit; runbook 08 §2); strict so it flips once the patch lands")
 def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
-    (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052, its W7 post-check `*"0052 lab_control_reject"`), so condition 2
+    (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052-0056, its W7 post-check `*"0056 lab_control_grants"`), so condition 2
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
     newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
