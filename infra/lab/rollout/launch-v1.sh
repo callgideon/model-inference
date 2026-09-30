@@ -32,26 +32,36 @@ RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}
 NEWEST=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | tail -1)   # e.g. 0056_lab_control_grants.sql
 # The window applies every migration after hosted-at that this checkout carries (lab-migrate.sh
 # refuses otherwise), so the checkout's newest migration must be the newest RE-PROVEN one
-# (R151 condition 1). Newer LOCAL-ONLY migrations (0057+) land on the tip before their
-# re-proof: run the window from a worktree at the last release whose newest migration is
-# THROUGH, e.g. `git worktree add /tmp/launch-$THROUGH a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c && cd /tmp/launch-$THROUGH`.
-THROUGH=${THROUGH:-0056}; WINDOW_RELEASE_HINT=a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c
+# (R151 condition 1). Newer LOCAL-ONLY migrations land on the tip before their re-proof: run
+# the window from a worktree at the last release whose newest migration is THROUGH, e.g.
+# `git worktree add /tmp/launch-$THROUGH $WINDOW_RELEASE_HINT && cd /tmp/launch-$THROUGH`.
+# THROUGH picks the window: the re-proven level, hosted's level before it (the applied-list
+# anchor the patched hosted-migrate.sh stops on) and the reviewed patch that gets it there.
+THROUGH=${THROUGH:-0059}
+case "$THROUGH" in
+  0056) HOSTED_AT="0051 lab_import_jobs"; PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch   # KNOWN-GOOD-REPROOF-3; WR-KGR3-3
+        WINDOW_RELEASE_HINT=a58eb0d66f82a5239c3f6c1cb0d992e43aa4045c ;;
+  0059) HOSTED_AT="0056 lab_control_grants"; PATCH=infra/lab/rollout/hosted-migrate-0057-0059.patch   # KNOWN-GOOD-REPROOF-4; applies after the 0056 window's
+        WINDOW_RELEASE_HINT="<the known-good-reproof-4 merge on claude/consumer-v1>" ;;
+  *) echo "THROUGH=$THROUGH is not a re-proven level (0056 or 0059)" >&2; exit 2 ;;
+esac
+HOSTED_N=${HOSTED_AT:0:4}
 if [ "${NEWEST:0:4}" != "$THROUGH" ]; then
   printf 'this checkout carries %s (newer than the re-proven %s): run from a worktree at %s\n' "$NEWEST" "$THROUGH" "$WINDOW_RELEASE_HINT" >&2
   printf '  git worktree add /tmp/launch-%s %s && cd /tmp/launch-%s && RELEASE=%s %s %s\n' "$THROUGH" "$WINDOW_RELEASE_HINT" "$THROUGH" "$WINDOW_RELEASE_HINT" "$0" "${1:-preflight}" >&2
   exit 2
 fi
 NEWEST_N=${NEWEST:0:4}; NEWEST_NAME=${NEWEST:5}; NEWEST_NAME=${NEWEST_NAME%.sql}
-PENDING=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | awk -v at=0051 'substr($0,1,4) > at {printf "%s%s", sep, substr($0,1,4); sep=", "}')
+PENDING=$(ls apps/app/supabase/migrations | grep -E '^00[0-9]{2}_' | sort | awk -v at="$HOSTED_N" 'substr($0,1,4) > at {printf "%s%s", sep, substr($0,1,4); sep=", "}')
 SSM_CONTROL_DSN=/model-inference/lab/control_database_url
 SSM_ANON=/model-inference/lab/supabase_anon_key
 SSM_VERCEL=/callgideon/prod/VERCEL_TOKEN
 
 preflight() {
-  say "preflight at $RELEASE (newest migration $NEWEST; pending after 0051: $PENDING)"
+  say "preflight at $RELEASE (newest migration $NEWEST; pending after $HOSTED_N: $PENDING)"
   git merge-base --is-ancestor "$RELEASE" claude/consumer-v1 || { echo "RELEASE is not on claude/consumer-v1" >&2; exit 2; }
   [ -x apps/infrx-api/.venv/bin/python ] || make api-env
-  say "R151 condition 1: both rollback targets KNOWN-GOOD at $NEWEST_N (needs the known-good-reproof-3 merge)"
+  say "R151 condition 1: both rollback targets KNOWN-GOOD at $NEWEST_N (needs the re-proof through $THROUGH merged)"
   for t in bda15866e5700f3856d7142580da842fba9bbd23 422631591845fbd66b590c73d5ff4150318d9d7a; do
     apps/infrx-api/.venv/bin/python infra/rollout/known-good.py "$t" --applied "$NEWEST_N" && echo "  $t KNOWN-GOOD at $NEWEST_N"
   done
@@ -64,13 +74,17 @@ preflight() {
 
 window() {
   need WINDOW
-  say "R151 condition 2: the reviewed EXPECTED_PENDING patch (hosted is 0001-0051; pending $PENDING)"
-  PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch   # the reviewed diff (KNOWN-GOOD-REPROOF-3); WR-KGR3-3
+  say "R151 condition 2: the reviewed EXPECTED_PENDING patch (hosted is 0001-$HOSTED_N; pending $PENDING)"
   XFAIL_TEST=apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py
-  if grep -q '^EXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' infra/rollout/hosted-migrate.sh; then
+  if grep -q "^EXPECTED_PENDING=\"$PENDING\"" infra/rollout/hosted-migrate.sh; then
     echo "  already applied"
   else
+    git apply --check "$PATCH" || { echo "hosted-migrate.sh is not in the state $PATCH expects (for 0059: the 0056 window's patch committed first)" >&2; exit 2; }
     git apply "$PATCH"
+  fi
+  grep -qF "case \"\$HOSTED_APPLIED\" in *\"$HOSTED_AT\")" infra/rollout/hosted-migrate.sh \
+    || { echo "hosted-migrate.sh's applied-list anchor is not *\"$HOSTED_AT\"" >&2; exit 2; }
+  if [ "$THROUGH" = 0056 ] && grep -q '^@pytest.mark.xfail(strict=True, reason="R151 condition 2 for the 0052 window' "$XFAIL_TEST"; then
     python3 - "$XFAIL_TEST" <<'PY'   # the strict xfail would XPASS (fail) once the patch lands: drop it in the same commit
 import sys; p=sys.argv[1]; L=open(p).read().split('\n')
 i=L.index('def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():'); j=i-1
@@ -81,20 +95,23 @@ s=s.replace('EXPECTED_PENDING 0052, its W7 post-check `*"0052 lab_control_reject
 open(p,'w').write(s)
 PY
   fi
+  if [ "$THROUGH" = 0059 ]; then   # the tree-as-it-stands case follows hosted to 0056 (no xfail left to drop)
+    sed -i 's/"--hosted-at", "0051", "--window", "P-08:dry"/"--hosted-at", "0056", "--window", "P-08:dry"/' "$XFAIL_TEST"
+  fi
   git --no-pager diff --stat -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"; git --no-pager diff -- infra/rollout/hosted-migrate.sh "$XFAIL_TEST"
   read -r -p "commit this reviewed patch and continue to w6b? [y/N] " ok; [ "$ok" = y ] || exit 1
   git add infra/rollout/hosted-migrate.sh "$XFAIL_TEST"
-  git commit -q -m "rollout: hosted-migrate.sh expects the Lab migrations $PENDING (second R151/R201 window $WINDOW; the reviewed $PATCH; the strict xfail dropped, WR-KGR3-3)" || true
+  git commit -q -m "rollout: hosted-migrate.sh expects the Lab migrations $PENDING (R151 window $WINDOW, hosted $HOSTED_N -> $THROUGH; the reviewed $PATCH; the test_ldp case follows it)" || true
   say "coordinator log entry for condition 3 (append; never rewrite)"
-  printf -- '- %s (operator, %s): **R151 window %s** — hosted 0052–%s (Lab), never reverted; P-08 record: lab.callbill.ai / lab-control.callbill.ai; release %s.\n' \
-    "$(date -u +%FT%H:%MZ)" "$(git config user.name)" "$WINDOW" "$NEWEST_N" "$RELEASE" >> research/plan/evidence/coordinator/2026-09-24-session-03.md
-  git add research/plan/evidence/coordinator/2026-09-24-session-03.md; git commit -q -m "plan: R151 window $WINDOW opened (0052–$NEWEST_N)" || true
+  printf -- '- %s (operator, %s): **R151 window %s** — hosted %s–%s (Lab), never reverted; P-08 record: lab.callbill.ai / lab-control.callbill.ai; release %s.\n' \
+    "$(date -u +%FT%H:%MZ)" "$(git config user.name)" "$WINDOW" "${PENDING%%,*}" "$NEWEST_N" "$RELEASE" >> research/plan/evidence/coordinator/2026-09-24-session-03.md
+  git add research/plan/evidence/coordinator/2026-09-24-session-03.md; git commit -q -m "plan: R151 window $WINDOW opened (${PENDING%%,*}–$NEWEST_N)" || true
   say "W6 + W6b on a fresh hosted dump (no hosted write)"
-  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at 0051 --window "$WINDOW" --through w6b | tee /tmp/launch-v1-w6b.log
+  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at "$HOSTED_N" --window "$WINDOW" --through w6b | tee /tmp/launch-v1-w6b.log
   DIG=$(grep -o 'COPY_DIGEST=[0-9a-f]*' /tmp/launch-v1-w6b.log | tail -1 | cut -d= -f2); [ -n "$DIG" ] || { echo "no COPY_DIGEST in the w6b log" >&2; exit 1; }
   say "W7 needs the public /health 503: maintenance on, apply, resume (App requests queue for ~1 min)"
   infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh
-  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at 0051 --window "$WINDOW" --through w7 --expect "$DIG" | tee /tmp/launch-v1-w7.log
+  infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at "$HOSTED_N" --window "$WINDOW" --through w7 --expect "$DIG" | tee /tmp/launch-v1-w7.log
   infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh
   grep -q "W7 PASS: hosted 0001-$NEWEST_N" /tmp/launch-v1-w7.log && echo "hosted 0001-$NEWEST_N applied (digest $DIG)"
   git push origin claude/consumer-v1
