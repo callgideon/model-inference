@@ -263,6 +263,9 @@ MUTANTS += (
     Mutant("i3bm40", "a restore empties the template's default privileges first (else anon "
                      "gets ALL on the tenant tables)", PGRESTORE,
            "    if neutralize:\n", "    if False:\n", RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm40b", "a restore creates the dump's migration roles (infrx_*) before the project restore", PGRESTORE,
+           '    return {n for n in names if n.startswith("infrx_")}\n',
+           "    return set()\n", RESTORE, "bk00b"),
     Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", PGRESTORE,
            '        for definition in meta["auth_triggers"]:\n',
            "        for definition in []:\n", RESTORE, "bk01_a", layer=2),
