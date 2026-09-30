@@ -37,11 +37,10 @@ const PROPOSAL = obj({
   proposalId: str, kind: oneOf("expand", "rollback"), policyRef: str, fence: num, state: oneOf("proposed", "approved", "rejected"), proposedAt: str, decidedAt: nul(str),
 });
 const IDENTITY = obj({ engine: str, engineVersion: str, hardware: str, quantization: str, capabilities: list(str) });
-// R252 (WR-LW7-3 (b)): R3 does not persist the two identities yet (WR-LW7-3a), so 0055's listing omits
-// them; absent or null reads as unknown and the page shows the serving refs. The refs stay required.
-const MAYBE_IDENTITY = opt(nul(IDENTITY));
+// R263: 0058's listing names both identities R3 stored with the variant; null only for a variant stored
+// before R3 recorded them (the page says so). An answer that omits them is not 0058's listing: unavailable.
 const VARIANT = obj({
-  variantRef: str, baseServingRef: str, variantServingRef: str, changes: list(str), base: MAYBE_IDENTITY, variant: MAYBE_IDENTITY,
+  variantRef: str, baseServingRef: str, variantServingRef: str, changes: list(str), base: nul(IDENTITY), variant: nul(IDENTITY),
   comparison: nul(obj({
     outcome: oneOf("equivalent", "not_equivalent", "inconclusive", "rejected"), reasons: list(str), reportDigest: str, optimizationClaimed: bool,
     performance: nul(obj({ throughputRatio: num, p99MsDelta: num, memoryGibDelta: num, sources: list(str) })),

@@ -411,6 +411,19 @@ def lab_releases(connect, sessions, access, objects):
                        proposals=ReleaseProposals(PgReleaseProposals(connect)), store=d9)
 
 
+# --- WR-LW9-4 (R263): R3's store on this pool ---------------------------------------------
+def lab_optimizations(connect):
+    """R3's `optimization.store` over D7 and 0058's identities port on this pool; the caller
+    names `identities=(base, variant)`, the pair `register` derived both serving refs from."""
+    import functools
+
+    from ..rollouts import optimization
+    from ..state.lab_data import PgLabDataStore
+    from ..state.lab_variants import PgLabVariants
+    return functools.partial(optimization.store, PgLabDataStore(connect),
+                             variants=PgLabVariants(connect))
+
+
 SHOWN = ("running", "approved", "rolled_back")      # the Lab's release states (port.ts)
 
 

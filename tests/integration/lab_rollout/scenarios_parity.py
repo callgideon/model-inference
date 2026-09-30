@@ -43,6 +43,7 @@ def test_k07_a_variant_is_probed_compared_and_stored(lab, workdir):
     from infrx.rollouts import optimization as r3
     from infrx.state.jobstore import connector
     from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_variants import PgLabVariants
     base, nvfp4, _ = identities()
     with lw.engine(nvfp4.engine_version, (nvfp4.served_model,)) as url:
         variant = run(r3.register(lab.NEMO, VARIANT_ID, base, nvfp4, probe(url)))
@@ -57,10 +58,11 @@ def test_k07_a_variant_is_probed_compared_and_stored(lab, workdir):
     measured = r3.compare(variant, base, nvfp4, report=report, runs=runs, loads=loads)
     assert measured["optimization_claimed"] and measured["performance"]["throughput_ratio"] == 1.5
     data = PgLabDataStore(connector(lab.dsn))
+    ids = {"identities": (base, nvfp4), "variants": PgLabVariants(connector(lab.dsn))}  # R263
     first = run(r3.store(data, variant, measured, report, provider_org_id=lab.NEMO,
-                         actor="dev@nemo"))
+                         actor="dev@nemo", **ids))
     again = run(r3.store(data, variant, measured, report, provider_org_id=lab.NEMO,
-                         actor="dev@nemo"))
+                         actor="dev@nemo", **ids))
     lw.save(workdir, "comparison.json", {"variant": variant, "comparison": measured,
                                          "digest": first})
     assert first == again

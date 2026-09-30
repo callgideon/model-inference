@@ -504,6 +504,24 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
     assert sorted(every) == sorted(LAB_2)
 
 
+def test_lab_optimizations__r3_stores_both_identities_through_d7_and_0058_on_the_pool():
+    """WR-LW9-4 (R263): R3's `store` composed on the Lab pool - D7 for the variant, its B2
+    report and comparison, 0058's `PgLabVariants` for both revision identities. Nothing is
+    bound for the caller but the ports: it names `identities=(base, variant)` itself."""
+    from infrx.gateway import pilot
+    from infrx.rollouts import optimization
+    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_variants import PgLabVariants
+
+    store = pilot.lab_optimizations("pool")
+    assert store.func is optimization.store, store
+    [data] = store.args
+    assert type(data) is PgLabDataStore and data._connect == "pool"
+    assert set(store.keywords) == {"variants"}, store.keywords
+    variants = store.keywords["variants"]
+    assert type(variants) is PgLabVariants and variants._connect == "pool"
+
+
 def test_lab_releases__the_surface_is_d9_d7_the_stored_plan_and_0043s_proposals():
     """WR-R4-2: `LAB_RELEASES` composes the release read models over D9 (0048's listing of the
     three states the Lab shows, 0053's decisions), D7's policy revision and the plan its

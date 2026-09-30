@@ -86,10 +86,13 @@ test("R4-H03 one unreadable release, decision, proposal or variant fails the who
   assert.deepEqual(await answers(snake(drop(PROPOSAL, "proposalId"))).propose(A, "rollback", "p", 1), { ok: false, reason: "unavailable" });
 });
 
-test("R4-H06 a variant whose identities R3 has not persisted (absent or null) still lists, its serving refs intact (R252)", async () => {
-  const bare = Object.fromEntries(Object.entries(VARIANT).filter(([k]) => k !== "base" && k !== "variant"));
-  const listed = [bare, { ...VARIANT, base: null, variant: null }];
-  assert.deepEqual(await server(() => json({ data: snake(listed) })).port.variants(A), { ok: true, value: listed });
+test("R4-H06 a variant stored before R3 recorded its identities (null) still lists, its serving refs intact; one whose answer omits them is unavailable (R263)", async () => {
+  const legacy = { ...VARIANT, base: null, variant: null };
+  assert.deepEqual(await server(() => json({ data: snake([VARIANT, legacy]) })).port.variants(A), { ok: true, value: [VARIANT, legacy] });
+  for (const key of ["base", "variant"]) {
+    const omitted = Object.fromEntries(Object.entries(VARIANT).filter(([k]) => k !== key));
+    assert.deepEqual(await server(() => json({ data: snake([omitted]) })).port.variants(A), { ok: false, reason: "unavailable" }, key);
+  }
 });
 
 test("R4-H04 without a session token nothing is sent and every call is unavailable", async () => {

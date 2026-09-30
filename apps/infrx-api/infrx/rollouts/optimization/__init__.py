@@ -29,9 +29,9 @@ only for an equivalent variant with measurements. ponytail: no cost column; atta
 a measured $/GPU-hour source (cloud-pricing) is wired to the load records.
 
 **R3.d storage** (`store`, WR-LSQ-6). The comparison rests on its variant and its B2 report:
-the variant record is published (content-addressed), the report stored write-once by its
-digest (0034 `put_eval_report`), and only then the comparison (0040
-`put_variant_comparison`), all as the provider's.
+the variant record is published (content-addressed) with both revision identities beside it
+(0058, R263; required), the report stored write-once by its digest (0034 `put_eval_report`),
+and only then the comparison (0040 `put_variant_comparison`), all as the provider's.
 """
 from __future__ import annotations
 
@@ -162,26 +162,27 @@ def compare(variant: dict[str, Any], base: Identity, candidate: Identity, *,
 
 async def store(data, variant: dict[str, Any], comparison: dict[str, Any],
                 report: dict[str, Any], *, provider_org_id: str, actor: str,
-                identities: tuple[Identity, Identity] | None = None, variants=None) -> str:
+                identities: tuple[Identity, Identity], variants) -> str:
     """Store `comparison` (from `compare`) beside its variant and B2 report, in that order,
     through D7 (`PgLabDataStore`); its digest. A comparison of another variant or resting on
-    another report is refused before anything is written. With `identities` (base, variant)
-    R3 also stores both revision identities as the variant is created, through `variants`
-    (`PgLabVariants.put_identities`, 0058, WR-LW7-3a); identities other than the registered
-    ones are refused before anything is written."""
+    another report is refused before anything is written. Every variant R3 creates carries
+    both revision identities (base, variant), stored as it is created through `variants`
+    (`PgLabVariants.put_identities`, 0058, WR-LW7-3a; WR-LW9-4: required, composed by
+    `pilot.lab_optimizations`); none, no port, or identities other than the registered ones
+    are refused before anything is written."""
     if comparison["variant_ref"] != lab.ref_of(variant) or \
             comparison["report_digest"] != report.get("report_digest"):
         raise errors.InvalidRequest("the comparison is not of this variant and report")
-    if identities is not None and variants is None:    # F3: never a partial write
-        raise errors.InvalidRequest("identities are stored through the variants port (0058)")
-    if identities is not None and tuple(serving_ref(provider_org_id, i) for i in identities) \
+    if identities is None or variants is None:        # F3: never a partial write
+        raise errors.InvalidRequest("a variant is stored with both identities, through the "
+                                    "variants port (0058)")
+    if tuple(serving_ref(provider_org_id, i) for i in identities) \
             != (variant["base_serving_ref"], variant["variant_serving_ref"]):
         raise errors.InvalidRequest("the identities are not the registered ones")
     await data.publish(variant, provider_org_id=provider_org_id, actor=actor)
-    if identities is not None:
-        base, candidate = (i.model_dump(mode="json") for i in identities)
-        await variants.put_identities(lab.ref_of(variant), base=base, variant=candidate,
-                                      provider_org_id=provider_org_id, actor=actor)
+    base, candidate = (i.model_dump(mode="json") for i in identities)
+    await variants.put_identities(lab.ref_of(variant), base=base, variant=candidate,
+                                  provider_org_id=provider_org_id, actor=actor)
     await data.put_eval_report(report, provider_org_id=provider_org_id, actor=actor)
     return await data.put_variant_comparison(comparison, provider_org_id=provider_org_id,
                                              actor=actor)
