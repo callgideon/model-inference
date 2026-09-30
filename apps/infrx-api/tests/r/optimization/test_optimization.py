@@ -260,6 +260,9 @@ class Data:
         self.calls.append(("put_eval_report", report_["report_digest"], provider_org_id, actor))
         return report_["report_digest"]
 
+    async def put_identities(self, ref, *, base, variant, provider_org_id, actor):
+        self.calls.append(("put_identities", ref, provider_org_id, actor))
+
     async def put_variant_comparison(self, comparison, *, provider_org_id, actor):
         self.calls.append(("put_variant_comparison", comparison["report_digest"],
                            provider_org_id, actor))
@@ -273,14 +276,17 @@ def test_r3_a_comparison_is_stored_after_its_variant_and_report():
     rep = report()
     result = compare(rep=rep)
     data = Data()
-    got = asyncio.run(r3.store(data, VARIANT, result, rep, provider_org_id=P, actor="dev@p"))
+    got = asyncio.run(r3.store(data, VARIANT, result, rep, provider_org_id=P, actor="dev@p",
+                               identities=(BASE, NVFP4), variants=data))
     assert got == digest(result)
     assert data.calls == [("publish", "lab.optimization_variant.1", P, "dev@p"),
+                          ("put_identities", lab.ref_of(VARIANT), P, "dev@p"),
                           ("put_eval_report", rep["report_digest"], P, "dev@p"),
                           ("put_variant_comparison", rep["report_digest"], P, "dev@p")]
     other = register(variant=ident(quantization="fp8"))
     untouched = Data()
     for bad in ((other, result, rep), (VARIANT, result, report("inconclusive"))):
         with pytest.raises(errors.InvalidRequest, match="not of this variant"):
-            asyncio.run(r3.store(untouched, *bad, provider_org_id=P, actor="dev@p"))
+            asyncio.run(r3.store(untouched, *bad, provider_org_id=P, actor="dev@p",
+                                 identities=(BASE, NVFP4), variants=untouched))
     assert untouched.calls == []
