@@ -12,3 +12,5 @@ node_modules/
 # I3B restore.md: database backups hold users' e-mail addresses; never committed
 *.dump
 infrx-backups/
+.vercel
+.env*
