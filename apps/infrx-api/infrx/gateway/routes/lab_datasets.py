@@ -242,5 +242,5 @@ def register(app: FastAPI, rt: Any, datasets: LabDatasets | None = None
     api = router(access=x.access, store=x.store, objects=x.objects, read=read, jobs=x.jobs,
                  user_of=lambda request: lab_auth.authenticate(request, x.sessions))
     for route in cast("list[APIRoute]", api.routes):   # on the app's table, as every router
-        app.add_api_route(route.path, route.endpoint, methods=route.methods)
+        app.add_api_route(route.path, route.endpoint, methods=list(route.methods))
     return x
