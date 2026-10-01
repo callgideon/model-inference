@@ -1,0 +1,17 @@
+{"task": "W6-lab-release-tool", "slice": "INFRA-01/03/08/09, DT-12/13/18, LAB-03 (deploy half: deferred)", "activity": "review",
+ "head": "5c6c9e60", "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-lab-release-tool",
+ "branch": "codex/w6-lab-release-tool",
+ "owned_paths": ["infra/lab/rollout/lab-release.sh", "infra/lab/rollout/launch-v1.sh", "research/plan/evidence/i/hosted-migrate-0052-0056.patch", "research/plan/evidence/i/hosted-migrate-0057-0059.patch", "apps/infrx-api/tests/i/test_lab_release.py", "apps/infrx-api/tests/i/test_known_good_proof.py", "apps/infrx-api/tests/i/mutants.py", "research/plan/consumer-v1/08-lab-internal-testing-rollout.md"],
+ "commands": [
+  {"cmd": "uv run --frozen pytest -q tests/i/test_known_good_proof.py tests/i/test_lab_release.py", "exit": 0, "summary": "21 passed"},
+  {"cmd": "uv run --frozen pytest -q tests/i (excl. test_mutants and the PG subdirs)", "exit": 0, "summary": "261 passed, 1 skipped, 1 xfailed"},
+  {"cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'launch or lab_release or known_good or hosted_migrate'", "exit": 0, "summary": "68 passed, 0 survivors"},
+  {"cmd": "pytest -q tests/i/test_mutants.py (default subset)", "exit": 0, "summary": "59 passed"},
+  {"cmd": "bash -n lab-release.sh launch-v1.sh", "exit": 0, "summary": "ok"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+  {"cmd": "scratch: lab-release.sh box with ssm.sh stubbed (exit 1 at first call)", "exit": 1, "summary": "stopped at L0 lab-checkout.sh RELEASE=<head>"},
+  {"cmd": "scratch: lab-release.sh members on i6 PG 0001-0059 (twice)", "exit": 0, "summary": "MEMBERS-PG PASS; base p.id statement: UndefinedColumn"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2.5, "confidence": "medium", "basis": "code/tests/mutants done; remaining: LAB-03 env switch after lab-B merges, shim removal next wave, review round", "at": "2026-10-01T03:20Z"},
+ "blockers": ["LAB-03 deploy half waits on lab-B's LAB_API_URL fallback reaching the tip"],
+ "wiring_requests": ["WR-W6-LRT-1 infra-libs: test_lab_rollout_steps.py test_ldp docstring + --hosted-at from hosted-migrate.sh's anchor (DT-12)", "WR-W6-LRT-2 docs-state: CLAUDE.md / infra/rollout/README.md §6 / infra/lab/app/README.md name lab-release.sh; launch-v1.sh deprecated shim", "WR-W6-LRT-3 plan-ledger: register the operator steps as lab-release.sh members/main, shim removal, LAB-03 deploy follow-up"],
+ "evidence": ["research/plan/evidence/w6/lab-release-tool-5c6c9e6.md"]}
