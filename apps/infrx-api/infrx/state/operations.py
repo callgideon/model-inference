@@ -16,7 +16,6 @@ and A1's `claim_signup_grant`, whose triggers move the totals.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
@@ -27,6 +26,7 @@ from ..contracts.v2.records import (CredentialAudience, CreditLedgerEntry,
                                     DeploymentRevision, RateCardSnapshot, ServingRevision,
                                     UsageHistory, UsageRecordV2, WalletRef)
 from ..operations.ports import AuditEntry, HoldView, KeyRow, VerifiedIdentity
+from . import rpc
 from .jobstore import Connect, PgJobStore, domain_error
 from .signup import PgSignup
 
@@ -42,22 +42,12 @@ class _Db:
     def __init__(self, connect: Connect) -> None:
         self._connect = connect
 
-    @asynccontextmanager
-    async def connection(self):
-        """The `pool.connection()` shape A1's `PgSignup` takes."""
-        conn = await self._connect()
-        try:
-            yield conn
-        finally:
-            await conn.close()
+    def connection(self):
+        """The `pool.connection()` shape A1's `PgSignup` takes (`rpc.connection`)."""
+        return rpc.connection(self._connect)
 
     async def rows(self, sql: str, params: tuple = ()) -> list[tuple]:
-        from psycopg import Error
-        async with self.connection() as conn:
-            try:
-                return await (await conn.execute(sql, params)).fetchall()
-            except Error as failed:
-                raise _typed(failed) from None
+        return await rpc.rows(self._connect, sql, params, error=_typed)
 
     async def one(self, sql: str, params: tuple = ()) -> tuple | None:
         found = await self.rows(sql, params)

@@ -23,7 +23,15 @@ from ..contracts.limits import MAX_FEEDBACK_TEXT_CHARS, MAX_RUBRIC_VERSION, MIN_
 from ..contracts.records import (CalibrationLabel, Feedback, FeedbackChannel, IdempotencyRef,
                                  visible_feedback)
 from ..contracts.wire import FeedbackSubmission
+from . import rpc
 from .jobstore import Connect, domain_error
+
+
+def _refusal(failed: Exception) -> Exception:
+    """The flag's refusal (0A000) is a typed 503; anything else is `domain_error`'s."""
+    if getattr(failed, "sqlstate", None) == "0A000":
+        return errors.DependencyUnavailable("feedback is not enabled")
+    return domain_error(failed)
 
 
 class PgFeedbackService:
@@ -35,19 +43,7 @@ class PgFeedbackService:
         self.channel = channel
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            if failed.sqlstate == "0A000":
-                raise errors.DependencyUnavailable("feedback is not enabled") from None
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=_refusal)
 
     async def accept(self, auth, request_id: str, feedback: dict[str, Any],
                      idem: IdempotencyRef) -> Feedback:

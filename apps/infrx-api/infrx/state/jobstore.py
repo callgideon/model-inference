@@ -24,6 +24,7 @@ from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent,
                                  SettlementState, TerminalCause, TerminalOutcome, Work)
 from ..contracts.v2.records import (AdmissionPins, AdmissionV2, DataAccessPolicyRef,
                                     NormalizedRequestV2, RateCardSnapshot, SettlementV2, WorkV2)
+from . import rpc
 
 #: `async () -> psycopg.AsyncConnection` in autocommit, acting as `service_role`.
 Connect = Callable[[], Awaitable[Any]]
@@ -188,25 +189,10 @@ class PgJobStore:
         self.released: tuple[str, ...] = ()
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=domain_error)
 
     async def _query(self, sql: str, params: tuple) -> list[tuple]:
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(sql, params)
-            return await cursor.fetchall()
-        finally:
-            await conn.close()
+        return await rpc.rows(self._connect, sql, params)
 
     def _admit_args(self, regime: str, request: NormalizedRequest,
                     idem: IdempotencyRef) -> dict[str, Any]:

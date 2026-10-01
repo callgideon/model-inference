@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""R32/R40 for D2's Python half (`infrx/state/jobstore.py`, `outbox.py`, `pgtesting.py`).
+"""R32/R40 for D2's Python half (`infrx/state/jobstore.py`, `outbox.py`, `pgtesting.py`) and
+W6 A5's one-connection statement helper (`rpc.py`) with each adapter's wiring of it.
 
 Delegates to the one runner (`tests/contracts/mutants.py`, R83): each mutant is one edit
 to a throwaway copy of the package, the named cases in `tests/d/test_adapter_units.py`
@@ -17,6 +18,7 @@ from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 
 J, OUTBOX, T = "state/jobstore.py", "state/outbox.py", "state/pgtesting.py"
+RPC, OPS, LC = "state/rpc.py", "state/operations.py", "state/lifecycle.py"   # W6 A5
 RUNNER = Runner(name="d2", targets=("tests/d/test_adapter_units.py",))
 
 
@@ -26,6 +28,11 @@ def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mu
 
 
 MAPPING = "test_domain_error__each_refusal_is_its_most_specific_type"
+RPC_CALL = "test_rpc__a_call_is_one_named_function_on_its_own_closed_connection"
+RPC_REFUSAL = "test_rpc__a_refusal_is_typed_and_the_connection_still_closed"
+RPC_OUTAGE = "test_rpc__unreachable_is_a_retryable_503_connecting_or_executing"
+RPC_ROWS = "test_rpc__rows_are_every_row_or_the_count_of_a_statement_without_rows"
+RPC_ADAPTERS = "test_rpc__each_adapter_keeps_its_own_refusal"
 MUTANTS: tuple[Mutant, ...] = (
     _m("retry_after_is_dropped", "a 429 carries the store's Retry-After", J,
        '                return cls(detail, retry_after_s=int(hint.split("=", 1)[1]))',
@@ -124,6 +131,42 @@ MUTANTS: tuple[Mutant, ...] = (
        "        since = await self.store.db_now()\n"
        "        indexed = await self.scheduler.rebuild(snapshot)\n",
        "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
+    # W6 A5: the one-connection statement helper and each adapter's wiring of it.
+    _m("rpc_connection_reused", "R09/CF-4: a fresh connection per statement", RPC,
+       "    conn = await connect()\n",
+       '    conn = connect.__dict__.get("_kept") or connect.__dict__.setdefault('
+       '"_kept", await connect())\n', RPC_CALL),
+    _m("rpc_connection_left_open", "every statement's connection is closed", RPC,
+       "    finally:\n        await conn.close()", "    finally:\n        pass", RPC_CALL,
+       RPC_REFUSAL),
+    _m("rpc_refusal_untyped", "a database error is the adapter's typed refusal", RPC,
+       "                raise error(failed) from None", "                raise", RPC_REFUSAL),
+    _m("rpc_no_refusal_calls_none", "without a mapping the error is raised as it is", RPC,
+       "                if error is None or isinstance(failed, gone):",
+       "                if isinstance(failed, gone):", RPC_REFUSAL),
+    _m("rpc_outage_read_as_refusal", "RV-03: an outage is an outage before any refusal", RPC,
+       "                if error is None or isinstance(failed, gone):",
+       "                if error is None:", RPC_OUTAGE),
+    _m("rpc_outage_raw", "RV-03: an unreachable store is a typed 503", RPC,
+       "    except gone:\n", "    except ():\n", RPC_OUTAGE),
+    _m("rpc_every_outage_typed", "without `unreachable` an outage is the bug it is", RPC,
+       "    gone = OperationalError if unreachable is not None else ()",
+       "    gone = OperationalError", RPC_OUTAGE),
+    _m("rpc_retry_after_dropped", "the caller's Retry-After is carried", RPC,
+       "DependencyUnavailable(unreachable, retry_after_s=retry_after_s)",
+       "DependencyUnavailable(unreachable)", RPC_OUTAGE),
+    _m("rpc_function_unnamed", "a call names its infrx function", RPC,
+       'f"select infrx.{function}(%s)"', 'f"select infrx.call(%s)"', RPC_CALL),
+    _m("rpc_count_read_as_rows", "a statement without rows answers its count", RPC,
+       "if cursor.description else cursor.rowcount", "if True else cursor.rowcount", RPC_ROWS),
+    _m("jobstore_refusal_untyped", "the job store's refusals are typed", J,
+       "function, args, error=domain_error)", "function, args, error=None)", RPC_ADAPTERS),
+    _m("operations_refusal_untyped", "a duplicate registry key is a Conflict", OPS,
+       "params, error=_typed)", "params, error=domain_error)", RPC_ADAPTERS),
+    _m("lifecycle_outage_raw", "RV-03: the lifecycle store's outage is a typed 503", LC,
+       'unreachable="the lifecycle store is unreachable", ', "", RPC_ADAPTERS),
+    _m("lifecycle_retry_after_default", "RV-03: the collector retries after 30 s", LC,
+       "retry_after_s=30))", "retry_after_s=5))", RPC_ADAPTERS),
     _m("the_harness_alters_production", "SEC-1: guards are stepped around only in a test "
        "database", T, "    if not ok:\n        raise RuntimeError(", "    if False:\n"
        "        raise RuntimeError(",

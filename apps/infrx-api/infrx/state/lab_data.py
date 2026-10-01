@@ -30,6 +30,7 @@ from ..contracts import errors
 from ..contracts.lab import records
 from ..contracts.v2.records import AccessGrant
 from ..lab.access import DatasetUse
+from . import rpc
 from .jobstore import Connect, domain_error
 
 
@@ -53,17 +54,7 @@ class PgLabDataStore:
         self._connect = connect
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=domain_error)
 
     @property
     def restrictions(self):

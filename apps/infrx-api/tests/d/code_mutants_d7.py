@@ -488,7 +488,7 @@ CODE_MUTANTS = (
     _p("d7_py_resolve_raw_row", "a resolved ref is the parsed record",
        '        return records.parse(json.loads(row["body"]))', "        return row", RESOLVE),
     _p("d7_py_untyped_refusal", "a SQL refusal is its typed error",
-       "            raise domain_error(failed) from None", "            raise", RESOLVE),
+       "function, args, error=domain_error)", "function, args, error=None)", RESOLVE),
     _p("d7_py_resolve_unscoped", "resolve is provider-scoped",
        '{"provider_org_id": provider_org_id, "ref": ref}', '{"ref": ref}', RESOLVE),
     _p("d7_py_source_without_grant", "a source names its grant",

@@ -30,6 +30,7 @@ from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import IdempotencyRef, Lease, MediaRef, NormalizedRequest
 from ..contracts.v2 import lifecycle as L
 from ..contracts.v2.records import AccountingRegime
+from . import rpc
 from .jobstore import Connect, PgJobStore, admission_of, admission_v2_of, domain_error
 
 #: F2C.a's reference windows (`fakes/lifecycle.py`); a composition root passes its own.
@@ -103,26 +104,11 @@ class PgLifecycle:
         self.claim_ttl_s, self.retention_s = claim_ttl_s, retention_s
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error, OperationalError
-        from psycopg.types.json import Jsonb
-        try:
-            conn = await self._connect()
-        except OperationalError:
-            # RV-03: an unreachable authority is a typed, retryable answer - the collector
-            # RETAINS and reports; it never reads silence as "unreferenced".
-            raise errors.DependencyUnavailable("the lifecycle store is unreachable",
-                                               retry_after_s=30) from None
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except OperationalError:
-            raise errors.DependencyUnavailable("the lifecycle store is unreachable",
-                                               retry_after_s=30) from None
-        except Error as failed:
-            raise lifecycle_error(failed) from None
-        finally:
-            await conn.close()
-        return _raise_refusal(result)
+        # RV-03: an unreachable authority is a typed, retryable answer - the collector
+        # RETAINS and reports; it never reads silence as "unreferenced".
+        return _raise_refusal(await rpc.call(
+            self._connect, function, args, error=lifecycle_error,
+            unreachable="the lifecycle store is unreachable", retry_after_s=30))
 
     # --- UploadRepository ---------------------------------------------------------------
     async def create(self, org_id: str, constraints: L.UploadConstraints) -> L.UploadTicket:
