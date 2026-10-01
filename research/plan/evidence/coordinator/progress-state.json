@@ -10346,6 +10346,42 @@
    "wiring_requests": []
   },
   {
+   "id": "W6-DOCS-STATE",
+   "task": null,
+   "slice": "wave 6 clean-up lane docs-state (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_95946792-a5a",
+   "agent": "opus",
+   "branch": "codex/w6-docs-state",
+   "worktree": ".claude/worktrees/codex-w6-docs-state",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "-",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
    "id": "W6-PLAN-LEDGER",
    "task": null,
    "slice": "W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row",
@@ -10426,6 +10462,222 @@
     "at": "2026-10-01T03:11:37Z",
     "basis": "brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h"
    }
+  },
+  {
+   "id": "W6-INFRA-LIBS",
+   "task": null,
+   "slice": "wave 6 clean-up lane infra-libs (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_2be41693-24b",
+   "agent": "opus",
+   "branch": "codex/w6-infra-libs",
+   "worktree": ".claude/worktrees/codex-w6-infra-libs",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "i5",
+    "prefix": "infrx-i5",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-LAB-RELEASE-TOOL",
+   "task": null,
+   "slice": "wave 6 clean-up lane lab-release-tool (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_c5926c7c-285",
+   "agent": "opus",
+   "branch": "codex/w6-lab-release-tool",
+   "worktree": ".claude/worktrees/codex-w6-lab-release-tool",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "i6",
+    "prefix": "infrx-i6",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-API-L2",
+   "task": null,
+   "slice": "wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0",
+   "agent": "opus",
+   "branch": "codex/w6-api-L2",
+   "worktree": ".claude/worktrees/codex-w6-api-L2",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "g7",
+    "prefix": "infrx-g7",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-API-L3",
+   "task": null,
+   "slice": "wave 6 clean-up lane api-L3 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_a1f4374c-9e4",
+   "agent": "opus",
+   "branch": "codex/w6-api-L3",
+   "worktree": ".claude/worktrees/codex-w6-api-L3",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "d10",
+    "prefix": "infrx-d10",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-API-L4",
+   "task": null,
+   "slice": "wave 6 clean-up lane api-L4 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_b12e6bd8-f8c",
+   "agent": "opus",
+   "branch": "codex/w6-api-L4",
+   "worktree": ".claude/worktrees/codex-w6-api-L4",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "l4",
+    "prefix": "infrx-l4",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-LAB-A",
+   "task": null,
+   "slice": "wave 6 clean-up lane lab-A (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_4621c470-b7b",
+   "agent": "opus",
+   "branch": "codex/w6-lab-A",
+   "worktree": ".claude/worktrees/codex-w6-lab-A",
+   "base": "08983639",
+   "head": null,
+   "isolation": {
+    "ports": "-",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T02:50:14Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/rollouts/optimization/",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/tests/r/optimization/",
+    "apps/lab/lib/services/rollouts/",
+    "apps/lab/tests/r/",
+    "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
   }
  ],
  "review_queue": [
