@@ -1,0 +1,32 @@
+{
+  "task": "W6-lab-A",
+  "lane": "lab-A",
+  "slice": "LAB-01 (@infrx/shared as link:) + LAB-02 (packages/shared/console deleted; TracePage and the loss vocabulary Lab-local)",
+  "activity": "review",
+  "at": "2026-10-01T03:00:00Z",
+  "head": "b07fae84",
+  "base": "08983639",
+  "worktree": ".claude/worktrees/codex-w6-lab-A",
+  "branch": "codex/w6-lab-A",
+  "owned_paths": ["apps/lab/package.json", "apps/lab/pnpm-lock.yaml", "packages/shared/package.json", "packages/shared/console/", "apps/lab/lib/services/traces/port.ts", "apps/lab/components/traces/list/view-model.ts", "apps/lab/tests/l/shared/", "research/plan/evidence/w6/LAB-01-6c47bf1.md", "research/plan/evidence/w6/LAB-02-002e217.md", "research/plan/evidence/coordinator/updates/W6-lab-A-20261001T0300Z.json"],
+  "commands": [
+    {"cmd": "cd apps/lab && node --test tests/l/shared/shared.test.ts (base 08983639)", "exit": 1, "summary": "red first: 0 pass / 2 fail (file: specifier; ./console/* export)"},
+    {"cmd": "cd apps/lab && pnpm install --frozen-lockfile (minimal lockfile edit)", "exit": 0, "summary": "accepted; node_modules/@infrx/shared -> ../../../../packages/shared"},
+    {"cmd": "make lab-typecheck lab-lint lab-build", "exit": 0, "summary": "green at 002e2173"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "267 tests: 253 pass, 0 fail, 14 skipped (base 265/251/0/14)"},
+    {"cmd": "make -k lab-mutants", "exit": 0, "summary": "13 runners, 958 mutants, 958 killed, all cases named"},
+    {"cmd": "cd apps/lab && node tests/l/shared/run-mutants.mjs", "exit": 0, "summary": "2 cases, 7 mutants, 7 killed"},
+    {"cmd": "clean clone: cd apps/lab && pnpm install --frozen-lockfile && next typegen && tsc --noEmit && pnpm build; make lab-typecheck", "exit": 0, "summary": "all green"},
+    {"cmd": "upload shape (git archive 002e2173): cd apps/lab && pnpm install --frozen-lockfile && typecheck && pnpm build", "exit": 0, "summary": "all green; vercel build not run (no Vercel in a lane)"},
+    {"cmd": "probe (not committed): a value import of @infrx/shared/contracts/lab, pnpm build", "exit": 1, "summary": "Can't resolve (Turbopack root apps/lab); with next.config turbopack.root = repo root: exit 0 (WR-W6-LABA-2)"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 2, "confidence": "high", "basis": "both tasks done and green; remaining = review round + the next.config wiring (one line) proven in a scratch build; pessimistic if vercel build on the project disagrees with the repo-root upload simulation", "at": "2026-10-01T03:00:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-W6-LABA-1 Makefile lab-mutants: add `\\tcd apps/lab && node tests/l/shared/run-mutants.mjs` (makefile-pins)",
+    "WR-W6-LABA-2 apps/lab/next.config.ts: `import { resolve } from \"node:path\";` + `turbopack: { root: resolve(import.meta.dirname, \"../..\") },` — required before any value import of @infrx/shared (lab-D holds()/ROLE_CAPABILITIES); proven by a scratch upload-shape build, tsc, lint and tests/l/shell 34/0",
+    "WR-W6-LABA-3 ruling (proposed, unnumbered): amend R154 — @infrx/shared is a link: (symlink to the live directory, no reinstall after an edit); packages/shared carries only the Lab contracts",
+    "WR-W6-LABA-4 infra/lab/rollout/launch-v1.sh:176 'a file: dependency' -> 'a link: dependency' (lab-release-tool)"
+  ],
+  "evidence": ["research/plan/evidence/w6/LAB-01-6c47bf1.md", "research/plan/evidence/w6/LAB-02-002e217.md"]
+}

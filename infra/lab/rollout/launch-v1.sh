@@ -173,7 +173,7 @@ vercel_lab() {
   ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
   need SUPABASE_URL
   SCOPE=${VERCEL_SCOPE:-callgideon}   # the App's team (infrx-app lives there), never the login's default team
-  say "project infrx-lab in team $SCOPE (Root Directory apps/lab, set in the dashboard; linked and deployed from the REPO ROOT so packages/shared, a file: dependency, is uploaded)"
+  say "project infrx-lab in team $SCOPE (Root Directory apps/lab, set in the dashboard; linked and deployed from the REPO ROOT so packages/shared, a link: dependency, is uploaded)"
   vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \
     || { vercel project add infrx-lab --scope "$SCOPE" && vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null; }
   for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \

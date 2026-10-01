@@ -3,12 +3,12 @@
 //   GET /lab/v1/traces/{request_id}?provider_org_id=      -> item
 // The credential is the signed-in user's own session token (lab_auth.py) and the provider is always the
 // session workspace; the route decides every tenancy question. Only the route's named fields are kept.
-import type { Page } from "@infrx/shared/console/types.ts";
 import type { Actor, Result, TraceDetail, TraceReadPort, TraceRefusal } from "../../../components/traces/detail/port.ts";
 
 /** The route's default page (1..200); the list asks for exactly this many. */
 export const LIST_LIMIT = 50;
-export type TracePage = Page<TraceDetail>;
+/** One page of the route's list: `next_cursor` is null on the last page. */
+export type TracePage = { items: TraceDetail[]; next_cursor: string | null };
 export interface TraceService extends TraceReadPort {
   list(actor: Actor, cursor: string | null): Promise<Result<TracePage, TraceRefusal>>;
 }

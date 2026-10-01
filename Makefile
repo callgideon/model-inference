@@ -155,6 +155,7 @@ lab-mutants:
 	cd apps/lab && node tests/b/run-mutants.mjs
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
+	cd apps/lab && node tests/l/shared/run-mutants.mjs
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 

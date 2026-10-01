@@ -7,7 +7,6 @@
  * missing piece of content is a state, and only a lost capture is a failure, with its reason. Requests
  * made with capture off have no trace row, so their absence is explained rather than drawn as a loss.
  */
-import type { TraceLossReason } from "@infrx/shared/console/types.ts";
 import type { Result, TraceDetail, TraceRefusal } from "../detail/port.ts";
 import { contentState, TRACE_COPY, type ContentState } from "../detail/view.ts";
 import type { TracePage } from "../../../lib/services/traces/port.ts";
@@ -22,6 +21,10 @@ export const CONTENT_LABEL: Record<ContentState, string> = {
   revoked: "Revoked",
   unavailable: "Unavailable",
 };
+
+/** The trace contract's loss reasons (infrx/contracts/records.py TraceLossReason). */
+type TraceLossReason =
+  | "none" | "memory_budget" | "metadata_budget" | "queue_full" | "disk_budget" | "disk_error" | "shutdown" | "malformed" | "abandoned";
 
 /** Why content is missing, in the reader's words; a reason outside the vocabulary is shown as recorded. */
 const LOSS_DETAIL: Readonly<Record<TraceLossReason, string>> = {

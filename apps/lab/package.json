@@ -13,7 +13,7 @@
     "node": ">=22.18"
   },
   "dependencies": {
-    "@infrx/shared": "file:../../packages/shared",
+    "@infrx/shared": "link:../../packages/shared",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "next": "16.3.5",
