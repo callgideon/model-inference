@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "25e49de5",
+ "integration_head": "0fe5d091",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,10 +19,11 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)",
   "hosted_schema": "0001-0059 (2026-09-30T08:01Z, the second Lab window; MIGRATION_DIGEST 9566fa25093c306c4fa4ae79df132d0802326ad1700deefea8b78538860b6c65; release fdd10264)",
-  "note": "2026-09-30: the first Lab window applied 0052-0056 hosted (launch-v1.sh window THROUGH=0056; launch/window-0056 merged); 0057-0059 pending the second window | 2026-09-30T08:01Z: the second Lab window applied 0057-0059 hosted (THROUGH=0059 from the tip; launch/window-0059 = the tip). Every LOCAL-ONLY migration is hosted; next: box → vercel → members → main"
+  "note": "2026-09-30: the first Lab window applied 0052-0056 hosted (launch-v1.sh window THROUGH=0056; launch/window-0056 merged); 0057-0059 pending the second window | 2026-09-30T08:01Z: the second Lab window applied 0057-0059 hosted (THROUGH=0059 from the tip; launch/window-0059 = the tip). Every LOCAL-ONLY migration is hosted; next: box → vercel → members → main",
+  "lab_box": "2026-10-01T01:26Z: the Lab on the box at 7ecbab0e — image sha256:870aa2ea…, every Lab unit installed (inert), the control service ON on 127.0.0.1:8003 (readyz 200; its login password set on hosted by the operator), smoke PASS on :8001/:8002/:8003, the lab-control.callbill.ai site on the edge (/lab/v1/* → 8003; a release list answers 401 without a token)"
  },
- "revision": 341,
- "updated": "2026-09-30T08:02:32Z",
+ "revision": 342,
+ "updated": "2026-10-01T01:30:45Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
