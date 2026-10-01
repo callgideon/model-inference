@@ -22,15 +22,15 @@
   "target": "State 2026-10-01: the pilot box (single L40S) runs the consumer runtime 41693d5d in the CREDIT regime beside the Lab control unit from the checkout 7ecbab0e (readyz 200; lab-control.callbill.ai on the edge); hosted Supabase 0001-0059; the Lab app is live at https://lab.callbill.ai (Vercel project infrx-lab, team callgideon, Root Directory apps/lab). Remaining: members -> main -> E4C certify -> one tester's checklist",
   "hosted_schema": "0001-0059: 2026-09-30T08:01Z the second Lab window applied 0057-0059 (MIGRATION_DIGEST 9566fa25093c306c4fa4ae79df132d0802326ad1700deefea8b78538860b6c65, release fdd10264); 2026-09-30T07:43Z the first applied 0052-0056 (MIGRATION_DIGEST 88f9d412e873a7540942ff449f1aa2e5d9e4701f2b6d111777a0d2a2a7feeac6, release a58eb0d6); flags credit_admission=true legacy_usd_admission=false signup_grant=true since the 2026-09-29 window",
   "lab_box": "2026-10-01T01:26Z: the Lab on the box at 7ecbab0e — image sha256:870aa2ea…, every Lab unit installed (inert), the control service ON on 127.0.0.1:8003 (readyz 200; its login password set on hosted by the operator), smoke PASS on :8001/:8002/:8003, the lab-control.callbill.ai site on the edge (/lab/v1/* → 8003; a release list answers 401 without a token)",
-  "lab_app": "2026-10-01T02:30Z: apps/lab on Vercel — project infrx-lab in team callgideon (Root Directory apps/lab, Next.js), production https://lab.callbill.ai (200), env NEXT_PUBLIC_LAB_URL/SUPABASE_URL/SUPABASE_ANON_KEY + LAB_*_API_URL=https://lab-control.callbill.ai; the CLI login is the operator's (the SSM token is invalid) | 2026-10-01T05:1xZ: LAB_API_URL=https://lab-control.callbill.ai set on the project (production); the six old names stay until the redeploy after lab-D/lab-E",
+  "lab_app": "2026-10-01T02:30Z: apps/lab on Vercel — project infrx-lab in team callgideon (Root Directory apps/lab, Next.js), production https://lab.callbill.ai (200), env NEXT_PUBLIC_LAB_URL/SUPABASE_URL/SUPABASE_ANON_KEY + LAB_*_API_URL=https://lab-control.callbill.ai; the CLI login is the operator's (the SSM token is invalid) | 2026-10-01T05:1xZ: LAB_API_URL=https://lab-control.callbill.ai set on the project (production); the six old names stay until the redeploy after lab-D/lab-E | 2026-10-01T07:0xZ: redeployed from the wave-6 tip (lab-A/B/D/E in) — https://lab.callbill.ai 200; the six deprecated LAB_*_URL names removed from the project; LAB_API_URL is the one Lab API name",
   "sources": [
    "research/plan/evidence/coordinator/2026-09-24-session-03.md (lines 525, 589-595)",
    "research/plan/consumer-v1/09-path-to-internal-testing.md (log 2026-09-29T09:50Z to 2026-10-01T02:21Z)"
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 384,
- "updated": "2026-10-01T06:39:23Z",
+ "revision": 385,
+ "updated": "2026-10-01T06:53:25Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
