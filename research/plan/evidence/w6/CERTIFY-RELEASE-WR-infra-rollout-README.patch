@@ -1,0 +1,18 @@
+--- a/infra/rollout/README.md	2026-10-01 03:54:31.211608111 +0000
++++ b/infra/rollout/README.md	2026-10-01 03:54:31.252121606 +0000
+@@ -107,7 +107,9 @@
+ logging every step to its 0700 `LOGDIR`; `--step <step> --logdir <dir>` resumes, `--only <step>` runs one step,
+ `DRY_RUN=1` prints the plan and its stop conditions and calls nothing. One sequencer holds a LOGDIR (`flock` on
+ `$LOGDIR/.lock`); no step starts while another detached cell of the LOGDIR is live, and no step after `report` starts
+-before `report` has seen the launched certify run's `exit N`. Its steps and helpers:
++before `report` has seen the launched certify run's `exit N`. `RELEASE=<40 hex>` names the served release
++(default: origin/main's commit, the box's installed release; 77 refuses any other build) and `MIGRATION_VERSION`
++defaults to the newest numbered file in `apps/app/supabase/migrations/` (W6 INFRA-02). Its steps and helpers:
+ 
+ | Script | Where | What | Stops / exits |
+ |---|---|---|---|
+@@ -169,3 +171,4 @@
+ - 2026-09-29 (KNOWN-GOOD-REPROOF-2, WR-KGR2-1): both targets proven through 0052 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0051 proof is kept in `superseded` (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md`; the row and the paragraph say 0052 and `files` 0019-0052. Task-local only, doc only; hosted stays at 0051 until the next R151 window.
+ - 2026-09-29 (KNOWN-GOOD-REPROOF-3, WR-KGR3-1): both targets proven through 0056 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0052 proof is kept in `superseded` in front of the through-0051 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-8f0e3c9.md`; the row and the paragraph say 0056 and `files` 0019-0056. Task-local only, doc only; hosted stays at 0051 until the next R151 window.
+ - 2026-09-30 (KNOWN-GOOD-REPROOF-4, WR-KGR4-1): both targets proven through 0059 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0056 proof is kept in `superseded` in front of the through-0052 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md`; the row and the paragraph say 0059 and `files` 0019-0059. Task-local only, doc only; hosted stays where the operator's windows leave it (0051 now; 0056 after the first Lab window).
++- 2026-10-01 (W6 certify-release, INFRA-02): `certify-window.sh` takes `RELEASE` from the environment (default origin/main) instead of the d3a99e01 literal and derives `MIGRATION_VERSION`; the pending E4C run on 41693d5d can start. `go-live-remaining.sh` retired (deleted): its steps h3 w8 w9 w10 w10b w11 user w12 main ran 2026-09-27 on d3a99e01 (RELEASE-d3a99e01.md, session-03 :454) and its INSTALL_ARGS served the 2026-09-29 window on 41693d5d (session-03 :525); no step of it remains. The next install passes `RELEASE=<sha> ENGINE_MAX_NUM_SEQS=8 INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8 DATABASE_POOL_MAX_SIZE=6 ACCOUNTING_REGIME=credit ACTIVE_RATE_CARD_VERSION=rc_marlin2b_20260925_launch" MIGRATION_DIGEST=<the window's digest>` to `steps/50-install.sh` (git show 2add8e0a:infra/rollout/go-live-remaining.sh keeps the whole script). Tested against stubs and a DRY_RUN (`apps/infrx-api/tests/i/test_rollout.py`); not run on the box, AWS or hosted.

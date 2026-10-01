@@ -1,0 +1,13 @@
+{"task":"W6-CERTIFY-RELEASE","slice":"INFRA-02","activity":"review","head":"2851d83f","worktree":".claude/worktrees/codex-w6-certify-release","branch":"codex/w6-certify-release",
+ "owned_paths":["infra/rollout/certify-window.sh","infra/rollout/go-live-remaining.sh","apps/infrx-api/tests/i/test_rollout.py","infra/rollout/e4c-certify.sh"],
+ "commands":[
+  {"cmd":"pytest -q tests/i/test_rollout.py -k certify_window (new case, before the fix)","exit":1,"summary":"red: 1 failed, 8 passed"},
+  {"cmd":"pytest -q tests/i/test_rollout.py","exit":0,"summary":"26 passed"},
+  {"cmd":"INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py","exit":0,"summary":"475 passed, 6 skipped (i8 NOT RUN, unrelated), 0 survivors"},
+  {"cmd":"pytest -q tests/i (top level, no lab*, no test_mutants)","exit":0,"summary":"210 passed, 9 skipped, 1 xfailed"},
+  {"cmd":"bash -n certify-window.sh e4c-certify.sh","exit":0,"summary":"ok"},
+  {"cmd":"DRY_RUN=1 certify-window.sh (repo root, RELEASE unset)","exit":0,"summary":"41693d5d in 8 lines, d3a99e01 in 0, MIGRATION_VERSION=0059"}],
+ "estimate":{"optimistic_h":0.25,"likely_h":0.5,"pessimistic_h":1,"confidence":"high","basis":"done; review fixes only","at":"2026-10-01T04:50Z"},
+ "blockers":[],
+ "wiring_requests":["docs-state: infra/rollout/README.md per research/plan/evidence/w6/CERTIFY-RELEASE-WR-infra-rollout-README.patch","infra-libs: certify-window.sh sources host-lib.sh (HOST_LOG=$LOGDIR/window.log) and drops its aws()/venv check once host-lib lands"],
+ "evidence":["research/plan/evidence/w6/CERTIFY-RELEASE-2851d83.md","research/plan/evidence/w6/CERTIFY-RELEASE-WR-infra-rollout-README.patch"]}
