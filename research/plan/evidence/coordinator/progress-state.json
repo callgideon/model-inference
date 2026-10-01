@@ -29,8 +29,8 @@
     ],
     "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
   },
-  "revision": 344,
-  "updated": "2026-10-01T03:00:09Z",
+  "revision": 346,
+  "updated": "2026-10-01T03:01:43Z",
   "agent_slots": {
     "total": 16,
     "active": 5,
@@ -10558,7 +10558,7 @@
       ],
       "decision": null,
       "decided_at": null,
-      "note": "17/17 cells PASS on the fixed shared clone of RELEASE d3a99e01 (and b640c35c before it) (console-test/lint/typecheck, browser journey 20/20 PASS in 102.9 s; the four delegated cells by the E3C final run at b640c35c: 16/16 scenarios, 12/12 controls, exit 0); earlier 17/17 on 400a7e94 and 2b29c617. The candidate is ready for acceptance; per the manifest the decision is recorded when E3A dispatches after BACKEND-READY (the GO-LIVE order runs the install and the App release ahead of BACKEND-READY, then certify on the live system; the gate decision follows that). Evidence research/plan/evidence/coordinator/RELEASE-b640c35c.md."
+      "note": "17/17 cells PASS on the fixed shared clone of RELEASE d3a99e01 (and b640c35c before it) (console-test/lint/typecheck, browser journey 20/20 PASS in 102.9 s; the four delegated cells by the E3C final run at b640c35c: 16/16 scenarios, 12/12 controls, exit 0); earlier 17/17 on 400a7e94 and 2b29c617. The candidate is ready for acceptance; per the manifest the decision is recorded when E3A dispatches after BACKEND-READY (the GO-LIVE order runs the install and the App release ahead of BACKEND-READY, then certify on the live system; the gate decision follows that). Evidence research/plan/evidence/coordinator/RELEASE-b640c35c.md. | Decision as recorded (W6 INT-03): APP-LOCAL was accepted for GO-LIVE at RELEASE b640c35c (session-03 record line 442) and withdrawn as a tracker decision at rev 143 (line 443: the manifest dispatches E3A after BACKEND-READY); it is recorded after the E4C live certify. The App has served from main 41693d5d on Vercel since 2026-09-29 (line 525)."
     },
     "APP-PILOT": {
       "candidate": {
@@ -10595,7 +10595,7 @@
       ],
       "decision": null,
       "decided_at": null,
-      "note": "Pending; no decision recorded."
+      "note": "Decision deferred to the E4C certify on the live system (GO-LIVE \"test window\" decision, session-03 record line 435); all five cells NOT RUN until that window (W6 INT-03)."
     }
   },
   "findings": [
@@ -13472,6 +13472,18 @@
       "by": "W6-PLAN-LEDGER",
       "what": "INT-01: overlay header (main 41693d5d, integration_head 08983639, base note) and one dated deployed block at the launch state (runtime 41693d5d CREDIT, Lab 7ecbab0e, hosted 0001-0059 + both window digests, lab.callbill.ai on Vercel infrx-lab, lab-control edge)",
       "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
+    },
+    {
+      "at": "2026-10-01T03:01:34Z",
+      "by": "W6-PLAN-LEDGER",
+      "what": "INT-03: seven gate records (E3L, E5L, E6L, E7L, E8L, E4-ON, COMPLETE-LOCAL) with candidate, cells (PASS / NOT RUN[class] + rerun), rulings and evidence under gate_records; APP-LOCAL/APP-PILOT decisions as recorded in session-03",
+      "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
+    },
+    {
+      "at": "2026-10-01T03:01:43Z",
+      "by": "W6-PLAN-LEDGER",
+      "what": "INT-03: gate_records holds only the seven records; its explanation moves to gate_records_note",
+      "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
     }
   ],
   "history": {
@@ -14740,5 +14752,528 @@
     "X3",
     "X5"
   ],
-  "base_note": "base stays dff31efc: the program-22 lane base and the reused-baseline denominator; main moved d3a99e01 -> 41693d5d in the 2026-09-29 deploy window (session-03 record line 525) and moves again only by the operator after wave 6 (audit §7 decision 8); integration_head = the wave-6 base 08983639 (claude/consumer-v1), 447 commits ahead of main"
+  "base_note": "base stays dff31efc: the program-22 lane base and the reused-baseline denominator; main moved d3a99e01 -> 41693d5d in the 2026-09-29 deploy window (session-03 record line 525) and moves again only by the operator after wave 6 (audit §7 decision 8); integration_head = the wave-6 base 08983639 (claude/consumer-v1), 447 commits ahead of main",
+  "gate_records": {
+    "E3L": {
+      "manifest_gate": "LAB-OPERATE (local half: LAB-OPERATE-LOCAL; the release gate also needs I2L staging under P-08)",
+      "root": "E3L",
+      "candidate": {
+        "source": "5bec250c9a1f0be0b00431bcda9bd0b825585f78",
+        "deployed": "task-local e3l stack (make lab-operate)",
+        "merge": "b0504b44 (merge #37)"
+      },
+      "cells": [
+        {
+          "id": "LAB-ACCESS",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3L-5bec250.md",
+            "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json"
+          ]
+        },
+        {
+          "id": "LAB-PUBLISH",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3L-5bec250.md",
+            "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json"
+          ]
+        },
+        {
+          "id": "SPLIT-CONTRACT",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3L-5bec250.md",
+            "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json"
+          ]
+        }
+      ],
+      "run": "make lab-operate exit 0: 12/12 scenarios (l01-l12), 24/24 cases",
+      "rerun": "make lab-operate",
+      "decision": "accepted",
+      "decided_at": "2026-09-29 (merge #37 b0504b44; session-03 record line 518)",
+      "ruling": "R220",
+      "evidence": [
+        "research/plan/evidence/e/E3L-5bec250.md",
+        "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json",
+        "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+      ],
+      "note": "every cell PASS; the engine smoke is the R203 stand-in until WR-L3-2"
+    },
+    "E5L": {
+      "manifest_gate": "LAB-OBSERVE (local; the release gate also needs I2L-OBS deployment evidence under P-08)",
+      "root": "E5L",
+      "candidate": {
+        "source": "290d70e94aebafa11317242110d515dcfb7c8d84",
+        "deployed": "task-local e5l stack (make lab-observe, lab-observe-5)",
+        "merge": "f2ef6b2e (merge #67)"
+      },
+      "cells": [
+        {
+          "id": "TRACE-BOUNDS",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "TRACE-RECOVER",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "TRACE-TENANT",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "FEEDBACK-ACK",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "JUDGE-BUDGET",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "JUDGE-SCORES",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "LAB-ACCESS",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "CONSOLE-FLOWS",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        }
+      ],
+      "run": "19 PASS / 0 FAIL / 0 NOT RUN (o01-o10; r222 accepted, open {}); stack mutants 25/25",
+      "rerun": "make lab-observe",
+      "decision": "accepted",
+      "decided_at": "2026-09-29 merge #57 be6b2fde (17/0/1 at df837faf; session-03 record line 559); gate of record moved to 290d70e9 at merge #67 2026-09-30T02:28Z (R265)",
+      "ruling": "R222/R234/R253/R254/R261/R265",
+      "evidence": [
+        "research/plan/evidence/e/E5L-290d70e.md",
+        "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json",
+        "research/plan/consumer-v1/09-path-to-internal-testing.md"
+      ],
+      "note": "every cell PASS at the run of record"
+    },
+    "E6L": {
+      "manifest_gate": "LAB-EVALUATE-LOCAL",
+      "root": "E6L",
+      "candidate": {
+        "source": "24a7a0657cd113c21ba6d8fc43649781e077bda3 + j11 at 9938ad6ccbdadea33fa3925053e4d34a06d9a30f",
+        "deployed": "task-local e6l stack (make lab-evaluate)",
+        "merge": "fe3c2043 (merge #45) + be1ae258 (merge #49)"
+      },
+      "cells": [
+        {
+          "id": "DATA-IMPORT",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j01, j02"
+        },
+        {
+          "id": "DATA-SPLIT",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j04"
+        },
+        {
+          "id": "DATA-RIGHTS",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j03"
+        },
+        {
+          "id": "EVAL-DURABLE",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j05, j09"
+        },
+        {
+          "id": "EVAL-REPRO",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j06"
+        },
+        {
+          "id": "EVAL-COMPARE",
+          "verdict": "NOT RUN",
+          "class": "product WR (R234): j10 waits on WR-B4-2, WR-LAB2-4 and WR-B3-1 (09 names WR-LAB2-2)",
+          "rerun": "make lab-evaluate",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json",
+            "research/plan/evidence/e/E6L-J11-9938ad6.md"
+          ],
+          "note": "j07 PASS at 24a7a065; j11 PASS at 9938ad6c labelled \"reaches the endpoint; span/cap not enforced at the gateway\" (R239, WR-LEM-SPAN); j10 NOT RUN"
+        },
+        {
+          "id": "CHECKPOINT-IDEM",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json"
+          ],
+          "note": "j08, j09"
+        }
+      ],
+      "run": "j01-j09 PASS at 24a7a065, j11 PASS at 9938ad6c, j10 NOT RUN; 0 FAIL",
+      "rerun": "make lab-evaluate",
+      "decision": "accepted",
+      "decided_at": "2026-09-29 merge #45 (session-03 record line 538; r222 accepted over the recorded verdict); j11 rerun at merge #49",
+      "ruling": "R222/R234/R235/R239",
+      "evidence": [
+        "research/plan/evidence/e/E6L-24a7a06.md",
+        "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json",
+        "research/plan/evidence/e/E6L-J11-9938ad6.md",
+        "research/plan/consumer-v1/09-path-to-internal-testing.md"
+      ],
+      "note": "no FAIL cell; the one NOT RUN is out of local scope with its rerun"
+    },
+    "E7L": {
+      "manifest_gate": "LAB-IMPROVE-LOCAL",
+      "root": "E7L",
+      "candidate": {
+        "source": "17176f5842fa8de36aa1ad880da3a845eb6e1dce",
+        "deployed": "task-local e7l stack (make lab-improve, composition-4)",
+        "merge": "1cc8a0f0 (merge #36)"
+      },
+      "cells": [
+        {
+          "id": "DATA-LINEAGE",
+          "verdict": "NOT RUN",
+          "class": "staging target (P-08): i09",
+          "rerun": "make lab-improve",
+          "evidence": [
+            "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json"
+          ],
+          "note": "i03, i04 PASS; i09 NOT RUN[staging-target] (candidate promotion through L3/L4 staging)"
+        },
+        {
+          "id": "PIPELINE-LINEAGE",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json"
+          ],
+          "note": "i01, i02, i03, i08"
+        },
+        {
+          "id": "PIPELINE-BUDGET",
+          "verdict": "NOT RUN",
+          "class": "external training provider (P-11): i07 training half",
+          "rerun": "make lab-improve",
+          "evidence": [
+            "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json"
+          ],
+          "note": "i03, i05, i06 PASS; i07 NOT RUN[P-11]"
+        },
+        {
+          "id": "TRAIN-RECOVER",
+          "verdict": "NOT RUN",
+          "class": "external training provider (P-11): i07 training half",
+          "rerun": "make lab-improve",
+          "evidence": [
+            "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json"
+          ],
+          "note": "i02, i06 PASS; i07 NOT RUN[P-11]"
+        }
+      ],
+      "run": "20 PASS / 0 FAIL / 2 NOT RUN (i07 training half P-11, i09 staging)",
+      "rerun": "make lab-improve",
+      "decision": "accepted",
+      "decided_at": "2026-09-29 merge #36 (session-03 record line 520)",
+      "ruling": "R222",
+      "evidence": [
+        "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json",
+        "research/plan/evidence/coordinator/2026-09-24-session-03.md",
+        "research/plan/tasks.json"
+      ],
+      "note": "no FAIL cell; both NOT RUN out of local scope (the runner reports a cell NOT RUN when any of its scenarios is)"
+    },
+    "E8L": {
+      "manifest_gate": "LAB-ROLLOUT-LOCAL",
+      "root": "E8L",
+      "candidate": {
+        "source": "e65bbecf91b836c3b2316d1e6f1a3befc1730d78",
+        "deployed": "task-local e8l stack (make lab-rollout, lab-rollout-7)",
+        "merge": "3c1b1d34 (merge #62)"
+      },
+      "cells": [
+        {
+          "id": "ROLLOUT-PIN",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E8L-e65bbec.md",
+            "research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json"
+          ],
+          "note": "k01, k02, k03, k10"
+        },
+        {
+          "id": "ROLLOUT-RECOVER",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E8L-e65bbec.md",
+            "research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json"
+          ],
+          "note": "k04, k05, k06, k09"
+        },
+        {
+          "id": "OPT-PARITY",
+          "verdict": "NOT RUN",
+          "class": "staging GPU target (P-08): k08",
+          "rerun": "make lab-rollout",
+          "evidence": [
+            "research/plan/evidence/e/E8L-e65bbec.md",
+            "research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json"
+          ],
+          "note": "k07 PASS; k08 NOT RUN[P-08] (parity on an allocated GPU target)"
+        }
+      ],
+      "run": "k01-k07, k09, k10 PASS; k08 NOT RUN[P-08]; r222 accepted, open {}",
+      "rerun": "make lab-rollout",
+      "decision": "accepted",
+      "decided_at": "2026-09-29 merge #44 (d869ee40; session-03 record line 537); run of record 93f41299 (#53), then e65bbecf (#62)",
+      "ruling": "R222/R234/R238/R249/R259/R260",
+      "evidence": [
+        "research/plan/evidence/e/E8L-e65bbec.md",
+        "research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json",
+        "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+      ],
+      "note": "no FAIL cell; WR-LR7 open issues carried (register)"
+    },
+    "E4-ON": {
+      "manifest_gate": null,
+      "root": "I2L (LAB-INTERNAL-TESTING-PREP)",
+      "candidate": {
+        "source": "5bb93621bfa0e1340358148409f9664999464ed9",
+        "deployed": "fresh git clone --shared at 5bb93621 (dirty false); e3l block + lab-on + keyed rows (GATE_ARGS=--keep make lab-local)",
+        "merge": "27feb079 (merge #64)"
+      },
+      "cells": [
+        {
+          "id": "lab-build",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "e4-on",
+          "verdict": "FAIL",
+          "class": "by design (R198/R257): the pilot-box worker refusal is reported, never excused into PASS",
+          "rerun": "GATE_ARGS=--keep make lab-local",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ],
+          "note": "2,869 tests: 2,850 passed, 1 failed (R198), 18 skipped keyed"
+        },
+        {
+          "id": "e4-on@keys",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ],
+          "note": "18/18 on their own keys (b1, b3, p1, p2, p3, r1, r2, j2, t2i, t2f)"
+        },
+        {
+          "id": "o01",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o02",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o03",
+          "verdict": "NOT RUN",
+          "class": "external training provider (P-11)",
+          "rerun": "GATE_ARGS=--keep make lab-local",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o04",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o05",
+          "verdict": "FAIL",
+          "class": "by design (R237/R245): the all-switches App gateway is never the box's Lab server",
+          "rerun": "GATE_ARGS=--keep make lab-local",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o06",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "o07",
+          "verdict": "NOT RUN",
+          "class": "product WR: WR-B4-2, WR-LAB2-4",
+          "rerun": "GATE_ARGS=--keep make lab-local",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ]
+        },
+        {
+          "id": "journeys",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E4ON-5bb93621.md",
+            "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json"
+          ],
+          "note": "datasets 1/1, releases 5/5, pipelines 7/7, evaluations 4/4, traces 6/6"
+        }
+      ],
+      "run": "make 2 / runner exit 1 with r222.accepted true; by_design R198 + R237 only; 94 lab_local mutants 0 survivors",
+      "rerun": "GATE_ARGS=--keep make lab-local",
+      "decision": "accepted",
+      "decided_at": "2026-09-30 merge #64 (09 log line \"E4-ON accepted at merge #64\"; host clock ~01:15Z, see the 09 stamp correction)",
+      "ruling": "R257/R258/R262",
+      "evidence": [
+        "research/plan/evidence/e/E4ON-5bb93621.md",
+        "research/plan/evidence/e/E4ON-raw-5bb93621/verdict.json",
+        "research/plan/consumer-v1/09-path-to-internal-testing.md"
+      ],
+      "note": "reruns when WR-B4-2 / WR-LAB2-4 / WR-P4B-1 / WR-LL2-5 / P-11 land (09)"
+    },
+    "COMPLETE-LOCAL": {
+      "manifest_gate": "none exactly: 09's COMPLETE-LOCAL is the five Lab gates; the manifest gate COMPLETE-LOCAL also requires E3B/E3A/E3C and stays undecided while E3A is planned",
+      "root": "E3L, E5L, E6L, E7L, E8L",
+      "candidate": {
+        "source": "be6b2fde",
+        "deployed": "each gate on its own task-local stack (runs of record above)",
+        "merge": "be6b2fde (merge #57)"
+      },
+      "cells": [
+        {
+          "id": "E3L",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E3L-5bec250.md",
+            "research/plan/evidence/e/E3L-raw-5bec250c/verdict.json"
+          ]
+        },
+        {
+          "id": "E5L",
+          "verdict": "PASS",
+          "evidence": [
+            "research/plan/evidence/e/E5L-290d70e.md",
+            "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json"
+          ]
+        },
+        {
+          "id": "E6L",
+          "verdict": "NOT RUN",
+          "class": "R222 out of local scope: EVAL-COMPARE j10 (product WR)",
+          "rerun": "make lab-evaluate",
+          "evidence": [
+            "research/plan/evidence/e/E6L-24a7a06.md",
+            "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json",
+            "research/plan/evidence/e/E6L-J11-9938ad6.md"
+          ]
+        },
+        {
+          "id": "E7L",
+          "verdict": "NOT RUN",
+          "class": "R222 out of local scope: i07 (P-11), i09 (staging)",
+          "rerun": "make lab-improve",
+          "evidence": [
+            "research/plan/evidence/e/E7L-raw-17176f5/run/verdict.json"
+          ]
+        },
+        {
+          "id": "E8L",
+          "verdict": "NOT RUN",
+          "class": "R222 out of local scope: k08 (P-08 staging GPU)",
+          "rerun": "make lab-rollout",
+          "evidence": [
+            "research/plan/evidence/e/E8L-e65bbec.md",
+            "research/plan/evidence/e/E8L-raw-e65bbecf/verdict.json"
+          ]
+        }
+      ],
+      "run": "every Lab gate runner ran for real on its stack with no FAIL cell; every NOT RUN out of local scope with its rerun",
+      "rerun": "make lab-operate lab-observe lab-evaluate lab-improve lab-rollout",
+      "decision": "accepted",
+      "decided_at": "2026-09-29T19:00Z at be6b2fde (09 section \"COMPLETE-LOCAL accepted\"; session-03 record line 559)",
+      "ruling": "R222/R234",
+      "evidence": [
+        "research/plan/consumer-v1/09-path-to-internal-testing.md",
+        "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+      ],
+      "note": "108 of 133 manifest tasks implemented at acceptance"
+    }
+  },
+  "gate_records_note": "W6 plan-ledger (INT-03): the gate records of the post-launch Lab program, copied from 09 and evidence/e. They live here, not under `gates`: progress.py accepts only manifest release-gate ids in `gates` (E4-ON is none), forecasts every undecided gate root (a COMPLETE-LOCAL entry turns BACKEND-LOCAL's accepted E3C milestone into \"unknown\" and adds E3B/E3C to the E4C/E4 paths), and its green rule needs every cell PASS, which R222 local acceptance does not. Rendering them is wiring request WR-PL-1."
 }
