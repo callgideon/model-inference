@@ -147,7 +147,7 @@ def lab_objects(mode: str, env):
 
 
 def trace_retention(limits, endpoint_url: str, objects=None, connect=None):
-    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`; with
+    """T3's `Retention` over the trace projection and bucket, as `compose.lab_traces`; with
     the Lab objects, a deletion pushes N3's tombstones (WR-N3-2a), writing 0041 too when
     `connect` (the datasets role's login) is given (1-C3-1)."""
     import clickhouse_connect

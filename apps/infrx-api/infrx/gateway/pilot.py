@@ -1,26 +1,37 @@
-"""G2 item 5: the pilot composition - `IngressDeps` built from the real adapters.
+"""The gateway's composition root (G2 item 5 onward): `IngressDeps` and the runtime's stores,
+built from settings once per process by `create_app` (`gateway/app.py`):
 
-    rt.ingress = pilot.build_ingress_deps(rt, catalog=..., stream=..., objects=...)
+    rt.ingress = pilot.build_ingress_deps(rt, **pilot.adapters_from_env(settings, ...))
     app = FastAPI(lifespan=pilot.lifespan, ...)
 
-What `create_app` calls at the cutover, once per process:
+Every composition here, its switch and its callers (A15):
 
-* `PgJobStore` over a psycopg pool whose connections `set role service_role` (D2 request 7;
-  never on 0021's dedicated logins, R127) and carry the deployment's statement timeout;
-* the `Relay` (G2's acceptor, sync wait and SSE relay), dispatching admission on
-  `ACCOUNTING_REGIME` and holding the CREDIT pins to `ACTIVE_RATE_CARD_VERSION`;
-* one `MediaUploads` (M3 request 3), exposed as `rt.media_store` - the instance G4U's upload
-  router finalizes into - and one `LargeBodies`, `rt.large_bodies`, shared with it;
-* the Q3 `Reconciler` over the Valkey index, run for the process lifetime by `lifespan`;
-* the gateway `Registry` (I3B request 1) and the two readiness probes `REQUIRED_CHECKS`
-  names, as sync callables over cached answers the lifetime task refreshes.
+* `adapters_from_env` - `create_app`, `capture` (WR-C6-CAPTURE). The object store first
+  (`object_store`, `S3_MEDIA_BUCKET` answering HeadBucket, else startup is refused - never
+  process memory, M1-L2), then on one pool (`connection_pool`: `set role service_role` and
+  the statement timeout per connection, D2 request 7; never on 0021's dedicated logins, R127;
+  nothing session-level on the transaction pooler, WR-I8-1): D5's `PgCatalogDirectory`, D4's
+  `PgStreamStore`, D2's `PgJobStore` (both regimes, R86), M's `PgAttachments`, D10's
+  `PgLifecycle` (`_pg_lifecycle`, also the admission's `ReadinessStore`), and the switched ones:
+  `ROLLOUT_ROUTING` -> `_rollouts` (R1's router over D9 with `NoShadows`, `infrx_runtime`
+  login only), `TRACE_PUMPS` -> `capture.adapters`, `FEEDBACK_API` -> `_pg_feedback`, and the
+  Lab's `LAB_*` switches -> `infrx.lab.compose` (`lab_surfaces`, `lab_checkpoints`).
+* `build_ingress_deps` - `create_app`: the `Relay` (admission on `ACCOUNTING_REGIME`, CREDIT
+  pinned to `ACTIVE_RATE_CARD_VERSION`; `admission_readiness`), `MediaUploads` as
+  `rt.media_store` with `LargeBodies`, the Q3 `Reconciler` over `valkey_index`, the two
+  readiness `Probe`s (`price_check`, `journal_check`), `TRACE_EXPORT_API` -> `_trace_export`,
+  and every Lab surface on `rt` only when its switch is on.
+* `build_info` - `create_app` and the worker: `infrx_build_info{revision, image}`.
+* `lifespan` - the app's: opens the pool, runs the reconciler, the probes and the capture
+  pump, drains the relay, closes the pool.
+* `connection_pool`, `object_store`, `valkey_index`, `build_info` - also `infrx.worker`.
+* The login rules (`login_user`, `dedicated_login`, `DEDICATED_LOGINS`) are
+  `state.jobstore`'s (A9), re-exported here.
 
-`adapters_from_env` is what `create_app` composes when a caller injects nothing: D5's
-`PgCatalogDirectory`, D4's `PgStreamStore` and D2's `PgJobStore` (both regimes: the relay
-dispatches on `ACCOUNTING_REGIME`, R86) on the one pool, and M1-L2's `S3ObjectStore` on the
-bucket `S3_MEDIA_BUCKET` names - probed with HeadBucket before anything else is built. No
-bucket, or one that does not answer, refuses startup rather than staging into process
-memory, which would make acceptance depend on gateway-local bytes (02 step 1).
+The Lab compositions moved to `infrx.lab.compose` (A1); the names tests import
+(`_lab`, `_lab_2`, `_lab_checkpoints`, `_lab_traces`, `_teachers`, `lab_releases`,
+`lab_operations`, `control_serving`, `lab_optimizations`, `ReleaseRecords`, ...) are
+re-exported here, the same objects.
 """
 from __future__ import annotations
 

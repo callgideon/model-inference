@@ -16,8 +16,8 @@ on; nothing here runs at import.
 * `lab_releases` with its read models (`ReleaseRecords`, `ReleaseProposals`, `SHOWN`,
   `_progress`, `ReportUnavailable`) and the release helpers the rollout role shares
   (`plan_key`, `release_live`, `release_report`).
-* `lab_optimizations` (R3's store, R263): a composition awaiting its CLI caller (WR-R3I-OPEN,
-  audit A11, register item) - only tests call it today; kept, not dead.
+* `lab_optimizations` (R3's store): R266's composition, awaiting its CLI caller (A11,
+  WR-R3I-OPEN in the carried-work register) - only tests call it today; kept, not dead.
 """
 from __future__ import annotations
 
@@ -230,7 +230,9 @@ def lab_releases(connect, sessions, access, objects):
 # --- WR-LW9-4 (R263): R3's store on this pool ---------------------------------------------
 def lab_optimizations(connect):
     """R3's `optimization.store` over D7 and 0058's identities port on this pool; the caller
-    names `identities=(base, variant)`, the pair `register` derived both serving refs from."""
+    names `identities=(base, variant)`, the pair `register` derived both serving refs from.
+    R266's production composition; A11: no production caller yet - a Lab workers CLI command
+    (`optimization register`) will compose through it (carried-work register, WR-R3I-OPEN)."""
     import functools
 
     from ..rollouts import optimization
