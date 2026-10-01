@@ -6,10 +6,9 @@
 import { redirect } from "next/navigation";
 import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
+import { UUID, UUID_RE as ID } from "../shapes.ts";
 import { evaluationPort, holds, type Actor, type Amount, type Launch, type Protocol, type Refusal, type Result, type SubscriptionRequest } from "./port.ts";
 
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const ID = new RegExp(`^${UUID}$`);
 /** F3: an immutable `lab:<kind>:<provider>:<object>@sha256:<hex>` ref of the named kind. */
 const ref = (kind: string) => new RegExp(`^lab:${kind}:${UUID}:${UUID}@sha256:[0-9a-f]{64}$`);
 const CREDIT = /^(0|[1-9][0-9]{0,11})(\.[0-9]{1,8})?$/;

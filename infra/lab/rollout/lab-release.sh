@@ -89,6 +89,7 @@ vercel_lab() {
   vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \
     || { vercel project add infrx-lab --scope "$SCOPE" && vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null; }
   for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \
+      "LAB_API_URL=https://lab-control.callbill.ai" \
       "LAB_CONTROL_URL=https://lab-control.callbill.ai" "LAB_TRACES_API_URL=https://lab-control.callbill.ai" "LAB_EVALS_API_URL=https://lab-control.callbill.ai" \
       "LAB_PIPELINES_API_URL=https://lab-control.callbill.ai" "LAB_RELEASES_API_URL=https://lab-control.callbill.ai" "LAB_DATASETS_API_URL=https://lab-control.callbill.ai"; do
     k=${kv%%=*}; v=${kv#*=}; vercel env rm "$k" production --yes >/dev/null 2>&1 || true; printf '%s' "$v" | vercel env add "$k" production >/dev/null; done

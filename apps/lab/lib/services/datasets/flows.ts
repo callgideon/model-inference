@@ -3,6 +3,7 @@
 // always the guarded workspace's, never a form field, and a viewer is refused before any call.
 import type { Membership } from "../../auth/access.ts";
 import type { DatasetsPort, Derived, ExportRecord, Failure, ImportJob, ImportReport, Leak, Preview } from "./port.ts";
+import { UUID_RE as UUID } from "../shapes.ts";
 import { FAILURE_COPY } from "./views.ts";
 
 export type ActionState<T> =
@@ -15,7 +16,6 @@ export type ActionState<T> =
 export const MAX_UPLOAD_BYTES = 1_000_000;
 export const PREVIEW_BYTES = 64 * 1024;
 export const MAX_TTL_S = 7 * 86_400;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const refused = (message: string) => ({ status: "error", message }) as const;
 const failed = (f: Failure) => ({ status: "error", message: `${FAILURE_COPY[f.error]} ${f.detail}`, leaks: f.leaks, report: f.report }) as const;

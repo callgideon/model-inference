@@ -46,6 +46,14 @@ test("C3F-L02 a malformed request id is not_found without asking the database", 
   }
 });
 
+test("C3F-L05 an uppercase or non-v4 request id reaches the door (shapes UUID_ANY_RE, LAB-10)", async () => {
+  for (const id of [JOB.toUpperCase(), "6ba7b810-9dad-11d1-80b4-00c04fd430c8"]) {
+    const { rpc, calls } = client({ data: [], error: null });
+    assert.deepEqual(await reviewFeedback(rpc, workspace, id), { ok: true, entries: [] }, id);
+    assert.deepEqual(calls, [[REVIEW_RPC, { p_args: { provider_org_id: NEMO, request_id: id } }]]);
+  }
+});
+
 test("C3F-L03 the door's refusals keep their meaning; anything unexpected is unavailable, never an empty review", async () => {
   const cases: [Answer | (() => never), string][] = [
     [{ data: null, error: { code: "P0001", message: "not_found: no such request shared with this provider" } }, "not_found"],

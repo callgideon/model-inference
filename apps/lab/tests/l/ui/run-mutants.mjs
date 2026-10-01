@@ -10,6 +10,7 @@ const VIEW = "lib/services/control/view.ts";
 const ACTIONS = "lib/services/control/actions.ts";
 const HTTP = "lib/services/control/http.ts";
 const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 const SERVER = "lib/services/control/server.ts";
 const LAYOUT = "app/(provider)/layout.tsx";
 const MODELS = "app/(provider)/models/page.tsx";
@@ -77,7 +78,7 @@ const MUTANTS = [
   m("L4-X33", "the actor's role is not the session's", ACTIONS, "role: w.role });", 'role: "administrator" });', [C.a01]),
   m("L4-X34", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("L4-X35", "malformed input reaches the control service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
-  m("L4-X36", "any artifact reference passes the shape check", ACTIONS, "const DIGEST = /^sha256:[0-9a-f]{64}$/;", "const DIGEST = /./;", [C.a03]),
+  m("L4-X36", "any artifact reference passes the shape check", SHAPES, "DIGEST_RE = /^sha256:[0-9a-f]{64}$/;", "DIGEST_RE = /./;", [C.a03]),
   m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
   m("L4-X38", "an unknown proposal kind is accepted", ACTIONS, '(kind === "publish" || kind === "rollback") && id !== null', "id !== null", [C.a03]),
   m("L4-X39", "a refusal is dropped on the way back", ACTIONS, "redirect(result.ok ? page : `${page}?refused=${result.reason}`);", "redirect(page);", [C.a02, C.a04]),

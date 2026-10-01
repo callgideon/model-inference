@@ -38,6 +38,7 @@ const C = {
   f05: "N4-F05 a derivation needs a UUID, whole numbers within 10000 basis points and a parent",
   f06: "N4-F06 an export lives 1 s to 7 days and names a version",
   f07: "N4-F07 a backend failure is an error state carrying its leaks and report, never success",
+  f08: "N4-F08 a new dataset id is a lowercase v4 UUID: a v1 or uppercase id is refused (shapes UUID_RE, LAB-10)",
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
 };
 
@@ -84,6 +85,8 @@ const MUTANTS = [
     'export async function exportAction(_: ActionState<ExportRecord>, form: FormData): Promise<ActionState<ExportRecord>> {\n  const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
   m("N4-X38", "an export part is served without the guard", `${D}/exports/[id]/[part]/route.ts`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "" };', [C.b01]),
   m("N4-X39", "the version page renders without the guard", `${D}/[ref]/page.tsx`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
+  // N4-X41..X44 are reserved for WR-W6-LABB-2 (carried to the lab-E merge).
+  m("N4-X45", "the derivation imports the read-back strictness (any version, either case)", FLOWS, "import { UUID_RE as UUID }", "import { UUID_ANY_RE as UUID }", [C.f08]),
 ];
 
 function copy() {

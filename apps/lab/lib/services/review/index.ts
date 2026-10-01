@@ -7,6 +7,7 @@
 // only the selected workspace and the request, and accepts only stored customer (or judge) signals:
 // never a label, never the customer's identity.
 import type { Membership } from "../../auth/access.ts";
+import { UUID_ANY_RE as UUID } from "../shapes.ts";
 
 export const REVIEW_RPC = "lab_review_feedback";
 export type ReviewRpc = {
@@ -25,7 +26,6 @@ export type ReviewEntry = {
 };
 export type ReviewResult = { ok: true; entries: ReviewEntry[] } | { ok: false; reason: "not_found" | "forbidden" | "unavailable" };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEYS = ["feedback_id", "request_id", "name", "value", "comment", "author_role", "channel", "created_at"];
 const NAMES = ["thumb", "rating", "correction", "comment"];
 

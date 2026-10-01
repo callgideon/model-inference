@@ -12,6 +12,7 @@ const ANNOT = "app/(provider)/annotations/page.tsx";
 const TRAIN = "app/(provider)/training/page.tsx";
 const HTTP = "lib/services/pipelines/http.ts";
 const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 const SERVER = "lib/services/pipelines/server.ts";
 
 const C = {
@@ -137,8 +138,8 @@ const MUTANTS = [
   m("P4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
-  m("P4-X73", "any USD amount passes", ACTIONS, "const USD = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "const USD = /./;", [C.a03]),
-  m("P4-X74", "any id passes as a run id", ACTIONS, "const ID = new RegExp(`^${UUID}$`);", "const ID = /./;", [C.a03]),
+  m("P4-X73", "any USD amount passes", SHAPES, "USD_RE = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "USD_RE = /./;", [C.a03]),
+  m("P4-X74", "any id passes as a run id", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
   m("P4-X75", "any objective passes", ACTIONS, 'oneOf(data, "objective", ["sft", "preference"] as const)', 'text(data, "objective") as "sft"', [C.a03]),
   m("P4-X76", "any op reaches the service", ACTIONS, 'const op = oneOf(data, "op", ["submit", "finish", "cancel"] as const);', 'const op = text(data, "op") as "submit" | null;', [C.a03]),
   m("P4-X77", "a correction may accept", ACTIONS, '(raw === "" || (correction !== null && decision === "rejected"))', '(raw === "" || correction !== null)', [C.a03]),

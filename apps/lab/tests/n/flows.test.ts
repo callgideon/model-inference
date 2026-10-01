@@ -76,6 +76,14 @@ test("N4-F05 a derivation needs a UUID, whole numbers within 10000 basis points 
   assert.deepEqual(calls[0].args, [DEV.providerId, { datasetId: UUID, version: 1, seed: 7, trainBp: 8000, validationBp: 1000, base: null, add: ["lab:dataset:a", "lab:dataset:c"] }]);
 });
 
+test("N4-F08 a new dataset id is a lowercase v4 UUID: a v1 or uppercase id is refused (shapes UUID_RE, LAB-10)", async () => {
+  const { port, calls } = recordingPort();
+  for (const id of ["6ba7b810-9dad-11d1-80b4-00c04fd430c8", UUID.toUpperCase().replace(/2/g, "A")]) {
+    assert.equal((await deriveVersion(port, DEV, derive({ dataset_id: id }))).status, "error", id);
+  }
+  assert.equal(calls.length, 0);
+});
+
 test("N4-F06 an export lives 1 s to 7 days and names a version", async () => {
   const { port, calls } = recordingPort();
   for (const bad of [{ ttl_s: "0" }, { ttl_s: String(7 * 86_400 + 1) }, { ttl_s: "x" }, { dataset_ref: "" }]) {

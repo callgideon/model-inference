@@ -26,6 +26,7 @@
       {"name": "NEXT_PUBLIC_LAB_URL", "exposure": "public", "purpose": "the Lab's own https origin, no path (apps/lab/lib/auth/config.ts)"},
       {"name": "NEXT_PUBLIC_SUPABASE_URL", "exposure": "public", "purpose": "the auth/DB project the Lab session door (0030) is served from"},
       {"name": "NEXT_PUBLIC_SUPABASE_ANON_KEY", "exposure": "public", "purpose": "publishable key; the Lab holds no service-role key"},
+      {"name": "LAB_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for every Lab family (control, traces, evaluations, pipelines, releases, datasets); unset = each family falls back to its deprecated name (LAB-03), then unavailable"},
       {"name": "LAB_DATASETS_API_URL", "exposure": "server", "purpose": "server-only base URL of the datasets backend (WR-N4-5); unset = the datasets pages are unavailable"},
       {"name": "LAB_TRACES_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for the provider trace read (V1M/WR-LAB-API-5); unset = the request pages read nothing and say so"},
       {"name": "LAB_EVALS_API_URL", "exposure": "server", "purpose": "server-only lab-api base URL for /lab/v1/evaluations (WR-B4-1, behind LAB_EVALS); unset = the evaluation pages are unavailable"},

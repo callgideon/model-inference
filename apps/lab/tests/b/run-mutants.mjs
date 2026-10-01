@@ -17,6 +17,7 @@ const HTTP = "lib/services/evaluation/http.ts";
 const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
 const SERVER = "lib/services/evaluation/server.ts";
 const SESSION = "lib/auth/session.ts"; // LAB-05: the one read-only session client
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 
 const C = {
   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
@@ -138,7 +139,7 @@ const MUTANTS = [
   m("B4-X71", "malformed input reaches the service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
   m("B4-X73", "a ref with trailing text passes", ACTIONS, "@sha256:[0-9a-f]{64}$`);", "@sha256:[0-9a-f]{64}`);", [C.a03]),
-  m("B4-X74", "any record id passes", ACTIONS, "const ID = new RegExp(`^${UUID}$`);", "const ID = /./;", [C.a03]),
+  m("B4-X74", "any record id passes", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
   m("B4-X75", "any CREDIT string passes", ACTIONS, "const CREDIT = /^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,8})?$/;", "const CREDIT = /^-?[0-9.e]+$/;", [C.a03]),
   m("B4-X76", "an amount is not written with 8 decimals", ACTIONS, 'frac.padEnd(8, "0")', "frac", [C.a01]),
   m("B4-X77", "zero cases may be launched", ACTIONS, 'max_cases: int(data, "max_cases", 1), run_limit: credit(data, "run_limit"), protocol', 'max_cases: int(data, "max_cases", 0), run_limit: credit(data, "run_limit"), protocol', [C.a03]),

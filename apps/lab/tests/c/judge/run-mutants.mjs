@@ -17,6 +17,7 @@ const SUITE = ["tests/c/judge/judge.test.ts", "tests/c/judge/runs.test.ts", "tes
 const CORE = "lib/services/judge/core.ts";
 const ACTIONS = "lib/services/judge/actions.ts";
 const RUNS = "lib/services/judge/runs.ts";
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 const PAGE = "app/(provider)/judge/page.tsx";
 const FORM = "app/(provider)/judge/form.tsx";
 const COPY = "lib/services/judge/copy.ts";
@@ -54,7 +55,7 @@ const MUTANTS = [
   m("C3L-X04", "the calibration page takes the provider from the form", CORE, "p_provider_org_id: w.providerId, p_after", `p_provider_org_id: ${FORGED}, p_after`, [C.a01]),
   m("C3L-X05", "a malformed grantor id is sent", CORE, "const grantor = id(input.grantor_org_id);", "const grantor = input.grantor_org_id as string;", [C.a02]),
   m("C3L-X06", "a malformed model id is sent", CORE, "const model = id(input.model_id);", "const model = input.model_id as string;", [C.a02]),
-  m("C3L-X07", "ids match case-insensitively", CORE, "const ID = new RegExp(`^${UUID}$`);", 'const ID = new RegExp(`^${UUID}$`, "i");', [C.a02]),
+  m("C3L-X07", "ids match case-insensitively", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(`^${UUID}$`, \"i\")", [C.a02]),
   m("C3L-X08", "any judge model name is sent", CORE, 'typeof input.judge_model === "string" && MODEL.test(input.judge_model)', 'typeof input.judge_model === "string"', [C.a02]),
   m("C3L-X09", "the sample size is unbounded", CORE, "count(input.sample_size, MAX_SAMPLES)", "count(input.sample_size, 999_999)", [C.a02]),
   m("C3L-X10", "zero counts as a count", CORE, "return n >= 1 && n <= max ? n : null;", "return n >= 0 && n <= max ? n : null;", [C.a02, C.p01]),
@@ -89,7 +90,7 @@ const MUTANTS = [
   m("J3L-X02", "the request id is not sent", RUNS, "p_request_id: requestId }", "p_request_id: null }", [C.r01]),
   m("J3L-X03", "a viewer reads judge runs", RUNS, '      if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.r02]),
   m("J3L-X04", "a malformed request id is sent", RUNS, 'if (typeof requestId !== "string" || !ID.test(requestId))', 'if (typeof requestId !== "string")', [C.r02]),
-  m("J3L-X05", "ids match case-insensitively", RUNS, "[0-9a-f]{12}$/;", "[0-9a-f]{12}$/i;", [C.r02]),
+  m("J3L-X05", "ids match case-insensitively", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(`^${UUID}$`, \"i\")", [C.r02]),
   m("J3L-X06", "P0002 (a foreign or unknown row) is unavailable", RUNS, 'code === "42501" || code === "P0002" ?', 'code === "42501" ?', [C.r03]),
   m("J3L-X07", "any error reads as denied", RUNS, '? "denied" : "unavailable" };', '? "denied" : "denied" };', [C.r03]),
   m("J3L-X08", "a thrown call reads as denied", RUNS, '      } catch {\n        return { ok: false, reason: "unavailable" };', '      } catch {\n        return { ok: false, reason: "denied" };', [C.r03]),

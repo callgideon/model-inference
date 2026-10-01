@@ -1,6 +1,6 @@
-// LAB-10: the Lab's input shapes, defined once. The copies they replace live outside lab-B's paths and move
-// here by wiring request: auth/memberships.ts, review/index.ts, datasets/flows.ts, judge/core.ts, judge/runs.ts,
-// pipelines/fake.ts (WR-W6-LABB-6) and the control/evaluation/pipelines actions (WR-W6-LABB-1, with DIGEST_RE).
+// LAB-10: the Lab's input shapes, defined once. Importers: auth/memberships.ts, review/index.ts,
+// datasets/flows.ts, judge/core.ts, judge/runs.ts, pipelines/fake.ts (WR-W6-LABB-6) and the
+// control/evaluation/pipelines actions (WR-W6-LABB-1, with DIGEST_RE).
 // Two UUID strictnesses, deliberately: ids the Lab mints or forwards as record ids are lowercase v4
 // (UUID_RE); ids it only reads back (memberships, a request under review) accept any version, either case.
 
