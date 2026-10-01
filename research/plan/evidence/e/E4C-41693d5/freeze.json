@@ -1,0 +1,92 @@
+{
+ "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+ "maintenance_window": "e4c-side-41693d5d-20261001T1755Z",
+ "migration_version": "0059",
+ "identity": {
+  "source_sha": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+  "deployed_sha": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+  "image_digest": "sha256:423e9f9af764f53e171643cc6e1a009aaced332b6589f2cd00d7cf4955e9b35d",
+  "weights_sha256": "sha256:91a81b77f73b647ff84d32cad09ded838966b1dea605024d1e082ae7f3b20bfc",
+  "processor_sha256": "sha256:d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1",
+  "migration_version": "0059",
+  "config_version": "sha256:fab14300b9512a2d28cd036b253b09b1ee344b06ee3a229c8f0517008ff0df97"
+ },
+ "certify_hashes": {
+  "git": {
+   "sha": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+   "dirty": false
+  },
+  "serving_version_json": "66f9f5e6893831c744817632bf0afd528cffdef464af153f369917c68fee663a",
+  "serve_sh": "9e1f473bd7d8d7ac593468e2e4c4049b0bbff1c78f93cdbf72577b894fb6dd11",
+  "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+  "engine_options_digest_recomputed": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+  "runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+  "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+  "model_digests": {
+   "weight_shards": [
+    "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+    "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+   ],
+   "tokenizer": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+   "chat_template": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+  },
+  "contract_limits": "57dd15f4dbb62aadb8177fd21c4cfa475e9b869cca72241d62382322848ff61d",
+  "migrations": "4150513a297dbc4c0b25ec1a04f5a4333beb993ced5575de79421fd5d1ad8696",
+  "deploy_tree": "c81b57e4cfc991a2ad96df7cb32ecf41466568d97aaf7168f1d5f6911b3b1fb4",
+  "rollout_tree": "b8ace9a888e837a095ef21ca0680879a071e8f9185640c420438179c1fc034d8",
+  "alert_rules": "8eec8014fdc120bd54a7779b69a7226d470198a5569c4f7cb6d131a37d5c1243",
+  "uv_lock": "52723deb4b1ed8a993d993017953efeb973f10a7004e435997919bd195a10bb2",
+  "infrx_package": "d46b0d76b1ecacf6462d768b9c8f1f67d8182bfc8cf0e855961a1a49acccc70f",
+  "published_release": {
+   "requested_model": "nemostation/marlin-2b@2026-09-01",
+   "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+   "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+   "rate_card_version": "rc_marlin2b_20260901T000000Z_provisional_p01"
+  },
+  "gateway_image": null,
+  "release_image": null
+ },
+ "inventory": [
+  "4b8baaca4bf907ccdbc8bdc4d8e919092eec897b1bb69a8c18c1f7db6d9cd5b1",
+  "50"
+ ],
+ "release_bundle_sha256": "156cd791f2ed6dfe80cbbec8baefe147734847f1ae2e59ba28dbbc494c42150c",
+ "launchers_sha256": {
+  "infra/rollout/certify-window.sh": "271dc91f39aebfc235dc7cf84f0359ee9f5085d688374458a66e12ded0757b27",
+  "infra/rollout/e4c-certify.sh": "08a903fbde5c2e1c853c97a943630ff4ab6a4f7a0fa0015fd8b94c8455a66391",
+  "infra/rollout/e1b-window.sh": "a2cb0a6db3ca1b4424f05874b7fab1dce2dcbed4f51c357ac42e4032bcca59a8",
+  "infra/rollout/certify-h6.sh": "d3f1cc826071141d9566e0e8616cfcf4457bafb7b2938e85a1d74d12a940b9c3",
+  "infra/rollout/certify-fill.py": "d22eed471996ef8ac753a509f74da7c09ea8f0ac930f4111395f17f9debfac0b",
+  "infra/rollout/steps/76-e4c-prepare.sh": "e3d7bad4a7195ee978b82feb365a6d4d9a2000a9e5a1ffbb86b6aed3f4cca626",
+  "infra/rollout/steps/77-e4c-profiles.sh": "a23daf689de92af632652cd30e3ddbce38774be9a1ba49e3a02aa58e5fe68af0",
+  "infra/rollout/steps/78-e4b-report.sh": "4e8a10b43b5230a6538e8c3f47efa4efe6173c12df5e18b739074059c174b7b2",
+  "infra/rollout/steps/79-wc0-scrape.sh": "15d531a42fb6ada794152e126166530a15370c2e4e58a0c26a5af3ba6c8885ea",
+  "infra/rollout/steps/80-e4b-fetch.sh": "74bfa6df52bc7ae3ac073025d21730d486c591fc7122bce8fc8513bf09159343",
+  "models/marlin2b/e1b/l8ref.sh": "f618a0e9bafe380e1f8e4d6e2e253aa24dee916113f0962316aa1e2dd689dfb1",
+  "models/marlin2b/e1b/l8served.sh": "764a478f21ea32af047280291501d29995756e7d1e8bff5b1b4fe9ee1c842e57"
+ },
+ "ssm_commands": {
+  "o3": [
+   {
+    "step": "71-pool-budget.sh",
+    "command_id": "fd9d2e10-7660-4a31-80c7-f8a52cdbef8a"
+   }
+  ],
+  "prep76": [
+   {
+    "step": "76-e4c-prepare.sh",
+    "command_id": "caedfbc6-20e7-4afe-b406-47033a28fafb"
+   }
+  ],
+  "profiles77": [
+   {
+    "step": "77-e4c-profiles.sh",
+    "command_id": "d3bbe146-3d47-4637-9c2b-3d6909ed8e3e"
+   }
+  ]
+ },
+ "skipped": [
+  "O4-O6 alerts (the user's decision)",
+  "the canary (P-24)"
+ ]
+}
