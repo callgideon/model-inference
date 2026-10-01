@@ -45,8 +45,8 @@ def test_actions__a_consumer_actor_is_refused_every_operator_write():
 
 def test_actions__an_operator_key_is_not_an_operator_session():
     """The operator SQL authorizes the bound session subject; an operator-audience key has
-    no individual to bind. Oracle: an actor without a user id reached the database."""
-    key_operator = api.Actor(audience="operator", org_id=ORG, operator=True)
+    no individual to bind. Oracle: an operator-audience credential reached the database."""
+    key_operator = api.Actor(audience="operator", user_id=USER, org_id=ORG, operator=True)
     with pytest.raises(errors.Forbidden):
         run(repo.set_suspension(key_operator, ORG, True, "r", "k"))
 

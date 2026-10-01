@@ -248,7 +248,8 @@ class ConsoleActions:
     async def revoke_key(self, actor: api.Actor, key_id: str, idempotency_key: str | None
                          ) -> ApiKey:
         """One-way and repeatable (the first `revoked_at` answers again); allowed while
-        suspended (R33). Another account's key is not_found."""
+        suspended (R33). Another account's key is not_found. The scoped Idempotency-Key is
+        the audit row's: reusing it for another key is the unique index's 409."""
         user_id, org_id = consumer(actor)
         try:
             key_id = str(uuid.UUID(key_id))
@@ -258,12 +259,6 @@ class ConsoleActions:
             "key.revoke", org_id, bounded(idempotency_key, "Idempotency-Key",
                                           MAX_IDEMPOTENCY_KEY))
         async with self._as(user_id) as conn:
-            if scope is not None:
-                used = await self._one(conn, "select after->>'key_id' from "
-                                             "infrx.audit_entries where idempotency_key = %s",
-                                       (scope,))
-                if used is not None and used[0] != key_id:
-                    raise errors.IdempotencyConflict("this key revoked another key")
             if await self._one(conn, _KEY + " for update", (key_id, org_id)) is None:
                 raise errors.NotFound("no such key for this account")
             await conn.execute("select infrx.revoke_key(%s, %s, %s, %s)",

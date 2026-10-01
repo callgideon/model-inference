@@ -49,6 +49,17 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def refused(kind, coro) -> None:
+    """The typed refusal, asserted: any other exception (a raw database error, a crash) is
+    an assertion failure naming it, never a pass."""
+    try:
+        run(coro)
+    except Exception as exc:     # the type is the assertion
+        assert isinstance(exc, kind), f"{type(exc).__name__} instead of {kind.__name__}: {exc}"
+        return
+    raise AssertionError(f"no {kind.__name__}: the write was accepted")
+
+
 def person(w, *, confirmed=True, operator=False) -> api.Actor:
     from tests.g.ops import pgworld
     user = pgworld.individual(w, confirmed=confirmed)
@@ -129,8 +140,7 @@ def test_keys_pg__a_different_name_under_the_same_key_is_a_conflict(w):
     minted a second key under a used idempotency key."""
     actor = person(w)
     run(actions(w).create_key(actor, "one", "idem-c"))
-    with pytest.raises(errors.IdempotencyConflict):
-        run(actions(w).create_key(actor, "two", "idem-c"))
+    refused(errors.IdempotencyConflict, actions(w).create_key(actor, "two", "idem-c"))
     assert [k[3] for k in keys_of(w, actor.org_id)] == ["one"]
 
 
@@ -190,8 +200,7 @@ def test_keys_pg__two_processes_racing_one_idempotency_key_create_exactly_one_ke
 def test_keys_pg__an_unverified_individual_cannot_create_a_key(w):
     """Oracle: the backend's service role skipped `consumer_may_create_key`."""
     actor = person(w, confirmed=False)
-    with pytest.raises(errors.Forbidden):
-        run(actions(w).create_key(actor, "nope", "idem-u"))
+    refused(errors.Forbidden, actions(w).create_key(actor, "nope", "idem-u"))
     assert keys_of(w, actor.org_id) == []
 
 
@@ -201,8 +210,7 @@ def test_keys_pg__an_organization_the_actor_does_not_own_is_refused(w):
     account."""
     a, b = person(w), person(w)
     forged = a.model_copy(update={"org_id": b.org_id})
-    with pytest.raises(errors.Forbidden):
-        run(actions(w).create_key(forged, "x", "idem-f"))
+    refused(errors.Forbidden, actions(w).create_key(forged, "x", "idem-f"))
     assert keys_of(w, b.org_id) == []
 
 
@@ -213,8 +221,7 @@ def test_keys_pg__a_suspended_account_revokes_but_cannot_create(w):
     created = run(actions(w).create_key(actor, "before", "idem-s1"))
     w.owner.execute("select infrx.set_suspension(%s, true, 'abuse', 'test', 'suspended', "
                     "'susp-' || %s)", (actor.org_id, actor.org_id))
-    with pytest.raises(errors.OrgSuspended):
-        run(actions(w).create_key(actor, "after", "idem-s2"))
+    refused(errors.OrgSuspended, actions(w).create_key(actor, "after", "idem-s2"))
     revoked = run(actions(w).revoke_key(actor, created.key.key_id, None))
     assert revoked.revoked_at is not None and len(keys_of(w, actor.org_id)) == 1
 
@@ -229,10 +236,8 @@ def test_keys_pg__revocation_is_idempotent_scoped_and_conflicts_on_a_reused_key(
     first = run(actions(w).revoke_key(actor, k1.key_id, "rv-1"))
     again = run(actions(w).revoke_key(actor, k1.key_id, "rv-1"))
     assert first.revoked_at is not None and again.revoked_at == first.revoked_at
-    with pytest.raises(errors.IdempotencyConflict):
-        run(actions(w).revoke_key(actor, k2.key_id, "rv-1"))
-    with pytest.raises(errors.NotFound):
-        run(actions(w).revoke_key(actor, theirs.key_id, "rv-2"))
+    refused(errors.IdempotencyConflict, actions(w).revoke_key(actor, k2.key_id, "rv-1"))
+    refused(errors.NotFound, actions(w).revoke_key(actor, theirs.key_id, "rv-2"))
     assert [k[5] is None for k in keys_of(w, actor.org_id)] == [False, True]
     assert keys_of(w, other.org_id)[0][5] is None
 
@@ -263,12 +268,16 @@ def test_grant_pg__an_unverified_individual_is_not_granted(w):
 
 def test_grant_pg__two_processes_claiming_concurrently_land_one_grant(w):
     """API-KEYGRANT: six claims for one individual from two API processes at once. Oracle:
-    more than one entitlement or ledger row, or more than one `granted` answer."""
+    more than one entitlement or ledger row, more than one `granted` answer, or a racer
+    that did not see the one grant."""
     from tests.g.ops import pgworld
     actor = person(w)
     answers = race(w, "grant", actor, "infrx.signup_entitlements")
     assert all(a["status"] == 200 for a in answers), answers
     assert sorted(a["body"]["status"] for a in answers) == ["granted"] + ["replayed"] * 5
+    assert all(a["body"]["credit"] == {"amount": "10000.00000000", "unit": "CREDIT"}
+               for a in answers), answers
+    assert len({a["body"]["granted_at"] for a in answers}) == 1, answers
     assert entitlements(w, actor.user_id) == 1 and pgworld.signup_rows(w, str(actor.user_id)) == 1
 
 
@@ -315,7 +324,6 @@ def test_operator_pg__a_forged_operator_actor_is_refused_by_the_database(w):
     service role - and the write happened."""
     forged = person(w).model_copy(update={"operator": True})
     victim = person(w)
-    with pytest.raises(errors.Forbidden):
-        run(actions(w).set_suspension(forged, str(victim.org_id), True, REASON, "forged-1"))
+    refused(errors.Forbidden, actions(w).set_suspension(forged, str(victim.org_id), True, REASON, "forged-1"))
     assert w.one("select suspended from public.organizations where id = %s",
                  (victim.org_id,)) is False
