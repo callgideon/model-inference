@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 359,
- "updated": "2026-10-01T03:34:22Z",
+ "revision": 360,
+ "updated": "2026-10-01T03:35:26Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10810,6 +10810,241 @@
     "apps/infrx-api/tests/g/lab_releases/",
     "tests/integration/test_harness.py",
     "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-LAB-B",
+   "task": null,
+   "slice": "wave 6 clean-up lane lab-B (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_cf050177-8d7",
+   "agent": "opus",
+   "branch": "codex/w6-lab-B",
+   "worktree": ".claude/worktrees/codex-w6-lab-B",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "-",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "*/server.ts",
+    "apps/lab/.env.example",
+    "apps/lab/lib/auth/config.ts",
+    "apps/lab/lib/auth/session.ts",
+    "apps/lab/lib/services/*/http.ts",
+    "apps/lab/lib/services/http.ts",
+    "apps/lab/lib/services/shapes.ts",
+    "apps/lab/tests/*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-LAB-E",
+   "task": null,
+   "slice": "wave 6 clean-up lane lab-E (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_98b2df61-077",
+   "agent": "opus",
+   "branch": "codex/w6-lab-E",
+   "worktree": ".claude/worktrees/codex-w6-lab-E",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "-",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/components/traces/detail/{view.ts,panels.tsx,fake.ts,port.ts}",
+    "apps/lab/lib/services/content/",
+    "apps/lab/tests/c/content/",
+    "apps/lab/tests/c/judge/run-mutants.mjs",
+    "apps/lab/tests/c/review/run-mutants.mjs",
+    "apps/lab/tests/e2e/run-mutants.mjs",
+    "apps/lab/tests/l/shell/harness.mjs",
+    "apps/lab/tests/n/run-mutants.mjs",
+    "apps/lab/tests/v/detail/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-CERTIFY-RELEASE",
+   "task": null,
+   "slice": "wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "agent": "opus",
+   "branch": "codex/w6-certify-release",
+   "worktree": ".claude/worktrees/codex-w6-certify-release",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "m6",
+    "prefix": "infrx-m6",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/tests/i/test_rollout.py",
+    "infra/rollout/certify-window.sh",
+    "infra/rollout/e4c-certify.sh",
+    "infra/rollout/go-live-remaining.sh"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-PGRESTORE-TESTS",
+   "task": null,
+   "slice": "wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "agent": "opus",
+   "branch": "codex/w6-pgrestore-tests",
+   "worktree": ".claude/worktrees/codex-w6-pgrestore-tests",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "i3b",
+    "prefix": "infrx-i3b",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infra/runbooks/pgrestore.py",
+    "tests/integration/backend/recovery/mutants_i3b.py",
+    "tests/integration/backend/recovery/test_restore.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-API-L5",
+   "task": null,
+   "slice": "wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "agent": "opus",
+   "branch": "codex/w6-api-L5",
+   "worktree": ".claude/worktrees/codex-w6-api-L5",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "w5",
+    "prefix": "infrx-w5",
+    "db": "task-local"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/traces/spool.py",
+    "apps/infrx-api/infrx/worker/engine.py",
+    "apps/infrx-api/infrx/worker/service.py",
+    "apps/infrx-api/pyproject.toml",
+    "apps/infrx-api/tests/w/",
+    "attempt.py",
+    "engine_wire.py",
+    "tests/t/",
+    "traces/segment.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MAKEFILE-PINS",
+   "task": null,
+   "slice": "wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "agent": "opus",
+   "branch": "codex/w6-makefile-pins",
+   "worktree": ".claude/worktrees/codex-w6-makefile-pins",
+   "base": "2add8e0a",
+   "head": null,
+   "isolation": {
+    "ports": "-",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T03:35:26Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate",
+    "at": "2026-10-01T03:35:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "Makefile",
+    "tests/integration/README.md",
+    "tests/integration/mutants.py",
+    "tests/integration/test_makefile_mutant_lists.py"
    ],
    "wiring_requests": []
   }
