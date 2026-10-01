@@ -282,7 +282,7 @@ def test_lab_release__web_deploys_infrx_lab_in_the_callgideon_scope(tmp_path):
                      "NEXT_PUBLIC_SUPABASE_URL": "https://ref.supabase.co",
                      "NEXT_PUBLIC_SUPABASE_ANON_KEY": ANON,
                      **{k: "https://lab-control.callbill.ai" for k in (
-                         "LAB_API_URL")}}
+                         "LAB_API_URL",)}}
     assert ANON not in out
     c.log.unlink()
     assert c.run("web", SUPABASE_URL="https://ref.supabase.co", VERCEL_SCOPE="other")[0] == 0

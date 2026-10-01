@@ -1915,7 +1915,7 @@ MUTANTS += (
        LR, '--project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \\', "--project infrx-lab --scope callgideon >/dev/null 2>&1 \\",
        LR_WEB),
     _m("lab_release_env_name_dropped", "the deploy sets LAB_API_URL, the one Lab API name (LAB-03)",
-       LR, '"LAB_API_URL=https://lab-control.callbill.ai" ', "", LR_WEB),
+       LR, '"LAB_API_URL=https://lab-control.callbill.ai"; do', '; do', LR_WEB),
     _m("lab_release_members_dsn_on_argv", "the owner DSN never travels on an argv",
        LR, 'apps/infrx-api/.venv/bin/python - "operator:',
        'apps/infrx-api/.venv/bin/python - "$OPERATIONS_DATABASE_URL" "operator:', LR_MEMBERS),
