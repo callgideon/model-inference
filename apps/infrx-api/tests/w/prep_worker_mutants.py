@@ -71,7 +71,7 @@ BOUNDED = "test_prep_worker__the_memo_is_bounded_least_recently_used_first"
 NOT_MEMOIZED = "test_prep_worker__a_refused_video_count_is_never_memoized"   # fix round B1
 PG_DRAIN = "test_prep_worker_pg__sigterm_releases_a_preparation_and_the_next_worker_prepares_it"
 
-_WAIT = "{waiting, self._pool, self._reaper, *self.loop._tasks,\n"
+_WAIT = "{waiting, pool, reaper, *self.loop._tasks,\n"
 _PREP_DRAIN = "self.preparation.drain(self.loop.limits.preparation_lease_ttl_s)"
 _REFUSED = "        except errors.DomainError as refused:\n            log.warning("
 

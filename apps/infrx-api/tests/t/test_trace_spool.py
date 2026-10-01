@@ -1917,3 +1917,19 @@ def test_synthetic_concurrent_load_stays_within_the_declared_bounds():
         assert stats["loss_reasons"].get("memory_budget", 0) > 0, stats["loss_reasons"]
         await spool.close()
     asyncio.run(scenario())
+
+
+# A12: the segment format and its reader are one module, re-exported by the sink.
+SEGMENT_NAMES = ("SEGMENT_VERSION", "SEGMENT_MAGIC", "SEGMENT_PREFIX", "SEGMENT_SUFFIX",
+                 "HEADER", "FRAME", "LENGTHS", "MAX_ENVELOPE_BYTES", "SpoolIO",
+                 "segment_header", "frame_checksum", "pack_frame", "frame_size", "Scan",
+                 "scan_segment", "segment_names", "recover")
+
+
+def test_the_segment_format_lives_in_one_module_the_sink_reexports():
+    """A12 (W6): `traces.segment` holds the on-disk format, its reader and the injectable
+    filesystem; `traces.spool` re-exports each, so the shipper, the drills and recovery read
+    the same objects. Fails when a name is copied instead of moved, or dropped."""
+    from infrx.traces import segment, spool
+    for name in SEGMENT_NAMES:
+        assert getattr(spool, name, None) is getattr(segment, name), name

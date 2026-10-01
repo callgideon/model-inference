@@ -31,6 +31,7 @@ API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = "tests/t/test_trace_spool.py"
 SPOOL = "traces/spool.py"
+SEGMENT = "traces/segment.py"   # A12: the format and its reader moved here
 
 # the cases, spelled once
 CONFORMANCE = "test_the_spool_sink_passes_the_exported_tracesink_conformance_suite"
@@ -87,15 +88,17 @@ FSYNC_RAISES = "test_an_fsync_step_that_raises_leaves_the_books_agreeing"
 OWNERSHIP = "test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock"
 MOVED_FRAME = "test_a_frame_excised_or_duplicated_mid_segment_is_the_tail"
 PARTS_RELEASE = PARTS
+REEXPORT = "test_the_segment_format_lives_in_one_module_the_sink_reexports"
 
 
-def _m(name, invariant, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
-    """One single-edit defect in `spool.py` and the cases that must fail because of it.
+def _m(name, invariant, old, new, *cases, dies_by=(), occurrences=1, file=SPOOL) -> Mutant:
+    """One single-edit defect in `spool.py` (or, since A12, `segment.py`) and the cases that
+    must fail because of it.
 
-    The declaration is the shared `Mutant` (F2R item 9); every mutant in this list edits
-    the same file, so the factory fills it in.
+    The declaration is the shared `Mutant` (F2R item 9); the factory fills in `spool.py`
+    unless the mutant names the segment module.
     """
-    return Mutant(name=name, invariant=invariant, file=SPOOL, old=old, new=new, cases=cases,
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
                   dies_by=tuple(dies_by), occurrences=occurrences)
 
 
@@ -108,15 +111,15 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- the segment format and its reader -------------------------------------
     _m("checksum_not_verified", "a corrupt record is never replayed",
        "        if frame_checksum(payload, (content,), content_bytes, index) != crc:",
-       "        if False:", CORRUPT),
+       "        if False:", CORRUPT, file=SEGMENT),
     _m("the_checksum_ignores_the_lengths", "a frame's lengths are inside its checksum",
        "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))\n"
        "    crc = binascii.crc32(payload, crc)",
-       "    crc = binascii.crc32(payload)", SWAPPED),
+       "    crc = binascii.crc32(payload)", SWAPPED, file=SEGMENT),
     _m("the_checksum_ignores_the_position", "a moved frame is not another record's id",
        "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))",
        "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, 0))",
-       MOVED_FRAME),
+       MOVED_FRAME, file=SEGMENT),
     _m("the_writer_checksums_the_wrong_position", "the writer and reader agree on position",
        "                crc = frame_checksum(row.payload, row.parts, row.content_bytes,\n"
        "                                     segment.records)",
@@ -124,20 +127,20 @@ MUTANTS: tuple[Mutant, ...] = (
        TWICE, MOVED_FRAME),
     _m("the_reader_numbers_records_by_hand", "a record's id is its verified position",
        "        position, index = index, index + 1", "        position, index = 0, index + 1",
-       BITFLIP),
+       BITFLIP, file=SEGMENT),
     _m("a_poison_record_shifts_the_ids_after_it", "a poison row does not renumber the rest",
        "            scan.poison += 1\n            continue",
        "            scan.poison += 1\n            index -= 1\n            continue",
-       POISON),
+       POISON, file=SEGMENT),
     _m("torn_tail_crashes_the_reader", "a torn tail is tolerated, not raised",
        "        if len(data) - offset < FRAME.size:\n"
        "            _torn(scan, name, offset, len(data))\n            break",
        "        if False:\n"
        "            _torn(scan, name, offset, len(data))\n            break",
-       RECOVER, dies_by=("error",)),
+       RECOVER, dies_by=("error",), file=SEGMENT),
     _m("a_frame_past_the_reader_ceiling_is_read", "the reader's frame ceiling is the writer's",
        "        if envelope_bytes > MAX_ENVELOPE_BYTES or len(data) - body",
-       "        if False or len(data) - body", CEILING),
+       "        if False or len(data) - body", CEILING, file=SEGMENT),
     # No mutant for the *other* half of that condition (`len(data) - body < envelope_bytes +
     # content_bytes`). A frame that claims more bytes than the file holds is sliced short and
     # then fails its checksum, so removing the length test changes nothing an oracle can see:
@@ -145,13 +148,13 @@ MUTANTS: tuple[Mutant, ...] = (
     # weakening a case, which R40 forbids.
     _m("any_format_version_is_parsed", "an unknown segment version is not guessed at",
        "    if magic != SEGMENT_MAGIC or version != SEGMENT_VERSION:",
-       "    if False:", VERSION),
+       "    if False:", VERSION, file=SEGMENT),
     _m("the_reader_loses_the_content", "the reader returns the content it read",
        "        scan.contents.append(content)", "        scan.contents.append(b\"\")",
-       ROUND_TRIP),
+       ROUND_TRIP, file=SEGMENT),
     _m("replay_reads_every_segment_twice", "a replay yields each record exactly once",
        "    for name in segment_names(directory, reader):",
-       "    for name in segment_names(directory, reader) * 2:", TWICE),
+       "    for name in segment_names(directory, reader) * 2:", TWICE, file=SEGMENT),
     # --- the fsync boundary ----------------------------------------------------
     _m("fsync_claimed_at_every_flush", "durability begins at fsync, not at append",
        "        fsync_due = ((now - self._last_fsync).total_seconds()\n"
@@ -321,7 +324,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            _torn(scan, name, offset, len(data))\n            break",
        "        if frame_checksum(payload, (content,), content_bytes, index) != crc:\n"
        "            _torn(scan, name, offset, len(data))\n            return Scan()",
-       CORRUPT),
+       CORRUPT, file=SEGMENT),
     _m("an_unmeasurable_disk_is_an_empty_one", "a disk that cannot be measured fails closed (R14)",
        "        except OSError:\n            free = 0", "        except OSError:\n            free = 1 << 62",
        FLOOR),
@@ -340,7 +343,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '            raise RuntimeError("this trace sink is closed")',
        '        if False:\n            raise RuntimeError("this trace sink is closed")', CLOSED),
     _m("a_torn_tail_says_nothing_about_itself", "a torn tail reports where it stopped",
-       "    scan.unread_bytes += size - offset", "    scan.unread_bytes += 0", TORN_AT),
+       "    scan.unread_bytes += size - offset", "    scan.unread_bytes += 0", TORN_AT,
+       file=SEGMENT),
 
     # --- round 2 of review ------------------------------------------------------------
     _m("a_cancelled_flush_releases_the_guard", "the guard is the batch's lifetime (B7)",
@@ -457,7 +461,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "        scan.unreadable += 1\n        scan.unread_bytes += len(data)\n"
        "        return scan\n    offset = HEADER.size",
        "        scan.unreadable += 1\n        return scan\n    offset = HEADER.size",
-       UNREAD),
+       UNREAD, file=SEGMENT),
+    # A12 (W6): the split keeps one object per name, re-exported by the sink.
+    _m("a_segment_name_dropped_from_the_reexport", "spool re-exports every segment name",
+       "frame_checksum, frame_size, pack_frame,", "frame_checksum, pack_frame,", REEXPORT),
 )
 
 

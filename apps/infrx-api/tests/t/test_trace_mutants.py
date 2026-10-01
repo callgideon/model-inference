@@ -59,16 +59,17 @@ def test_the_runner_cannot_report_a_false_kill():
     checks = (
         (mutation_list.Outcome.broken_runner,
          _m("self_syntax_error", "a broken copy is not a kill",
-            "class SpoolIO:", "class SpoolIO:::", case)),
+            "class SpoolIO:", "class SpoolIO:::", case, file=mutation_list.SEGMENT)),
         (mutation_list.Outcome.survived,
          _m("self_no_op", "an edit that changes nothing survives",
-            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 2  # a comment changes no behaviour", case)),
+            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 2  # a comment changes no behaviour", case,
+            file=mutation_list.SEGMENT)),
         (mutation_list.Outcome.misdeclared,
          _m("self_missing_anchor", "the list matches the code",
             "this text is not in the module", "nor is this", case)),
         (mutation_list.Outcome.misdeclared,
          _m("self_no_case", "every mutant names a case",
-            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 3")),
+            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 3", file=mutation_list.SEGMENT)),
     )
     for expected, mutant in checks:
         result = mutation_list.run_mutant(mutant)

@@ -34,7 +34,8 @@ def test_the_list_is_well_formed():
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
-        assert mutant.file in ("worker/engine.py", "worker/reasoning.py"), mutant.file
+        assert mutant.file in ("worker/engine.py", "worker/engine_wire.py",
+                               "worker/reasoning.py"), mutant.file
         # a declared kill mode is an exception name, never a blanket "anything goes"
         for name in mutant.dies_by:
             assert name.isidentifier() and name not in mutation_list.KILL_ERRORS, name

@@ -39,7 +39,8 @@ def test_the_list_is_well_formed():
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
-        assert mutant.file in ("worker/attempt.py", "worker/loop.py", "worker/engine.py"), \
+        assert mutant.file in ("worker/attempt.py", "worker/loop.py", "worker/engine.py",
+                               "worker/engine_wire.py"), \
             mutant.file
         for name in mutant.dies_by:
             assert name.isidentifier() and name not in w1_list.KILL_ERRORS, name
