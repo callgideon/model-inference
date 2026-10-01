@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@infrx/shared':
-        specifier: file:../../packages/shared
-        version: file:../../packages/shared
+        specifier: link:../../packages/shared
+        version: link:../../packages/shared
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.116.0)
@@ -336,9 +336,6 @@ packages:
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [win32]
-
-  '@infrx/shared@file:../../packages/shared':
-    resolution: {directory: ../../packages/shared, type: directory}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2130,8 +2127,6 @@ snapshots:
 
   '@img/sharp-win32-x64@0.35.4':
     optional: true
-
-  '@infrx/shared@file:../../packages/shared': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
