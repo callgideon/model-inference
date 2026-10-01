@@ -11,6 +11,7 @@ const ACTIONS = "lib/services/rollouts/actions.ts";
 const RELEASES = "app/(provider)/releases/page.tsx";
 const OPTIMIZATIONS = "app/(provider)/optimizations/page.tsx";
 const HTTP = "lib/services/rollouts/http.ts";
+const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
 const SERVER = "lib/services/rollouts/server.ts";
 
 const C = {
@@ -136,26 +137,26 @@ const MUTANTS = [
   m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
   // the HTTP adapter (WR-R4-1, lane lab-api-2)
-  m("R4-X78", "the session token is not sent", HTTP, "authorization: `Bearer ${bearer}`", 'authorization: "Bearer"', [C.h01]),
-  m("R4-X79", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
-  m("R4-X80", "a read is not unwrapped from {data}", HTTP, "camel(body === undefined ? payload.data : payload)", "camel(payload)", [C.h01]),
-  m("R4-X81", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
-  m("R4-X82", "nested records are not renamed", HTTP, "camel(v)]", "v]", [C.h01]),
-  m("R4-X83", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(camel)", "Array.isArray(value) ? value", [C.h01]),
-  m("R4-X84", "optimizations read the releases", HTTP, 'call(actor, "optimizations", list(VARIANT))', 'call(actor, "releases", list(VARIANT))', [C.h01]),
+  m("R4-X78", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),
+  m("R4-X79", "the provider is not the actor's", TRANSPORT, "encodeURIComponent(actor.providerId)", "\"\"", [C.h01]),
+  m("R4-X80", "a read is not unwrapped from {data}", TRANSPORT, "read: Answer = (p) => keys(p.data)", "read: Answer = (p) => keys(p)", [C.h01]),
+  m("R4-X81", "records keep the route's snake_case keys", TRANSPORT, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
+  m("R4-X82", "nested records are not renamed", TRANSPORT, "[to(k), deep(v)]", "[to(k), v]", [C.h01]),
+  m("R4-X83", "a list of records is not renamed", TRANSPORT, "Array.isArray(value) ? value.map(deep)", "Array.isArray(value) ? value", [C.h01]),
+  m("R4-X84", "optimizations read the releases", HTTP, "get(actor, \"optimizations\", list(VARIANT))", "get(actor, \"releases\", list(VARIANT))", [C.h01]),
   m("R4-X85", "the proposal carries the port's key", HTTP, "policy_ref: policyRef", "policyRef", [C.h01]),
-  m("R4-X86", "the proposal is a read", HTTP, 'method: body === undefined ? "GET" : "POST"', 'method: "GET"', [C.h01]),
-  m("R4-X87", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
-  m("R4-X88", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
-  m("R4-X89", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
-  m("R4-X90", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
-  m("R4-X91", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+  m("R4-X86", "the proposal is a read", HTTP, "post(actor, \"releases/proposals\"", "get(actor, \"releases/proposals\"", [C.h01]),
+  m("R4-X87", "the body is not declared JSON", TRANSPORT, "if (body !== undefined) headers[\"content-type\"] = \"application/json\";", "", [C.h01]),
+  m("R4-X88", "no session reads as unavailable", TRANSPORT, "401: \"denied\", ", "", [C.h02]),
+  m("R4-X89", "a missing capability reads as not found", TRANSPORT, "403: \"denied\"", "403: \"not_found\"", [C.h02]),
+  m("R4-X90", "an unmapped status is invalid", TRANSPORT, "?? \"unavailable\"", "?? \"invalid\"", [C.h02]),
+  m("R4-X91", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-R4-1): the configured adapter, the session's token, the row check
   m("R4-X92", "the configured adapter is ignored", PORT, "return labReleases(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
   m("R4-X93", "another server env names the backend", SERVER, "env.LAB_RELEASES_API_URL", "env.LAB_PIPELINES_API_URL", [C.w01]),
   m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
-  m("R4-X95", "a call is sent without a session token", HTTP, '    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent\n', "", [C.h04, C.w01]),
-  m("R4-X96", "an answer is not checked", HTTP, 'return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" };', "return { ok: true, value: value as T };", [C.h03]),
+  m("R4-X95", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
+  m("R4-X96", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
   m("R4-X97", "an unknown release state is read", HTTP, 'state: oneOf("running", "approved", "rolled_back"), fence: num,', "state: str, fence: num,", [C.h03]),
   m("R4-X98", "a release without its fence is read", HTTP, "fence: num, planDigest: str,", "planDigest: str,", [C.h03]),
   m("R4-X99", "a plan without its budget is read", HTTP, "maxLagS: num, budget: AMOUNT }", "maxLagS: num }", [C.h03]),
@@ -182,9 +183,11 @@ const MUTANTS = [
   m("R4-X114", "an identity without its quantization is read", HTTP, "hardware: str, quantization: str,", "hardware: str,", [C.h03]),
   m("R4-X115", "a performance ratio that is not a number is read", HTTP, "throughputRatio: num,", "throughputRatio: () => true,", [C.h03]),
   m("R4-X116", "a comparison without its claim flag is read", HTTP, "reportDigest: str, optimizationClaimed: bool,", "reportDigest: str,", [C.h03]),
-  m("R4-X117", "a variants answer that is one record is read", HTTP, 'call(actor, "optimizations", list(VARIANT))', 'call(actor, "optimizations", (v) => list(VARIANT)(v) || VARIANT(v))', [C.h03]),
+  m("R4-X117", "a variants answer that is one record is read", HTTP, "get(actor, \"optimizations\", list(VARIANT))", "get(actor, \"optimizations\", (v) => list(VARIANT)(v) || VARIANT(v))", [C.h03]),
   m("R4-X118", "a proposal's answer is not checked", HTTP, '"releases/proposals", PROPOSAL, {', '"releases/proposals", () => true, {', [C.h03]),
-  m("R4-X119", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
+  m("R4-X119", "a session-token getter that rejects escapes the adapter", TRANSPORT, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
+  m("R4-X127", "a 410 reads as gone in a family that has no gone", TRANSPORT, "422: \"invalid\" }", "422: \"invalid\", 410: \"gone\" }", [C.h02]),
+  m("R4-X128", "records keep the route's snake_case keys (no rename)", HTTP, "labClient(options, \"/lab/v1\", { rename: camel })", "labClient(options, \"/lab/v1\")", [C.h01]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "R4", mutants: MUTANTS }));
