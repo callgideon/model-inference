@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Checkpoint, Label, TeacherBatch, TrainingRun } from "../../lib/services/pipelines/port.ts";
 import { holds, pipelinesPort } from "../../lib/services/pipelines/port.ts";
+import { firstFailure } from "../../lib/services/common.ts";
 import {
   checkpointRows, exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY, runRows, teacherRows,
 } from "../../lib/services/pipelines/view.ts";
@@ -214,4 +215,11 @@ test("P4-V17 each chunk reads as its ledger records it: held, ambiguous (never r
     "4 samples · failed: the hold is released",
     "4 samples · not reserved: the batch stopped before this chunk (payer budget or a withdrawn permission); nothing sent",
   ]);
+});
+
+test("P4-V18 a page's refusal is the first failed read's reason, in read order; skipped reads and successes are not failures", () => {
+  const ok = { ok: true, value: [] } as const;
+  assert.equal(firstFailure(ok, null, ok), null);
+  assert.equal(firstFailure(ok, { ok: false, reason: "denied" }, { ok: false, reason: "unavailable" }), "denied");
+  assert.equal(firstFailure(null, { ok: false, reason: "gone" }), "gone");
 });

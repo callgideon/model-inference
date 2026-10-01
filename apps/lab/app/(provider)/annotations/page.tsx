@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
+import { firstFailure } from "@/lib/services/common";
 import { adjudicateSample, assignReviewer, exportLabels, importLabels, reviewLabel } from "@/lib/services/pipelines/actions";
 import { ADAPTERS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY } from "@/lib/services/pipelines/view";
@@ -20,7 +21,7 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
     port.imports(workspace), port.exports(workspace),
     dataset === null ? null : port.labels(workspace, dataset), dataset === null ? null : port.disagreements(workspace, dataset),
   ]);
-  const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);
+  const failed = firstFailure(imports, exports, labels, disputes);
   return (
     <>
       <h1>Annotations</h1>
@@ -30,8 +31,8 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
         <label>Dataset version <input name="dataset" required defaultValue={dataset ?? ""} placeholder="lab:dataset:…@sha256:…" /></label>
         <button type="submit">Open</button>
       </form>
-      {failed && !failed.ok ? (
-        <p role="alert">{REFUSAL_COPY[failed.reason]}</p>
+      {failed !== null ? (
+        <p role="alert">{REFUSAL_COPY[failed]}</p>
       ) : (
         <>
           {dataset !== null && labels?.ok && disputes?.ok && (

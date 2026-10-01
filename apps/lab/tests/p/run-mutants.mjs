@@ -57,6 +57,8 @@ const C = {
   w02: "P4-W02 a missing LAB_PIPELINES_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
   v15: "P4-V15 a teacher dry run shows its USD budget, named payer, cost ceiling and each chunk's reservation; nothing is reserved or sent",
   v16: "P4-V16 only an administrator approves, only a dry run within its budget, and never twice",
+  v18: "P4-V18 a page's refusal is the first failed read's reason, in read order; skipped reads and successes are not failures",
+  p06: "P4-P06 each page shows the first failed read's fixed copy (common.ts firstFailure)",
   v17: "P4-V17 each chunk reads as its ledger records it: held, ambiguous (never resent), settled or unknown cost, stopped, failures counted",
   j06: "P4-J06 teacher batch: a dry run sends nothing; only an administrator approves within the budget; a double click is one batch; ambiguous, stopped and unauthorized variants",
   a07: "P4-A07 a teacher dry run and its approval: the session's actor and the form's batch id; a developer never approves; malformed input never reaches the service",
@@ -294,6 +296,11 @@ const MUTANTS = [
   m("P4-X212", "a failure without its reason is read", HTTP, "failures: many(obj({ sampleId: str, reason: str }))", "failures: many(obj({ sampleId: str }))", [C.h06]),
   m("P4-X213", "a chunk without its sent count is read", HTTP, "costUsd: nul(str), sent: num,", "costUsd: nul(str),", [C.h06]),
   m("P4-X214", "a chunk's unknown and missing cost read alike", HTTP, "costUsd: nul(str), sent: num", 'costUsd: (v) => v == null || typeof v === "string", sent: num', [C.h06]),
+  // LAB-13: one failure pick
+  m("P4-X217", "the last failed read wins", COMMON, "for (const r of results) if", "for (const r of [...results].reverse()) if", [C.v18]),
+  m("P4-X218", "a successful read counts as a failure", COMMON, "if (r !== null && !r.ok) return r.reason;", "if (r !== null) return (r as { reason: R }).reason;", [C.v18]),
+  m("P4-X219", "the training page says unavailable for every failure", TRAIN, "REFUSAL_COPY[firstFailure(runs, checkpoints)!]", "REFUSAL_COPY.unavailable", [C.p06]),
+  m("P4-X220", "the annotations page ignores a failed label read", ANNOT, "firstFailure(imports, exports, labels, disputes)", "firstFailure(imports, exports)", [C.p06]),
   m("P4-X216", "a refusal on a page with a query breaks its URL", COMMON, '${page.includes("?") ? "&" : "?"}refused=', "?refused=", [C.a02, C.a05]),
 ];
 

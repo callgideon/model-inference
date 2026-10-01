@@ -51,3 +51,9 @@ export function previewPort<P>(flag: string, fake: () => P, real: (env: Env) => 
   const port = (env: Env = process.env): P => (isPreview(env) ? (preview ??= fake()) : real(env) ?? unavailable);
   return { isPreview, port };
 }
+
+/** The first failed read's reason, in read order (a read the page skipped is null), or null when none failed. */
+export function firstFailure<R extends string>(...results: ({ ok: true } | { ok: false; reason: R } | null)[]): R | null {
+  for (const r of results) if (r !== null && !r.ok) return r.reason;
+  return null;
+}

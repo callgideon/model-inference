@@ -59,3 +59,9 @@ test("P4-P05 the teacher section: a dry-run form with its batch id minted at ren
   assert.match(training, /!batches\.ok \? <p role="note">\{TEACHER_UNAVAILABLE\}<\/p>/);
   assert.doesNotMatch(training, /name="live"|name="approve"/);
 });
+
+test("P4-P06 each page shows the first failed read's fixed copy (common.ts firstFailure)", () => {
+  assert.match(read(TRAINING), /if \(!runs\.ok \|\| !checkpoints\.ok\) return <p role="alert">\{REFUSAL_COPY\[firstFailure\(runs, checkpoints\)!\]\}<\/p>;/);
+  assert.match(read(ANNOTATIONS), /const failed = firstFailure\(imports, exports, labels, disputes\);/);
+  assert.match(read(ANNOTATIONS), /\{failed !== null \? \(\n\s+<p role="alert">\{REFUSAL_COPY\[failed\]\}<\/p>/);
+});

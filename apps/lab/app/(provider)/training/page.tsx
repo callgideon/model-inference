@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
+import { firstFailure } from "@/lib/services/common";
 import { approveCheckpoint, approveTeachers, importCheckpoint, planTeachers, prepareTraining, runAction } from "@/lib/services/pipelines/actions";
 import { EXPORT_FORMATS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { checkpointRows, refusalCopy, REFUSAL_COPY, runRows, teacherRows, type RunAction } from "@/lib/services/pipelines/view";
@@ -19,7 +20,7 @@ export default async function Training({ searchParams }: PageProps<"/training">)
   const refused = refusalCopy(query.refused);
   const port = pipelinesPort();
   const [runs, checkpoints, batches] = await Promise.all([port.runs(workspace), port.checkpoints(workspace), port.teacherBatches(workspace)]);
-  if (!runs.ok || !checkpoints.ok) return <p role="alert">{REFUSAL_COPY[!runs.ok ? runs.reason : checkpoints.ok ? "unavailable" : checkpoints.reason]}</p>;
+  if (!runs.ok || !checkpoints.ok) return <p role="alert">{REFUSAL_COPY[firstFailure(runs, checkpoints)!]}</p>;
   const bundles = await Promise.all(runs.value.map((r) => port.bundle(workspace, r.externalRunId)));
   const rows = runRows(workspace.role, runs.value);
   const writer = holds(workspace.role, "run_evaluation");

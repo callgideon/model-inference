@@ -28,6 +28,7 @@ const FAKES: Record<string, string> = {
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier in FAKES) return { url: `data:text/javascript,${encodeURIComponent(FAKES[specifier])}`, shortCircuit: true };
+    if (specifier.startsWith("@/")) return next(new URL(`../../${specifier.slice(2)}.ts`, import.meta.url).href, context); // tsconfig's @/ (LAB-13)
     return next(specifier === "next/navigation" ? "next/navigation.js" : specifier, context);
   },
 });

@@ -1,7 +1,7 @@
 // B4.c reproducibility export: the stored B2 report, verbatim (it names both runs, the case universe
 // and the protocol by digest and carries its own), for the session's workspace only.
-import { requireProviderWorkspace } from "../../../../../lib/auth/guard.ts";
-import { evaluationPort } from "../../../../../lib/services/evaluation/port.ts";
+import { requireProviderWorkspace } from "@/lib/auth/guard";
+import { evaluationPort } from "@/lib/services/evaluation/port";
 
 const HEADERS = { "cache-control": "private, no-store" };
 
