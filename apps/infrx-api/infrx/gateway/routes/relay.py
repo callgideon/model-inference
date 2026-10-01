@@ -28,10 +28,9 @@ even when the client left before the first byte (a generator that never started 
 `finally` to run).
 
 Every cancel names its cause (R21): `client_disconnected` for a client that left,
-`sync_deadline` past the bound, `client_cancelled` otherwise. Until D5's migration 0018 the
-PostgreSQL store cannot record the first two and refuses them (`param="cause"`); the relay
-then cancels with the default cause rather than leave the job running (an interim, marked
-where it is). The worker's timings are still pending (no durable carrier across processes,
+`sync_deadline` past the bound, `client_cancelled` otherwise; migration 0018 records all
+three, so a store refusal of a cancel stands as it is (the D5-era interim that re-cancelled
+under the default cause is retired, W6 A2). The worker's timings are still pending (no durable carrier across processes,
 W3 request 9): `Server-Timing` carries the phase the gateway measures itself.
 """
 from __future__ import annotations
@@ -229,17 +228,11 @@ class Relay:
         return job, admission, headers
 
     async def _lookup(self, org_id: str, idem):
-        """R91: the job a keyed request replays, with its outcome, or None. Until D5 the
-        PostgreSQL store cannot look up (`param="lookup"`, refused before any SQL); then
-        admission's own replay answer decides, as before (ponytail: interim, D5 lifts it)."""
+        """R91: the job a keyed request replays, with its outcome, or None (a key the lookup
+        has not seen yet is admission's own replay answer to give)."""
         if idem.key is None:
             return None
-        try:
-            found = await _dependency(self.jobs.lookup(org_id, idem))
-        except errors.UnsupportedParameter as refused:
-            if refused.param != "lookup":
-                raise
-            return None
+        found = await _dependency(self.jobs.lookup(org_id, idem))
         if found is not None and getattr(found[0], "accounting_regime", LEGACY) != self.regime:
             # One key, one regime (the store's own admit rule).
             raise errors.IdempotencyConflict("the key names a job of another accounting regime")
@@ -373,16 +366,6 @@ class Relay:
     async def _cancel(self, org_id: str, handle: str, cause: TerminalCause):
         try:
             return await self.jobs.cancel(org_id, handle, cause=cause)
-        except errors.UnsupportedParameter as refused:
-            if refused.param != "cause" or cause is TerminalCause.client_cancelled:
-                raise
-            # ponytail: interim until D5's migration 0018 - the PostgreSQL store cannot record
-            # this cause yet and refuses it before any SQL. The job is cancelled with the
-            # default cause rather than left running for want of the right label (the client
-            # never sees the refusal). D5 lifts it; nothing here changes then.
-            log.warning("cancel cause %s is not recordable yet: cancelling job %s as %s",
-                        cause.value, handle, TerminalCause.client_cancelled.value)
-            return await self._cancel(org_id, handle, TerminalCause.client_cancelled)
         except errors.AlreadyTerminal:
             # D3 handback: after `already_terminal`, the outcome is read, never assumed.
             return (await self._owned(org_id, handle))[1]

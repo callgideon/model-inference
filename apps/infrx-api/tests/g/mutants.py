@@ -1398,7 +1398,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   request_id=request.request_id, model=request.model_revision,",
        "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement"),
     _m("replay_reaccepted", "a terminal replay re-runs nothing of acceptance (admission's "
-       "replay answer, while the store refuses the lookup until D5)",
+       "replay answer, when the lookup missed the key)",
        R, "            if admission.replayed:              # a replay the lookup could not see yet",
        "            if False:              # a replay the lookup could not see yet",
        "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
@@ -1424,9 +1424,12 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if found is None:\n            # A fresh admission",
        "        if found is None or found[1] is not None:\n            # A fresh admission",
        "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
-    _m("lookup_refusal_escapes", "until D5 a store that cannot look up is admission's to answer",
-       R, '            if refused.param != "lookup":', "            if True:",
-       "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
+    # W6 A2: the D5-era lookup interim is retired; restoring it is the mutant.
+    _m("lookup_refusal_swallowed", "a store refusal of the lookup is the caller's answer (W6 A2)",
+       R, "        found = await _dependency(self.jobs.lookup(org_id, idem))\n",
+       "        try:\n            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+       "        except errors.UnsupportedParameter:\n            return None\n",
+       "test_dur_admit__a_store_refusal_of_the_lookup_is_never_swallowed"),
     _m("replay_crosses_regimes", "a key naming another regime's job is a conflict",
        R, '        if found is not None and getattr(found[0], "accounting_regime", LEGACY) '
           "!= self.regime:",
@@ -1690,19 +1693,17 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "                TerminalCause.client_disconnected if left else TerminalCause.client_cancelled))",
        "                TerminalCause.client_cancelled))",
        "test_api_stream__a_client_gone_before_the_first_byte_still_cancels"),
-    _m("cause_fallback_missing", "a store that cannot record the cause yet still cancels (0018)",
-       R, '            if refused.param != "cause" or cause is TerminalCause.client_cancelled:',
-       "            if True:",
-       "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels"),
-    _m("fallback_log_dropped", "the 0018 fallback is recorded in the log (review S6)",
-       R, '            log.warning("cancel cause %s is not recordable yet: cancelling job %s as %s",\n'
-          "                        cause.value, handle, TerminalCause.client_cancelled.value)\n",
-       "",
-       "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels"),
-    _m("fallback_on_any_param", "only a refusal of the cause falls back (review S6)",
-       R, '            if refused.param != "cause" or cause is TerminalCause.client_cancelled:',
-       "            if cause is TerminalCause.client_cancelled:",
-       "test_api_modes__only_the_cause_refusal_falls_back_to_the_default_cancel"),
+    # W6 A2: the D5-era cause interim is retired; restoring it is the mutant.
+    _m("cause_refusal_relabelled", "a store refusal of a cancel is never re-cancelled under "
+       "another label (review S6, W6 A2)",
+       R, "            return await self.jobs.cancel(org_id, handle, cause=cause)\n"
+          "        except errors.AlreadyTerminal:",
+       "            return await self.jobs.cancel(org_id, handle, cause=cause)\n"
+       "        except errors.UnsupportedParameter:\n"
+       "            return await self.jobs.cancel(org_id, handle,\n"
+       "                                          cause=TerminalCause.client_cancelled)\n"
+       "        except errors.AlreadyTerminal:",
+       "test_api_modes__a_cancel_refusal_is_never_relabelled"),
     # === G2 item 5: composition, readiness and the route table ===========================
     _m("pilot_built_without_catalog", "no pilot without a CatalogDirectory (D5)",
        P, "        if value is None:", '        if value is None and name != "catalog":',
