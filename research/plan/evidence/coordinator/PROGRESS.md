@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 07:22Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 388, updated 2026-10-01 07:22Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 07:24Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 389, updated 2026-10-01 07:24Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -26,7 +26,7 @@ Remaining, in order:
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `541570f7`), base `dff31efc`, main `db2f3445`.
+- Integration branch `claude/consumer-v1` (head `7467da91`), base `dff31efc`, main `db2f3445`.
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
 - Agent slots: 16 total, 6 active lanes, 2 reserved.
@@ -432,7 +432,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: W6-API-L3 (running) and W6-API-L4 (review) both own tests/i/ / tests/i/lab_control/
 - warning: overlapping writers: W6-API-L3 (running) and W6-MERGE-79 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
 - warning: overlapping writers: W6-API-L4 (review) and W6-MERGE-79 (running) both own apps/infrx-api/tests/g/lab_*/ / apps/infrx-api/tests/g/lab_releases/
-- warning: 11 update file(s) not applied yet: W6-CERTIFY-RELEASE-20261001T0450Z.json, W6-api-L3-20261001T0620Z.json, W6-docs-state-20261001T0335Z.json, W6-infra-libs-20261001T0324Z.json, W6-lab-A-20261001T0300Z.json, W6-lab-B-20261001T0413Z.json, W6-lab-D-20261001T0538Z.json, W6-lab-E-20261001T0404Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json, W6-pgrestore-tests-20261001T0500Z.json (run apply-updates)
+- warning: 12 update file(s) not applied yet: W6-CERTIFY-RELEASE-20261001T0450Z.json, W6-api-L3-20261001T0620Z.json, W6-api-L4-20261001T1200Z.json, W6-docs-state-20261001T0335Z.json, W6-infra-libs-20261001T0324Z.json, W6-lab-A-20261001T0300Z.json, W6-lab-B-20261001T0413Z.json, W6-lab-D-20261001T0538Z.json, W6-lab-E-20261001T0404Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json, W6-pgrestore-tests-20261001T0500Z.json (run apply-updates)
 
 ## Pending inputs
 
