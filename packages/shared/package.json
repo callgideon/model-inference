@@ -2,12 +2,11 @@
   "name": "@infrx/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "Lab-only shared TypeScript (F3 contracts, the C0 QueryPort copy, trace formatting); apps/lab depends on it through file:. The App does not.",
+  "description": "Lab-only shared TypeScript (the F3 Lab contracts); apps/lab depends on it through link:. The App does not.",
   "type": "module",
   "exports": {
     "./contracts/lab": "./contracts/lab/index.ts",
     "./contracts/lab/fakes": "./contracts/lab/fakes.ts",
-    "./contracts/lab/fixtures.json": "./contracts/lab/fixtures.json",
-    "./console/*": "./console/*"
+    "./contracts/lab/fixtures.json": "./contracts/lab/fixtures.json"
   }
 }
