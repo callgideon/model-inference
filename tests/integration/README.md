@@ -30,7 +30,7 @@ Useful flags:
 | `--pull` | pull the pinned digests first (first run on a fresh host) |
 | `--seed N` | the fixture seed; the same seed gives the same uuids and rows |
 | `--report P` | write the JSON stage report to `P` |
-| `--no-mutants` | skip the ~2 minute mutation run |
+| `--no-mutants` | skip the R32 mutation run (one suite copy per mutant; not timed in W6) |
 
 **Harness runs are serialized host-wide** (r1 review R-c). One compose project name is shared
 by every checkout of this repository, so two runs cannot be in flight at once; the ownership
@@ -71,6 +71,7 @@ apps/infrx-api/.venv/bin/python tests/integration/fake_vllm.py --port 55580 --fa
 | `test_run.py` | layer 1: the orchestration itself — exit mapping, every stage, the harness lifecycle — with docker and the shells stubbed |
 | `test_fake_vllm.py` | layer 1: the exported engine conformance suite over HTTP, plus wire shapes |
 | `test_services.py` | layer 2: migrations, the role matrix, the three other stores, faults |
+| `test_makefile_mutant_lists.py` | layer 1: every mutant runner in the tree is named exactly once by `make api-mutants` / `make lab-mutants` (W6 DT-11) |
 
 The console half of E's ownership is `apps/app/tests/e2e/`, which today proves nested console
 discovery and the console canary and lists the `CONSOLE-*` cases still pending.
@@ -241,6 +242,39 @@ Both carryovers of audit item 16 are closed, against the merged migrations `0001
 - The offset is a committed row, not a session GUC: a move outlives its statement, and a
   rolled-back transaction is what undoes it. `pgstate.probe_clock` is the one definition of
   what the clock does and `run.py` records its measurements in the `migrate` stage.
+
+## Measured wall-clocks of the `make` targets (W6 DT-16)
+
+`make check` = `api-test api-lint api-typecheck api-mutants console-test console-lint
+console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck
+lab-build lab-mutants`. No whole `make check` was timed in W6: the host carried other lanes'
+stacks (load average 25-33 on 16 cores, 61 GiB RAM, Docker up with nine foreign `infrx-*`
+containers), and `api-test`/`api-mutants` need the shared `d1` and the `r2`/`t2f`/`l3`/`l4`
+keys. So the container-free targets were timed one by one, sequentially, on the
+makefile-pins tree (2026-10-01 03:45-04:16Z, after one `pnpm install --frozen-lockfile` in
+each app), and the two Python targets are taken from the newest evidence that times them.
+Under a quiet host expect them faster; under load they are what you will see.
+
+| Target | Wall-clock | Result | Source |
+|---|---|---|---|
+| `api-test` | 1 h 28 min | 6,637 passed (key `lab-on`, concurrent lanes) | log: `research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md` (2026-09-29) |
+| `api-mutants` | >= 2 h 42 min | line 1 2:32:56 + E4B list 562 s; predates the Lab lists, so a lower bound | log: `research/plan/evidence/coordinator/G-GATES-9b21339.md` (2026-09-27) |
+| ... its `lab_local` line | 224.6 s | 82 passed, 12 stack skips | meas. W6 |
+| `api-lint`, `api-typecheck` | 0.0 s | "not run" until api-L5's config lands | meas. W6 |
+| `bench-test` | 26.0 s | 121 passed | meas. W6 |
+| `lab-test` | 2.8 s | 268 tests, 254 pass, 14 skipped | meas. W6 |
+| `lab-lint` | 9.6 s | exit 0 | meas. W6 |
+| `lab-typecheck` | 9.8 s | exit 0 | meas. W6 |
+| `lab-build` | 19.3 s | exit 0 | meas. W6 |
+| `lab-mutants` | 838.3 s | exit 0, every runner 0 survivors (e2e stack list not run without `LAB_E2E_REAL=1`) | meas. W6 |
+| `console-test` | 5.8 s | 650 tests, 591 pass, 59 skipped | meas. W6 |
+| `console-lint` | 15.6 s | exit 0 | meas. W6 |
+| `console-typecheck` | 13.6 s | exit 0 | meas. W6 |
+| `console-mutants` | 871.1 s | exit 0 | meas. W6 |
+| `console-built` | 23.9 s | exit 0 | meas. W6 |
+
+Sum: at least 4 h 45 min under load - `api-test` + `api-mutants` (with `lab_local`) at least
+4 h 14 min, every other target together about 31 min. The first post-merge `make check` on a quiet host replaces this table.
 
 ## Known limits of the isolation (r2 review, recorded deliberately)
 
