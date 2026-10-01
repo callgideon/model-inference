@@ -77,6 +77,7 @@ from ...worker import __main__ as worker_main
 from ...worker.__main__ import every
 from ..compose import (  # noqa: F401 - A1: shared with the gateway, re-exported
     control_serving, plan_key, release_live, release_report, teacher_wiring)
+from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
@@ -690,7 +691,7 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
         await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={
             "schema": "lab.rollout_decision.1", "provider_org_id": provider,
             "policy_ref": policy_ref, "decision": found["kind"], "evidence_refs": evidence,
-            "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
+            "decided_by": operator, "decided_at": iso_z(now)},
             reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
         decided = True                        # committed: a later failure is converge-only
         if found["kind"] == "expand":
