@@ -8,7 +8,7 @@ const HEADERS = { "cache-control": "private, no-store" };
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const workspace = await requireProviderWorkspace();
   const { id } = await params;
-  const list = await evaluationPort().experiments({ providerId: workspace.providerId, role: workspace.role });
+  const list = await evaluationPort().experiments(workspace);
   if (!list.ok) return Response.json({ refusal: list.reason }, { status: 503, headers: HEADERS });
   const experiment = list.value.find((e) => e.experiment_id === id);
   if (experiment === undefined) return Response.json({ refusal: "not_found" }, { status: 404, headers: HEADERS });

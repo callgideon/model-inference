@@ -8,7 +8,7 @@ export const metadata = { title: "Optimizations · infrx Lab" };
 // A performance figure is a measurement only when it comes from an experiment's results at a commit.
 export default async function Optimizations() {
   const workspace = await requireProviderWorkspace();
-  const variants = await releasesPort().variants({ providerId: workspace.providerId, role: workspace.role });
+  const variants = await releasesPort().variants(workspace);
   if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const rows = variantRows(variants.value);
   return (

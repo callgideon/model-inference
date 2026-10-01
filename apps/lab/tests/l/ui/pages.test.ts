@@ -13,7 +13,8 @@ test("L4-P01 each page reads the control records as the session's workspace and 
   for (const path of PAGES.filter((p) => !p.includes("settings"))) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /\{ providerId: workspace\.providerId, role: workspace\.role \}/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
   }
   for (const path of ["app/(provider)/models/page.tsx", "app/(provider)/deployments/page.tsx"])

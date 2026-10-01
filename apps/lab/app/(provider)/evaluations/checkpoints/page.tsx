@@ -11,9 +11,8 @@ export const metadata = { title: "Checkpoint subscriptions · infrx Lab" };
 export default async function Checkpoints({ searchParams }: PageProps<"/evaluations/checkpoints">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = evaluationPort();
-  const [subscriptions, catalog] = await Promise.all([port.subscriptions(actor), port.catalog(actor)]);
+  const [subscriptions, catalog] = await Promise.all([port.subscriptions(workspace), port.catalog(workspace)]);
   if (!subscriptions.ok || !catalog.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const c = catalog.value;
   return (

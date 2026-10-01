@@ -16,7 +16,7 @@ export async function proposeRelease(data: FormData): Promise<void> {
     && typeof fence === "string" && FENCE.test(fence);
   const refused: Refusal | null = !holds(w.role, "propose_publication") ? "denied" : !valid ? "invalid" : null;
   const result = refused === null
-    ? await releasesPort().propose({ providerId: w.providerId, role: w.role }, kind as "expand" | "rollback", policyRef as string, Number(fence))
+    ? await releasesPort().propose(w, kind as "expand" | "rollback", policyRef as string, Number(fence))
     : { ok: false as const, reason: refused };
   redirect(result.ok ? "/releases" : `/releases?refused=${result.reason}`);
 }

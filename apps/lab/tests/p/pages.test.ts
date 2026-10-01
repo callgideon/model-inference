@@ -16,7 +16,8 @@ test("P4-P01 each page reads the pipeline records as the session's workspace and
   for (const path of PAGES) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.match(page, /const refused = refusalCopy\(query\.refused\);/, path);
     assert.doesNotMatch(page, /success|succeeded!|saved|done=|\.providerId\s*=/i, path);
   }

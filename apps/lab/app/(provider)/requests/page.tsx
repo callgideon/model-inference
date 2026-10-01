@@ -11,9 +11,8 @@ export const metadata = { title: "Requests · infrx Lab" };
 // shares it (shown on the request's own page, V2). Moved from the App's /traces (V1).
 export default async function Requests({ searchParams }: PageProps<"/requests">) {
   const workspace = await requireProviderWorkspace();
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const params = parseListParams(await searchParams);
-  const view = buildListView(await labTraces().list(actor, params.cursor), params.cursor);
+  const view = buildListView(await labTraces().list(workspace, params.cursor), params.cursor);
   return (
     <>
       <h1>Requests</h1>

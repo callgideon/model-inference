@@ -117,7 +117,7 @@ const MUTANTS = [
   m("R4-X59", "an operator rollback carries no reason", FAKE, '["operator:proposal"]', "[]", [C.j02]),
   m("R4-X60", "an approval is recorded as the controller's", FAKE, '"expand", operatorId,', '"expand", "controller",', [C.j02]),
   // actions
-  m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "{ providerId: w.providerId, role: w.role }", '{ providerId: String(data.get("providerId")), role: w.role }', [C.a01]),
+  m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "releasesPort().propose(w, ", 'releasesPort().propose({ ...w, providerId: String(data.get("providerId")) }, ', [C.a01]),
   m("R4-X62", "the capability check is skipped", ACTIONS, '!holds(w.role, "propose_publication") ? "denied" : ', "", [C.a02]),
   m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'holds(w.role, "propose_publication")', 'holds(w.role, "manage_dev_deployment")', [C.a02]),
   m("R4-X64", "malformed input reaches the releases service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
@@ -129,7 +129,7 @@ const MUTANTS = [
   m("R4-X70", "an action runs without a provider workspace", ACTIONS, "  const w = await requireProviderWorkspace();",
     '  const w = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "x", role: "administrator" } as const;', [C.a05]),
   // pages
-  m("R4-X71", "a page reads records as a fixed provider", RELEASES, "{ providerId: workspace.providerId, role: workspace.role }", '{ providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role }', [C.p01]),
+  m("R4-X71", "a page reads records as a fixed provider", RELEASES, "releasesPort().releases(workspace)", 'releasesPort().releases({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
   m("R4-X72", "a page shows ?refused= raw", RELEASES, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
   m("R4-X73", "a proposal does not name the revision the page showed", RELEASES, '                <input type="hidden" name="fence" value={r.fence} />\n', "", [C.p01]),
   m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, 'if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;', "if (!variants.ok) return null;", [C.p01]),

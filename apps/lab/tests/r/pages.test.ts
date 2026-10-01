@@ -14,7 +14,8 @@ test("R4-P01 each page reads the records as the session's workspace and shows ?r
   for (const path of PAGES) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /\{ providerId: workspace\.providerId, role: workspace\.role \}/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
     assert.match(page, /if \(!\w+\.ok\) return <p role="alert">\{REFUSAL_COPY\.unavailable\}<\/p>;/, path);
   }

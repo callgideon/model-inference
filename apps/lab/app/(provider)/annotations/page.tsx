@@ -12,13 +12,12 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
   const workspace = await requireProviderWorkspace();
   const query = await searchParams;
   const refused = refusalCopy(query.refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const shape = new RegExp(`^lab:dataset:${workspace.providerId}:[0-9a-f-]{36}@sha256:[0-9a-f]{64}$`);
   const dataset = typeof query.dataset === "string" && shape.test(query.dataset) ? query.dataset : null;
   const port = pipelinesPort();
   const [imports, exports, labels, disputes] = await Promise.all([
-    port.imports(actor), port.exports(actor),
-    dataset === null ? null : port.labels(actor, dataset), dataset === null ? null : port.disagreements(actor, dataset),
+    port.imports(workspace), port.exports(workspace),
+    dataset === null ? null : port.labels(workspace, dataset), dataset === null ? null : port.disagreements(workspace, dataset),
   ]);
   const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);
   return (

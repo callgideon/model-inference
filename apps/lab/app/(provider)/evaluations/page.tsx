@@ -12,9 +12,8 @@ export const metadata = { title: "Evaluations · infrx Lab" };
 export default async function Evaluations({ searchParams }: PageProps<"/evaluations">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = evaluationPort();
-  const [runs, experiments, catalog] = await Promise.all([port.runs(actor), port.experiments(actor), port.catalog(actor)]);
+  const [runs, experiments, catalog] = await Promise.all([port.runs(workspace), port.experiments(workspace), port.catalog(workspace)]);
   if (!runs.ok || !experiments.ok || !catalog.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const c = catalog.value;
   return (

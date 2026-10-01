@@ -10,8 +10,7 @@ export const metadata = { title: "Experiment · infrx Lab" };
 export default async function ExperimentPage({ params }: PageProps<"/experiments/[id]">) {
   const workspace = await requireProviderWorkspace();
   const { id } = await params;
-  const actor = { providerId: workspace.providerId, role: workspace.role };
-  const list = await evaluationPort().experiments(actor);
+  const list = await evaluationPort().experiments(workspace);
   if (!list.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const e = list.value.find((x) => x.experiment_id === id);
   if (e === undefined) return <p role="alert">{REFUSAL_COPY.not_found}</p>;

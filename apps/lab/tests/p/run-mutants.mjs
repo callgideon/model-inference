@@ -134,8 +134,8 @@ const MUTANTS = [
   m("P4-X66", "the role is not checked", FAKE, 'return holds(actor.role, capability) ? null : "denied";', "return void capability, null;", [C.j05]),
   m("P4-X67", "assigning needs only run_evaluation", FAKE, 'const refused = this.gate(actor, "manage_members");\n    if (refused) return no(refused);\n    return this.set(', "const refused = this.gate(actor);\n    if (refused) return no(refused);\n    return this.set(", [C.j05]),
   // actions
-  m("P4-X68", "an import acts as the form's provider", ACTIONS, "pipelinesPort().importLabels(actor(w),", 'pipelinesPort().importLabels({ providerId: String(data.get("providerId")), role: w.role },', [C.a01]),
-  m("P4-X69", "the actor's role is not the session's", ACTIONS, "({ providerId: w.providerId, role: w.role });", '({ providerId: w.providerId, role: "administrator" });', [C.a01]),
+  m("P4-X68", "an import acts as the form's provider", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
+  m("P4-X69", "the actor's role is not the session's", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, role: "administrator" as const },', [C.a01]),
   m("P4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
@@ -153,7 +153,7 @@ const MUTANTS = [
   m("P4-X83", "assigning needs only run_evaluation in the action", ACTIONS, '"manage_members", ![datasetRef', '"run_evaluation", ![datasetRef', [C.a02]),
   m("P4-X84", "the action mints a run id when the form has none", ACTIONS, 'const externalRunId = field(data, "externalRunId", ID);\n  const datasetRef', 'const externalRunId = field(data, "externalRunId", ID) ?? globalThis.crypto.randomUUID();\n  const datasetRef', [C.p02, C.a03]),
   // pages
-  m("P4-X85", "a page reads records as a fixed provider", TRAIN, "const actor = { providerId: workspace.providerId, role: workspace.role };", 'const actor = { providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role };', [C.p01]),
+  m("P4-X85", "a page reads records as a fixed provider", TRAIN, "port.runs(workspace)", 'port.runs({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
   m("P4-X86", "a page shows ?refused= raw", ANNOT, "const refused = refusalCopy(query.refused);", 'const refused = String(query.refused ?? "") || null;', [C.p01]),
   m("P4-X87", "a page claims success on its own", TRAIN, "<h1>Training</h1>", "<h1>Training</h1>\n      <p>Submitted successfully.</p>", [C.p01]),
   m("P4-X88", "the run id is typed, not minted at render", TRAIN, '<input type="hidden" name="externalRunId" value={randomUUID()} />', '<input name="externalRunId" required />', [C.p02]),
@@ -257,7 +257,7 @@ const MUTANTS = [
   m("P4-X180", "the holdout is sent to the teacher", FAKE, 'const kept = set.samples.filter((x) => x.split !== "holdout")', "const kept = set.samples", [C.j06]),
   m("P4-X181", "a viewer plans a teacher batch", FAKE, '    this.calls.push(["planTeachers", actor, input]);\n    const refused = this.gate(actor);\n    if (refused) return no(refused);\n', '    this.calls.push(["planTeachers", actor, input]);\n', [C.j06]),
   // the actions
-  m("P4-X182", "a dry run acts as the form's provider", ACTIONS, "pipelinesPort().planTeachers(actor(w), {", 'pipelinesPort().planTeachers({ providerId: String(data.get("providerId")), role: w.role }, {', [C.a07]),
+  m("P4-X182", "a dry run acts as the form's provider", ACTIONS, "pipelinesPort().planTeachers(w, {", 'pipelinesPort().planTeachers({ ...w, providerId: String(data.get("providerId")) }, {', [C.a07]),
   m("P4-X183", "a developer's approval reaches the service", ACTIONS, 'land("/training", w, "manage_members", batchId !== null', 'land("/training", w, "run_evaluation", batchId !== null', [C.a07]),
   m("P4-X184", "any budget string passes", ACTIONS, 'const budgetUsd = field(data, "budgetUsd", USD);', 'const budgetUsd = text(data, "budgetUsd");', [C.a07]),
   m("P4-X185", "another provider's payer or dataset passes", ACTIONS, 'const payerRef = own(data, "payerRef", "payer", w);\n  const budgetUsd', 'const payerRef = text(data, "payerRef");\n  const budgetUsd', [C.a07]),

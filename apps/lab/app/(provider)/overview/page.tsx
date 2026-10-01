@@ -7,9 +7,8 @@ export const metadata = { title: "Overview · infrx Lab" };
 // L4: counts and redacted aggregate health, straight from the control records.
 export default async function Overview() {
   const workspace = await requireProviderWorkspace();
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = controlPort();
-  const [deployments, proposals, aggregates] = await Promise.all([port.deployments(actor), port.proposals(actor), port.aggregates(actor)]);
+  const [deployments, proposals, aggregates] = await Promise.all([port.deployments(workspace), port.proposals(workspace), port.aggregates(workspace)]);
   if (!deployments.ok || !proposals.ok || !aggregates.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const count = (env: string, visibility: string) =>
     deployments.value.filter((d) => d.state === "active" && d.environment === env && d.visibility === visibility).length;

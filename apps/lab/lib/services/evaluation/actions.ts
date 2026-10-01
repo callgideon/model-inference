@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
 import { UUID, UUID_RE as ID } from "../shapes.ts";
-import { evaluationPort, holds, type Actor, type Amount, type Launch, type Protocol, type Refusal, type Result, type SubscriptionRequest } from "./port.ts";
+import { evaluationPort, holds, type Amount, type Launch, type Protocol, type Refusal, type Result, type SubscriptionRequest } from "./port.ts";
 
 /** F3: an immutable `lab:<kind>:<provider>:<object>@sha256:<hex>` ref of the named kind. */
 const ref = (kind: string) => new RegExp(`^lab:${kind}:${UUID}:${UUID}@sha256:[0-9a-f]{64}$`);
@@ -70,7 +70,6 @@ function parseSubscription(data: FormData): SubscriptionRequest | null {
   return Object.values(s).includes(null) ? null : (s as SubscriptionRequest);
 }
 
-const actor = (w: Membership): Actor => ({ providerId: w.providerId, role: w.role });
 
 /** Refused here (role, then shape) or the backend's answer; success lands where `to` says. */
 async function land<T>(page: string, w: Membership, valid: boolean, call: () => Promise<Result<T>>, to: (value: T) => string = () => page): Promise<never> {
@@ -82,17 +81,17 @@ async function land<T>(page: string, w: Membership, valid: boolean, call: () => 
 export async function launchExperiment(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const launch = parseLaunch(data);
-  await land("/evaluations", w, launch !== null, () => evaluationPort().launch(actor(w), launch!), (e) => `/experiments/${e.experiment_id}`);
+  await land("/evaluations", w, launch !== null, () => evaluationPort().launch(w, launch!), (e) => `/experiments/${e.experiment_id}`);
 }
 
 export async function cancelRun(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const id = field(data, "run_id", ID);
-  await land("/evaluations", w, id !== null, () => evaluationPort().cancel(actor(w), id!));
+  await land("/evaluations", w, id !== null, () => evaluationPort().cancel(w, id!));
 }
 
 export async function subscribeCheckpoints(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const request = parseSubscription(data);
-  await land("/evaluations/checkpoints", w, request !== null, () => evaluationPort().subscribe(actor(w), request!));
+  await land("/evaluations/checkpoints", w, request !== null, () => evaluationPort().subscribe(w, request!));
 }

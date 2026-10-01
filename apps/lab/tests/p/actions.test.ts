@@ -67,7 +67,7 @@ test("P4-A01 actions run as the session's provider and role, whatever the form c
   as("developer");
   const before = lab.calls.length;
   assert.equal(await landing(actions.importLabels(form({ ...IMPORT, providerId: uuid(7), role: "administrator" }))), HERE);
-  same(lab.calls.slice(before), [["importLabels", { providerId: P, role: "developer" }, IMPORT]]);
+  same(lab.calls.slice(before), [["importLabels", { providerId: P, providerName: "Acme", role: "developer" }, IMPORT]]);
 });
 
 test("P4-A02 a role without the capability is refused before the pipeline service is asked", async () => {
@@ -138,7 +138,7 @@ test("P4-A07 a teacher dry run and its approval: the session's actor and the for
   as("developer");
   const before = lab.calls.length;
   assert.equal(await landing(actions.planTeachers(form({ ...TEACH, providerId: uuid(7), live: "1" }))), "/training");
-  same(lab.calls.slice(before), [["planTeachers", { providerId: P, role: "developer" }, { ...TEACH, chunkSize: 2 }]]);
+  same(lab.calls.slice(before), [["planTeachers", { providerId: P, providerName: "Acme", role: "developer" }, { ...TEACH, chunkSize: 2 }]]);
   assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(50) }))), "/training?refused=denied");
   for (const bad of [{ budgetUsd: "1" }, { budgetUsd: "1.00000000 CREDIT" }, { payerRef: ref("payer", uuid(7), uuid(3)) }, { datasetRef: ref("dataset", uuid(7), uuid(1)) },
     { chunkSize: "0" }, { chunkSize: "201" }, { chunkSize: "2.5" }, { batchId: "b-1" }, { teacherModel: "" }, { promptVersion: "" }, { rubricRef: "r" }])
@@ -147,7 +147,7 @@ test("P4-A07 a teacher dry run and its approval: the session's actor and the for
   assert.equal(await landing(actions.approveTeachers(form({ batchId: "b-1" }))), "/training?refused=invalid");
   assert.equal(lab.calls.length, before + 1);
   assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(50) }))), "/training");
-  same(lab.calls.at(-1), ["approveTeachers", { providerId: P, role: "administrator" }, uuid(50)]);
+  same(lab.calls.at(-1), ["approveTeachers", { providerId: P, providerName: "Acme", role: "administrator" }, uuid(50)]);
   assert.equal(await landing(actions.approveTeachers(form({ batchId: uuid(59) }))), "/training?refused=not_found");
 });
 

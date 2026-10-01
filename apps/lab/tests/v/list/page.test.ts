@@ -14,11 +14,11 @@ const ERROR = "app/(provider)/requests/error.tsx";
 
 test("V1M-P01 the list reads as the session's workspace through the Lab trace service", () => {
   const page = read(PAGE);
-  assert.match(page, /const workspace = await requireProviderWorkspace\(\);\n  const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/);
+  assert.match(page, /const workspace = await requireProviderWorkspace\(\);\n/);
   assert.match(page, /const params = parseListParams\(await searchParams\);/);
-  assert.match(page, /buildListView\(await labTraces\(\)\.list\(actor, params\.cursor\), params\.cursor\)/);
+  assert.match(page, /buildListView\(await labTraces\(\)\.list\(workspace, params\.cursor\), params\.cursor\)/);
   assert.match(page, /<RejectedParams rejected=\{params\.rejected\} ignored=\{params\.ignored\} \/>/);
-  assert.doesNotMatch(page, /providerId:\s*(params|searchParams)|getSession|providerRoute|consoleContext/);
+  assert.doesNotMatch(page, /providerId:|getSession|providerRoute|consoleContext/);
 });
 
 test("V1M-P02 rows are native links to the request page; states and refusals are text; no App kit, no scripts on rows", () => {

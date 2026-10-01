@@ -134,8 +134,8 @@ const MUTANTS = [
   m("B4-X66", "a subscription spends PROVIDER_USD", FAKE, 'request.run_limit.unit === "CREDIT" && request.limit.unit === "CREDIT" && ', "", [C.j03]),
   m("B4-X67", "a run's limit may exceed the total", FAKE, "exact(request.run_limit.value) <= exact(request.limit.value)", "true", [C.j03]),
   // actions: the session's actor, the capability, the shapes, the landing
-  m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(actor(w), launch!)", 'evaluationPort().launch({ providerId: text(data, "providerId"), role: w.role }, launch!)', [C.a01]),
-  m("B4-X69", "the actor's role is not the session's", ACTIONS, "({ providerId: w.providerId, role: w.role });", '({ providerId: w.providerId, role: "administrator" });', [C.a01]),
+  m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, providerId: text(data, "providerId") }, launch!)', [C.a01]),
+  m("B4-X69", "the actor's role is not the session's", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, role: "administrator" as const }, launch!)', [C.a01]),
   m("B4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, "run_evaluation") ? "denied" : ', "", [C.a02]),
   m("B4-X71", "malformed input reaches the service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
@@ -166,12 +166,12 @@ const MUTANTS = [
   // the export route
   m("B4-X96", "the export runs without a provider workspace", ROUTE, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "x", role: "viewer" as const };', [C.a05]),
   m("B4-X97", "the export answers before the report exists", ROUTE, '  if (experiment.report === null) return Response.json({ refusal: "conflict" }, { status: 409, headers: HEADERS });\n', "", [C.a06]),
-  m("B4-X98", "the export reads as a fixed provider", ROUTE, "{ providerId: workspace.providerId, role: workspace.role }", '{ providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role }', [C.a06]),
+  m("B4-X98", "the export reads as a fixed provider", ROUTE, "evaluationPort().experiments(workspace)", 'evaluationPort().experiments({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.a06]),
   m("B4-X99", "the export may be cached", ROUTE, 'const HEADERS = { "cache-control": "private, no-store" };', "const HEADERS = {};", [C.a06]),
   m("B4-X100", "the export is shown inline", ROUTE, '"content-disposition": `attachment; filename=', '"content-disposition": `inline; filename=', [C.a06]),
   m("B4-X101", "the export drops the report's digest", ROUTE, "return Response.json(experiment.report, {", "return Response.json({ ...experiment.report, report_digest: undefined }, {", [C.a06]),
   // pages
-  m("B4-X102", "a page reads records as a fixed provider", EVALS, "const actor = { providerId: workspace.providerId, role: workspace.role };", 'const actor = { providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role };', [C.p01]),
+  m("B4-X102", "a page reads records as a fixed provider", EVALS, "port.runs(workspace)", 'port.runs({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
   m("B4-X103", "a page shows ?refused= raw", CHECKPOINTS, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
   m("B4-X104", "a page claims success on its own", EVALS, "<h1>Evaluations</h1>", "<h1>Evaluations</h1>\n      <p>Launched successfully.</p>", [C.p01]),
   m("B4-X105", "the launch form is shown to a viewer", EVALS, '{holds(workspace.role, "run_evaluation") && (\n        <form action={launchExperiment}>', "{(\n        <form action={launchExperiment}>", [C.p02]),

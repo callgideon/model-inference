@@ -12,7 +12,7 @@ const LABEL = { expand: "Propose expansion", rollback: "Propose rollback" } as c
 export default async function Releases({ searchParams }: PageProps<"/releases">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const records = await releasesPort().releases({ providerId: workspace.providerId, role: workspace.role });
+  const records = await releasesPort().releases(workspace);
   if (!records.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const rows = releaseRows(workspace.role, records.value);
   return (

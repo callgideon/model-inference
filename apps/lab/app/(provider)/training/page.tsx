@@ -16,11 +16,10 @@ export default async function Training({ searchParams }: PageProps<"/training">)
   const workspace = await requireProviderWorkspace();
   const query = await searchParams;
   const refused = refusalCopy(query.refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = pipelinesPort();
-  const [runs, checkpoints, batches] = await Promise.all([port.runs(actor), port.checkpoints(actor), port.teacherBatches(actor)]);
+  const [runs, checkpoints, batches] = await Promise.all([port.runs(workspace), port.checkpoints(workspace), port.teacherBatches(workspace)]);
   if (!runs.ok || !checkpoints.ok) return <p role="alert">{REFUSAL_COPY[!runs.ok ? runs.reason : checkpoints.ok ? "unavailable" : checkpoints.reason]}</p>;
-  const bundles = await Promise.all(runs.value.map((r) => port.bundle(actor, r.externalRunId)));
+  const bundles = await Promise.all(runs.value.map((r) => port.bundle(workspace, r.externalRunId)));
   const rows = runRows(workspace.role, runs.value);
   const writer = holds(workspace.role, "run_evaluation");
   return (
