@@ -1,0 +1,26 @@
+{
+  "task": "W6-lab-E",
+  "lane": "lab-E",
+  "slice": "LAB-06 (remove the dead Show content offer + always-unavailable content adapter; WR-V2-2 stays in the register), LAB-12 (four runners on the shared harness)",
+  "activity": "review",
+  "at": "2026-10-01T04:04:00Z",
+  "head": "1747d2cf",
+  "base": "2add8e0a",
+  "worktree": ".claude/worktrees/codex-w6-lab-E",
+  "branch": "codex/w6-lab-E",
+  "owned_paths": ["apps/lab/lib/services/content/", "apps/lab/components/traces/detail/", "apps/lab/tests/c/content/", "apps/lab/tests/v/detail/", "apps/lab/tests/e2e/run-mutants.mjs", "apps/lab/tests/n/run-mutants.mjs", "apps/lab/tests/c/review/run-mutants.mjs", "apps/lab/tests/c/judge/run-mutants.mjs", "apps/lab/tests/l/shell/harness.mjs"],
+  "commands": [
+    {"cmd": "node --test tests/v/detail/*.test.ts (new cases, base code)", "exit": 1, "summary": "red first: V2-P02, V2-D03, V2-D07 fail; 8 pass"},
+    {"cmd": "make lab-test (head + wiring patch)", "exit": 0, "summary": "261 tests, 247 pass, 0 fail, 14 skipped"},
+    {"cmd": "make lab-typecheck (head + wiring patch)", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-typecheck (head alone)", "exit": 2, "summary": "5 TS errors in the five wiring files; expected until the wiring patch lands"},
+    {"cmd": "make lab-lint (head + wiring patch)", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-build (head + wiring patch)", "exit": 0, "summary": "next build OK"},
+    {"cmd": "make lab-mutants (head + wiring patch)", "exit": 0, "summary": "13 runners, 0 survivors; v/detail 31/31 (was 42/42), tests/c/content retired (was 14/14)"},
+    {"cmd": "node tests/{n,c/review,c/judge,e2e}/run-mutants.mjs before/after", "exit": 0, "summary": "identical: 23/40, 4/20, 21/72, 4/17 cases/kills; same killing case per mutant"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "medium", "basis": "implementation done; remaining = coordinator applies the 5-file wiring patch at merge (and reconciles page.tsx with lab-D / V1M-X34 with lab-B if they moved those lines), then make lab-test lab-typecheck lab-mutants on the merge; the Docker e2e stack list (l4) is unverified for E2E-O02/S03", "at": "2026-10-01T04:04:00Z"},
+  "blockers": [],
+  "wiring_requests": ["research/plan/evidence/w6/LAB-06-wiring-f1c4f82.patch: Makefile (drop the tests/c/content lab-mutants line), apps/lab/app/(provider)/requests/[id]/page.tsx (ContentPanel detail=, no searchParams/content port), apps/lab/components/traces/list/view-model.ts (drop CONTENT_LABEL revoked/unavailable), apps/lab/tests/v/list/run-mutants.mjs (V1M-X34 re-pointed), apps/lab/tests/e2e/observe/stack.test.ts (E2E-O02: stated, never read)"],
+  "evidence": ["research/plan/evidence/w6/LAB-06-f1c4f82.md", "research/plan/evidence/w6/LAB-12-1747d2c.md", "research/plan/evidence/w6/LAB-06-wiring-f1c4f82.patch"]
+}
