@@ -37,8 +37,9 @@ Safe to free, in this order:
 4. Processing-cache entries past their 7-day life: M's sweep (`ProcessingCache.sweep`, run by
    M's collector, PENDING M3's timer) - not by hand, an entry may belong to a live job.
 
-**Never delete**: `usage.jsonl` / `usage_failed.jsonl` (the legacy gateway's only usage
-record - copy them to persistent storage first if the disk they are on must be cleared),
+**Never delete**: `usage.jsonl` / `usage_failed.jsonl` where they still exist (the legacy gateway's only usage
+record - copy them to persistent storage first if the disk they are on must be cleared; the
+writer was retired W6 A4, 2026-10-01, so no new rows are appended),
 staged sources of live jobs, the engine's weights while it is running, anything under
 PostgreSQL's or Valkey's data directories.
 

@@ -211,10 +211,10 @@ def test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_i
     from unittest import mock
 
     from infrx.gateway import app as composition
-    from infrx.gateway.routes import chat, health, models
+    from infrx.gateway.routes import health, models
     staged = tmp_path / "pilot.env"
     staged.write_text(cfg.env_file.read_text() if cfg.env_file.exists() else "INFRX_MODE=pilot\n")
-    with mock.patch.object(composition, "ROUTERS", (health, models, chat)):
+    with mock.patch.object(composition, "ROUTERS", (health, models)):
         verdict = preflight.probe(staged, "pilot")
     assert any("pilot routers to be composed" in problem for problem in verdict["problems"])
 

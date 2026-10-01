@@ -875,8 +875,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once",
        dies_by=("KeyError",)),
     # --- G1R item 4: pilot never serves chat through the legacy route (E3B dr17) -----
-    # `config.validate_runtime` is the coordinator's hook; G1R's brief places this refusal
-    # there, so these three edit it in the temporary copy.
+    # no_metered_ingress_accepted edits config.validate_runtime; pilot_route_table_unchecked
+    # removes the route-table assertion in gateway/app.py.
     # W6 A4: the legacy route is retired, so `legacy_route_beside_the_ingress` (the module
     # check) is retired with it; the route table's one-handler rule refuses that composition.
     _m("no_metered_ingress_accepted", "a pilot with no metered ingress refuses (I0's predicate)",
