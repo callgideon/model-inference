@@ -108,3 +108,82 @@ without the config.
 ## Estimate (remaining for A13)
 
 0 / 0.5 / 2 h (confidence medium): the baseline number moves with the other lanes' merges.
+
+## Fix round (2026-10-01, finding 1-L5-INT-1; head e751e42d)
+
+Finding: merged onto claude/consumer-v1, the api-lint/api-typecheck recipes that makefile-pins
+landed there (3fdd62e0, 945139f3) switch on with this lane's config and fail: `uv run --frozen
+ruff|pyright` (neither is in uv.lock), a per-package pyright loop with no baseline gate, and a
+UP031 in `tests/i/test_rollout_host.py` (added after 2add8e0a).
+
+Owned-path fix (e751e42d): `[tool.ruff.lint.per-file-ignores]` gains
+`"tests/i/test_rollout_host.py" = ["UP031"]` (same baseline treatment as the other 98 files).
+Makefile and uv.lock are not this lane's (LANE-RULES 2): the recipe fix is the wiring request
+below, now written as a diff against the landed recipes (the if/else guard kept).
+
+Merged-tree oracle: `git merge-tree --write-tree claude/consumer-v1(db2f3445) 9ef4aa93` =
+995aae2e (clean), `git archive` of apps/infrx-api + Makefile into the scratchpad, lane .venv
+symlinked.
+
+| command (merged tree, from apps/infrx-api unless noted) | exit | result |
+|---|---|---|
+| `uvx ruff@0.15.12 check` with 9ef4aa93's pyproject | 1 | RED: `tests/i/test_rollout_host.py:98:17 UP031` (the only finding) |
+| same with e751e42d's pyproject | 0 | All checks passed! |
+| `uvx ruff@0.15.12 check` in the lane tree (e751e42d) | 0 | All checks passed! |
+| `uvx pyright@1.1.414 -p pyproject.toml --outputjson` | 1 | 182 files, 508 errors, 3 warnings; 13.5 s, 0.77 GB RSS (consumer-v1 added no infrx/deploy file since the base: baseline 508 holds) |
+| root: `make api-lint` (merged Makefile + the diff below) | 0 | All checks passed! |
+| root: `make api-typecheck` | 0 | `pyright: 508 errors (baseline 508)` |
+| root: `make api-typecheck API_PYRIGHT_BASELINE=507` | 2 | `pyright: 508 errors (baseline 507)`, Error 1 — the gate bites |
+
+`-p pyproject.toml` is new versus the first request: without it pyright picks up a
+`pyrightconfig.json` in any parent directory (it did in the scratchpad, exit 1, empty JSON).
+
+Affected suites: the change is a ruff-config line only (no runtime/test code); the ruff and
+pyright runs above are the affected checks. Mutant lists: unaffected (no anchor names a
+pyproject line); last green run is in the A12 file.
+
+### Wiring request (replaces the first one): `Makefile` (owner makefile-pins / coordinator at merge)
+
+Against claude/consumer-v1's Makefile (db2f3445); `check` and `.PHONY` already name both targets.
+
+```diff
+--- a/Makefile
++++ b/Makefile
+@@ -12,20 +12,24 @@
+ api-test:
+ 	cd $(API) && uv run --frozen pytest -q
+ 
+-# W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config. Until it lands
+-# each reports "not run" rather than a pass, as bench-test does. pyright runs one package
+-# per process (then the top-level infrx/*.py modules in one): a whole-tree run OOMs node here
+-# (exit 250, audit A13).
++# W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config, pinned through
++# uvx (neither is in uv.lock). Until the config lands each reports "not run" rather than a pass.
++# pyright runs once over the config's `include` (infrx, deploy; ~0.8 GB RSS): the exit-250 OOM
++# (audit A13) was an unscoped run walking .venv. The gate is the 2026-10-01 error baseline:
++# lower it as errors are fixed, never raise it.
++API_PYRIGHT_BASELINE := 508
++
+ api-lint:
+ 	@if [ -f $(API)/ruff.toml ] || grep -q '^\[tool\.ruff' $(API)/pyproject.toml; then \
+-		cd $(API) && uv run --frozen ruff check infrx deploy tests; \
++		cd $(API) && uvx ruff@0.15.12 check infrx deploy tests; \
+ 	else \
+ 		echo "api-lint: not run - no ruff config in $(API) yet (api-L5 owns it)"; \
+ 	fi
+ 
+ api-typecheck:
+ 	@if [ -f $(API)/pyrightconfig.json ] || grep -q '^\[tool\.pyright' $(API)/pyproject.toml; then \
+-		cd $(API) && rc=0; for pkg in infrx/*/; do [ "$$pkg" = infrx/__pycache__/ ] && continue; uv run --frozen pyright "$$pkg" || rc=1; done; uv run --frozen pyright infrx/*.py || rc=1; exit $$rc; \
++		cd $(API) && n=$$(uvx pyright@1.1.414 -p pyproject.toml --outputjson | .venv/bin/python -c 'import json,sys; print(json.load(sys.stdin)["summary"]["errorCount"])') && \
++		echo "pyright: $$n errors (baseline $(API_PYRIGHT_BASELINE))" && [ "$$n" -le $(API_PYRIGHT_BASELINE) ]; \
+ 	else \
+ 		echo "api-typecheck: not run - no pyright config in $(API) yet (api-L5 owns it)"; \
+ 	fi
+```
+
+Alternative (uv.lock owner): ruff==0.15.12 and pyright==1.1.414 in the dev group, then
+`uv run --frozen` in place of `uvx …@…`; the baseline gate is needed either way.
+
+Estimate (remaining for the lane): 0 / 0.25 / 1 h (confidence medium): applying the diff at
+merge; the baseline moves only with other lanes' merges.
