@@ -130,6 +130,42 @@ want to tell the d1 holder that `infrx_d1_l3tpl`/`infrx_d1_l3case` may have been
 Optimistic 0.5 h / likely 1 h / pessimistic 3 h, confidence high — basis: the four tasks are done and green; what
 remains is review, the five wiring requests (each a one-line edit + one anchor) and a rerun on the merged tip.
 
+## Fix round (1-L4-RV-1, 2026-10-01)
+
+Finding: the one `tests/l/control` mutant rerun without `INFRX_D_TASK` reached the d1 harness (55432). Re-examined
+with read-only `docker inspect` only (d1 itself was not touched again):
+
+- `infrx-d1-postgres` carries `ai.infrx.d1.checkout = .../worktrees/codex-w5-lab-rollout-4`, created
+  2026-09-29T11:54:16Z, so the label at incident time was another checkout's (labels are fixed at create).
+- `tests/l/control/conftest.py` `pg_template` calls `pgharness.ensure()` BEFORE `recreate()`; `ensure()` takes the
+  port lock, then raises `ForeignContainer` for a container another checkout labelled ("this run will not start, stop or
+  delete it"). `recreate()` and the per-case copy also go through `assert_ours()` before any `DROP DATABASE`.
+  The three pristine pg failures of that run are this refusal. Conclusion: the run was refused at the gate, and
+  `infrx_d1_l3tpl` / `infrx_d1_l3case` were most probably NOT dropped. The evidence's earlier "may have been dropped"
+  overstated it. The coordinator should still tell the d1 holder (codex-w5-lab-rollout-4) that a refused attempt was
+  made, so they can check.
+- The rule was still broken: the run should never have aimed at 55432. Process fix for this lane: every PG/mutant command
+  in this lane's evidence now runs with `INFRX_D_TASK=l4` exported up front (all the reruns below do).
+- WR-L4-7 (owner of `tests/d/pgharness.py`): stop the silent `d1` default:
+  `SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))` -> refuse (pytest.skip/raise) when
+  `INFRX_D_TASK` is unset and `INFRX_MUTANTS` is set, or when the checkout is a `codex/w6-*` worktree. Proposed oracle:
+  `env -u INFRX_D_TASK INFRX_MUTANTS=all pytest tests/l/control -m pg` skips with a "set INFRX_D_TASK" reason and
+  never runs `docker`. Today the ownership gate prevents damage only while d1's container exists. If the container is
+  absent, a stray run would create its own on 55432.
+
+Reruns at f6cd2d20 code (no code changed in this round; all with `INFRX_D_TASK=l4`):
+
+| Command | Exit | Result |
+|---|---|---|
+| `pytest tests/g/lab_auth tests/i/lab_control` | 0 | 41 passed |
+| `INFRX_LAB_API_PG=1 INFRX_MUTANTS=all pytest tests/i/lab_control/test_mutants.py` | 0 | 24 passed (PG matrix, releases 200 on both logins) |
+| `INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py` | 0 | 117 passed (the lab_control anchors, PG half on l4) |
+
+Contention note: earlier attempts in this round reported failures because another checkout
+(`codex-w5-merge-75`, a coordinator merge run) used the same `l4` key at the same time. The harness refused with
+`HarnessBusy` ("Nothing was altered"). Those numbers were discarded, and the reruns above started after it stopped.
+
 ## Log
 
 - 2026-10-01: written at code head f6cd2d20 by the api-L4 implementer.
+- 2026-10-01: fix round for 1-L4-RV-1 appended (incident re-examined, WR-L4-7, reruns on l4).
