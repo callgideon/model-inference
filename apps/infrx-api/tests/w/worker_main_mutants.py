@@ -64,7 +64,6 @@ RECON_PG = "test_worker_main_pg__the_monitor_login_reads_what_the_runtime_login_
 SWITCHES_OFF = "test_worker_main__every_trace_and_lab_switch_is_off_and_composes_nothing"
 TRACE_REFUSE = "test_worker_main__trace_pumps_refuse_to_start_without_their_settings"
 TRACE_ON = "test_worker_main__trace_pumps_ship_retain_and_project_on_the_workers_stores"
-TRACE_HOLDS = "test_worker_main__trace_pumps_refuse_without_c2s_content_refs"
 SHIPPER_HOLDS = "test_worker_main__the_shippers_retention_holds_what_it_was_given"
 SHIPPER = "traces/ship/shipper.py"
 LAB_REFUSE = "test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources"
@@ -359,10 +358,6 @@ MUTANTS = (
     _m("shipper_holds_dropped", "the shipper's retention holds what it was given",
        SHIPPER, "ClickHouseFeedbackProjection(client), objects, holds=holds,",
        "ClickHouseFeedbackProjection(client), objects,", SHIPPER_HOLDS),
-    _m("main_trace_holds_optional", "without C2's refs in the build the pumps refuse",
-       MAIN, "    except ImportError:\n        raise RuntimeMisconfigured(mode, detail=\"TRACE_PUMPS",
-       "    except ImportError:\n        return None\n        raise RuntimeMisconfigured(mode, "
-       "detail=\"TRACE_PUMPS", TRACE_HOLDS),
 )
 
 PG_MUTANTS = (

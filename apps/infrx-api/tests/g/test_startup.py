@@ -814,7 +814,7 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     and D7 on the pool and the gateway's own object store (the Lab objects, R182).
     `LAB_CHECKPOINTS`: B3's receiver over D8's checkpoint ledger (0042) and D7 on the pool
     with the key directory `LAB_CHECKPOINT_KEYS` names - refused by name without a valid
-    one, and without the ledger in the build."""
+    one."""
     import dataclasses
     import sys
     import types
@@ -846,10 +846,6 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     secret = "cd" * 32
     good = settings(lab_checkpoints=True, lab_checkpoint_keys='{"k": {"provider_org_id": '
                     f'"{FakeProvider}", "secret": "{secret}"}}}}')
-    monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", None)       # before #16
-    refused = outcome(lambda: pilot._lab_checkpoints(good, None))
-    assert type(refused) is RuntimeMisconfigured and "0042" in str(refused)
-    assert secret not in str(refused)
     ledger = types.ModuleType("infrx.state.lab_pipeline")
     ledger.PgCheckpointLedger = lambda connect: ("ledger", connect)
     monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", ledger)

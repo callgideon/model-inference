@@ -53,7 +53,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib
 import json
 import logging
 import os
@@ -124,17 +123,6 @@ def settings(mode: str, env, names) -> dict[str, str]:
     if PORT in values and not (values[PORT].isdigit() and 0 < int(values[PORT]) < 65536):
         raise RuntimeMisconfigured(mode, detail=f"{PORT} must be a port")
     return values
-
-
-def lab_sql(mode: str, module: str, name: str):
-    """A store of lab-sql-lw3's 0041-0043 (merge batch #16). Until that merge is on this base
-    the import fails and the role refuses by name instead of crashing.
-    ponytail: drop the refusal once #16 is on every base."""
-    try:
-        return getattr(importlib.import_module(f"infrx.state.{module}"), name)
-    except (ImportError, AttributeError):
-        raise RuntimeMisconfigured(mode, detail=f"{name} (lab-sql-lw3, 0041-0043) is not in "
-                                                "this build") from None
 
 
 def lab_objects(mode: str, env):
@@ -300,8 +288,9 @@ def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deploy
     from ...state.lab_access import PgAccessStore
     from ...state.lab_control import PgControlStore
     from ...state.lab_data import PgLabDataStore
+    from ...state.lab_pipeline import PgCheckpointLedger
     from ...state.outbox import OutboxRelay
-    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)
+    ledger = PgCheckpointLedger(connect)
     store = PgLabDataStore(connect)
     per_provider = (lambda _: registries) if registries else \
         partial(checkpoints.lab_registry, objects)

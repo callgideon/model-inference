@@ -160,11 +160,7 @@ def lab_checkpoints(settings, connect) -> dict:
     except ValueError as refused:         # names the setting, never its value
         raise RuntimeMisconfigured(mode, ("LAB_CHECKPOINT_KEYS",), detail=str(refused)) \
             from None
-    try:
-        from ..state.lab_pipeline import PgCheckpointLedger
-    except ImportError:                   # ponytail: until lab-sql-lw3 (#16) is on the base
-        raise RuntimeMisconfigured(mode, detail="LAB_CHECKPOINTS needs D8's checkpoint "
-                                                "ledger (0042)") from None
+    from ..state.lab_pipeline import PgCheckpointLedger
     return {"lab_checkpoints": LabCheckpoints(keys, PgCheckpointLedger(connect),
                                               PgLabDataStore(connect))}
 

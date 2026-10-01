@@ -135,8 +135,8 @@ MUTANTS: tuple[Mutant, ...] = (
        'checkpoint_id, provider = event.payload["checkpoint_id"], '
        'event.payload.get("provider_org_id")', CKPT),
     _m("lw_checkpoints_ledger_off_the_pool", "D8's checkpoint ledger is on the role's database",
-       '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)',
-       '    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connector(""))', CKPT),
+       "    ledger = PgCheckpointLedger(connect)\n",
+       '    ledger = PgCheckpointLedger(connector(""))\n', CKPT),
     _m("lw_checkpoints_cadence", "the checkpoints relay pumps at the Lab pump cadence",
        "every(worker_main.LAB_PUMP_S, relay.pump,", "every(LINEAGE_PASS_S, relay.pump,", CKPT),
     # WR-N4-3 (composition-5): the datasets role's import-job pass
