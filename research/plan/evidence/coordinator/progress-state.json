@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 357,
- "updated": "2026-10-01T03:31:28Z",
+ "revision": 358,
+ "updated": "2026-10-01T03:32:15Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10366,7 +10366,10 @@
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
-    "pessimistic_h": 8
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10462,12 +10465,12 @@
     "WR-PL-5 (coordinator): correct the 7 W6 stubs' owned_paths (copied from LAB-R3: apps/infrx-api/infrx/rollouts/optimization/, pilot.py, ...) to each lane's own paths; they cause the 28 overlapping-writer warnings"
    ],
    "estimate": {
-    "optimistic_h": 0.1,
-    "likely_h": 0.3,
-    "pessimistic_h": 1,
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
     "confidence": "medium",
-    "at": "2026-10-01T03:22:20Z",
-    "basis": "fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h)"
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    }
   },
   {
@@ -10490,9 +10493,12 @@
    "blocker": null,
    "next_action": "handback → merge",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10534,9 +10540,12 @@
    "blocker": null,
    "next_action": "handback → merge",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10573,9 +10582,12 @@
    "blocker": null,
    "next_action": "handback → merge",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10614,7 +10626,10 @@
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
-    "pessimistic_h": 8
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10655,7 +10670,10 @@
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
-    "pessimistic_h": 8
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10691,9 +10709,12 @@
    "blocker": null,
    "next_action": "merge batch #69 (WR-W6-LABA-1/2, the loss-reason parity case, R268)",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 4,
-    "pessimistic_h": 8
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10730,7 +10751,10 @@
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
-    "pessimistic_h": 4
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
@@ -10769,7 +10793,10 @@
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
-    "pessimistic_h": 4
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
    },
    "evidence": [],
    "commands": [],
