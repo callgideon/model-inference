@@ -4,6 +4,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { approveCheckpoint, approveTeachers, importCheckpoint, planTeachers, prepareTraining, runAction } from "@/lib/services/pipelines/actions";
 import { EXPORT_FORMATS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { checkpointRows, refusalCopy, REFUSAL_COPY, runRows, teacherRows, type RunAction } from "@/lib/services/pipelines/view";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Training · infrx Lab" };
 
@@ -25,7 +26,7 @@ export default async function Training({ searchParams }: PageProps<"/training">)
   return (
     <>
       <h1>Training</h1>
-      {isPreview() && <p role="note">Preview: pipeline records come from an in-memory stand-in, not the pipeline service.</p>}
+      {isPreview() && <PreviewNote records="pipeline" service="pipeline" />}
       {refused && <p role="alert">{refused}</p>}
       <p>Automatic training connectors are not offered: you download the bundle and train on your own compute, and it reserves nothing. Provider-reported training metrics never make a candidate eligible; only a succeeded evaluation on the run&apos;s pinned holdout does.</p>
       <h2>Runs</h2>

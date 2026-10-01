@@ -4,6 +4,8 @@
 import { m, runMutants } from "../shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/l/ui/${f}.test.ts`);
+const COMMON = "lib/services/common.ts"; // LAB-09: land, form readers, refusal copy, preview switch
+const NOTE = "components/preview-note.tsx"; // LAB-09: the one preview note
 const PORT = "lib/services/control/port.ts";
 const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/control/fake.ts";
@@ -55,10 +57,10 @@ const MUTANTS = [
   m("L4-X11", "a proposal is shown as already published", VIEW, "proposed · awaiting operator approval", "published", [C.v04]),
   m("L4-X12", "health rows pass through every field of the record", VIEW, "aggregates.map((a) => ({\n", "aggregates.map((a) => ({\n    ...a,\n", [C.v05]),
   m("L4-X13", "an idle window divides by zero", VIEW, "a.requests > 0 ? `${Math.round((a.errors / a.requests) * 1000) / 10}%` : \"—\"", "`${Math.round((a.errors / a.requests) * 1000) / 10}%`", [C.v05]),
-  m("L4-X14", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v06]),
-  m("L4-X15", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v07]),
-  m("L4-X16", "the default port is the stand-in, not unavailable", PORT, "  return labControl(env) ?? UNAVAILABLE;\n}", "  return (preview ??= new FakeControl());\n}", [C.v07]),
-  m("L4-X17", "any preview flag value turns the stand-in on", PORT, 'env.LAB_CONTROL_PREVIEW === "1"', "env.LAB_CONTROL_PREVIEW !== undefined", [C.v07]),
+  m("L4-X14", "any ?refused= string is looked up", COMMON, "(refusals as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v06]),
+  m("L4-X15", "the preview stand-in runs in production", COMMON, ' && env.NODE_ENV !== "production"', "", [C.v07]),
+  m("L4-X16", "the default port is the stand-in, not unavailable", COMMON, "real(env) ?? unavailable", "(preview ??= fake())", [C.v07]),
+  m("L4-X17", "any preview flag value turns the stand-in on", COMMON, 'env[flag] === "1"', "env[flag] !== undefined", [C.v07]),
   m("L4-X18", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map(strip)", "rows.map(strip)", [C.j02]),
   m("L4-X19", "another provider's revision can be acted on", FAKE, "d.deploymentRevisionId === id && d.providerId === actor.providerId", "d.deploymentRevisionId === id", [C.j02]),
   m("L4-X20", "a foreign id is looked up before the role (the pre-L3 fake)", FAKE,
@@ -77,13 +79,13 @@ const MUTANTS = [
   m("L4-X31", "a published revision carries no rate card", FAKE, "rateCardVersion: `rc-${this.cards}`", "rateCardVersion: null", [C.j01]),
   m("L4-X32", "register acts as the form's provider", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
   m("L4-X33", "the actor's role is not the session's", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, role: "administrator" as const },', [C.a01]),
-  m("L4-X34", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("L4-X34", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("L4-X35", "malformed input reaches the control service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("L4-X36", "any artifact reference passes the shape check", SHAPES, "DIGEST_RE = /^sha256:[0-9a-f]{64}$/;", "DIGEST_RE = /./;", [C.a03]),
   m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
   m("L4-X38", "an unknown proposal kind is accepted", ACTIONS, '(kind === "publish" || kind === "rollback") && id !== null', "id !== null", [C.a03]),
-  m("L4-X39", "a refusal is dropped on the way back", ACTIONS, "redirect(result.ok ? page : `${page}?refused=${result.reason}`);", "redirect(page);", [C.a02, C.a04]),
-  m("L4-X40", "a success is flagged by the action, not the records", ACTIONS, "redirect(result.ok ? page :", "redirect(result.ok ? `${page}?done=1` :", [C.a01, C.a04]),
+  m("L4-X39", "a refusal is dropped on the way back", COMMON, 'return result.ok ? to(result.value) : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`;', "return result.ok ? to(result.value) : page;", [C.a02, C.a04]),
+  m("L4-X40", "a success is flagged by the action, not the records", COMMON, "return result.ok ? to(result.value) :", "return result.ok ? `${to(result.value)}?done=1` :", [C.a01, C.a04]),
   m("L4-X41", "proposing needs only the dev capability", ACTIONS, '"propose_publication", valid', '"manage_dev_deployment", valid', [C.a02]),
   m("L4-X42", "an action runs without a provider workspace", ACTIONS, "export async function smokeDeployment(data: FormData): Promise<void> {\n  const w = await requireProviderWorkspace();",
     'export async function smokeDeployment(data: FormData): Promise<void> {\n  const w = { providerId: "x", providerName: "x", role: "administrator" } as const;', [C.a05]),
@@ -91,7 +93,7 @@ const MUTANTS = [
   m("L4-X44", "a page shows ?refused= raw", MODELS, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
   m("L4-X45", "a page claims success on its own", DEPLOY, "<h1>Deployments</h1>", "<h1>Deployments</h1>\n      <p>Published successfully.</p>", [C.p01]),
   m("L4-X46", "the nav loses the deployments page", LAYOUT, '<Link href="/deployments">Deployments</Link>', "Deployments", [C.p02]),
-  m("L4-X47", "the preview label shows when the stand-in is off", LAYOUT, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+  m("L4-X47", "the preview label shows when the stand-in is off", LAYOUT, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p02]),
   m("L4-X48", "the session token is not forwarded", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer service\"", [C.h01, C.h05]),
   m("L4-X49", "the actor's provider is not sent", TRANSPORT, "?provider_org_id=${encodeURIComponent(actor.providerId)}", "", [C.h01, C.h05]),
   m("L4-X50", "a signed-out call is still sent", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04]),
@@ -124,7 +126,7 @@ const MUTANTS = [
   m("L4-X76", "the adapter runs without LAB_CONTROL_URL", SERVER, "if (!baseUrl || config === null) return null;\n  return httpControl({ baseUrl,", "if (config === null) return null;\n  return httpControl({ baseUrl: baseUrl ?? \"\",", [C.h05]),
   m("L4-X77", "the adapter carries a fixed credential, not the session's", SERVER, "token: sessionToken(config)", 'token: async () => "service"', [C.h05]),
   m("L4-X87", "the control adapter reads another family's old name", SERVER, "labApiUrl(env, \"control\")", "labApiUrl(env, \"traces\")", [C.h05]),
-  m("L4-X78", "controlPort() never uses the adapter", PORT, "return labControl(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.h05]),
+  m("L4-X78", "controlPort() never uses the adapter", PORT, "labControl, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.h05]),
   m("L4-X79", "a repeated proposal is a conflict (the pre-R214 fake)", FAKE, "return ok(strip(open));", 'return no("conflict");', [C.j02]),
   m("L4-X80", "a provider rollback is refused as a conflict, not invalid", FAKE, 'return no("invalid"); // a rollback', 'return no("conflict"); // a rollback', [C.j01, C.j02]),
   m("L4-X81", "any name registers the workspace's model", FAKE, 'm.modelId.split("/").at(-1) === r.name', 'm.modelId.split("/").at(-1) === m.modelId.split("/").at(-1)', [C.j02]),
@@ -132,6 +134,7 @@ const MUTANTS = [
   m("L4-X83", "a registration is its own model, not the imported one", FAKE, "const { modelId } = model;", "const modelId = r.name;", [C.j01]),
   m("L4-X85", "a developer may propose to the fake", FAKE, '    if (!holds(actor.role, "propose_publication")) return no("denied");\n', "", [C.j02]),
   m("L4-X84", "the operator's rollback leaves the rolled-back revision public", FAKE, '    live.visibility = "private";\n', "", [C.j01]),
+  m("L4-X88", "the preview note does not say it is a stand-in", NOTE, "come from an in-memory stand-in, not", "come from", [C.p02]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "L4", mutants: MUTANTS }));

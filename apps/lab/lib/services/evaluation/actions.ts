@@ -4,10 +4,10 @@
 // its refusal comes back as its reason. Nothing runs here: a launch queues backend jobs and lands on
 // the experiment's records, which say what actually happened.
 import { redirect } from "next/navigation";
-import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
+import { field, land } from "../common.ts";
 import { UUID, UUID_RE as ID } from "../shapes.ts";
-import { evaluationPort, holds, type Amount, type Launch, type Protocol, type Refusal, type Result, type SubscriptionRequest } from "./port.ts";
+import { evaluationPort, type Amount, type Launch, type Protocol, type SubscriptionRequest } from "./port.ts";
 
 /** F3: an immutable `lab:<kind>:<provider>:<object>@sha256:<hex>` ref of the named kind. */
 const ref = (kind: string) => new RegExp(`^lab:${kind}:${UUID}:${UUID}@sha256:[0-9a-f]{64}$`);
@@ -18,7 +18,6 @@ const text = (data: FormData, name: string) => {
   const v = data.get(name);
   return typeof v === "string" ? v : "";
 };
-const field = (data: FormData, name: string, shape: RegExp) => (shape.test(text(data, name)) ? text(data, name) : null);
 const int = (data: FormData, name: string, min: number) => {
   const v = text(data, name);
   return /^[0-9]{1,9}$/.test(v) && Number(v) >= min ? Number(v) : null;
@@ -71,27 +70,21 @@ function parseSubscription(data: FormData): SubscriptionRequest | null {
 }
 
 
-/** Refused here (role, then shape) or the backend's answer; success lands where `to` says. */
-async function land<T>(page: string, w: Membership, valid: boolean, call: () => Promise<Result<T>>, to: (value: T) => string = () => page): Promise<never> {
-  const refused: Refusal | null = !holds(w.role, "run_evaluation") ? "denied" : !valid ? "invalid" : null;
-  const result = refused === null ? await call() : { ok: false as const, reason: refused };
-  redirect(result.ok ? to(result.value) : `${page}?refused=${result.reason}`);
-}
 
 export async function launchExperiment(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const launch = parseLaunch(data);
-  await land("/evaluations", w, launch !== null, () => evaluationPort().launch(w, launch!), (e) => `/experiments/${e.experiment_id}`);
+  redirect(await land("/evaluations", w, "run_evaluation", launch !== null, () => evaluationPort().launch(w, launch!), (e) => `/experiments/${e.experiment_id}`));
 }
 
 export async function cancelRun(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const id = field(data, "run_id", ID);
-  await land("/evaluations", w, id !== null, () => evaluationPort().cancel(w, id!));
+  redirect(await land("/evaluations", w, "run_evaluation", id !== null, () => evaluationPort().cancel(w, id!)));
 }
 
 export async function subscribeCheckpoints(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const request = parseSubscription(data);
-  await land("/evaluations/checkpoints", w, request !== null, () => evaluationPort().subscribe(w, request!));
+  redirect(await land("/evaluations/checkpoints", w, "run_evaluation", request !== null, () => evaluationPort().subscribe(w, request!)));
 }

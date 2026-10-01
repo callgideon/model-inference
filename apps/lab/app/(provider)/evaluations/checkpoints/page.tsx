@@ -2,7 +2,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { subscribeCheckpoints } from "@/lib/services/evaluation/actions";
 import { evaluationPort, holds, isPreview } from "@/lib/services/evaluation/port";
 import { refusalCopy, REFUSAL_COPY, subscriptionRow } from "@/lib/services/evaluation/view";
-import { PreviewNote } from "../runs";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Checkpoint subscriptions · infrx Lab" };
 
@@ -18,7 +18,7 @@ export default async function Checkpoints({ searchParams }: PageProps<"/evaluati
   return (
     <>
       <h1>Checkpoint subscriptions</h1>
-      {isPreview() && <PreviewNote />}
+      {isPreview() && <PreviewNote records="evaluation" service="evaluation" />}
       {refused && <p role="alert">{refused}</p>}
       <p>Each checkpoint an external training run posts is evaluated once per subscription on a private dev deployment. It is never published or promoted.</p>
       {subscriptions.value.length === 0 && <p>No subscriptions yet.</p>}

@@ -4,6 +4,7 @@
 import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/r/${f}.test.ts`);
+const COMMON = "lib/services/common.ts"; // LAB-09: land, form readers, refusal copy, preview switch
 const PORT = "lib/services/rollouts/port.ts";
 const FAKE = "lib/services/rollouts/fake.ts";
 const VIEW = "lib/services/rollouts/view.ts";
@@ -50,9 +51,9 @@ const C = {
 
 const MUTANTS = [
   // port
-  m("R4-X01", "the default port is the stand-in, not unavailable", PORT, "labReleases(env) ?? UNAVAILABLE", "labReleases(env) ?? (preview ??= new FakeReleases())", [C.v11, C.w02]),
-  m("R4-X02", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v11]),
-  m("R4-X03", "any preview flag value turns the stand-in on", PORT, 'env.LAB_RELEASES_PREVIEW === "1"', "env.LAB_RELEASES_PREVIEW !== undefined", [C.v11]),
+  m("R4-X01", "the default port is the stand-in, not unavailable", COMMON, "real(env) ?? unavailable", "(preview ??= fake())", [C.v11, C.w02]),
+  m("R4-X02", "the preview stand-in runs in production", COMMON, ' && env.NODE_ENV !== "production"', "", [C.v11]),
+  m("R4-X03", "any preview flag value turns the stand-in on", COMMON, 'env[flag] === "1"', "env[flag] !== undefined", [C.v11]),
   // release rows
   m("R4-X04", "candidate weights are shown as raw basis points", VIEW, "${(c.weightBp / 100).toFixed(2)}%", "${c.weightBp}%", [C.v01]),
   m("R4-X05", "the budget loses its unit", VIEW, "budget ${money(p.budget)}", "budget ${p.budget.amount}", [C.v01]),
@@ -95,7 +96,7 @@ const MUTANTS = [
   m("R4-X40", "an inconclusive variant is eligible", VIEW, 'eligible: c?.outcome === "equivalent" ?', "eligible: c ?", [C.v09]),
   m("R4-X41", "an uncompared variant reads as compared", VIEW, ': "not compared";', ': "equivalent";', [C.v09]),
   m("R4-X42", "the comparison's reasons are dropped", VIEW, '${c.reasons.length ? `: ${c.reasons.join(", ")}` : ""}', "", [C.v09]),
-  m("R4-X43", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v10]),
+  m("R4-X43", "any ?refused= string is looked up", COMMON, "(refusals as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v10]),
   // fake (the WR-R4-1 contract)
   m("R4-X44", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId)", "rows.filter(() => true)", [C.j03]),
   m("R4-X45", "another provider's release can be proposed on", FAKE, "x.policyRef === policyRef && x.providerId === actor.providerId", "x.policyRef === policyRef", [C.j03]),
@@ -118,14 +119,14 @@ const MUTANTS = [
   m("R4-X60", "an approval is recorded as the controller's", FAKE, '"expand", operatorId,', '"expand", "controller",', [C.j02]),
   // actions
   m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "releasesPort().propose(w, ", 'releasesPort().propose({ ...w, providerId: String(data.get("providerId")) }, ', [C.a01]),
-  m("R4-X62", "the capability check is skipped", ACTIONS, '!holds(w.role, "propose_publication") ? "denied" : ', "", [C.a02]),
-  m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'holds(w.role, "propose_publication")', 'holds(w.role, "manage_dev_deployment")', [C.a02]),
+  m("R4-X62", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'w, "propose_publication", valid', 'w, "manage_dev_deployment", valid', [C.a02]),
   m("R4-X64", "malformed input reaches the releases service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("R4-X65", "an unknown proposal kind is accepted", ACTIONS, '(kind === "expand" || kind === "rollback") && ', "", [C.a03]),
   m("R4-X66", "any policy reference passes the shape check", ACTIONS, "const POLICY_REF = /^lab:policy:", "const POLICY_REF = /^lab:\\w+:", [C.a03]),
   m("R4-X67", "any fence passes the shape check", ACTIONS, "const FENCE = /^\\d{1,15}$/;", "const FENCE = /./;", [C.a03]),
-  m("R4-X68", "a refusal is dropped on the way back", ACTIONS, 'redirect(result.ok ? "/releases" : `/releases?refused=${result.reason}`);', 'redirect("/releases");', [C.a02, C.a03, C.a04]),
-  m("R4-X69", "a success is flagged by the action, not the records", ACTIONS, 'redirect(result.ok ? "/releases" :', 'redirect(result.ok ? "/releases?done=1" :', [C.a01]),
+  m("R4-X68", "a refusal is dropped on the way back", COMMON, 'return result.ok ? to(result.value) : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`;', "return result.ok ? to(result.value) : page;", [C.a02, C.a03, C.a04]),
+  m("R4-X69", "a success is flagged by the action, not the records", COMMON, "return result.ok ? to(result.value) :", "return result.ok ? `${to(result.value)}?done=1` :", [C.a01]),
   m("R4-X70", "an action runs without a provider workspace", ACTIONS, "  const w = await requireProviderWorkspace();",
     '  const w = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "x", role: "administrator" } as const;', [C.a05]),
   // pages
@@ -135,7 +136,7 @@ const MUTANTS = [
   m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, 'if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;', "if (!variants.ok) return null;", [C.p01]),
   m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
   m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
-  m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, '{isPreview() && <p role="note">', '{<p role="note">', [C.p02]),
+  m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p02]),
   // the HTTP adapter (WR-R4-1, lane lab-api-2)
   m("R4-X78", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),
   m("R4-X79", "the provider is not the actor's", TRANSPORT, "encodeURIComponent(actor.providerId)", "\"\"", [C.h01]),
@@ -152,7 +153,7 @@ const MUTANTS = [
   m("R4-X90", "an unmapped status is invalid", TRANSPORT, "?? \"unavailable\"", "?? \"invalid\"", [C.h02]),
   m("R4-X91", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-R4-1): the configured adapter, the session's token, the row check
-  m("R4-X92", "the configured adapter is ignored", PORT, "return labReleases(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
+  m("R4-X92", "the configured adapter is ignored", PORT, "labReleases, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.w01]),
   m("R4-X93", "another server env names the backend", SERVER, "labApiUrl(env, \"releases\")", "labApiUrl(env, \"pipelines\")", [C.w01]),
   m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
   m("R4-X95", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),

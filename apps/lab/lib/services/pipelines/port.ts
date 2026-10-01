@@ -4,6 +4,7 @@
 // and only when asked for, the labelled preview fake. The route derives the user from the forwarded session (LAB-AUTH) and
 // re-checks every call; the Lab only ever names the session's workspace.
 import type { Actor } from "../../auth/access.ts";
+import { down, previewPort } from "../common.ts";
 import { FakePipelines } from "./fake.ts";
 import { labPipelines } from "./server.ts";
 
@@ -145,18 +146,11 @@ export interface PipelinesPort {
   approveTeachers(actor: Actor, batchId: string): Promise<Result<TeacherBatch>>;
 }
 
-const down = async () => ({ ok: false, reason: "unavailable" }) as const;
 const UNAVAILABLE: PipelinesPort = {
   labels: down, disagreements: down, imports: down, exports: down, importLabels: down, assign: down, review: down,
   adjudicate: down, exportLabels: down, runs: down, checkpoints: down, bundle: down, prepare: down, submit: down,
   finish: down, cancel: down, importCheckpoint: down, approve: down, teacherBatches: down, planTeachers: down, approveTeachers: down,
 };
 
-let preview: FakePipelines | undefined;
-export const isPreview = (env: Record<string, string | undefined> = process.env) =>
-  env.LAB_PIPELINES_PREVIEW === "1" && env.NODE_ENV !== "production";
-
-export function pipelinesPort(env: Record<string, string | undefined> = process.env): PipelinesPort {
-  if (isPreview(env)) return (preview ??= new FakePipelines());
-  return labPipelines(env) ?? UNAVAILABLE;
-}
+/** The HTTP adapter when configured; otherwise unavailable, or outside production the asked-for preview (common.ts). */
+export const { isPreview, port: pipelinesPort } = previewPort("LAB_PIPELINES_PREVIEW", () => new FakePipelines(), labPipelines, UNAVAILABLE);

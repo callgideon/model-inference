@@ -3,24 +3,13 @@
 // form's; a missing capability or malformed value is refused before L3 is asked; L3's own refusal
 // comes back as its reason; success is a plain return to the page, which re-reads the records.
 import { redirect } from "next/navigation";
-import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
+import { field, land } from "../common.ts";
 import { DIGEST_RE as DIGEST } from "../shapes.ts";
-import { controlPort, holds, type Capability, type Refusal, type Result } from "./port.ts";
+import { controlPort } from "./port.ts";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const IDENT = /^[A-Za-z0-9._:@/+-]{1,200}$/;
-const field = (data: FormData, name: string, shape: RegExp) => {
-  const v = data.get(name);
-  return typeof v === "string" && shape.test(v) ? v : null;
-};
-
-/** Refused here (role, then shape) or L3's answer; either way the page re-reads the records. */
-async function land(page: string, w: Membership, capability: Capability, valid: boolean, call: () => Promise<Result<unknown>>): Promise<never> {
-  const refused: Refusal | null = !holds(w.role, capability) ? "denied" : !valid ? "invalid" : null;
-  const result = refused === null ? await call() : { ok: false as const, reason: refused };
-  redirect(result.ok ? page : `${page}?refused=${result.reason}`);
-}
 
 export async function registerModel(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
@@ -28,15 +17,15 @@ export async function registerModel(data: FormData): Promise<void> {
   const artifactDigest = field(data, "artifactDigest", DIGEST);
   const schemaVersion = field(data, "schemaVersion", IDENT);
   const runtime = field(data, "runtime", IDENT);
-  await land("/models", w, "manage_dev_deployment", ![name, artifactDigest, schemaVersion, runtime].includes(null), () =>
+  redirect(await land("/models", w, "manage_dev_deployment", ![name, artifactDigest, schemaVersion, runtime].includes(null), () =>
     controlPort().register(w, { name: name!, artifactDigest: artifactDigest!, schemaVersion: schemaVersion!, runtime: runtime! }),
-  );
+  ));
 }
 
 export async function smokeDeployment(data: FormData): Promise<void> {
   const w = await requireProviderWorkspace();
   const id = field(data, "deploymentRevisionId", IDENT);
-  await land("/deployments", w, "manage_dev_deployment", id !== null, () => controlPort().smoke(w, id!));
+  redirect(await land("/deployments", w, "manage_dev_deployment", id !== null, () => controlPort().smoke(w, id!)));
 }
 
 export async function proposeChange(data: FormData): Promise<void> {
@@ -44,5 +33,5 @@ export async function proposeChange(data: FormData): Promise<void> {
   const kind = data.get("kind");
   const id = field(data, "deploymentRevisionId", IDENT);
   const valid = (kind === "publish" || kind === "rollback") && id !== null;
-  await land("/deployments", w, "propose_publication", valid, () => controlPort().propose(w, kind as "publish" | "rollback", id!));
+  redirect(await land("/deployments", w, "propose_publication", valid, () => controlPort().propose(w, kind as "publish" | "rollback", id!)));
 }

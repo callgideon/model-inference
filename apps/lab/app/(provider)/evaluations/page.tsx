@@ -3,7 +3,8 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { launchExperiment } from "@/lib/services/evaluation/actions";
 import { evaluationPort, holds, isPreview } from "@/lib/services/evaluation/port";
 import { comparison, refusalCopy, REFUSAL_COPY, runRow } from "@/lib/services/evaluation/view";
-import { PreviewNote, RunsTable } from "./runs";
+import { RunsTable } from "./runs";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Evaluations · infrx Lab" };
 
@@ -19,7 +20,7 @@ export default async function Evaluations({ searchParams }: PageProps<"/evaluati
   return (
     <>
       <h1>Evaluations</h1>
-      {isPreview() && <PreviewNote />}
+      {isPreview() && <PreviewNote records="evaluation" service="evaluation" />}
       {refused && <p role="alert">{refused}</p>}
       <p><Link href="/evaluations/checkpoints">Checkpoint subscriptions</Link></p>
       <h2>Experiments</h2>

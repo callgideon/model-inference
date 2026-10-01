@@ -5,6 +5,7 @@ import { providerAccessForRequest } from "@/lib/auth/guard";
 import { signOut } from "@/lib/auth/sign-in";
 import { SignInForm } from "@/lib/auth/sign-in-form";
 import { isPreview } from "@/lib/services/control/port";
+import { PreviewNote } from "@/components/preview-note";
 
 // Every provider page reads the session: never prerender.
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
             <Link href="/datasets">Datasets</Link> ·{" "}
             <Link href="/settings">Settings</Link>
           </nav>
-          {isPreview() && <p role="note">Preview: control records come from an in-memory stand-in, not the control service.</p>}
+          {isPreview() && <PreviewNote records="control" service="control" />}
         </header>
         <main>{children}</main>
       </>

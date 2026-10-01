@@ -3,6 +3,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { adjudicateSample, assignReviewer, exportLabels, importLabels, reviewLabel } from "@/lib/services/pipelines/actions";
 import { ADAPTERS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY } from "@/lib/services/pipelines/view";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Annotations · infrx Lab" };
 
@@ -23,7 +24,7 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
   return (
     <>
       <h1>Annotations</h1>
-      {isPreview() && <p role="note">Preview: pipeline records come from an in-memory stand-in, not the pipeline service.</p>}
+      {isPreview() && <PreviewNote records="pipeline" service="pipeline" />}
       {refused && <p role="alert">{refused}</p>}
       <form method="get">
         <label>Dataset version <input name="dataset" required defaultValue={dataset ?? ""} placeholder="lab:dataset:…@sha256:…" /></label>

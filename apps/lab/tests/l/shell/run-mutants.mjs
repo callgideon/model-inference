@@ -55,6 +55,7 @@ const C = {
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
   b02: "L1-B02 the provider layout renders its children only for a ready workspace",
   b03: "L1-B03 the selection action stores the membership it validated, never the submitted value",
+  b06: "L1-B06 the action, refusal-copy and preview boilerplate lives once, in lib/services/common.ts and components/preview-note.tsx",
   b04: "L1-B04 the Lab never imports the App: shared code comes only from packages/shared",
   b05: "L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out",
   s01: "L1-S01 sign-in sets the Lab session through the Lab's own client and lands on the home page",
@@ -173,6 +174,11 @@ const MUTANTS = [
   ...PORTS.map((port, i) => m(`L1-X${99 + i}`, `${port} answers from a table of its own`, port,
     'export { holds, type Actor, type Capability } from "../../auth/access.ts";',
     'export { type Actor, type Capability } from "../../auth/access.ts";\nexport const holds = (role: string, capability: string): boolean => role !== "viewer" || capability === "read_aggregate_health";', [C.a11])),
+  // LAB-09: the boilerplate lives once
+  m("L1-X102", "a family keeps its own refusal guard", "lib/services/rollouts/view.ts", "export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);",
+    "export const refusalCopy = (value: unknown) => ((REFUSALS as readonly unknown[]).includes(value) ? REFUSAL_COPY[value as Refusal] : null);", [C.b06]),
+  m("L1-X103", "a page inlines its own preview copy", LAYOUT, '<PreviewNote records="control" service="control" />',
+    '<p role="note">Preview: control records come from an in-memory stand-in, not the control service.</p>', [C.b06]),
   m("L1-X40", "the Lab imports the App's code", ACCESS, "export const ROLES", 'import type {} from "../../../app/lib/types.ts";\nexport const ROLES', [C.b04]),
 ];
 

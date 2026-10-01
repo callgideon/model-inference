@@ -4,6 +4,8 @@
 import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/p/${f}.test.ts`);
+const COMMON = "lib/services/common.ts"; // LAB-09: land, form readers, refusal copy, preview switch
+const NOTE = "components/preview-note.tsx"; // LAB-09: the one preview note
 const PORT = "lib/services/pipelines/port.ts";
 const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/pipelines/fake.ts";
@@ -66,9 +68,9 @@ const MUTANTS = [
   // port
   m("P4-X01", "a viewer may run pipelines", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "run_evaluation"],', [C.v01, C.a02, C.j05]),
   m("P4-X02", "a developer may assign reviewers", ACCESS, '"manage_dev_deployment", "run_evaluation"],\n  administrator', '"manage_dev_deployment", "run_evaluation", "manage_members"],\n  administrator', [C.v01, C.a02, C.j05]),
-  m("P4-X03", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v14]),
-  m("P4-X04", "the default port is the stand-in, not unavailable", PORT, "labPipelines(env) ?? UNAVAILABLE", "labPipelines(env) ?? (preview ??= new FakePipelines())", [C.v14, C.w02]),
-  m("P4-X05", "any preview flag value turns the stand-in on", PORT, 'env.LAB_PIPELINES_PREVIEW === "1"', "env.LAB_PIPELINES_PREVIEW !== undefined", [C.v14]),
+  m("P4-X03", "the preview stand-in runs in production", COMMON, ' && env.NODE_ENV !== "production"', "", [C.v14]),
+  m("P4-X04", "the default port is the stand-in, not unavailable", COMMON, "real(env) ?? unavailable", "(preview ??= fake())", [C.v14, C.w02]),
+  m("P4-X05", "any preview flag value turns the stand-in on", COMMON, 'env[flag] === "1"', "env[flag] !== undefined", [C.v14]),
   // view
   m("P4-X06", "a synthetic label reads as an imported one", VIEW, 'synthetic: "Synthetic (model-generated)",', 'synthetic: "Imported (external human pipeline)",', [C.v02]),
   m("P4-X07", "any label flagged ground truth reads as ground truth", VIEW, 'l.method === "human" && l.groundTruth ?', "l.groundTruth ?", [C.v02]),
@@ -100,7 +102,7 @@ const MUTANTS = [
   m("P4-X33", "an eligible candidate is offered approval again", VIEW, "approvable: passed && !c.eligible && ", "approvable: passed && ", [C.v12]),
   m("P4-X34", "a viewer may approve", VIEW, 'approvable: passed && !c.eligible && holds(role, "run_evaluation"),', "approvable: passed && !c.eligible,", [C.v12]),
   m("P4-X35", "an eligible candidate reads as published", VIEW, '"Eligible candidate: not public and not promoted."', '"Published."', [C.v12]),
-  m("P4-X36", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v13]),
+  m("P4-X36", "any ?refused= string is looked up", COMMON, "(refusals as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v13]),
   // fake (the route's contract)
   m("P4-X37", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map((r) => bare<T>(r))", "rows.map((r) => bare<T>(r))", [C.j05]),
   m("P4-X38", "another provider's dataset is served", FAKE, "return d?.providerId === actor.providerId ? d : undefined;", "return d;", [C.j05]),
@@ -136,7 +138,7 @@ const MUTANTS = [
   // actions
   m("P4-X68", "an import acts as the form's provider", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
   m("P4-X69", "the actor's role is not the session's", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, role: "administrator" as const },', [C.a01]),
-  m("P4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("P4-X70", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
   m("P4-X73", "any USD amount passes", SHAPES, "USD_RE = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "USD_RE = /./;", [C.a03]),
@@ -146,8 +148,8 @@ const MUTANTS = [
   m("P4-X77", "a correction may accept", ACTIONS, '(raw === "" || (correction !== null && decision === "rejected"))', '(raw === "" || correction !== null)', [C.a03]),
   m("P4-X78", "an export may outlive N2's bound", ACTIONS, "ttlS <= MAX_EXPORT_TTL_S", "ttlS <= 9_999_999", [C.a03]),
   m("P4-X79", "the connector is read from the form", ACTIONS, "      config: { objective: objective!,", '      connector: text(data, "connector"), config: { objective: objective!,', [C.a04]),
-  m("P4-X80", "a refusal is dropped on the way back", ACTIONS, 'redirect(result.ok ? page : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`);', "redirect(page);", [C.a02, C.a05]),
-  m("P4-X81", "a success is flagged by the action, not the records", ACTIONS, "redirect(result.ok ? page :", 'redirect(result.ok ? `${page}${page.includes("?") ? "&" : "?"}done=1` :', [C.a01, C.a05]),
+  m("P4-X80", "a refusal is dropped on the way back", COMMON, 'return result.ok ? to(result.value) : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`;', "return result.ok ? to(result.value) : page;", [C.a02, C.a05]),
+  m("P4-X81", "a success is flagged by the action, not the records", COMMON, "return result.ok ? to(result.value) :", 'return result.ok ? `${to(result.value)}${page.includes("?") ? "&" : "?"}done=1` :', [C.a01, C.a05]),
   m("P4-X82", "an action runs without a provider workspace", ACTIONS, "export async function runAction(data: FormData): Promise<void> {\n  const w = await requireProviderWorkspace();",
     'export async function runAction(data: FormData): Promise<void> {\n  const w = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "x", role: "administrator" } as const;', [C.a06]),
   m("P4-X83", "assigning needs only run_evaluation in the action", ACTIONS, '"manage_members", ![datasetRef', '"run_evaluation", ![datasetRef', [C.a02]),
@@ -166,7 +168,7 @@ const MUTANTS = [
   m("P4-X95", "the form picks a connector", TRAIN, '<button type="submit">Prepare bundle</button>', '<input name="connector" defaultValue="vendor-x" />\n            <button type="submit">Prepare bundle</button>', [C.p03]),
   m("P4-X96", "automatic connectors are advertised", TRAIN, "Automatic training connectors are not offered", "Automatic training connectors are available", [C.p03]),
   m("P4-X97", "a label's ground-truth status is not shown", ANNOT, "<td>{l.kind}</td><td>{l.truth}</td>", "<td>{l.kind}</td><td>{l.state}</td>", [C.p04]),
-  m("P4-X98", "the preview label shows when the stand-in is off", TRAIN, '{isPreview() && <p role="note">', '{<p role="note">', [C.p04]),
+  m("P4-X98", "the preview label shows when the stand-in is off", TRAIN, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p04]),
   // the HTTP adapter (WR-P4-1, lane lab-api-2)
   m("P4-X99", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),
   m("P4-X100", "the provider is not the actor's", TRANSPORT, "encodeURIComponent(actor.providerId)", "\"\"", [C.h01]),
@@ -189,7 +191,7 @@ const MUTANTS = [
   m("P4-X117", "an unmapped status is invalid", TRANSPORT, "?? \"unavailable\"", "?? \"invalid\"", [C.h02]),
   m("P4-X118", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-P4-1): the configured adapter, the session's token, the row check
-  m("P4-X119", "the configured adapter is ignored", PORT, "return labPipelines(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
+  m("P4-X119", "the configured adapter is ignored", PORT, "labPipelines, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.w01]),
   m("P4-X120", "another server env names the backend", SERVER, "labApiUrl(env, \"pipelines\")", "labApiUrl(env, \"evaluation\")", [C.w01]),
   m("P4-X121", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
   m("P4-X122", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
@@ -292,6 +294,7 @@ const MUTANTS = [
   m("P4-X212", "a failure without its reason is read", HTTP, "failures: many(obj({ sampleId: str, reason: str }))", "failures: many(obj({ sampleId: str }))", [C.h06]),
   m("P4-X213", "a chunk without its sent count is read", HTTP, "costUsd: nul(str), sent: num,", "costUsd: nul(str),", [C.h06]),
   m("P4-X214", "a chunk's unknown and missing cost read alike", HTTP, "costUsd: nul(str), sent: num", 'costUsd: (v) => v == null || typeof v === "string", sent: num', [C.h06]),
+  m("P4-X216", "a refusal on a page with a query breaks its URL", COMMON, '${page.includes("?") ? "&" : "?"}refused=', "?refused=", [C.a02, C.a05]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "P4", mutants: MUTANTS }));

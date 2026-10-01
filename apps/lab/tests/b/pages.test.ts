@@ -47,6 +47,6 @@ test("B4-P03 an experiment is found only among the workspace's own, compared onl
 });
 
 test("B4-P04 the preview stand-in is labelled on every page only when it is on", () => {
-  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote \/>\}/, path);
-  assert.match(read(RUNS), /<p role="note">Preview: /);
+  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote records="evaluation" service="evaluation" \/>\}/, path);
+  assert.match(read("components/preview-note.tsx"), /<p role="note">\{`Preview: \$\{records\} records come from an in-memory stand-in, not the \$\{service\} service\.`\}<\/p>/, "LAB-09: the one preview note");
 });

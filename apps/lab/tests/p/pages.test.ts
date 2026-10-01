@@ -45,7 +45,7 @@ test("P4-P03 the paid forms show the USD budget and named payer, and no form pic
 test("P4-P04 labels show their kind and ground-truth status apart; the preview stand-in is labelled only when it is on", () => {
   const annotations = read(ANNOTATIONS);
   assert.match(annotations, /<td>\{l\.kind\}<\/td><td>\{l\.truth\}<\/td>/);
-  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <p role="note">Preview: /, path);
+  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote records="pipeline" service="pipeline" \/>\}/, path);
 });
 
 test("P4-P05 the teacher section: a dry-run form with its batch id minted at render, its USD budget and payer; approval only where the view allows it; unavailable said as such", () => {

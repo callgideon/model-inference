@@ -29,7 +29,7 @@ test("R4-P02 no page offers a launch or allocation control or claims success; th
     const page = read(path);
     assert.doesNotMatch(page, /success|succeeded|rolled back!|saved/i, path);
     assert.doesNotMatch(page, /name="(mode|cohort|weight\w*|budget|candidate\w*|endpoint\w*)"/, path);
-    assert.match(page, /\{isPreview\(\) && <p role="note">Preview: /, path);
+    assert.match(page, new RegExp(`\\{isPreview\\(\\) && <PreviewNote records="${path.includes("releases") ? "release" : "variant"}" service="rollout" \\/>\\}`), path);
   }
   assert.equal([...read(PAGES[0]).matchAll(/<form /g)].length, 1, "one form: the expand/rollback proposal");
   assert.doesNotMatch(read(PAGES[1]), /<form /);

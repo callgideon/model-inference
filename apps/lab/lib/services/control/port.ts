@@ -2,6 +2,7 @@
 // port is the HTTP adapter (server.ts, WR-E3L-J); unset it is "unavailable" (fails closed), or, only
 // outside production and only when asked for, the labelled preview fake.
 import type { Actor } from "../../auth/access.ts";
+import { down, previewPort } from "../common.ts";
 import { FakeControl } from "./fake.ts";
 import { labControl } from "./server.ts";
 
@@ -57,14 +58,7 @@ export interface ControlPort {
   propose(actor: Actor, kind: ProposalKind, deploymentRevisionId: string): Promise<Result<Proposal>>;
 }
 
-const down = async () => ({ ok: false, reason: "unavailable" }) as const;
 const UNAVAILABLE: ControlPort = { models: down, deployments: down, proposals: down, aggregates: down, register: down, smoke: down, propose: down };
 
-let preview: FakeControl | undefined;
-export const isPreview = (env: Record<string, string | undefined> = process.env) =>
-  env.LAB_CONTROL_PREVIEW === "1" && env.NODE_ENV !== "production";
-
-export function controlPort(env: Record<string, string | undefined> = process.env): ControlPort {
-  if (isPreview(env)) return (preview ??= new FakeControl());
-  return labControl(env) ?? UNAVAILABLE;
-}
+/** The HTTP adapter when configured; otherwise unavailable, or outside production the asked-for preview (common.ts). */
+export const { isPreview, port: controlPort } = previewPort("LAB_CONTROL_PREVIEW", () => new FakeControl(), labControl, UNAVAILABLE);

@@ -142,6 +142,14 @@ test("L1-B03 the selection action stores the membership it validated, never the 
   assert.equal(action.split(".set(").length - 1, 1);
 });
 
+test("L1-B06 the action, refusal-copy and preview boilerplate lives once, in lib/services/common.ts and components/preview-note.tsx", () => {
+  const families = /^lib\/services\/(control|evaluation|pipelines|rollouts)\//;
+  for (const { path, source } of sources()) {
+    if (path.startsWith("app/")) assert.doesNotMatch(source, /in-memory stand-in/, path);
+    if (families.test(path)) assert.doesNotMatch(source, /function land\b|\.includes\(value\)|let preview\b|NODE_ENV !== "production"|const (field|oneOf) = |redirect\(result/, path);
+  }
+});
+
 test("L1-B04 the Lab never imports the App: shared code comes only from packages/shared", () => {
   const offenders = sources().filter(({ source }) => /from\s+["'][^"']*apps\/app|from\s+["'](\.\.\/)+app\//.test(source));
   assert.deepEqual(offenders.map((f) => f.path), []);

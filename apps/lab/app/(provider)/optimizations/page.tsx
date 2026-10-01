@@ -1,6 +1,7 @@
 import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { isPreview, releasesPort } from "@/lib/services/rollouts/port";
 import { REFUSAL_COPY, variantRows } from "@/lib/services/rollouts/view";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Optimizations · infrx Lab" };
 
@@ -14,7 +15,7 @@ export default async function Optimizations() {
   return (
     <>
       <h1>Optimizations</h1>
-      {isPreview() && <p role="note">Preview: variant records come from an in-memory stand-in, not the rollout service.</p>}
+      {isPreview() && <PreviewNote records="variant" service="rollout" />}
       {rows.length === 0 ? (
         <p>No optimized variants registered yet.</p>
       ) : (

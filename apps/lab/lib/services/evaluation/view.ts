@@ -1,5 +1,6 @@
 // B4: rows and copy derived only from the backends' records. Nothing here remembers what a button did,
 // rounds a statistic, or adds amounts of different units.
+import { fixedCopy } from "../common.ts";
 import type { Role } from "../../auth/access.ts";
 import { holds, REFUSALS, type Estimate, type Refusal, type Report, type Run, type Subscription } from "./port.ts";
 
@@ -113,7 +114,5 @@ export const REFUSAL_COPY: Record<Refusal, string> = {
   unavailable: "Evaluation records could not be read. Nothing is shown until they can be; try again shortly.",
 };
 
-/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown. */
-export function refusalCopy(value: unknown): string | null {
-  return (REFUSALS as readonly unknown[]).includes(value) ? REFUSAL_COPY[value as Refusal] : null;
-}
+/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown (common.ts). */
+export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);

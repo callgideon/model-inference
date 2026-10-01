@@ -1,5 +1,6 @@
 // R4: rows and copy derived only from the release and variant records. Nothing here remembers what a
 // button did: a rollback is whatever D9's state and decisions say, a proposal only "awaiting operator".
+import { fixedCopy } from "../common.ts";
 import type { Role } from "../../auth/access.ts";
 import { holds, REFUSALS, type Amount, type ProposalKind, type Records, type Refusal, type Variant } from "./port.ts";
 
@@ -80,7 +81,5 @@ export const REFUSAL_COPY: Record<Refusal, string> = {
   unavailable: "Release records could not be read. Nothing is shown until they can be; try again shortly.",
 };
 
-/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown. */
-export function refusalCopy(value: unknown): string | null {
-  return (REFUSALS as readonly unknown[]).includes(value) ? REFUSAL_COPY[value as Refusal] : null;
-}
+/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown (common.ts). */
+export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);
