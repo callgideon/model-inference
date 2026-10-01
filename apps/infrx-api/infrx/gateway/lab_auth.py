@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from collections.abc import Awaitable, Callable
 
 import httpx
 from fastapi import Request

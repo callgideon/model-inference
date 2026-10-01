@@ -144,6 +144,7 @@ extend-select = ["UP"]
 "tests/i/test_rollback_drill.py" = ["UP017"]
 # Added on claude/consumer-v1 after this lane's base 2add8e0a (fix round 1-L5-INT-1).
 "tests/i/test_rollout_host.py" = ["UP031"]
+"infrx/gateway/lab_auth.py" = ["UP047"]  # held()/lab_body() TypeVar generics (merge #82 integration; PEP 695 rewrite is a W7 item)
 "tests/i/test_rollout.py" = ["E731", "E741"]
 "tests/j/fakes.py" = ["UP017"]
 "tests/j/submit/fakes.py" = ["UP017"]

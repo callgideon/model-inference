@@ -10,7 +10,8 @@ included, a retryable `DependencyUnavailable` - never an answer read as "nothing
 from __future__ import annotations
 
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from ..contracts import errors
 
