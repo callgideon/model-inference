@@ -25,7 +25,7 @@ One company can use both products. Consumer membership, provider membership and 
 
 This directory supersedes earlier product scope where it conflicts. The amended [task manifest](../plan/tasks.json) and [implementation impact](../plan/08-platform-split.md) govern task routing and dependencies; [shared contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md) govern the runtime. Earlier module briefs remain useful subject to these amendments. Historical research is evidence to evaluate, not an instruction to implement every feature.
 
-The original package was committed as `25b9829`; wave-2 implementation has now been pulled from main at `271add9`. Read the [audit](../plan/10-wave2-platform-audit.md) and [revision handoffs](../plan/11-wave3-revision-handoffs.md). Original module completions are preserved. That sentence's status (CREDIT and Lab as target behavior, a legacy USD pilot) held at `271add9`; the current state is the status line above.
+The original package was committed as `25b9829`; wave-2 implementation has now been pulled from main at `271add9`. Read the [audit](../plan/10-wave2-platform-audit.md) and [revision handoffs](../plan/11-wave3-revision-handoffs.md). Original module completions are preserved. At `271add9` CREDIT wallets and the Lab were target behavior over a legacy USD pilot; both have since shipped (the status line above).
 
 ## Product sequencing
 
