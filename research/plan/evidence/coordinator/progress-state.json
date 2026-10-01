@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "db2f3445",
- "integration_head": "2d710800",
+ "integration_head": "6462ed06",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -30,8 +30,8 @@
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3.",
   "main": "db2f3445 (fast-forwarded 2026-10-01T07:05Z from 41693d5d; the App's Vercel project infrx-app builds main — the wave-6 tip; the box's consumer runtime stays installed at 41693d5d until a consumer window)"
  },
- "revision": 393,
- "updated": "2026-10-01T17:51Z",
+ "revision": 394,
+ "updated": "2026-10-01T20:45Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -12251,7 +12251,7 @@
   {
    "id": "P-17",
    "status": "resolved",
-   "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab)",
+   "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab); E4C live window RUNNING 2026-10-01T20:45Z (run 20261001T181109Z on the installed 41693d5d: preconditions/config-pin/served-build/sop-parity ok; dataset-resume FAIL on the oracle — corrected on main 6462ed06; envelope FAIL at the declared 0.5/s pending detail; soak 4 h in progress; overload queued).",
    "owner": "coordinator at E4C handback",
    "blocks": [
     "E4C"
