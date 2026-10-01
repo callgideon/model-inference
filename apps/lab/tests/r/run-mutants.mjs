@@ -121,7 +121,7 @@ const MUTANTS = [
   m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "releasesPort().propose(w, ", 'releasesPort().propose({ ...w, providerId: String(data.get("providerId")) }, ', [C.a01]),
   m("R4-X62", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'w, "propose_publication", valid', 'w, "manage_dev_deployment", valid', [C.a02]),
-  m("R4-X64", "malformed input reaches the releases service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("R4-X64", "malformed input reaches the releases service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("R4-X65", "an unknown proposal kind is accepted", ACTIONS, '(kind === "expand" || kind === "rollback") && ', "", [C.a03]),
   m("R4-X66", "any policy reference passes the shape check", ACTIONS, "const POLICY_REF = /^lab:policy:", "const POLICY_REF = /^lab:\\w+:", [C.a03]),
   m("R4-X67", "any fence passes the shape check", ACTIONS, "const FENCE = /^\\d{1,15}$/;", "const FENCE = /./;", [C.a03]),

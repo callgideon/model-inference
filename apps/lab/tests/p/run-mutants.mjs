@@ -5,7 +5,6 @@ import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/p/${f}.test.ts`);
 const COMMON = "lib/services/common.ts"; // LAB-09: land, form readers, refusal copy, preview switch
-const NOTE = "components/preview-note.tsx"; // LAB-09: the one preview note
 const PORT = "lib/services/pipelines/port.ts";
 const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/pipelines/fake.ts";
@@ -141,7 +140,7 @@ const MUTANTS = [
   m("P4-X68", "an import acts as the form's provider", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
   m("P4-X69", "the actor's role is not the session's", ACTIONS, "pipelinesPort().importLabels(w,", 'pipelinesPort().importLabels({ ...w, role: "administrator" as const },', [C.a01]),
   m("P4-X70", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
-  m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("P4-X71", "malformed input reaches the pipeline service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
   m("P4-X73", "any USD amount passes", SHAPES, "USD_RE = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "USD_RE = /./;", [C.a03]),
   m("P4-X74", "any id passes as a run id", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),

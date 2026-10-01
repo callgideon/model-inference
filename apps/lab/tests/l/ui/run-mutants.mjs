@@ -80,7 +80,7 @@ const MUTANTS = [
   m("L4-X32", "register acts as the form's provider", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
   m("L4-X33", "the actor's role is not the session's", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, role: "administrator" as const },', [C.a01]),
   m("L4-X34", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
-  m("L4-X35", "malformed input reaches the control service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("L4-X35", "malformed input reaches the control service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("L4-X36", "any artifact reference passes the shape check", SHAPES, "DIGEST_RE = /^sha256:[0-9a-f]{64}$/;", "DIGEST_RE = /./;", [C.a03]),
   m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
   m("L4-X38", "an unknown proposal kind is accepted", ACTIONS, '(kind === "publish" || kind === "rollback") && id !== null', "id !== null", [C.a03]),

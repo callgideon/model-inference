@@ -105,7 +105,7 @@ const MUTANTS = [
   // port: roles and the fail-closed seam
   m("B4-X40", "a viewer may run evaluations", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "run_evaluation"],', [C.v01, C.a02, C.j02]),
   m("B4-X41", "a developer may not run evaluations", ACCESS, 'developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],', 'developer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a01, C.j01]),
-  m("B4-X42", "a viewer may not read", PORT, 'capability === "read_aggregate_health" || ', "", [C.v01]),
+  m("B4-X42", "a viewer may not read", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: [],', [C.v01]),
   m("B4-X43", "the preview stand-in runs in production", COMMON, ' && env.NODE_ENV !== "production"', "", [C.v09]),
   m("B4-X44", "the default port is the stand-in, not unavailable", COMMON, "real(env) ?? unavailable", "(preview ??= fake())", [C.v09, C.w02]),
   m("B4-X45", "any preview flag value turns the stand-in on", COMMON, 'env[flag] === "1"', "env[flag] !== undefined", [C.v09]),
@@ -139,7 +139,7 @@ const MUTANTS = [
   m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, providerId: text(data, "providerId") }, launch!)', [C.a01]),
   m("B4-X69", "the actor's role is not the session's", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, role: "administrator" as const }, launch!)', [C.a01]),
   m("B4-X70", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
-  m("B4-X71", "malformed input reaches the service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("B4-X71", "malformed input reaches the service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
   m("B4-X73", "a ref with trailing text passes", ACTIONS, "@sha256:[0-9a-f]{64}$`);", "@sha256:[0-9a-f]{64}`);", [C.a03]),
   m("B4-X74", "any record id passes", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
