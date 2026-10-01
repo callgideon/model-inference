@@ -2,6 +2,8 @@
 
 **State 2026-10-01:** start at the [state of record](research/plan/25-state-2026-10-01.md) (what runs where, what is pending, the reading order). Everything below — the 2026-09-21/22/24 dispatches (programs [22](research/plan/22-consumer-v1-implementation.md)/[24](research/plan/24-consumer-v1-session-handoff.md), [handoff 20 §14](research/plan/20-platform-handoff-2026-09-24.md), [review 21](research/plan/21-v1-consumer-readiness-review-2026-09-24.md), [16](research/plan/16-fresh-session-handoff.md)/[18](research/plan/18-marlin-backend-first.md), the [wave-2 audit](research/plan/10-wave2-platform-audit.md)) and the original handoff — is historical.
 
+**Operational session tails (2026-09-22 → 09-24):** the 25 dated `HANDOFF-2026*.md` files are in [research/plan/handoffs/operational/](research/plan/handoffs/operational/); the newest, [HANDOFF-20260924T2115Z.md](HANDOFF-20260924T2115Z.md), stays at the root while plans 16, 21 and 24 link it there.
+
 Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.
 
 ## 0. Current objective and accepted changes
@@ -398,3 +400,4 @@ BASE_URL=https://marlin2b.callbill.ai/v1 MARLIN_API_KEY=$KEY python3 models/marl
 - 2026-09-20: Added authoritative implementation package, incorporated review decisions, removed plaintext account password from this file and retained historical source context. No live infrastructure or application implementation changed.
 - 2026-09-21: Repository map and test command refreshed after F1/F2 integration on `claude/infrx-impl`; live-state sections above remain historical and were not re-verified by this edit. The I1 inventory (`research/plan/evidence/i/`) and `infra/README.md` hold the re-observed state, including the installer fail-open hazard (`O-FAILOPEN`).
 - 2026-10-01 (W6 docs-state): the five stacked dispatch banners collapsed to one dated line pointing at `research/plan/25-state-2026-10-01.md` (their links kept in that line); the map's `apps/lab/` row annotated; the historical body unchanged.
+- 2026-10-01 (W6 docs-state, DT-17): 25 root `HANDOFF-2026*.md` files moved (git mv, content unchanged) to `research/plan/handoffs/operational/`; `HANDOFF-20260924T2115Z.md` stays at the root until plans 16/21/24 re-point their links (wiring request); a pointer line above.
