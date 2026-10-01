@@ -9,12 +9,24 @@
  * system fonts; the batch-3 visual suite (UX-11) owns full-page rendering.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { createRequire, registerHooks } from "node:module";
+import * as nodeModule from "node:module";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const APP = fileURLToPath(new URL("../../../", import.meta.url));
+const { createRequire } = nodeModule;
 const require = createRequire(join(APP, "package.json"));
+
+// Node >= 22.15's synchronous module hooks; the pinned @types/node (20) predates them.
+type Context = { parentURL?: string; conditions?: string[] };
+type Resolved = { url: string; format?: string; shortCircuit?: boolean };
+type Loaded = { format: string; source?: string | Uint8Array; shortCircuit?: boolean };
+const { registerHooks } = nodeModule as unknown as {
+  registerHooks(hooks: {
+    resolve(specifier: string, context: Context, next: (specifier: string, context: Context) => Resolved): Resolved;
+    load(url: string, context: Context, next: (url: string, context: Context) => Loaded): Loaded;
+  }): void;
+};
 const ts = require("typescript") as typeof import("typescript");
 
 const STUBS: Record<string, string> = {
