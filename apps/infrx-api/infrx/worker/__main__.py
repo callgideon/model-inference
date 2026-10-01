@@ -75,7 +75,7 @@ from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
 from ..media.retention import RetentionCollector
 from ..observe.metrics import Registry
-from ..state.jobstore import PgJobStore, PreparedWork, connector
+from ..state.jobstore import PgJobStore, PreparedWork, connector, dedicated_login
 from ..state.journal import PgStreamStore
 from ..state.lab_data import PgLabDataStore
 from ..state.lifecycle import PgLifecycle
@@ -213,7 +213,7 @@ def reconciliation_reader(deployment):
         return None
     # ponytail: one connection per tick (every 10 s), bounded by the login's own
     # statement_timeout; put `connect_timeout` in the DSN if a hung connect ever matters.
-    return PgReconciliation(connector(dsn, set_role=not pilot.dedicated_login(dsn)))
+    return PgReconciliation(connector(dsn, set_role=not dedicated_login(dsn)))
 # --- end W5-F5 ----------------------------------------------------------------------------
 
 

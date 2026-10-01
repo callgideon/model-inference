@@ -56,6 +56,23 @@ def session_state_allowed(dsn: str) -> bool:
     return urlsplit(dsn).port != TRANSACTION_POOLER_PORT
 
 
+#: 0021's dedicated logins (R127): members of no role, so they never `set role`.
+DEDICATED_LOGINS = frozenset({"infrx_runtime", "infrx_monitor"})
+
+
+def login_user(dsn: str) -> str:
+    """A9: the one DSN login parser - the role a DSN logs in as, bare or as Supavisor's
+    `<role>.<project-ref>`; "" when the DSN names no user (libpq's default)."""
+    from psycopg.conninfo import conninfo_to_dict
+    return (conninfo_to_dict(dsn).get("user") or "").split(".")[0]
+
+
+def dedicated_login(dsn: str) -> bool:
+    """True when the DSN logs in as a dedicated login. Every other login (bda1586's broad
+    one) keeps D2 request 7 (`set role service_role`)."""
+    return login_user(dsn) in DEDICATED_LOGINS
+
+
 def connector(dsn: str, *, set_role: bool | None = None) -> Connect:
     """The simplest `Connect`: a fresh connection per operation, `set role service_role`
     (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does) - only

@@ -44,7 +44,8 @@ from ..media.uploads import MediaUploads
 from ..observe.metrics import Registry
 from ..scheduling.reconcile import Reconciler
 from ..state.catalog import PgCatalogDirectory
-from ..state.jobstore import PgJobStore, session_state_allowed
+from ..state.jobstore import (  # noqa: F401 - A9: re-exported, `jobstore` owns the parser
+    DEDICATED_LOGINS, PgJobStore, dedicated_login, login_user, session_state_allowed)
 from ..state.journal import PgStreamStore
 from . import capture as trace_capture
 from .routes import intake, models
@@ -113,17 +114,6 @@ def journal_check(stream):
         await stream.usage()
         return True
     return check
-
-
-#: 0021's dedicated logins (R127): members of no role, so they never `set role`.
-DEDICATED_LOGINS = frozenset({"infrx_runtime", "infrx_monitor"})
-
-
-def dedicated_login(dsn: str) -> bool:
-    """True when the DSN logs in as a dedicated login - bare, or as Supavisor's
-    `<role>.<project-ref>`. Every other login (bda1586's broad one) keeps D2 request 7."""
-    from psycopg.conninfo import conninfo_to_dict
-    return (conninfo_to_dict(dsn).get("user") or "").split(".")[0] in DEDICATED_LOGINS
 
 
 def configure_connection(statement_timeout_ms: int, *, session_state: bool = True,
@@ -260,9 +250,7 @@ def _rollouts(settings, connect) -> dict:
     EXECUTE infrx_runtime only; never service_role)."""
     if not settings.deployment.rollout_routing:
         return {}
-    from psycopg.conninfo import conninfo_to_dict
-    if (conninfo_to_dict(settings.pilot.database_url).get("user")
-            or "").split(".")[0] != "infrx_runtime":
+    if login_user(settings.pilot.database_url) != "infrx_runtime":
         raise RuntimeMisconfigured(runtime_mode(settings), detail="ROLLOUT_ROUTING needs "
                                    "DATABASE_URL to log in as infrx_runtime")
     from ..rollouts.routing import Router
