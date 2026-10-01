@@ -1375,6 +1375,10 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("mpm07", "tests/integration's runners are pinned to api-mutants too",
            MP_PIN, '"tests/integration")]', ')]', MP_SUITE, "resolved",
            cases=("test_a_path_is_resolved_against_its_segments_cd",)),
+    Mutant("mpm08", "a runner outside the glob is found by reading INFRX_MUTANTS (0-MP-RV-1)",
+           MP_PIN, 'and "INFRX_MUTANTS" in p.read_text()}', "and False}", MP_SUITE,
+           "outside_the_glob",
+           cases=("test_a_runner_outside_the_glob_is_found_by_reading_infrx_mutants",)),
 )
 
 
