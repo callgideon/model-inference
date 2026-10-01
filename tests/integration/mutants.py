@@ -72,6 +72,7 @@ class Mutant:
 
 
 TU_TOOL, TU_SUITE = "infra/app/create-test-user.py", "tests/integration/ops/test_create_test_user.py"
+MP_PIN = MP_SUITE = "tests/integration/test_makefile_mutant_lists.py"
 
 MUTANTS: tuple[Mutant, ...] = (
     # ---------------- controls (must survive)
@@ -1350,6 +1351,30 @@ MUTANTS: tuple[Mutant, ...] = (
            TU_TOOL, '"/rest/v1/rpc/claim_signup_grant",', '"/rest/v1/rpc/claim_signup_grant_x",',
            TU_SUITE, "tu11", layer=2,
            cases=("test_tu11_the_real_grant_through_postgrest_on_app_c0",)),
+    # W6 makefile-pins (DT-11): the Makefile's mutant targets name each runner in the tree once.
+    Mutant("mpm01", "a runner named twice by a mutant target is reported",
+           MP_PIN, "if mentions[rel] != 1:", "if mentions[rel] < 1:", MP_SUITE, "duplicated",
+           cases=("test_a_duplicated_runner_is_reported",)),
+    Mutant("mpm02", "a runner the mutant targets omit is reported",
+           MP_PIN, "if mentions[rel] != 1:", "if mentions[rel] > 1:", MP_SUITE, "omitted",
+           cases=("test_an_omitted_runner_is_reported_for_both_targets",)),
+    Mutant("mpm03", "a named path that does not exist is reported",
+           MP_PIN, "for p in mentions if not (REPO / p).is_file()]",
+           "for p in mentions if False]", MP_SUITE, "resolved",
+           cases=("test_a_path_is_resolved_against_its_segments_cd",)),
+    Mutant("mpm04", "each named path resolves against its recipe segment's cd",
+           MP_PIN, "cwd = CD[move.group(1)]", "pass", MP_SUITE, "exactly_once",
+           cases=("test_every_mutant_runner_is_named_exactly_once",)),
+    Mutant("mpm05", "a recipe comment line names no runner",
+           MP_PIN, 'if line.strip().startswith("#"):', "if False:", MP_SUITE, "comment",
+           cases=("test_a_recipe_comment_names_nothing",)),
+    Mutant("mpm06", "the Lab runners are pinned to lab-mutants",
+           MP_PIN, '"lab-mutants": [("apps/lab/tests", "run-*mutants.mjs")],',
+           '"lab-mutants": [],', MP_SUITE, "omitted",
+           cases=("test_an_omitted_runner_is_reported_for_both_targets",)),
+    Mutant("mpm07", "tests/integration's runners are pinned to api-mutants too",
+           MP_PIN, '"tests/integration")]', ')]', MP_SUITE, "resolved",
+           cases=("test_a_path_is_resolved_against_its_segments_cd",)),
 )
 
 

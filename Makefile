@@ -12,13 +12,15 @@ api-env:
 api-test:
 	cd $(API) && uv run --frozen pytest -q
 
-# r1 R32: the whole mutation list (one pytest process per mutant, ~75s). The default
-# suite runs a subset; a surviving mutant is a failed suite either way.
+# r1 R32: every mutation list (one pytest process per mutant; measured wall-clocks per target:
+# tests/integration/README.md). The default suite runs a subset; a surviving mutant is a
+# failed suite either way. tests/integration/test_makefile_mutant_lists.py pins each
+# test_*mutants*.py in the tree to exactly one line here.
 # Track mutant lists join here as their task merges (M1, M pilot, M1-L2, Q1, J1, W1, T1, D1-D5, G1, I; E4B below — D's list needs Docker and skips visibly without it; M1-L2's S3 mutants skip visibly without INFRX_M_S3_ENDPOINT); each gates on INFRX_MUTANTS.
 # E4B's list lives beside its runner in tests/integration/backend (outside apps/infrx-api), so it
 # runs from the root with the pinned interpreter, through the same shared R83 runner.
 api-mutants:
-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/h/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py tests/b/runner/test_mutants.py tests/b/reports/test_mutants.py tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py tests/j/submit/test_mutants.py tests/r/control/test_mutants.py tests/r/optimization/test_mutants.py tests/p/annotations/test_mutants.py tests/p/training/test_mutants.py tests/n/lineage/test_mutants.py tests/g/lab_auth/test_mutants.py tests/g/lab_control/test_mutants.py tests/g/lab_traces/test_mutants.py tests/r/routing/test_mutants.py tests/content/test_mutants.py tests/g/trace_export/test_mutants.py tests/j/calibration/test_mutants.py tests/p/teachers/test_mutants.py tests/g/lab_evaluations/test_mutants.py tests/g/lab_pipelines/test_mutants.py tests/g/lab_releases/test_mutants.py tests/w/test_lab_workers_mutants.py tests/g/lab_datasets/test_mutants.py tests/g/lab_checkpoints/test_mutants.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/m/test_retention_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py tests/contracts/lab/test_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py tests/d/test_code_mutants_l2sql.py tests/d/test_code_mutants_d6f.py tests/d/test_code_mutants_d7.py tests/n/imports/test_mutants.py tests/n/versions/test_mutants.py tests/d/test_upgrade_lab.py tests/g/feedback/test_mutants.py tests/b/runner/test_mutants.py tests/b/reports/test_mutants.py tests/b/checkpoints/test_mutants.py tests/i/lab_eval/test_mutants.py tests/j/submit/test_mutants.py tests/r/control/test_mutants.py tests/r/optimization/test_mutants.py tests/p/annotations/test_mutants.py tests/p/training/test_mutants.py tests/n/lineage/test_mutants.py tests/g/lab_auth/test_mutants.py tests/g/lab_control/test_mutants.py tests/g/lab_traces/test_mutants.py tests/r/routing/test_mutants.py tests/content/test_mutants.py tests/g/trace_export/test_mutants.py tests/j/calibration/test_mutants.py tests/p/teachers/test_mutants.py tests/g/lab_evaluations/test_mutants.py tests/g/lab_pipelines/test_mutants.py tests/g/lab_releases/test_mutants.py tests/w/test_lab_workers_mutants.py tests/g/lab_datasets/test_mutants.py tests/g/lab_checkpoints/test_mutants.py
 	# Lab PG mutant lists run in their own process: their pristine baseline starts the D harness itself (LW1 integration F1)
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/l/access/test_mutants.py tests/h/test_mutants.py tests/d/test_l2sql_self_mutants.py tests/d/test_code_mutants_d6j.py tests/d/test_code_mutants_l3sql.py tests/d/test_code_mutants_d9.py tests/l/control/test_mutants.py tests/d/test_code_mutants_c2rpc.py tests/d/test_code_mutants_d8.py
 	INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py
@@ -27,6 +29,8 @@ api-mutants:
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_observe/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve/test_mutants.py
+	# LAB-LOCAL's (E4-ON) list: its stack half skips visibly without a kept e3l stack (lab-local.sh --keep)
+	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_local/test_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py tests/i/lab_control/test_mutants.py
 	# 0053's SQL list (composition-6): needs Docker, skips visibly without it; task-local key r2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=r2 uv run --frozen pytest -q tests/d/test_code_mutants_c6.py
@@ -142,8 +146,8 @@ lab-e2e:
 	@$(LAB_INSTALLED)
 	cd apps/lab && pnpm build && LAB_E2E_BUILT=1 LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test --test-concurrency=1 tests/e2e/observe/stack.test.ts tests/e2e/evaluate/stack.test.ts tests/e2e/improve/stack.test.ts tests/e2e/rollout/stack.test.ts
 
-# Lab mutant runners join here as their lanes merge (and console-mutants' tests/v line when V1M
-# removes tests/v); each exits non-zero on a survivor.
+# Lab mutant runners join here as their lanes merge; each exits non-zero on a survivor.
+# tests/integration/test_makefile_mutant_lists.py pins this list and api-mutants to the tree.
 lab-mutants:
 	cd apps/lab && node tests/l/shell/run-mutants.mjs && node tests/l/ui/run-mutants.mjs
 	cd apps/lab && node tests/c/review/run-mutants.mjs
