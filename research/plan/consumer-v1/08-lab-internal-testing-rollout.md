@@ -124,6 +124,35 @@ After it: `infra/runbooks/schema_proof.py <target> --candidate "$RELEASE"` with
 `SCHEMA_PROOF_DSN` (read-only) against hosted, before relying on the proof
 (`infra/rollout/README.md` §2).
 
+### Next window (0060+) — a re-proof and a reviewed edit, not a script (W6, INFRA-03)
+
+The two windows of 2026-09-30 (hosted 0052–0056, then 0057–0059) ran from `launch-v1.sh window`
+and a reviewed patch each; both are spent (the patches are
+`research/plan/evidence/i/hosted-migrate-0052-0056.patch` / `-0057-0059.patch`, the script is in
+git history at `08983639`). `infra/lab/rollout/lab-release.sh` has no window action. The next
+window, from a checkout whose newest migration is the re-proven one:
+
+1. Condition 1: the KNOWN-GOOD re-proof through the new newest migration (step 1 above:
+   `schema_proof.py` per target, the appended `known-good.json` entries, `known-good.py --list
+   --applied <newest>` exit 0).
+2. Condition 2: ONE reviewed commit editing the three lines of `infra/rollout/hosted-migrate.sh`
+   — `EXPECTED_PENDING` (the migrations after hosted's newest), the `case "$HOSTED_APPLIED"`
+   anchor (hosted's newest, `migrate.py plan`'s "NNNN name" form) and the W7 `case "$POST"`
+   post-check (the new newest) — plus the three `hosted_migrate_*` anchors in
+   `apps/infrx-api/tests/i/mutants.py`; `tests/i/test_known_good_proof.py`'s anchor case and
+   `lab-migrate.sh` check it (it derives the pending list exactly as lab-migrate.sh does).
+3. Condition 3: the dated coordinator-log entry (`--window`).
+4. The window (the W7 precondition needs the public `/health` 503; the maintenance switch is the
+   box's INSTALLED consumer release's `drain.sh`, not the Lab release):
+
+   ```bash
+   infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at <NNNN> --window "<ref>" --through w6b   # prints COPY_DIGEST
+   git fetch -q origin main && BOX_RELEASE=$(git rev-parse --verify origin/main)   # never a stale local main (DT-13)
+   infra/rollout/ssm.sh infra/rollout/steps/95-maintenance.sh RELEASE="$BOX_RELEASE"
+   infra/lab/rollout/lab-migrate.sh --release "$RELEASE" --hosted-at <NNNN> --window "<ref>" --through w7 --expect <COPY_DIGEST>
+   infra/rollout/ssm.sh infra/rollout/steps/56-resume.sh RELEASE="$BOX_RELEASE"
+   ```
+
 ## 3. SSM parameters (names; values put by the operator, never typed on a command line)
 
 Create each as the App's are (`read -rs V; umask 077; printf '%s' "$V" > ~/.p; aws ssm put-parameter --name <NAME> --type SecureString --value file://$HOME/.p; shred -u ~/.p`),
@@ -221,26 +250,35 @@ the sign-in form, the Redirect URLs screenshot/export.
 1. Each internal tester signs up **in the App** (signup and recovery are the App's; the Lab
    verifies sign-in links only) and verifies the email. A provider membership is not a consumer
    grant: the tester's consumer account keeps its one-time 10,000 CREDIT as any user's.
-2. The internal-testing provider: the seed's NemoStation (`b0000001-0000-4000-8000-000000000001`)
-   or a new provider org (P-08 decides). New org, as the owner login in the window
-   (`read -rs OPERATIONS_DATABASE_URL`, never typed):
+2. The internal-testing provider org `infrx-internal` and one `developer` membership per tester,
+   in one transaction, with the owner DSN read from SSM by NAME (`OPS_DSN_PARAM`, default
+   `/model-inference/pg_journal_url`) into the environment, never typed or on an argv, every value
+   a bound parameter (W6, INFRA-01/DT-18):
+
+   ```bash
+   TESTER_EMAILS="<email> <email>" OPERATOR_NAME="<name>" WINDOW="<P-08 ref>" \
+     infra/lab/rollout/lab-release.sh members        # OPERATOR_NAME defaults to git user.name
+   ```
+
+   It runs (psycopg, `%s` parameters; idempotent: a rerun inserts nothing):
 
    ```sql
    insert into infrx.provider_orgs (slug, display_name, created_by)
-   values ('infrx-internal', 'infrx internal testing', 'operator:<name> P-08 <window ref>');
-   ```
-3. One membership per tester (roles: `viewer`, `developer`, `administrator`; no browser role
-   can write this table):
-
-   ```sql
+   values ('infrx-internal', 'infrx internal testing', 'operator:<name> P-08 <window ref>')
+   on conflict (slug) do nothing;
    insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by)
-   values ('<provider_org_id>', (select id from auth.users where email = '<tester email>'),
-           'developer', 'operator:<name> P-08 <window ref>');
+   select p.provider_org_id, u.id, 'developer', 'operator:<name> P-08 <window ref>'
+   from infrx.provider_orgs p, auth.users u where p.slug = 'infrx-internal' and u.email = '<tester email>'
+   on conflict do nothing;
    ```
-   Revocation is the one-way update: `update infrx.provider_memberships set revoked_at = now()
+
+   An email with no App account inserts nothing (the proof below omits it). Another role
+   (`viewer`, `administrator`) or the seed's NemoStation (`b0000001-0000-4000-8000-000000000001`)
+   is a hand statement of the same shape.
+3. Revocation is the one-way update: `update infrx.provider_memberships set revoked_at = now()
    where membership_id = '<id>'` — the next Lab call is refused (E3L l01).
-4. Proof: `select provider_org_id, user_id, role, granted_at from infrx.provider_memberships
-   where revoked_at is null` (ids only), and each tester seeing exactly their workspace on
+4. Proof: the action prints the org's current memberships as `email  role  granted_at`, and
+   each tester sees exactly their workspace on
    `https://lab.callbill.ai/` (the 0030 door).
 
 ## 8. Internal testing checklist
@@ -373,3 +411,4 @@ reversal of Lab tables is never part of this runbook.
 - 2026-09-29 (lab-local-2 fix round, 0-LL2C-1/2): §11 G1–G6 row — the runner's R222 check no longer excuses the by-design FAILs or an e4-on stage with skipped cases; recomputed over `E4ON-raw-fd0aba04` it stays open on o05, e4-on and the two journeys (`evidence/e/E4ON-fd0aba04.md` §7). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
 - 2026-09-29 (lab-local-3, I2L, R257/R258): §11 G1–G6 and L5 rows — `make lab-local` at b94fd337 (`E4ON-raw-b94fd337`): the e4-on cases skipped for another key now rerun on that key (14/14 PASS, the 15th on r1), journeys 5/5 PASS, o05's by-design FAIL on its recorded text; `r222.accepted` false only on WR-LL3-1 (tests/g/lab_releases red on the tip, another lane's test). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
 - 2026-09-30 (merge #64, lab-local-3 WR-LL3-2, R262): §11 G1–G6 and L5 rows — `make lab-local` at 5bb93621 (`E4ON-raw-5bb93621`): `r222.accepted: true`, by_design = R198 + R237 only, all 18 e4-on skips PASS on their keys (p3 added to KEYED, t2f free), journeys 5/5, o05's control factory as the owner login with releases 200 (0059); E4-ON accepted. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-10-01 (W6 lab-release-tool, INFRA-01/03/09, DT-13/18): §2 "Next window (0060+)" — the spent window tooling retired (patches to evidence/i, `launch-v1.sh window` gone), the next window is a re-proof plus one reviewed three-line edit, BOX_RELEASE after a fetch; §7 steps 2–4 — `lab-release.sh members` (owner DSN by SSM name, psycopg bound parameters, `p.provider_org_id`; the base statement's `p.id` failed on 0001–0059: UndefinedColumn, i6 task-local run).
