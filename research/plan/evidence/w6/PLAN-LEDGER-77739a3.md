@@ -221,3 +221,5 @@ The overlay is at revision 356 (above the tip's 346). It has 239 lanes with uniq
 - 28 overlapping writers, all among the W6 stubs' copied LAB-R3 paths (WR-PL-5).
 
 `validate_plan.py --write-ledger` passes, and the ledger is current.
+
+One addition, from the merge's checks: run from the repo root, `pytest research/plan/scripts/test_*.py` failed at collection with `ModuleNotFoundError: No module named 'progress'`. The cause is the root `pytest.ini` (`--import-mode=importlib`, WR-E7L-5), which does not put the scripts directory on `sys.path`; it was pre-existing, and `python3 -m unittest` run inside the directory was unaffected. A new `research/plan/scripts/conftest.py` puts that directory on `sys.path`. Result: 56 passed.
