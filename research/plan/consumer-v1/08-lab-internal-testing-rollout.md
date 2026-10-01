@@ -1,11 +1,26 @@
 # Lab internal-testing rollout — the pilot box and a Vercel project for `apps/lab` (LAB-DEPLOY-PREP)
 
-**Operator-run. Preparation only.** The LAB-DEPLOY-PREP lane wrote this runbook, the box steps
-it calls (`infra/lab/rollout/`) and the E4-ON gate (`make lab-local`). It ran **nothing** against
-the pilot box (`i-0e8449a4ffca29bab`), AWS, SSM, S3, Vercel or hosted Supabase; nothing here is a
-live-state claim. Every value lives in the operator's stores: this page names **parameters and
-settings by NAME only**. Every step names its proof; a step without its proof recorded did not
-happen.
+**Operator-run; run through 2026-10-01 (state below).** The LAB-DEPLOY-PREP lane wrote this runbook,
+the box steps it calls (`infra/lab/rollout/`) and the E4-ON gate (`make lab-local`); the operator ran
+it with `infra/lab/rollout/launch-v1.sh` (wave 6 renames it `lab-release.sh`). Every value lives in
+the operator's stores: this page names **parameters and settings by NAME only**. Every step names its
+proof; a step without its proof recorded did not happen. The step tables below are the procedure as
+written; where the run differed, the state block says so.
+
+## State 2026-10-01
+
+Sources: the [session-03 record](../evidence/coordinator/2026-09-24-session-03.md) lines 591–595 and
+[09](09-path-to-internal-testing.md)'s log; nothing here was re-probed.
+
+| Part | State |
+|---|---|
+| §2 hosted migrations | **done**: 0052–0056 (2026-09-30T07:43Z, digest `88f9d412…`, release a58eb0d6) and 0057–0059 (08:02Z, digest `9566fa25…`, release fdd10264), each through `launch-v1.sh window` (the per-window patches `infra/lab/rollout/hosted-migrate-0052-0056.patch` and `hosted-migrate-0057-0059.patch`, spent; wave 6 moves them to evidence). Hosted is 0001–0059; the next window (0060+) needs a KNOWN-GOOD re-proof through it, a reviewed `EXPECTED_PENDING` edit and R151's approval |
+| §3 SSM | `/model-inference/lab/control_database_url` and `supabase_anon_key` created by the operator; the `infrx_lab_control` login's password set from SSM over the owner DSN (0043 created it LOGIN without one) |
+| §4 the box | **done** at 7ecbab0e (`launch-v1.sh box`, 01:26Z): L0 `lab-checkout.sh` (fetch + `40-checkout`, refuses when `serve.sh` or its pin differ), L1, L3 image `sha256:870aa2ea…`, L4 units inert, L5 control ON (readyz 200; the env file owned by `ubuntu`, the user the unit runs docker as), L5s/L6s smoke PASS, L6 `lab-control.callbill.ai` on the edge (`/lab/v1/releases` 401 unauthenticated). L5d `steps/70-lab-status.sh` (read-only unit/journal/readiness, value-bearing lines dropped) was added on the way. **L7 skipped**: no per-role Lab logins yet (WR-LDP-7), so the eval/judge/datasets roles stay OFF. The consumer runtime install stays at 41693d5d beside the Lab checkout |
+| §6 the Lab web | **live at `https://lab.callbill.ai`** (02:21Z): project `infrx-lab` in team `callgideon`, Root Directory `apps/lab`, deployed **from the repository root** through `npx vercel` (an `apps/lab`-only upload lacks `packages/shared`), domain attached and verified |
+| §7 memberships | **pending** (`launch-v1.sh members`) |
+| `main` | **pending**: `origin/main` stays 41693d5d until the operator fast-forwards it after wave 6 |
+| E4C, §8 checklist | **pending**: E4C certify on the box; one tester's checklist = INTERNAL-TESTING accepted |
 
 Scope: stand the Lab (provider product) up **beside** the launched App on the pilot box for
 **internal testing** by named operators, with the App untouched. The App's own rollout is
@@ -373,3 +388,4 @@ reversal of Lab tables is never part of this runbook.
 - 2026-09-29 (lab-local-2 fix round, 0-LL2C-1/2): §11 G1–G6 row — the runner's R222 check no longer excuses the by-design FAILs or an e4-on stage with skipped cases; recomputed over `E4ON-raw-fd0aba04` it stays open on o05, e4-on and the two journeys (`evidence/e/E4ON-fd0aba04.md` §7). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
 - 2026-09-29 (lab-local-3, I2L, R257/R258): §11 G1–G6 and L5 rows — `make lab-local` at b94fd337 (`E4ON-raw-b94fd337`): the e4-on cases skipped for another key now rerun on that key (14/14 PASS, the 15th on r1), journeys 5/5 PASS, o05's by-design FAIL on its recorded text; `r222.accepted` false only on WR-LL3-1 (tests/g/lab_releases red on the tip, another lane's test). Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
 - 2026-09-30 (merge #64, lab-local-3 WR-LL3-2, R262): §11 G1–G6 and L5 rows — `make lab-local` at 5bb93621 (`E4ON-raw-5bb93621`): `r222.accepted: true`, by_design = R198 + R237 only, all 18 e4-on skips PASS on their keys (p3 added to KEYED, t2f free), journeys 5/5, o05's control factory as the owner login with releases 200 (0059); E4-ON accepted. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-10-01 (W6 docs-state): the head says the runbook has run; a dated 'State 2026-10-01' block records both hosted windows (07:43Z/08:02Z, digests), the box at 7ecbab0e (L0 lab-checkout.sh, L5d 70-lab-status.sh, L7 skipped per WR-LDP-7, env owner ubuntu), the Lab web from the repository root, and what is pending (members, main, E4C, §8); sources session-03 lines 591–595 and 09's log. The step tables are unchanged.
