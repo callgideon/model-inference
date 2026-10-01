@@ -203,9 +203,8 @@ class _Row:
 
 @dataclass
 class FakeControlOps:
-    """`ControlOps` in memory for other lanes' tests, with 0060's rules and refusals.
-    ponytail: the fake skips 0060's length caps on phase/resource/outcome/owner; the
-    PostgreSQL store enforces them."""
+    """`ControlOps` in memory for other lanes' tests, with 0060's rules and refusals (the
+    scenario set of tests/d/test_control_ops_units.py passes on both)."""
 
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     _rows: dict[str, _Row] = field(default_factory=dict)
@@ -242,7 +241,7 @@ class FakeControlOps:
         owner, now = owner_of(actor), self.now()
         if owner is None:
             raise errors.InvalidRequest("an operation needs an actor that names a tenant")
-        if (len(kind) > 64 or not KIND.fullmatch(kind) or not HASH.fullmatch(input_hash)
+        if (not KIND.fullmatch(kind) or not HASH.fullmatch(input_hash)
                 or not 1 <= len(idempotency_key) <= 255 or retention_s < RETENTION_S):
             raise errors.InvalidRequest("not a startable operation")
         scope = (f"{owner}/{kind}", idempotency_key)
@@ -265,7 +264,7 @@ class FakeControlOps:
 
     async def lease(self, operation_id: str, owner: str, ttl_s: int) -> Operation:
         row, now = self._row(operation_id), self.now()
-        if not owner or not 1 <= ttl_s <= 3600:
+        if not 1 <= len(owner) <= 128 or not 1 <= ttl_s <= 3600:
             raise errors.InvalidRequest("a lease needs an owner and a ttl of 1-3600 s")
         if row.op.state in TERMINAL:
             raise errors.Conflict("the operation is finished")

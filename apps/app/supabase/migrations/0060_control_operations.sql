@@ -25,29 +25,26 @@
 
 create table if not exists infrx.control_operations (
   operation_id uuid primary key,
-  kind text not null check (length(kind) <= 64 and kind ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'),
+  kind text not null check (kind ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'),
   state text not null default 'queued'
     check (state in ('queued', 'running', 'succeeded', 'failed', 'cancel_requested',
                      'cancelled')),
-  phase text check (length(phase) <= 64),
-  resource_kind text check (length(resource_kind) <= 64),
-  resource_id text check (length(resource_id) <= 128),
+  phase text,
+  resource_kind text,
+  resource_id text,
   -- R270 `Actor` as the server established it (audience + ids), never a request field
   actor jsonb not null
     check (actor->>'audience' in ('consumer', 'operator', 'provider_dev', 'session')),
-  requested_input_hash text not null check (requested_input_hash ~ '^sha256:[0-9a-f]{64}$'),
-  lease_owner text check (length(lease_owner) <= 128),
+  requested_input_hash text not null,      -- checked on its control_idempotency row
+  lease_owner text,
   lease_until timestamptz,
-  fence bigint not null default 0 check (fence >= 0),
+  fence bigint not null default 0,
   retry_after_s int check (retry_after_s >= 0),
   error jsonb,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   cancel_requested_at timestamptz,
-  constraint control_operations_error_iff_failed check ((state = 'failed') = (error is not null)),
-  constraint control_operations_lease_pair check ((lease_owner is null) = (lease_until is null)),
-  constraint control_operations_finished_unleased
-    check (state not in ('succeeded', 'failed', 'cancelled') or lease_owner is null)
+  constraint control_operations_error_iff_failed check ((state = 'failed') = (error is not null))
 );
 create index if not exists control_operations_pending_idx on infrx.control_operations (created_at)
   where state in ('queued', 'running', 'cancel_requested');
@@ -58,7 +55,7 @@ create table if not exists infrx.control_idempotency (
   input_hash text not null check (input_hash ~ '^sha256:[0-9a-f]{64}$'),
   operation_id uuid not null references infrx.control_operations (operation_id)
     deferrable initially deferred,
-  outcome jsonb check (length(outcome::text) <= 4096),
+  outcome jsonb,
   created_at timestamptz not null,
   expires_at timestamptz not null,
   primary key (scope, key),
@@ -113,7 +110,8 @@ end $$;
 
 -- ================================================================ boundary ===
 -- {kind, actor, idempotency_key, input_hash, resource_kind?, resource_id?, outcome?,
---  retention_s? (default 86400)} -> {operation, replayed, outcome}
+--  retention_s (>= 86400)} -> {operation, replayed, outcome}. An actor that names no tenant
+-- has no scope (null): refused with the other unstorable starts.
 create or replace function infrx.control_op_start(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
@@ -124,15 +122,12 @@ declare
   i infrx.control_idempotency;
   r infrx.control_operations;
 begin
-  if v_owner is null then
-    perform infrx.refuse('invalid_request', 'an operation needs an actor that names a tenant');
-  end if;
   begin
     insert into infrx.control_idempotency (scope, key, input_hash, operation_id, outcome,
                                            created_at, expires_at)
     values (v_scope, p_args->>'idempotency_key', p_args->>'input_hash', v_id,
             nullif(p_args->'outcome', 'null'),
-            v_now, v_now + make_interval(secs => coalesce((p_args->>'retention_s')::int, 86400)))
+            v_now, v_now + make_interval(secs => (p_args->>'retention_s')::int))
     on conflict (scope, key) do nothing;
     if found then
       insert into infrx.control_operations (operation_id, kind, resource_kind, resource_id, actor,
@@ -143,9 +138,9 @@ begin
       return jsonb_build_object('operation', infrx.control_op_doc(r), 'replayed', false,
                                 'outcome', nullif(p_args->'outcome', 'null'));
     end if;
-  exception when check_violation or not_null_violation or invalid_text_representation then
-    perform infrx.refuse('invalid_request', 'not a startable operation: kind, actor, key, '
-                         'input hash or retention');
+  exception when check_violation or not_null_violation then
+    perform infrx.refuse('invalid_request', 'not a startable operation: kind, actor (with a '
+                         'tenant), key, input hash or retention');
   end;
   select * into i from infrx.control_idempotency where scope = v_scope
      and key = p_args->>'idempotency_key';
@@ -227,7 +222,7 @@ begin
   end if;
   if r.fence is distinct from (p_args->>'fence')::bigint or r.lease_until is null
      or r.lease_until <= v_now then
-    perform infrx.refuse('state_conflict', 'stale fence: the lease was lost');
+    perform infrx.refuse('state_conflict', 'stale fence: the lease was lost before finishing');
   end if;
   begin
     update infrx.control_operations set state = p_args->>'state', error = nullif(p_args->'error', 'null'),
@@ -311,9 +306,7 @@ begin
 end $$;
 revoke all on function infrx.control_owner(jsonb), infrx.control_op_doc(infrx.control_operations),
   infrx.control_op_row(jsonb) from public, anon, authenticated, service_role;
-revoke all on function infrx.control_op_start(jsonb), infrx.control_op_lease(jsonb),
-  infrx.control_op_advance(jsonb), infrx.control_op_finish(jsonb), infrx.control_op_cancel(jsonb),
-  infrx.control_op_get(jsonb), infrx.control_op_pending(jsonb) from public, anon, authenticated;
+-- (the boundary functions start with no browser grant: 0004's default privileges)
 grant execute on function infrx.control_op_start(jsonb), infrx.control_op_lease(jsonb),
   infrx.control_op_advance(jsonb), infrx.control_op_finish(jsonb), infrx.control_op_cancel(jsonb),
   infrx.control_op_get(jsonb), infrx.control_op_pending(jsonb)

@@ -140,12 +140,14 @@ async def a_lease_is_fenced_and_expires(env) -> str:
     await refused(errors.Conflict, ops.lease(op_id, "w3", 30))
     await refused(errors.Conflict, ops.advance(op_id, 2, "after"))
     await refused(errors.Conflict, ops.finish(op_id, 2, "failed", FAILURE))
-    _, other = await leased(env)
+    other = (await ops.start(kind(), actor(user=uid()), uid(), H1)).operation
     for bad in (ops.lease(other.operation_id, "w1", 0), ops.lease(other.operation_id, "w1", 3601),
-                ops.lease(other.operation_id, "", 30)):
+                ops.lease(other.operation_id, "", 30), ops.lease(other.operation_id, "w" * 129, 30)):
         await refused(errors.InvalidRequest, bad)
-    edge = await ops.lease(other.operation_id, "w1", 3600)
+    edge = await ops.lease(other.operation_id, "w" * 128, 3600)
     assert edge.fence == 1
+    await refused(errors.InvalidRequest, ops.advance(other.operation_id, 1, "x", retry_after_s=-1))
+    assert (await ops.advance(other.operation_id, 1, "x", retry_after_s=0)).retry_after_s == 0
     return "fence 1 -> renewed 1 -> expired -> 2; stale and finished fences refused"
 
 
@@ -217,6 +219,7 @@ async def reads_belong_to_the_owning_tenant_or_an_operator(env) -> str:
     mine = (await ops.start(kind(), lone, uid(), H1)).operation.operation_id
     assert (await ops.get(mine, actor(user=lone.user_id))).operation_id == mine
     await refused(errors.NotFound, ops.get(mine, actor(user=uid())))
+    assert (await ops.cancel(own, root)).state == "cancelled", "an operator cancels any tenant's"
     return "workspace, organization and user tenants; operator; strangers and bad ids 404"
 
 
@@ -243,7 +246,11 @@ async def pending_is_the_unleased_unfinished_work_of_its_kinds(env) -> str:
     assert len(await ops.pending([k], limit=0)) == 1, "a limit is at least one"
     both = await ops.pending([k, other], limit=1000)
     assert set(both) == set(later) | {elsewhere}, both
-    return f"{len(now)} queued, then {len(later)} with expired leases; limits bounded"
+    for _ in range(101):
+        await ops.start(other, a, uid(), H1)
+    capped = await ops.pending([other], limit=1000)
+    assert len(capped) == 100 and capped[0] == elsewhere, "at most 100, oldest first"
+    return f"{len(now)} queued, then {len(later)} with expired leases; limits 1..100"
 
 
 SCENARIOS = (start_replays_the_same_request_and_refuses_another,
@@ -251,6 +258,18 @@ SCENARIOS = (start_replays_the_same_request_and_refuses_another,
              a_lease_is_fenced_and_expires, finish_records_one_terminal_state,
              cancel_from_each_state, reads_belong_to_the_owning_tenant_or_an_operator,
              pending_is_the_unleased_unfinished_work_of_its_kinds)
+
+
+def run(scenario, env) -> str:
+    """A scenario's every call is a contract step: an exception it did not expect (a typed
+    refusal where an answer was due, a database error) is the step's assertion failing."""
+    try:
+        return asyncio.run(scenario(env))
+    except AssertionError:
+        raise
+    except Exception as other:
+        raise AssertionError(f"{scenario.__name__}: unexpected {type(other).__name__}: "
+                             f"{other}") from other
 
 
 # ----------------------------------------------------------------------- the fake
@@ -263,7 +282,7 @@ def fake_env():
 
 
 def _fake(scenario) -> None:
-    print(asyncio.run(scenario(fake_env())))
+    print(run(scenario, fake_env()))
 
 
 def test_fake__start_replays_the_same_request_and_refuses_another() -> None:

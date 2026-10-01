@@ -11,10 +11,12 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import psycopg
 import pytest
 from infrx.state import migrations
 from infrx.state.control_ops import PgControlOps
 from infrx.state.jobstore import connector
+from psycopg.types.json import Jsonb
 
 from . import pgharness
 from . import test_control_ops_units as u
@@ -45,7 +47,7 @@ def pg_env(conn) -> SimpleNamespace:
 
 def _on_pg(scenario):
     def check(conn) -> str:
-        return asyncio.run(scenario(pg_env(conn)))
+        return u.run(scenario, pg_env(conn))
     check.__name__ = f"check_{scenario.__name__}"
     return check
 
@@ -89,8 +91,11 @@ def check_two_instances_race_one_key_to_one_operation(conn) -> str:
     who, k = u.actor(provider=u.uid(), user=u.uid()), u.kind()
 
     async def race():
-        return await asyncio.gather(*(ops.start(k, who, "raced", u.H1) for _ in range(8)))
+        return await asyncio.gather(*(ops.start(k, who, "raced", u.H1) for _ in range(8)),
+                                    return_exceptions=True)
     started = asyncio.run(race())
+    failed = [repr(s) for s in started if isinstance(s, BaseException)]
+    assert not failed, f"a racing start failed: {failed[:2]}"
     ids = {s.operation.operation_id for s in started}
     assert len(ids) == 1 and sum(not s.replayed for s in started) == 1, \
         [(s.operation.operation_id, s.replayed) for s in started]
@@ -100,10 +105,25 @@ def check_two_instances_race_one_key_to_one_operation(conn) -> str:
     return "8 racing starts: 1 operation, 7 replays"
 
 
+def check_the_sql_refuses_an_actor_python_never_sends(conn) -> str:
+    """0060 checks the actor's audience itself (R270's four), so a caller that bypasses the
+    pydantic `Actor` cannot store an operation no reader can classify."""
+    body = {"kind": "artifact.verify", "idempotency_key": "raw", "input_hash": u.H1,
+            "actor": {"audience": "root", "provider_org_id": u.uid()}}
+    try:
+        with conn.transaction(force_rollback=True):
+            conn.execute("select infrx.control_op_start(%s)", (Jsonb(body),))
+    except psycopg.errors.RaiseException as refused:
+        assert str(refused).startswith("invalid_request:"), refused
+        return "an unknown audience is invalid_request"
+    raise AssertionError("an operation with audience 'root' was stored")
+
+
 CHECKS = {c.__name__: c for c in (
     *(_on_pg(s) for s in u.SCENARIOS),
     check_browser_roles_reach_nothing,
-    check_two_instances_race_one_key_to_one_operation)}
+    check_two_instances_race_one_key_to_one_operation,
+    check_the_sql_refuses_an_actor_python_never_sends)}
 
 
 @pytest.fixture(scope="module")
