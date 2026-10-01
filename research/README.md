@@ -1,5 +1,7 @@
 # research/ — index and reading guide
 
+For the implemented platform, start at [current state](../STATUS.md), [product architecture](platforms/README.md) and [launch closure](plan/26-launch-readiness-review-2026-10-01.md). The research below contains dated estimates, comparisons and proposals; it is not the current deployment inventory or a promise that every feature/model is available.
+
 ## 1. What this is
 
 Fact-checked GPU-inference research for the five model experiments in this

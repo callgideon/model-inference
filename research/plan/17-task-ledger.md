@@ -4,9 +4,9 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 
 **133 records; 127 active; 6 retired; 13 planned; 109 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
-**Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
+**Current scope:** qualify the deployed consumer App and Marlin API, close production/onboarding evidence, then enable later provider/hosting workflows under their own gates. Implemented statuses are not release acceptance. See [current state](../../STATUS.md), [launch review 26](26-launch-readiness-review-2026-10-01.md), [planning index](README.md) and [carried work](consumer-v1/10-carried-work-register.md).
 
-## Backend endpoint gate closure — current scope
+## Backend endpoint requirements and acceptance
 
 | ID | Status / owner | Deliverable / brief | Start dependencies | Real integration dependencies |
 |---|---|---|---|---|
@@ -61,7 +61,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | E3C | implemented / E | [Integrate corrective backend with real services and process faults](consumer-v1/03-operations-and-verification.md) | E2C, F2C, E3B | D10, M5, M6, W5, G7, G8, I8, E1C |
 | E4C | planned / E | [Certify repaired CREDIT backend on final Marlin deployment](consumer-v1/03-operations-and-verification.md) | E3C, E4B | I8, E1C, G8 |
 
-## App launch additions — after backend acceptance
+## Consumer App requirements and acceptance
 
 | ID | Status / owner | Deliverable / brief | Start dependencies | Real integration dependencies |
 |---|---|---|---|---|

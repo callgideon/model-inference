@@ -1,5 +1,7 @@
 # Path to v1 internal testing (Lab) — completion plan
 
+**Dated operational record.** Current inventory, priority and gate scope are consolidated in [STATUS.md](../../../STATUS.md). The earlier dispatch/ETA tables below describe prior work; later events supersede them. The current Lab checklist is narrower than consumer release or complete provider-workflow acceptance.
+
 Written 2026-09-29T07:35Z by the coordinator at tip `b0504b44` (merge batches #1–#35, #37; 45 tasks implemented; rulings through R221). The consumer v1 is live; this plan closes the post-launch Lab program locally and deploys it for **internal testing**.
 
 ## Definition of done

@@ -1,17 +1,15 @@
 # I — Infrastructure and operations
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
-
-> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. I2 is split into I2A/I2L; use independent App/Lab gates.
+**Module requirements / acceptance reference.** Read [current state](../../../STATUS.md), [planning index](../README.md), manifest status and the [carried register](../consumer-v1/10-carried-work-register.md) before dispatch. This brief retains algorithms and test obligations; its baseline narrative is not a current deployment inventory or instruction to repeat completed work.
 
 
-## Current State Summary
+## Original requirement context
 
-Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Deploy the integrated pilot reproducibly, prove recovery, and keep fleet rollout behind its own evidence gate. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+The original wave-2 baseline is recorded in `10-wave2-platform-audit.md`; current completion is recorded in the manifest and evidence. This original brief supplies unchanged algorithms, not current progress claims. Deploy the integrated pilot reproducibly, prove recovery, and keep fleet rollout behind its own evidence gate. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
-Read the [accepted scope](../00-decisions-and-scope.md), [contracts](../01-contracts.md), [durable protocols](../02-durable-protocols.md), [worktree rules](../03-execution-protocol.md) and [test oracles](../04-verification.md) before editing. These override conflicting historical examples. Application implementation belongs to the new session; this handoff does not claim a deployed feature.
+Read the [accepted scope](../00-decisions-and-scope.md), [contracts](../01-contracts.md), [durable protocols](../02-durable-protocols.md), [worktree rules](../03-execution-protocol.md) and [test oracles](../04-verification.md) before editing. These override conflicting historical examples. Use these requirements only for the assigned unresolved slice; implementation and deployment status come from the current state record.
 
 ## Architecture Overview
 
@@ -19,7 +17,7 @@ Deploy pinned artifacts and coordinator-approved environment configs; D owns mig
 
 ## Critical Files
 
-- [HANDOFF.md](../../../HANDOFF.md)
+- [HANDOFF.md](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/HANDOFF.md)
 - [apps/infrx-api/deploy/install.sh](../../../apps/infrx-api/deploy/install.sh)
 - [research/production-api/02-aws-architecture-options.md](../../../research/production-api/02-aws-architecture-options.md)
 - [research/production-api/07-reliability-observability-operations.md](../../../research/production-api/07-reliability-observability-operations.md)

@@ -1,6 +1,8 @@
 # Implementation-session progress tracker and parallel coordination
 
-Status: implementation-session instructions, added 2026-09-24. The user explicitly requests maximum parallel agents/worktrees and an HTML tracker covering task progress and ETA. This is coordinator support work alongside S3/E2C, not a consumer product feature or a second task graph. [Program 22](../22-consumer-v1-implementation.md) and [manifest](../tasks.json) remain authoritative.
+**Retained tracker requirements, originally added 2026-09-24.** The renderer/overlay now exist and were reconciled during the October 1 documentation cleanup; [STATUS.md](../../../STATUS.md) records current evidence and gate limits.
+
+Original scope: The user explicitly requests maximum parallel agents/worktrees and an HTML tracker covering task progress and ETA. This is coordinator support work alongside S3/E2C, not a consumer product feature or a second task graph. [Program 22](../22-consumer-v1-implementation.md) and [manifest](../tasks.json) remain authoritative.
 
 ## Extend the existing tracker first
 
@@ -12,7 +14,7 @@ Reuse these files instead of creating an unrelated dashboard:
 - [HTML output](../evidence/coordinator/progress.html)
 - [Markdown output](../evidence/coordinator/PROGRESS.md)
 
-The existing renderer hardcodes the E4B closure, old task bands and cadence estimates. It treats implemented/integrated as done, which is unsuitable for interpreting the new release gates. Preserve the v46-era state/history with an immutable snapshot or commit reference, then migrate the renderer/state deliberately. Do not run the old renderer and present its result as the new program's progress.
+At the September 24 baseline the renderer hardcoded the E4B closure and old bands/estimates. That migration is complete: the current renderer reads all 133 manifest tasks and explicit gate records; v46 is retained as a dated snapshot. Do not substitute the archived v46 renderer for the current one.
 
 A tracker support agent can inspect/build this during S3 reconciliation and E2C environment inventory. Its first output should show all current manifest tasks and honest baseline states; ETA can initially be unknown. S3's committed evidence reconciliation may unblock F2C while tracker polish continues. Do not wait for a polished dashboard before implementing ready tasks.
 

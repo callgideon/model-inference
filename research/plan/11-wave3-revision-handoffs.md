@@ -1,10 +1,6 @@
-# Executable revision handoffs after wave 2
+# Runtime revision requirements
 
-**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
-
-**Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
-
-Use the [audit](10-wave2-platform-audit.md), [manifest v4](tasks.json), [product architecture](../platforms/README.md) and original module briefs together. These revision tasks preserve completed v1 behavior and establish the common base for the remaining implementation. They supersede conflicting start/order/ownership instructions in the old F2.2 list. No implementation-model-specific orchestration is required.
+These are task-linked requirements from the platform amendment, not current dispatch instructions. Read [STATUS.md](../../STATUS.md), [review 26](26-launch-readiness-review-2026-10-01.md), [the task manifest](tasks.json) and [carried work](consumer-v1/10-carried-work-register.md) to identify unresolved implementation or acceptance. Preserve the contracts below without restarting completed waves.
 
 ## Assignment protocol
 

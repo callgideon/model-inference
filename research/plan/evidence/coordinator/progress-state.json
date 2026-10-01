@@ -2,12 +2,12 @@
  "schema": 2,
  "program": "consumer-v1 (program 22)",
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
- "integration_branch": "claude/consumer-v1",
+ "integration_branch": "main",
  "base": "dff31efc",
- "main": "db2f3445",
- "integration_head": "2d710800",
+ "main": "6462ed06",
+ "integration_head": "6462ed06",
  "deployed": {
-  "as_of": "2026-10-01T02:30Z",
+  "as_of": "2026-10-01T20:40:00Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
   "install": "consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime",
   "image": "infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e",
@@ -19,24 +19,27 @@
    "ACCOUNTING_REGIME": "credit"
   },
   "regime": "credit",
-  "target": "State 2026-10-01: the pilot box (single L40S) runs the consumer runtime 41693d5d in the CREDIT regime beside the Lab control unit from the checkout 7ecbab0e (readyz 200; lab-control.callbill.ai on the edge); hosted Supabase 0001-0059; the Lab app is live at https://lab.callbill.ai (Vercel project infrx-lab, team callgideon, Root Directory apps/lab). Remaining: members -> main -> E4C certify -> one tester's checklist",
+  "target": "Consumer App/API deployed; public signup closed; production acceptance pending. Latest E4C diagnosis at 18:58Z: dataset-resume oracle failure (corrected in source 6462ed06), plus envelope failure at 0.5/s awaiting report detail. Full result and gate decision pending. Lab remains partial.",
   "hosted_schema": "0001-0059: 2026-09-30T08:01Z the second Lab window applied 0057-0059 (MIGRATION_DIGEST 9566fa25093c306c4fa4ae79df132d0802326ad1700deefea8b78538860b6c65, release fdd10264); 2026-09-30T07:43Z the first applied 0052-0056 (MIGRATION_DIGEST 88f9d412e873a7540942ff449f1aa2e5d9e4701f2b6d111777a0d2a2a7feeac6, release a58eb0d6); flags credit_admission=true legacy_usd_admission=false signup_grant=true since the 2026-09-29 window",
   "lab_box": "2026-10-01T01:26Z: the Lab on the box at 7ecbab0e — image sha256:870aa2ea…, every Lab unit installed (inert), the control service ON on 127.0.0.1:8003 (readyz 200; its login password set on hosted by the operator), smoke PASS on :8001/:8002/:8003, the lab-control.callbill.ai site on the edge (/lab/v1/* → 8003; a release list answers 401 without a token)",
-  "lab_app": "2026-10-01T02:30Z: apps/lab on Vercel — project infrx-lab in team callgideon (Root Directory apps/lab, Next.js), production https://lab.callbill.ai (200), env NEXT_PUBLIC_LAB_URL/SUPABASE_URL/SUPABASE_ANON_KEY + LAB_*_API_URL=https://lab-control.callbill.ai; the CLI login is the operator's (the SSM token is invalid) | 2026-10-01T05:1xZ: LAB_API_URL=https://lab-control.callbill.ai set on the project (production); the six old names stay until the redeploy after lab-D/lab-E | 2026-10-01T07:0xZ: redeployed from the wave-6 tip (lab-A/B/D/E in) — https://lab.callbill.ai 200; the six deprecated LAB_*_URL names removed from the project; LAB_API_URL is the one Lab API name",
+  "lab_app": "https://lab.callbill.ai root sign-in form returned 200 at 18:46Z; deployed from W6/main per operator. Exact Lab web SHA unverified; LAB_API_URL names the control origin.",
   "sources": [
    "research/plan/evidence/coordinator/2026-09-24-session-03.md (lines 525, 589-595)",
-   "research/plan/consumer-v1/09-path-to-internal-testing.md (log 2026-09-29T09:50Z to 2026-10-01T02:21Z)"
+   "research/plan/consumer-v1/09-path-to-internal-testing.md (log 2026-09-29T09:50Z to 2026-10-01T02:21Z)",
+   "STATUS.md",
+   "research/plan/26-launch-readiness-review-2026-10-01.md"
   ],
-  "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3.",
-  "main": "db2f3445 (fast-forwarded 2026-10-01T07:05Z from 41693d5d; the App's Vercel project infrx-app builds main — the wave-6 tip; the box's consumer runtime stays installed at 41693d5d until a consumer window)"
+  "note": "Documentation reconciliation: exact current-state inventory in STATUS.md. Fresh public probes do not prove authenticated workflows or release acceptance. No production change or operating-window action performed.",
+  "main": "6462ed06 (reviewed upstream main and public App /api/version before this documentation merge); consumer runtime remains reported at 41693d5d",
+  "app": "https://app.callbill.ai; /api/version source 6462ed06, built 2026-10-01T20:06:14Z, observed 20:40Z; public signup closed per operator record; no new authenticated journey."
  },
- "revision": 393,
- "updated": "2026-10-01T17:51Z",
+ "revision": 396,
+ "updated": "2026-10-01T20:41:39Z",
  "agent_slots": {
   "total": 16,
-  "active": 5,
+  "active": 0,
   "reserved": 2,
-  "note": "Session 03 post-launch: running feedback (G4F), eval-runner (B1→B2), lab-sql-lw2, lab-access-lw2, lab-app-lw2; certify window awaits the operator start."
+  "note": "Historical capacity setting; no live agent inventory was queried. All W6 lanes are merged. Pending operator acceptance is not an active local writer."
  },
  "eta_params": {
   "review_rework_fraction": 0.3,
@@ -1235,22 +1238,23 @@
     "prefix": null,
     "db": null
    },
-   "activity": "queued",
+   "activity": "blocked",
    "started": null,
-   "updated": "2026-10-01T06:08:44Z",
-   "blocker": "the operator runs the certify window: /tmp/e4c (certify-window.sh unpinned at merge #78; inputs provisioned)",
-   "next_action": "operator: /tmp/e4c from a real terminal (DRY_RUN=1 first) → BACKEND-READY (P-17 checks) → I2A/E3A/I3/E4 → APP-PILOT",
+   "updated": "2026-10-01T20:41:39Z",
+   "blocker": "Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass.",
+   "next_action": "Fetch the existing report for ~/infrx-e4c/20261001T175557Z, run 20261001T181109Z at RELEASE 41693d5d. Inspect the full reconciliation problems and secondary envelope verdict/cap failure. Preserve original evidence; record any corrected-oracle adjudication or separately pinned rerun. Do not restart the wrapper or substitute origin/main without reconciling the existing window.",
    "estimate": {
     "optimistic_h": null,
     "likely_h": null,
     "pessimistic_h": null,
     "confidence": "unknown",
-    "basis": "not estimated at baseline (lane has not inspected its slice yet)",
+    "basis": "Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.",
     "at": null
    },
    "evidence": [
     "research/plan/evidence/coordinator/2026-10-01-v1-audit.md",
-    "research/plan/consumer-v1/09-path-to-internal-testing.md"
+    "research/plan/consumer-v1/09-path-to-internal-testing.md",
+    "STATUS.md"
    ],
    "commands": []
   },
@@ -1769,18 +1773,18 @@
     "prefix": "infrx-i2a-prep-",
     "db": null
    },
-   "activity": "review",
+   "activity": "blocked",
    "started": "2026-09-25T23:50:01Z",
-   "updated": "2026-10-01T03:06:16Z",
-   "blocker": null,
-   "next_action": "I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md",
+   "updated": "2026-10-01T20:25:20Z",
+   "blocker": "Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.",
+   "next_action": "App source 252f3ea8 is deployed. Close CAPTCHA (LR-02), hosted onboarding/settings/delivery and known-good App verification; do not repeat first-deploy setup blindly.",
    "estimate": {
-    "optimistic_h": 2,
-    "likely_h": 5,
-    "pessimistic_h": 12,
-    "confidence": "low",
-    "basis": "prep merged; the live deploy waits for the accepted backend and seven operator inputs",
-    "at": "2026-09-26T00:33:19Z"
+    "optimistic_h": null,
+    "likely_h": null,
+    "pessimistic_h": null,
+    "confidence": "unknown",
+    "basis": "Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.",
+    "at": null
    },
    "evidence": [
     "research/plan/evidence/i/I2A-prep-9fe9484.md",
@@ -1823,18 +1827,18 @@
     "prefix": "infrx-e3a-prep-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "blocked",
    "started": "2026-09-25T23:50:01Z",
-   "updated": "2026-10-01T03:06:16Z",
-   "blocker": "E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY)",
-   "next_action": "APP-LOCAL 17/17 PASS at RELEASE b640c35c (candidate refreshed; journey 20/20; delegated cells by the E3C final at b640c35c); per the manifest the decision is recorded when E3A dispatches after BACKEND-READY — under GO-LIVE that is after the live certify",
+   "updated": "2026-10-01T20:25:20Z",
+   "blocker": "Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.",
+   "next_action": "Local candidate PASS at b640c35c is historical evidence. Reconcile final supported-host/local candidate and the named APP-LOCAL decision; run the bounded actual customer journey in review 26 after its prerequisites.",
    "estimate": {
-    "optimistic_h": 0.3,
-    "likely_h": 0.5,
-    "pessimistic_h": 1,
-    "confidence": "high",
-    "basis": "candidate complete; the recorded decision waits on BACKEND-READY",
-    "at": "2026-09-26T22:00:00Z"
+    "optimistic_h": null,
+    "likely_h": null,
+    "pessimistic_h": null,
+    "confidence": "unknown",
+    "basis": "Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.",
+    "at": null
    },
    "evidence": [
     "research/plan/evidence/coordinator/RELEASE-b640c35c.md",
@@ -1951,18 +1955,18 @@
     "prefix": "infrx-i3-prep-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "blocked",
    "started": "2026-09-26T01:18:15Z",
-   "updated": "2026-10-01T03:26:39Z",
-   "blocker": "I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands)",
-   "next_action": "merged; WR-I3-1 (middleware PUBLIC + I3-ROUTE-03), WR-I3-2 (canary App probe), WR-I3-3 (rules.py merges app.json; test_observe pin a1+o2+p1; mutants layout) applied by the coordinator; GAP-I3-1 (audited signup_grant off) → after the union, point the cutover rollback at 0022's flag writer (I3R-7); I3 proper after BACKEND-READY: X0–X9, C1–C5, Vercel rollback drill, AppDown delivery — GAP-I3-1 / I3R-7 CLOSED at e7b1c272 (G8-FLAG verb; cutover rollback step 2 rewritten).",
+   "updated": "2026-10-01T20:25:20Z",
+   "blocker": "Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.",
+   "next_action": "Close operating acceptance, alert delivery, rollback/canary and the named App decision. Use current STATUS.md and I3 operations; no production window is allocated by this doc update.",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 14,
-    "confidence": "low",
-    "basis": "lane handback: preparation merged; the operator run needs hosted/Vercel/box windows and four pending inputs",
-    "at": "2026-09-26T02:11:40Z"
+    "optimistic_h": null,
+    "likely_h": null,
+    "pessimistic_h": null,
+    "confidence": "unknown",
+    "basis": "Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.",
+    "at": null
    },
    "evidence": [
     "research/plan/evidence/i/I3-prep-bf29b92.md",
@@ -10577,11 +10581,11 @@
     "prefix": "infrx-g7",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T20:25:20Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane.",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -10590,7 +10594,9 @@
     "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
     "at": "2026-10-01T03:32:15Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/26-launch-readiness-review-2026-10-01.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/deploy/replay_usage.py",
@@ -10620,11 +10626,11 @@
     "prefix": "infrx-d10",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T20:25:20Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane.",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10633,7 +10639,9 @@
     "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
     "at": "2026-10-01T03:32:15Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/26-launch-readiness-review-2026-10-01.md"
+   ],
    "commands": [],
    "owned_paths": [
     "_call",
@@ -10666,11 +10674,11 @@
     "prefix": "infrx-l4",
     "db": "task-local"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T06:03:49Z",
+   "updated": "2026-10-01T20:25:20Z",
    "blocker": null,
-   "next_action": "merge batch #79 (WR-L4-3/4/6; L4-R1/R2/R4/R5 minors; WR-L4-1/2 carried to api-L1; the d1 incident registered)",
+   "next_action": "Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane.",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10679,7 +10687,9 @@
     "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
     "at": "2026-10-01T03:32:15Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/26-launch-readiness-review-2026-10-01.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/contracts/lab/records.py",
@@ -10988,11 +10998,11 @@
     "prefix": "infrx-w5",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T20:25:20Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane.",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -11001,7 +11011,9 @@
     "basis": "wave6-plan.md brief estimate",
     "at": "2026-10-01T03:35:26Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/26-launch-readiness-review-2026-10-01.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/traces/spool.py",
@@ -11444,11 +11456,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T06:03:49Z",
-   "updated": "2026-10-01T06:03:49Z",
+   "updated": "2026-10-01T20:25:20Z",
    "blocker": null,
-   "next_action": "integrate → api-L1 after api-L3",
+   "next_action": "Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane.",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -11457,7 +11469,9 @@
     "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
     "at": "2026-10-01T03:32:15Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/26-launch-readiness-review-2026-10-01.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/supabase/migrations/0058_*",
@@ -11520,44 +11534,11 @@
  "integration_queue": [],
  "resource_locks": [
   {
-   "id": "ports-e2c-i8",
-   "kind": "ports",
-   "label": "e2c (55448/55493) + i8 (55450/55495/55496)",
-   "holder": "G2-FIX",
-   "since": "2026-09-26T17:17:00Z",
-   "until": "2026-09-26T21:00:00Z",
-   "tasks": [],
-   "windows": [],
-   "note": "exclusive for the whole make check + tests/i run; no other user of either until the verdict"
-  },
-  {
-   "id": "ports-e3c",
-   "kind": "ports",
-   "label": "e3c compose block 56900–56999",
-   "holder": "BACKEND-MINORS",
-   "since": "2026-09-26T18:20:00Z",
-   "until": null,
-   "tasks": [],
-   "windows": [],
-   "note": "one E3C run at a time"
-  },
-  {
-   "id": "ports-app",
-   "kind": "ports",
-   "label": "app-c0 55451 / app-u1r 55457 / app-u4 55456",
-   "holder": "APP-MINORS-2",
-   "since": "2026-09-26T18:20:00Z",
-   "until": null,
-   "tasks": [],
-   "windows": [],
-   "note": "App real-PG worlds"
-  },
-  {
    "id": "gpu-box",
    "kind": "gpu",
    "label": "pilot box i-0e8449a4ffca29bab (single GPU)",
-   "holder": null,
-   "since": null,
+   "holder": "operator — last reported E4C window; current ownership must be checked",
+   "since": "2026-10-01T17:55:57Z",
    "until": null,
    "tasks": [
     "E1B",
@@ -11565,7 +11546,7 @@
     "E4"
    ],
    "windows": [],
-   "note": "no window allocated; the E4C window pauses production admission (W5) and is operator-scheduled (B-11)"
+   "note": "Operator last reported a mid-run diagnosis at 18:58Z; completion/current ownership unverified. No fresh rerun slot recorded. Empty forecast windows is not permission to use the box."
   }
  ],
  "gates": {
@@ -14895,6 +14876,139 @@
    "by": "coordinator",
    "source": "merge #70 (plan-ledger) lens PL-1",
    "what": "I2A removed from review_queue: the W6 owned-paths update (updates/I2A-20261001T0306Z.json, activity review unchanged) re-queued it; I2A stays planned on purpose (closure note: decision deferred to E4C), activity left as it was. apply-updates cannot express review-but-not-queued, so the single writer (write_state) records the queue edit"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-lab-A'",
+   "source": "updates/W6-lab-A-20261001T0300Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-lab-release-tool'",
+   "source": "updates/W6-lab-release-tool-20261001T0320Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-docs-state'",
+   "source": "updates/W6-docs-state-20261001T0335Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-infra-libs'",
+   "source": "updates/W6-infra-libs-20261001T0324Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown activity 'review (fix round 0-CR-1 done)'",
+   "source": "updates/W6-CERTIFY-RELEASE-20261001T0450Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-lab-B'",
+   "source": "updates/W6-lab-B-20261001T0413Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-lab-E'",
+   "source": "updates/W6-lab-E-20261001T0404Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-makefile-pins'",
+   "source": "updates/W6-makefile-pins-20261001T0420Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-pgrestore-tests'",
+   "source": "updates/W6-pgrestore-tests-20261001T0500Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L5'",
+   "source": "updates/W6-api-L5-20261001T0526Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L2'",
+   "source": "updates/W6-api-L2-20261001T0556Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-lab-D'",
+   "source": "updates/W6-lab-D-20261001T0538Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L3'",
+   "source": "updates/W6-api-L3-20261001T0620Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L5'",
+   "source": "updates/W6-api-L5-20261001T0730Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L1'",
+   "source": "updates/W6-api-L1-20261001T0800Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "rejected update: unknown task ID 'W6-api-L4'",
+   "source": "updates/W6-api-L4-20261001T1200Z.json"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E4C)"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E4C)"
+  },
+  {
+   "at": "2026-10-01T20:23:53Z",
+   "by": "tracker",
+   "what": "forecast E4: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4, E4C (because: no GPU window allocated for E4, E4C; no remaining-effort estimate for E4, E4C)"
+  },
+  {
+   "at": "2026-10-01T20:25:20Z",
+   "by": "review coordinator",
+   "what": "Reconciled reviewed main/App 252f3ea8; retired five stale W6 writers, old local lock assignments and three obsolete estimates; E4C result awaiting reconciliation. Official ingestion rejected 16 malformed legacy update files; their files and rejection reasons remain. No task status, release gate or production setting changed.",
+   "source": "STATUS.md; research/plan/26-launch-readiness-review-2026-10-01.md (evidence cutoff 2026-10-01T18:46Z)"
+  },
+  {
+   "at": "2026-10-01T20:25:20Z",
+   "by": "tracker",
+   "what": "forecast E3A: unknown: no GPU window allocated for E4C → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E3A, E4C)"
+  },
+  {
+   "at": "2026-10-01T20:25:20Z",
+   "by": "tracker",
+   "what": "forecast E4: unknown: no GPU window allocated for E4, E4C → unknown: no GPU window allocated for E4, E4C (because: no GPU window allocated for E4, E4C; no remaining-effort estimate for E3A, E4, E4C, I2A, I3)"
+  },
+  {
+   "at": "2026-10-01T20:41:39Z",
+   "by": "review coordinator",
+   "what": "Latest-main merge reconciliation: upstream/App 6462ed06, operator 18:58 E4C diagnosis preserved; dataset oracle correction does not close envelope failure or release gates. Public App version and API health/models checked at 20:40Z; no authenticated workload or production mutation.",
+   "source": "STATUS.md; research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],
  "history": {
@@ -16862,10 +16976,90 @@
   "I3-20261001T0326Z.json": {
    "status": "applied",
    "at": "2026-10-01T03:26:39Z"
+  },
+  "W6-lab-A-20261001T0300Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T03:00:00Z",
+   "reason": "unknown task ID 'W6-lab-A'"
+  },
+  "W6-lab-release-tool-20261001T0320Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T03:20:00Z",
+   "reason": "unknown task ID 'W6-lab-release-tool'"
+  },
+  "W6-docs-state-20261001T0335Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T04:30:00Z",
+   "reason": "unknown task ID 'W6-docs-state'"
+  },
+  "W6-infra-libs-20261001T0324Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T04:30:00Z",
+   "reason": "unknown task ID 'W6-infra-libs'"
+  },
+  "W6-CERTIFY-RELEASE-20261001T0450Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T04:50:00Z",
+   "reason": "unknown activity 'review (fix round 0-CR-1 done)'"
+  },
+  "W6-lab-B-20261001T0413Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:00:00Z",
+   "reason": "unknown task ID 'W6-lab-B'"
+  },
+  "W6-lab-E-20261001T0404Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:00:00Z",
+   "reason": "unknown task ID 'W6-lab-E'"
+  },
+  "W6-makefile-pins-20261001T0420Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:00:00Z",
+   "reason": "unknown task ID 'W6-makefile-pins'"
+  },
+  "W6-pgrestore-tests-20261001T0500Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:00:00Z",
+   "reason": "unknown task ID 'W6-pgrestore-tests'"
+  },
+  "W6-api-L5-20261001T0526Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:26:00Z",
+   "reason": "unknown task ID 'W6-api-L5'"
+  },
+  "W6-api-L2-20261001T0556Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T05:56:00Z",
+   "reason": "unknown task ID 'W6-api-L2'"
+  },
+  "W6-lab-D-20261001T0538Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T06:10:00Z",
+   "reason": "unknown task ID 'W6-lab-D'"
+  },
+  "W6-api-L3-20261001T0620Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T06:20:00Z",
+   "reason": "unknown task ID 'W6-api-L3'"
+  },
+  "W6-api-L5-20261001T0730Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T07:30:00Z",
+   "reason": "unknown task ID 'W6-api-L5'"
+  },
+  "W6-api-L1-20261001T0800Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T08:00:00Z",
+   "reason": "unknown task ID 'W6-api-L1'"
+  },
+  "W6-api-L4-20261001T1200Z.json": {
+   "status": "rejected",
+   "at": "2026-10-01T12:00:00Z",
+   "reason": "unknown task ID 'W6-api-L4'"
   }
  },
  "eta": {
-  "computed_at": "2026-10-01T03:26:39Z",
+  "computed_at": "2026-10-01T20:41:39Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -16887,9 +17081,9 @@
    },
    "E4C": {
     "gate": "BACKEND-READY",
-    "status": "blocked",
-    "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
-    "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C",
+    "status": "unknown",
+    "text": "unknown: no GPU window allocated for E4C",
+    "constraint": "no GPU window allocated for E4C; no remaining-effort estimate for E4C",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
@@ -16900,35 +17094,29 @@
    },
    "E3A": {
     "gate": "APP-LOCAL",
-    "status": "blocked",
-    "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
-    "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E4C",
+    "status": "unknown",
+    "text": "unknown: no GPU window allocated for E4C",
+    "constraint": "no GPU window allocated for E4C; no remaining-effort estimate for E3A, E4C",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
     "conditional": null,
     "confidence": null,
     "critical_path": null,
-    "stale": [
-     "E3A"
-    ]
+    "stale": []
    },
    "E4": {
     "gate": "APP-PILOT",
-    "status": "blocked",
-    "text": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25",
-    "constraint": "blocked pending P-01, P-02, P-05, P-17, P-24, P-25; no GPU window allocated for E1B, E4, E4C; no remaining-effort estimate for E4, E4C",
+    "status": "unknown",
+    "text": "unknown: no GPU window allocated for E4, E4C",
+    "constraint": "no GPU window allocated for E4, E4C; no remaining-effort estimate for E3A, E4, E4C, I2A, I3",
     "effort_h": null,
     "wall_h": null,
     "finish": null,
     "conditional": null,
     "confidence": null,
     "critical_path": null,
-    "stale": [
-     "E3A",
-     "I2A",
-     "I3"
-    ]
+    "stale": []
    }
   }
  },
@@ -17506,5 +17694,44 @@
    "note": "108 of 133 manifest tasks implemented at acceptance"
   }
  },
- "gate_records_note": "W6 plan-ledger (INT-03): the gate records of the post-launch Lab program, copied from 09 and evidence/e. They live here, not under `gates`: progress.py accepts only manifest release-gate ids in `gates` (E4-ON is none), forecasts every undecided gate root (a COMPLETE-LOCAL entry turns BACKEND-LOCAL's accepted E3C milestone into \"unknown\" and adds E3B/E3C to the E4C/E4 paths), and its green rule needs every cell PASS, which R222 local acceptance does not. Rendering them is wiring request WR-PL-1."
+ "gate_records_note": "W6 plan-ledger (INT-03): the gate records of the post-launch Lab program, copied from 09 and evidence/e. They live here, not under `gates`: progress.py accepts only manifest release-gate ids in `gates` (E4-ON is none), forecasts every undecided gate root (a COMPLETE-LOCAL entry turns BACKEND-LOCAL's accepted E3C milestone into \"unknown\" and adds E3B/E3C to the E4C/E4 paths), and its green rule needs every cell PASS, which R222 local acceptance does not. Rendering them is wiring request WR-PL-1.",
+ "historical_resource_locks": {
+  "as_of": "2026-10-01T20:25:20Z",
+  "note": "Sep 26 local assignments retired from the current display; this is not a process kill or authorization to reuse remote ports. Revalidate actual ownership before work.",
+  "records": [
+   {
+    "id": "ports-e2c-i8",
+    "kind": "ports",
+    "label": "e2c (55448/55493) + i8 (55450/55495/55496)",
+    "holder": "G2-FIX",
+    "since": "2026-09-26T17:17:00Z",
+    "until": "2026-09-26T21:00:00Z",
+    "tasks": [],
+    "windows": [],
+    "note": "exclusive for the whole make check + tests/i run; no other user of either until the verdict"
+   },
+   {
+    "id": "ports-e3c",
+    "kind": "ports",
+    "label": "e3c compose block 56900–56999",
+    "holder": "BACKEND-MINORS",
+    "since": "2026-09-26T18:20:00Z",
+    "until": null,
+    "tasks": [],
+    "windows": [],
+    "note": "one E3C run at a time"
+   },
+   {
+    "id": "ports-app",
+    "kind": "ports",
+    "label": "app-c0 55451 / app-u1r 55457 / app-u4 55456",
+    "holder": "APP-MINORS-2",
+    "since": "2026-09-26T18:20:00Z",
+    "until": null,
+    "tasks": [],
+    "windows": [],
+    "note": "App real-PG worlds"
+   }
+  ]
+ }
 }

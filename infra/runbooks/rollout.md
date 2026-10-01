@@ -157,7 +157,7 @@ $PY infra/runbooks/pgrestore.py restore --conninfo "$LOCAL" --from "$BACKUP"
 $PY infra/runbooks/pgrestore.py check --source "$HOSTED" --target "$LOCAL"   # exit 0, "equal": true
 # The apply, on the copy first. The backup has no supabase_migrations schema: its rows are the
 # `applied:` line of hosted's own read-only `plan`, read here at the window, never typed (the
-# prep-time literal 0001/0002 went stale when hosted reached 0018). Hosted today: 0001-0018.
+# prep-time literal 0001/0002 went stale at historical 0001-0018). Read current hosted history below.
 export MIGRATE_DATABASE_URL="$HOSTED"                  # read-only; PGPASSWORD is exported above
 HOSTED_APPLIED=$($PY apps/infrx-api/deploy/migrate.py plan | sed -n 's/^applied: //p'); echo "$HOSTED_APPLIED"
 SEED=$(sed 's/, /\n/g' <<<"$HOSTED_APPLIED" | sed -E "s/^([0-9]{4}) ?(.*)$/('\1', '\2')/" | paste -sd, -)
@@ -176,15 +176,19 @@ unset MIGRATE_DATABASE_URL
 docker rm -f infrx-rollout-restore >/dev/null
 ```
 
-Pass: `HOSTED_APPLIED` is `0001 init, …, 0018 terminal_settlement` (0001-0018,
-[20-platform-handoff](../../research/plan/20-platform-handoff-2026-09-24.md) "Hosted Supabase"),
-anything else is a hosted change nobody recorded: stop; `check` exit 0 with `"equal": true`;
-`apply` prints every pending version (0019-0026 on this tree); flags as hosted's own at 0018:
-`credit_admission` f, `legacy_usd_admission` t, `signup_grant` t (the prep-time `signup_grant` f
-was a 0002 hosted with no flag rows); `drift_rows` 0. Retention of
+Pass: `HOSTED_APPLIED` equals the current operator-recorded hosted history; read it from
+`migrate.py plan` rather than typing a seed. The original 0001-0018 example is historical;
+[STATUS.md](../../STATUS.md) records hosted 0001-0059 at the latest cutoff. Any unrecorded
+change stops the window. `check` exits 0 with `"equal": true`; `apply` prints exactly the
+reviewed pending versions. Compare feature flags with the approved runtime configuration,
+not the pre-CREDIT defaults. `drift_rows` must be 0. Retention of
 `$BACKUP`: [restore.md A9](restore.md#a9-clean-up).
 
 ### W7 — the hosted apply
+
+The current committed migration tree is 0001-0059. For a later additive migration, reproof
+known-good compatibility and review the new pending range before this window; do not infer
+authorization from this historical command sequence.
 
 `PGPASSWORD` is still exported from W6; libpq reads it, so the DSN carries no secret.
 README step 6 runs the same `migrate.py` inside `infrx-runtime:$RELEASE`; either is the file at
@@ -194,7 +198,7 @@ README step 6 runs the same `migrate.py` inside `infrx-runtime:$RELEASE`; either
 export MIGRATE_DATABASE_URL="$HOSTED"
 $PY apps/infrx-api/deploy/migrate.py plan        # applied: == $HOSTED_APPLIED (W6), digest == $COPY_DIGEST
 $PY apps/infrx-api/deploy/migrate.py apply --expect "$COPY_DIGEST"
-$PY apps/infrx-api/deploy/migrate.py plan        # applied: 0001 … 0026, nothing pending
+$PY apps/infrx-api/deploy/migrate.py plan        # applied: current release tree, nothing pending (0001-0059 at this revision)
 unset MIGRATE_DATABASE_URL PGPASSWORD
 ```
 

@@ -71,7 +71,7 @@ run locally instead.
 
 ## Unit and path names
 
-After the 2026-09-23 cutover the box (release 41693d5d, [state of record](../../research/plan/25-state-2026-10-01.md)) runs `marlin2b-vllm.service`
+After the 2026-09-23 cutover the box (release 41693d5d, [current state](../../STATUS.md)) runs `marlin2b-vllm.service`
 (engine, `127.0.0.1:8000`), `marlin2b-gateway.service` (`uvicorn --factory
 infrx.gateway.app:create_app`, `127.0.0.1:8001`), `infrx-worker.service` (readyz `127.0.0.1:8002`),
 `infrx-valkey.service` and the `caddy` container (the edge; the I8 observe/canary units are

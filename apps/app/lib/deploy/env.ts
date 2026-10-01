@@ -19,8 +19,8 @@ export const PRODUCTION_ORIGIN = "https://app.callbill.ai";
 export const PRODUCTION_SUPABASE_URL = "https://fcbnscgsymzdykendbrc.supabase.co";
 /**
  * The Vercel scope slug preview hosts end in (`infrx-app-<hash|git-branch>-<scope>.vercel.app`).
- * ⚠️ Operator confirms: apps/app/supabase/README.md records `humanbit`; HANDOFF.md places the
- * project in a personal scope. A wrong slug only refuses previews that set NEXT_PUBLIC_APP_URL.
+ * Verify the configured slug against the actual Vercel project/team and a real preview URL
+ * before changing it. A wrong slug refuses previews that set NEXT_PUBLIC_APP_URL.
  */
 export const PREVIEW_SCOPE = "humanbit";
 const PREVIEW_HOST = new RegExp(`^infrx-app-[a-z0-9-]+-${PREVIEW_SCOPE}\\.vercel\\.app$`);

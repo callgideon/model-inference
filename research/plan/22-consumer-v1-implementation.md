@@ -1,6 +1,6 @@
-# 22 — Consumer v1 implementation program
+# Consumer v1 requirements and closure program
 
-Status: **planned, not implemented**. Prepared 2026-09-24 from main `6db71ee3`, including the `726d004d` acceptance update. Reconcile newer main and the in-flight E4B report before coding. This plan replaces obsolete next-task instructions; it preserves implementation evidence and the full App/Lab roadmap.
+Current implementation and priorities are in [STATUS.md](../../STATUS.md), [review 26](26-launch-readiness-review-2026-10-01.md) and [the planning index](README.md). The backend repairs and consumer App are implemented/deployed with acceptance still pending; the Lab has separate incomplete services. This document retains task-linked requirements and the original delivery bands, not a new-session dispatch or claim that all listed work is unimplemented. Use the manifest and evidence before selecting work.
 
 ## Objective and scope
 
@@ -12,9 +12,9 @@ Current launch profile: one pinned Marlin model, finite clips up to the deployed
 
 ## Authoritative package
 
-1. [Fresh-session handoff and copyable prompt](24-consumer-v1-session-handoff.md).
+1. [Fresh-session handoff and copyable prompt](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/24-consumer-v1-session-handoff.md).
 2. This program and [manifest v4](tasks.json); [generated ledger](17-task-ledger.md) gives all task IDs.
-3. [Audit 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20](20-platform-handoff-2026-09-24.md) and the newest committed operational tail.
+3. [Audit 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/20-platform-handoff-2026-09-24.md) and the newest committed operational tail.
 4. Detailed briefs: [contracts/data](consumer-v1/01-contracts-and-data.md), [media/worker/gateway](consumer-v1/02-runtime.md), [operations/integration/release](consumer-v1/03-operations-and-verification.md), [consumer App](consumer-v1/04-app.md), [client/load/fault protocol](consumer-v1/05-client-and-load-testing.md).
 5. [HTML progress/ETA tracker and parallel coordination](consumer-v1/06-progress-tracker.md): extend the existing tracker early; retain one task graph and evidence-backed gate decisions.
 6. Existing [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), [App requirements](../platforms/03-app-spec.md), [credit policy](../platforms/02-credits.md) and [pending inputs](15-pending-inputs.md).

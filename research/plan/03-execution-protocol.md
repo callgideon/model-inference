@@ -1,27 +1,18 @@
 # Worktree and integration protocol
 
-**2026-09-24 superseding dispatch:** [Program 22](22-consumer-v1-implementation.md), [handoff/prompt 24](24-consumer-v1-session-handoff.md) and the current [manifest](tasks.json) replace older next-task lists in this document. Existing implementation is preserved; S3 reconciles it, F2C freezes corrections, E3C/E4C close backend readiness, then App. Use this document for unchanged baseline contracts/ownership and historical context, not to restart completed waves.
-
-**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
-
 ## Session start
 
-First read [the fresh-session handoff](16-fresh-session-handoff.md), [current complete plan](12-complete-build-plan.md) and the wave-2 audit and reconcile any commits after `271add9`. Manifest v4 is authoritative for active task IDs, current paths and separate App/Lab release gates. Existing worktree owners retain their files until a coordinated handback; do not reset their status because this documentation uses `planned`.
+Read [current state](../../STATUS.md), [launch review 26](26-launch-readiness-review-2026-10-01.md), [planning index](README.md), the current manifest/register and the assigned brief. Reconcile newer commits, local worktrees and the active operating window before coding. Historical implementation bands are not a dispatch queue.
 
-Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Its current_execution_scope restricts dispatch to backend-first work; graph readiness alone does not authorize Lab or conditional extensions. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
+Use an isolated checkout of a coordinator-recorded committed base, normally reconciled main. Record task, owned paths, owner, base SHA, integration target, environment and a verifiable exit. Use `codex/<task>` branches regardless of implementation model; no historical tool-specific integration branch is required. Preserve other sessions' work and unrelated edits.
 
-Use an isolated checkout of the coordinator's **committed integration SHA**. Do not branch from uncommitted foundation changes. Example after selecting task D1 and a verified SHA:
+Keep local ports, databases, object prefixes and temporary directories isolated through the task-local registry. Never use production as a destructive test target. Runtime/GPU operations, hosted migrations and fault/load tests have one recorded environment owner at a time; ordinary local development proceeds within existing authorization.
 
-```bash
-git fetch origin
-git worktree add -b codex/d1-durable-schema ../model-inference-d1 <verified-integration-sha>
-```
-
-Replace the angle-bracket argument with the recorded SHA; it is intentionally not an executable command until selected. The `codex/` prefix is the repository handoff convention, irrespective of the implementation model. Use distinct local ports, database names/schema prefixes, object prefixes and temporary directories per worktree. Never share test credentials or destructive test targets with production. Do not delete or reset another session's checkout.
+The task manifest is the dependency graph and evidence status, not a live scheduler. Current dispatch closes deployed consumer acceptance/onboarding. Lab/hosting expansion requires its own enabled-path proof; graph readiness alone is not production acceptance.
 
 ## Parallelism and ownership
 
-F1 owns extraction first. F2 owns global types/fixtures/dependency locks and test discovery. After F2, ownership transfers for feature roots in the manifest; F does not keep editing feature code. Coordinator alone changes composition roots, shared CI/package manifests/lockfiles, navigation/layout wiring, shared global types and the task manifest. Workers submit a small integration request describing imports/routes/dependencies rather than editing shared wiring concurrently. D alone owns SQL migrations; reserve migration sequence numbers centrally.
+Foundation extraction and contract implementation already exist. Preserve their interfaces; assign the relevant feature owner and coordinate changes to global types/fixtures, dependency locks and test discovery. Coordinator alone changes composition roots, shared CI/package manifests/lockfiles, navigation/layout wiring, shared global types and the task manifest. Workers submit a small integration request describing imports/routes/dependencies rather than editing shared wiring concurrently. D alone owns SQL migrations; reserve migration sequence numbers centrally.
 
 Each task is one reviewable unit. Start dependencies need committed/reviewed code and fixtures; an implemented baseline adapter can enable development without a false integrated claim. New revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. Integration dependencies may be faked during development but must be real and tested before the task is marked integrated. All module test directories are separate; E owns cross-module tests, never replaces modules' unit tests. The module handoff's paths are planned ownership, not evidence of existing files.
 
