@@ -17,8 +17,8 @@ from ...g.lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/i/lab_control/test_control_routes.py",
                "tests/i/lab_control/test_control_routes_pg.py")
-APP, DS, PILOT = "lab/control/app.py", "gateway/routes/lab_datasets.py", "gateway/pilot.py"
-FILES = (APP, DS, PILOT)
+APP, DS, COMPOSE = "lab/control/app.py", "gateway/routes/lab_datasets.py", "lab/compose.py"
+FILES = (APP, DS, COMPOSE)
 C = "test_control_routes__"
 MOUNTED = C + "every_lab_family_is_mounted_behind_the_session_with_no_switch"
 LOGIN = C + "a_session_reaches_each_family_on_the_lab_login_never_the_runtimes"
@@ -55,15 +55,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("checkpoints_wait_on_their_switch", "the receiver is mounted with its key directory",
        APP, "lab_checkpoints=bool(settings.deployment.lab_checkpoint_keys.strip())",
        "lab_checkpoints=settings.deployment.lab_checkpoints", KEYS),
-    _m("checkpoints_not_composed", "the receiver is pilot's composition on this login", APP,
-       "**_lab_checkpoints(unit, connect)}", "}", KEYS),
+    _m("checkpoints_not_composed", "the receiver is compose's composition on this login", APP,
+       "**lab_checkpoints(unit, connect)}", "}", KEYS),
     # --- LDP-F1 (b) / LDP-F7: the Lab's own login, no set role, the Lab's own verifier ------
     _m("families_on_the_runtime_login", "the families never use the runtime's DATABASE_URL",
        APP, "**_families(settings, lab, connect)",
        "**_families(settings, lab, connector(settings.pilot.database_url, set_role=False))",
        LOGIN),
     _m("releases_read_no_experiments", "the release family's verdict reads B4's experiments on the "
-       "Lab login (R259, 0059) - never an unwired reads port", PILOT,
+       "Lab login (R259, 0059) - never an unwired reads port", COMPOSE,
        "PgLabVariants(connect), PgLabReads(connect)),", "PgLabVariants(connect), None),",
        VERDICT),
     _m("families_set_role", "the Lab login never sets role service_role (LDP-F7)", APP,

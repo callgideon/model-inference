@@ -18,7 +18,7 @@ from ..lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/g/lab_releases/test_lab_releases.py",)
 F = "gateway/routes/lab_releases.py"
-P = "gateway/pilot.py"                  # WR-LIVE-PAGE: the composed records' progress
+P = "lab/compose.py"                    # WR-LIVE-PAGE: the composed records' progress (A1)
 FILES = (F, auth.F, P)
 C = "test_lab_releases__"
 MOUNT, SESSION = C + "nothing_is_mounted_without_the_switch", \

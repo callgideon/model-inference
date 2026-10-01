@@ -17,9 +17,9 @@ from . import w3_mutants
 API_DIR = shared.API_DIR
 SUITE_FILE = "tests/w/test_lab_workers.py"
 F = "lab/workers/__main__.py"
-P = "gateway/pilot.py"
+LC = "lab/compose.py"                   # A1: the Lab compositions the CLI shares with the gateway
 T3 = "traces/retention/policy.py"
-FILES = (F, P, T3)
+FILES = (F, LC, T3)
 C = "test_lab_workers__"
 SETTINGS = C + "each_role_refuses_to_start_naming_a_missing_setting"
 PROCESS = C + "the_process_refuses_an_unknown_role_and_a_missing_setting"
@@ -277,10 +277,10 @@ MUTANTS: tuple[Mutant, ...] = (
     # WR-C6-LIVE (R244): D9's Live (0054) of the listed revision; nothing assigned is held
     _m("lw_rollout_empty_live_evaluated", "nothing assigned is held, never evaluated on zeros",
        "    if current is None:\n        raise errors.DependencyUnavailable(\"no admitted",
-       "    if False:\n        raise errors.DependencyUnavailable(\"no admitted", ROLLOUT),
+       "    if False:\n        raise errors.DependencyUnavailable(\"no admitted", ROLLOUT, file=LC),
     _m("lw_rollout_live_of_the_policy", "the Live read is of the listed policy revision",
        "await releases.live(listing.policy_ref)", "await releases.live(listing.policy_id)",
-       ROLLOUT),
+       ROLLOUT, file=LC),
     _m("lw_rollout_live_off_the_pool", "the Live read is on the role's database",
        "live or partial(release_live, releases)",
        'live or partial(release_live, PgReleaseStore(connector("")))', ROLLOUT),
@@ -308,7 +308,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_serving_principal_constant", "the alias CAS is audited under the operator",
        "                   OperatorSession(ops=None, principal=principal))",
        '                   OperatorSession(ops=None, principal="rollout:controller"))', STOP,
-       file=P),
+       file=LC),
     # --- WR-C5-REPORT (composition-6): a running release is stepped on its B2 report ----------
     _m("lw_report_never_read", "a running release is stepped on its stored B2 report",
        "                report, runs = await release_report(reads, store, provider, policy, plan) \\\n"
@@ -319,19 +319,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    if True else (None, None)\n", B2),
     _m("lw_report_any_protocol", "the report is under the plan's own protocol",
        '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
-       '        if e["report"] is None:\n', B2),
+       '        if e["report"] is None:\n', B2, file=LC),
     _m("lw_report_unreported", "an experiment without a stored report is skipped",
        '        if e["report"] is None or e["protocol_digest"] != protocol:\n',
-       '        if e["protocol_digest"] != protocol:\n', B2),
+       '        if e["protocol_digest"] != protocol:\n', B2, file=LC),
     _m("lw_report_other_servings", "the report compares the policy's baseline and a candidate",
        '        if runs[0]["serving_ref"] == policy.baseline_ref and \\\n', "        if True or \\\n",
-       B2),
+       B2, file=LC),
     _m("lw_report_oldest", "the newest matching experiment is the release's",
        "    for e in await reads.experiments(provider_org_id=provider):",
-       "    for e in reversed(await reads.experiments(provider_org_id=provider)):", B2),
+       "    for e in reversed(await reads.experiments(provider_org_id=provider)):", B2, file=LC),
     _m("lw_report_run_refs_changed", "the runs are D7's records as stored (their refs)",
        '.model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref',
-       '.model_dump(mode="json", by_alias=True)', B2),
+       '.model_dump(mode="json", by_alias=True)', B2, file=LC),
     _m("lw_report_off_the_pool", "B4's experiments are read on the role's database",
        "    reads = PgLabReads(connect)", '    reads = PgLabReads(connector(""))', B2),
     # --- WR-C5-PLAN (composition-6): the release launcher stores the plan, then D9 starts ------
@@ -497,14 +497,15 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- WR-P2-D8-C: the teacher wiring ------------------------------------------------------
     _m("lw_teacher_plain_judge_ledger", "P2's ledger is D8's PgTeacherLedger (record_failures)",
        "ledger=PgTeacherLedger(connect),", "ledger=PgTeacherLedger.__mro__[1](connect),",
-       TEACHER),
+       TEACHER, file=LC),
     _m("lw_teacher_log_off_the_pool", "P1's label log is on the role's database",
-       "log=PgLabelLog(connect),", 'log=PgLabelLog(connector("")),', TEACHER),
+       "labels=p1.import_labels, log=PgLabelLog(connect),",
+       'labels=p1.import_labels, log=PgLabelLog(connector("")),', TEACHER, file=LC),
     _m("lw_teacher_redaction_dropped", "the teacher sees content only through N2's redaction",
        "                         redact=redact)", "                         redact=str)",
-       TEACHER),
+       TEACHER, file=LC),
     _m("lw_teacher_rates_unapproved", "a live teacher is priced by the approved rates only",
-       "rates=APPROVED_RATES if rates is None else rates,", "rates=rates,", TEACHER),
+       "rates=APPROVED_RATES if rates is None else rates,", "rates=rates,", TEACHER, file=LC),
     # --- the process: health and the drain ---------------------------------------------------------
     _m("lw_ready_without_the_database", "/readyz is down while the database is",
        '            up = live and (path == "/livez" or await _answers(worker.ready))\n',

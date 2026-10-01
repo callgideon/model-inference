@@ -340,7 +340,8 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
     monkeypatch.setattr(clickhouse_connect, "get_client", connected)
     with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL.*S3_TRACE_BUCKET"):
         pilot._lab(settings(lab_traces=True), connect=None)
-    monkeypatch.setattr(pilot, "_lab_traces", lambda *args: "traces")
+    from infrx.lab import compose
+    monkeypatch.setattr(compose, "lab_traces", lambda *args: "traces")
     assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
 
 
@@ -1096,11 +1097,14 @@ def test_f_base__a_request_id_source_that_misbehaves_never_reaches_a_header():
 
 
 # --- W6 api-L1 (A1/A9): the composition roots ----------------------------------------------
-#: What `pilot` re-exports from `infrx.lab.compose` (tests and the e2e worlds import them).
-LAB_COMPOSITIONS = ("_lab", "_lab_2", "_lab_checkpoints", "_lab_traces", "_teachers",
-                    "RunLedger", "lab_releases", "lab_optimizations", "lab_control",
-                    "lab_operations", "control_serving", "SHOWN", "_z", "_progress",
-                    "ReportUnavailable", "ReleaseRecords", "ReleaseProposals")
+#: What `pilot` re-exports from `infrx.lab.compose` (tests and the e2e worlds import them):
+#: pilot's name -> compose's.
+LAB_COMPOSITIONS = {"_lab": "lab_surfaces", "_lab_2": "lab_evaluations_pipelines_releases",
+                    "_lab_checkpoints": "lab_checkpoints", "_lab_traces": "lab_traces",
+                    "_teachers": "lab_teachers", **{n: n for n in (
+                        "RunLedger", "lab_releases", "lab_optimizations", "lab_operations",
+                        "control_serving", "SHOWN", "_z", "_progress",
+                        "ReportUnavailable", "ReleaseRecords", "ReleaseProposals")}}
 
 
 def test_composition_root__the_lab_compositions_are_lab_compose_and_form_no_cycle():
@@ -1128,8 +1132,12 @@ def test_composition_root__the_lab_compositions_are_lab_compose_and_form_no_cycl
         assert "gateway.pilot import" not in (root / path).read_text(), path
     from infrx.gateway import pilot
     from infrx.lab import compose
-    assert [n for n in LAB_COMPOSITIONS
-            if getattr(pilot, n, None) is not getattr(compose, n, False)] == []
+    assert [n for n, c in LAB_COMPOSITIONS.items()
+            if getattr(pilot, n, None) is not getattr(compose, c, False)] == []
+    from infrx.lab.workers import __main__ as lab_workers
+    assert [n for n in ("control_serving", "plan_key", "release_live", "release_report",
+                        "teacher_wiring")
+            if getattr(lab_workers, n, None) is not getattr(compose, n, False)] == []
 
 
 def test_composition_root__one_dsn_login_parser():
