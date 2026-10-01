@@ -45,7 +45,6 @@ from datetime import datetime
 from typing import Any, Literal, Protocol, Sequence
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ...contracts import errors
@@ -524,16 +523,6 @@ async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any
 
 
 # --- the routes -----------------------------------------------------------------------------
-def _guarded(handler):
-    """`lab_auth.guarded`, plus P1/P3's `Gone` (an expired export) as the port's `gone`."""
-    async def wrapped(request: Request):
-        try:
-            return await handler(request)
-        except errors.Gone:
-            return JSONResponse({"refusal": "gone"}, status_code=410, headers=lab_auth.NO_STORE)
-    return lab_auth.guarded(wrapped)
-
-
 def register(app, rt, pipelines: LabPipelines | None = None):
     """Mount the pipeline routes over `pipelines` (default `rt.lab_pipelines`); without one
     nothing is mounted and `None` is returned."""
@@ -548,7 +537,7 @@ def register(app, rt, pipelines: LabPipelines | None = None):
     def route(method: str, path: str, answer, *, model=None, status: int = 200,
               capability: Cap = Cap.run_evaluation, listing: bool = False, query=()):
         """`answer(x, who, *path params, *query params, body)`."""
-        @_guarded
+        @lab_auth.guarded                   # P1/P3's `Gone` (an expired export): 410 gone
         async def handler(request: Request):
             who = await actor(request, capability)
             args = [*request.path_params.values(),

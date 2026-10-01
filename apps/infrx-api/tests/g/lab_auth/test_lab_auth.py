@@ -146,13 +146,15 @@ def test_lab_auth__a_revocation_takes_effect_on_the_next_call(world):
 
 # --- the refusal: fixed reasons, statuses the Lab adapter maps -------------------------------
 def test_lab_auth__refusals_are_the_lab_ports_reasons():
-    """Oracle: 401 unauthenticated, 404 not_found, 403 denied, 422 invalid, 409 conflict, and
-    anything else - an outage or a bug - 503 unavailable; the body is the reason only."""
+    """Oracle: 401 unauthenticated, 404 not_found, 403 denied, 422 invalid, 409 conflict, 410
+    gone (A7: one table for every family), and anything else - an outage or a bug - 503
+    unavailable; the body is the reason only."""
     cases = ((errors.InvalidApiKey(), 401, "unauthenticated"),
              (errors.NotFound(), 404, "not_found"), (errors.Forbidden(), 403, "denied"),
              (errors.OrgSuspended(), 403, "denied"), (errors.InvalidRequest(), 422, "invalid"),
              (errors.RequestTooLarge(), 422, "invalid"), (errors.StateConflict(), 409, "conflict"),
-             (errors.IdempotencyConflict(), 409, "conflict"),
+             (errors.IdempotencyConflict(), 409, "conflict"), (errors.Gone(), 410, "gone"),
+             (errors.ResultExpired(), 410, "gone"),
              (errors.DependencyUnavailable(), 503, "unavailable"),
              (RuntimeError("bug"), 503, "unavailable"))
     for exc, status, reason in cases:

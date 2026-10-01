@@ -36,9 +36,9 @@ PREFIX = "/lab/v1/providers/{provider}/datasets"
 #: One import is one bounded request. ponytail: a streamed bundle upload when datasets
 #: outgrow it.
 MAX_BODY_BYTES = 64 * 2**20
-STATUS = ((errors.InvalidApiKey, 401), (imports.ImportRejected, 400),
-          (errors.RequestTooLarge, 413), (errors.InvalidRequest, 400), (errors.Forbidden, 403), (errors.NotFound, 404),
-          (errors.Conflict, 409), (errors.Gone, 410))
+#: The backend's own statuses (N4's port reads `detail`, not port.ts's reasons): an invalid
+#: body or bundle is a 400, an oversized one 413; every other status is `lab_auth`'s (A7).
+STATUS = ((errors.RequestTooLarge, 413), (errors.InvalidRequest, 400),)
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,8 @@ class LabDatasets:
 
 
 def refusal(error: Exception) -> JSONResponse:
-    status = next((code for kind, code in STATUS if isinstance(error, kind)), 503)
+    status = next((code for kind, code in STATUS if isinstance(error, kind)), None) \
+        or lab_auth.status_of(error)[0]
     body: dict = {"detail": str(error) if status != 503 else "the datasets service failed"}
     if isinstance(error, versions.LeakRefused):
         body["leaks"] = error.leaks

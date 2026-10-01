@@ -14,7 +14,7 @@ from ..lab_auth import mutants as auth
 
 SUITE_FILES = ("tests/g/lab_datasets/test_lab_datasets.py",)
 F = "gateway/routes/lab_datasets.py"
-FILES = (F,)
+FILES = (F, auth.F)
 C = "test_lab_datasets__"
 MOUNT = C + "nothing_is_mounted_without_the_switch"
 IDENTITY = C + "the_upload_identity_is_the_verified_lab_session_only"
@@ -27,8 +27,8 @@ REQUEUE = C + "a_failed_import_is_requeued_as_a_new_job_the_pool_works"
 READ = "            body = await read(request)\n"
 
 
-def _m(name, invariant, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=F, old=old, new=new, cases=cases)
+def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -42,7 +42,12 @@ MUTANTS: tuple[Mutant, ...] = (
        'user_of=lambda request: asyncio.sleep(0, request.headers.get("authorization", "")'
        '[7:]))', IDENTITY),
     _m("unauthenticated_is_unavailable", "a missing or unverified session is a 401",
-       "STATUS = ((errors.InvalidApiKey, 401), ", "STATUS = (", IDENTITY),
+       '(errors.InvalidApiKey, 401, "unauthenticated")',
+       '(errors.InvalidApiKey, 503, "unauthenticated")', IDENTITY, file=auth.F),
+    _m("statuses_not_lab_auths", "every status but the body's 400/413 is lab_auth's (A7)",
+       "or lab_auth.status_of(error)[0]", "or 503", IDENTITY, ACCESS),
+    _m("invalid_body_is_a_422", "the datasets port's invalid body is a 400, not port.ts's 422",
+       "(errors.InvalidRequest, 400),", "", BODY),
     _m("actor_not_the_session", "N1 records the session's user as the actor",
        "                                               actor=user))",
        '                                               actor="lab"))', IDENTITY, DURABLE),

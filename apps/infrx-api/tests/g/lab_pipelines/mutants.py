@@ -136,10 +136,12 @@ MUTANTS: tuple[Mutant, ...] = (
        '[{"sample_id": s, "annotation_refs": refs}', '[{"sample_id": s, "annotation_refs": []}',
        HUMAN),
     # --- gone, the ports, the body ------------------------------------------------------------
-    _m("gone_is_unavailable", "an expired export is 410 gone, not a retryable 503",
-       "        except errors.Gone:\n", "        except errors.NotFound:\n", GONE),
+    _m("gone_is_unavailable", "an expired export is 410 gone, not a retryable 503 (A7: "
+       "lab_auth's one table)", '(errors.Gone, 410, "gone")', '(errors.Gone, 503, "unavailable")',
+       GONE, file=auth.F),
     _m("gone_cacheable", "a refusal is never cached",
-       'status_code=410, headers=lab_auth.NO_STORE)', "status_code=410)", GONE),
+       '    return JSONResponse({"refusal": reason}, status_code=status, headers=NO_STORE)',
+       '    return JSONResponse({"refusal": reason}, status_code=status)', GONE, file=auth.F),
     _m("unwired_is_a_bug", "a port not merged yet is a typed 503, not an AttributeError",
        "        if value is None:                   # expected until its table merges: a 503\n",
        "        if False:\n", UNWIRED),

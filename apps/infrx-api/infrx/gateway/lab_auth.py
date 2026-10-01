@@ -40,7 +40,7 @@ NO_STORE = {"cache-control": "no-store"}
 #: (error kind, status, reason), most specific first; anything else is 503 `unavailable`.
 REFUSALS = ((errors.InvalidApiKey, 401, "unauthenticated"), (errors.NotFound, 404, "not_found"),
             (errors.Forbidden, 403, "denied"), (errors.InvalidRequest, 422, "invalid"),
-            (errors.Conflict, 409, "conflict"))
+            (errors.Conflict, 409, "conflict"), (errors.Gone, 410, "gone"))
 
 
 class Sessions(Protocol):
@@ -102,9 +102,14 @@ def ok(content, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content, status_code=status_code, headers=NO_STORE)
 
 
+def status_of(exc: Exception) -> tuple[int, str]:
+    """The (status, reason) every Lab family answers `exc` with."""
+    return next(((status, reason) for kind, status, reason in REFUSALS
+                 if isinstance(exc, kind)), (503, "unavailable"))
+
+
 def refusal(exc: Exception) -> JSONResponse:
-    status, reason = next(((status, reason) for kind, status, reason in REFUSALS
-                           if isinstance(exc, kind)), (503, "unavailable"))
+    status, reason = status_of(exc)
     if not isinstance(exc, errors.DomainError):   # a bug: its type only - a message or
         log.error("lab route failed: %s", type(exc).__name__)   # traceback may echo the token
     return JSONResponse({"refusal": reason}, status_code=status, headers=NO_STORE)
