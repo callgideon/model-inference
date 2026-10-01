@@ -1,8 +1,10 @@
 # infrx-api — the inference gateway
 
-**2026-09-22 sequence:** [Marlin inference backend first](../../research/plan/18-marlin-backend-first.md), consumer App next, provider Lab afterward. The backend has independent headless deployment/recovery/performance gates; frontend feature work is subsequent.
-
-**Current execution:** [Marlin App-first complete plan](../../research/plan/12-complete-build-plan.md) and [fresh-session prompt](../../research/plan/16-fresh-session-handoff.md). Preserve the audited wave-2 work; actual product-v2 and runtime integration remain pending.
+**State 2026-10-01:** the gateway, worker and engine run on the pilot box at release 41693d5d in
+the CREDIT regime (`INFRX_MODE=pilot`, PostgreSQL-backed), public at `https://marlin2b.callbill.ai`;
+the Lab control service (`infrx.lab.control.app:create_app`, `127.0.0.1:8003`) runs beside it from
+checkout 7ecbab0e. Hosted schema 0001–0059. See the
+[state of record 25](../../research/plan/25-state-2026-10-01.md).
 
 OpenAI-compatible gateway in front of vLLM, plus its deployment files and the
 OpenRouter provider document. Runs on the GPU box as `marlin2b-gateway.service`
@@ -16,6 +18,10 @@ client ─▶ Caddy :443 ─▶ create_app :8001 ─▶ vLLM :8000
                           ├─▶ Supabase  usage_events (background queue)
                           └─▶ usage.jsonl (always) · usage_failed.jsonl (on failure)
 ```
+
+The diagram is the legacy (pre-`INFRX_MODE`) chat path, kept while it is mounted; in `pilot` mode
+admission, jobs, the stream journal and settlement are PostgreSQL's (`DATABASE_URL`), scheduling is
+Valkey's and the engine is reached by the worker (`infrx/worker/`).
 
 | file | what |
 |---|---|
@@ -40,9 +46,12 @@ inject the adapters.
 
 | var | SSM parameter | meaning |
 |---|---|---|
+| `INFRX_MODE` | — | required; `pilot` on the box (unset refuses to start, R44) |
+| `DATABASE_URL` | `/model-inference/pg_journal_url` | the runtime's PostgreSQL login: metering sink and price authority; pilot mode refuses without it |
+| `S3_MEDIA_BUCKET` | — | the media object store bucket (must answer HeadBucket) |
 | `SUPABASE_URL` | `/model-inference/supabase_url` | project REST base, e.g. `https://fcbnscgsymzdykendbrc.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | `/model-inference/supabase_service_role_key` | service role; bypasses RLS, box only |
-| `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | legacy single key, still accepted while it exists |
+| `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | legacy single key; refused in `pilot` mode (R51, `deploy/preflight.py`) |
 | `MODEL_ID` | — | id on the wire and in `usage_events.model_id` (`nemostation/marlin-2b`) |
 | `UPSTREAM`, `MAX_INFLIGHT`, `MAX_VIDEO_SECONDS`, `MAX_VIDEO_MB` | — | vLLM address, 429 threshold, video limits |
 | `FETCH_TIMEOUT_S`, `MAX_REDIRECTS`, `ALLOWED_VIDEO_MIME` | — | media fetch: total budget (30 s), redirect hops (3), content-type allowlist (`video/mp4,video/webm,video/quicktime`) |
@@ -129,9 +138,9 @@ set -a; . /etc/marlin2b-gateway.env; set +a
 
 ## Headless provisioning and the dataset client (G6B)
 
-Everything a provisioned client needs, with both Next.js apps stopped. **Status:
-implemented against in-memory fakes only** — `infrx.operations.cli` refuses to run
-until the D1R/D5/A1 PostgreSQL adapters exist (it never runs on an in-memory store).
+Everything a provisioned client needs, with both Next.js apps stopped. `infrx.operations.cli`
+runs against PostgreSQL only: `$OPERATIONS_DATABASE_URL` (the owner or broad login), else the
+deployment's `DATABASE_URL`; without either it refuses (it never runs on an in-memory store).
 
 Operator prerequisites: the gateway environment installed by `deploy/preflight.py
 apply --mode pilot` (no shared `GATEWAY_API_KEY`, R51), and an operator-audience key
@@ -208,7 +217,13 @@ coordinator: nobody else edits `pyproject.toml` or `uv.lock`. Test files live in
 `tests/<track>/`, discovered with `--import-mode=importlib` so same-named files in
 different track directories do not collide.
 
-`httpx.MockTransport` stands in for Supabase, the media origin and vLLM, so the
-tests need no network and no env vars. `tests/contracts/` covers the shared
+`httpx.MockTransport` stands in for Supabase, the media origin and vLLM, so most
+tests need no network and no env vars; the PostgreSQL/Valkey/MinIO-backed cases run on a
+task-local Docker stack (`INFRX_D_TASK=<key>`, `tests/integration/ENVIRONMENT.md`) and skip
+visibly without one. `tests/contracts/` covers the shared
 contracts: fixture round-trips, the money rules, the configuration names, and
 every port's conformance suite run against the in-memory fakes.
+
+## Verification log
+
+- 2026-10-01 (W6 docs-state): the 2026-09-22 banners replaced by a dated state line (release 41693d5d, Lab control 7ecbab0e per the session-03 record lines 525/594); the legacy diagram labelled; `INFRX_MODE`/`DATABASE_URL`/`S3_MEDIA_BUCKET` rows added; the operations CLI and test-environment sentences brought to the code (`infrx/operations/cli.py`, `infrx/config.py`).

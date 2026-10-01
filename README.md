@@ -1,15 +1,12 @@
 # model-inference
 
-**Current implementation package (2026-09-24):** [Consumer v1 program](research/plan/22-consumer-v1-implementation.md), [fresh-session handoff/prompt](research/plan/24-consumer-v1-session-handoff.md) and [task ledger](research/plan/17-task-ledger.md). Close the audited backend gaps through E3C/E4C, then complete App. [Hosting/scaling/Modal roadmap](research/plan/23-inference-hosting-roadmap.md) is a separate proposal. Earlier dated wave instructions below are historical.
-
-**2026-09-22 priority:** complete the robust, measured Marlin2B inference backend first, then the consumer App, then Lab. [Backend execution plan](research/plan/18-marlin-backend-first.md) and [fresh-session prompt](research/plan/16-fresh-session-handoff.md) supersede the earlier App-first dispatch order.
-
-**Product direction:** Marlin2B inference for SOP verification over large robotics datasets; backend endpoint first, App next. [Complete implementation plan](research/plan/12-complete-build-plan.md) · [Fresh-session prompt/context](research/plan/16-fresh-session-handoff.md) · [Task ledger](research/plan/17-task-ledger.md).
-
-Start with the [two-platform architecture and roadmaps](research/platforms/README.md).
-`apps/app` serves model consumers; `apps/lab` serves model providers. Wave 2 was pulled at `271add9`: read the [audit and revised sequence](research/plan/10-wave2-platform-audit.md)
-and [continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md) before wave 3.
-[HANDOFF.md](HANDOFF.md) preserves historical operational context.
+**State 2026-10-01:** the consumer App and its Marlin-2B inference API are live (runtime 41693d5d,
+CREDIT regime); the provider Lab is deployed for internal testing at `https://lab.callbill.ai`
+with its control service on the pilot box; hosted Supabase is at migrations 0001–0059.
+Start at the [state of record](research/plan/25-state-2026-10-01.md) and the
+[two-platform architecture](research/platforms/README.md). `apps/app` serves model consumers;
+`apps/lab` serves model providers. [HANDOFF.md](HANDOFF.md) preserves historical operational
+context; the dated dispatches it and the plan README carry (2026-09-21 to 2026-09-24) are history.
 
 Per-experiment inference and benchmarking code for the Gideon GPU work.
 
@@ -27,7 +24,7 @@ models/qwen3827b/       Qwen/Qwen3.8-27B                          ~54GB
 models/kimik3/          moonshotai/Kimi-K3                      ~1400GB
 models/marlin2b/        NemoStation/Marlin-2B (gated)              ~5GB
 apps/app/               consumer inference App (Next.js, Vercel, Supabase)
-apps/lab/               provider Lab (documentation scaffold; implementation planned)
+apps/lab/               provider Lab (Next.js, Vercel; live for internal testing)
 apps/infrx-api/         shared inference gateway/runtime + deployment
 research/platforms/    current architecture, separate specs and roadmaps
 research/               sizing, scaling and platform research
@@ -89,3 +86,7 @@ tracing, annotation, distillation, evals, A/B-gated promotion — see
   checkpoint is natively MXFP4 — do not assume an FP8 variant will. Note the
   node has ~2,144GB usable (268GB/GPU on HGX/DGX B300 and AWS p6-b300), not
   8×288GB = 2304GB; 288GB/GPU is the GB300 NVL72 figure. See `research/`.
+
+## Verification log
+
+- 2026-10-01 (W6 docs-state): the three stacked 2026-09-22/09-24 dispatch banners replaced by one dated state line pointing at `research/plan/25-state-2026-10-01.md`; `apps/lab/` described as built and deployed.

@@ -1,14 +1,8 @@
 # Handoff — product amendment 2026-09-21; historical operations below
 
-**Current implementation dispatch (2026-09-24):** use [program 22](research/plan/22-consumer-v1-implementation.md) and [handoff/prompt 24](research/plan/24-consumer-v1-session-handoff.md). They turn review 21 into corrective task briefs and make E3C/E4C the backend gate roots, followed by real consumer App completion. Reconcile newer operational evidence first; the older entries below remain historical context.
+**State 2026-10-01:** start at the [state of record](research/plan/25-state-2026-10-01.md) (what runs where, what is pending, the reading order). Everything below — the 2026-09-21/22/24 dispatches (programs [22](research/plan/22-consumer-v1-implementation.md)/[24](research/plan/24-consumer-v1-session-handoff.md), [handoff 20 §14](research/plan/20-platform-handoff-2026-09-24.md), [review 21](research/plan/21-v1-consumer-readiness-review-2026-09-24.md), [16](research/plan/16-fresh-session-handoff.md)/[18](research/plan/18-marlin-backend-first.md), the [wave-2 audit](research/plan/10-wave2-platform-audit.md)) and the original handoff — is historical.
 
-**Current entry (2026-09-24):** [As-built handoff 20, §14](research/plan/20-platform-handoff-2026-09-24.md), [operational tail](HANDOFF-20260924T2115Z.md), and [consumer v1 readiness review 21](research/plan/21-v1-consumer-readiness-review-2026-09-24.md). Backend implementation and a metered pilot have landed; final certification and consumer self-service remain open. The dated instructions below preserve the earlier plan and must not be read as current task status.
-
-**2026-09-22 priority:** complete the robust, measured Marlin2B inference backend first, then the consumer App, then Lab. [Backend execution plan](research/plan/18-marlin-backend-first.md) and [fresh-session prompt](research/plan/16-fresh-session-handoff.md) supersede the earlier App-first dispatch order.
-
-**Earlier implementation package (2026-09-22):** [historical implementation prompt](research/plan/16-fresh-session-handoff.md), [complete plan](research/plan/12-complete-build-plan.md) and [pending work](research/plan/15-pending-inputs.md). The objective is completing the Marlin2B inference backend supporting SOP verification over large robotics datasets; `apps/app` follows. Lab and later extensions have detailed follow-on plans; do not dispatch them ahead of the accepted App candidate.
-
-**Historical wave-2 baseline:** [the wave-2 audit](research/plan/10-wave2-platform-audit.md), [two-platform architecture](research/platforms/README.md) and [the continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md). Main was then pulled at `271add9`; all eleven wave-2 modules were preserved. F2R/F2P and additive D1R revisions preceded product-v2 integration and have since landed. Manifest v4 preserves task statuses separately from live release evidence.
+**Operational session tails (2026-09-22 → 09-24):** the 25 dated `HANDOFF-2026*.md` files are in [research/plan/handoffs/operational/](research/plan/handoffs/operational/); the newest, [HANDOFF-20260924T2115Z.md](HANDOFF-20260924T2115Z.md), stays at the root while plans 16, 21 and 24 link it there.
 
 Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.
 
@@ -72,7 +66,7 @@ models/common/            download.sh + env.sh (shared)
 models/<exp>/             deepseek41f, deepseek41fnvfp4, qwen3827b, kimik3, marlin2b (model.env, download.sh; marlin2b also serve.sh, smoke.py, bench.py, reference.py, tokens.py, results/)
 apps/README.md            console + gateway spec (requirements F1–F10, data model, deployment)
 apps/app/                 consumer App; shared migrations remain here initially
-apps/lab/                 provider Lab README scaffold; actual app not yet created by this plan
+apps/lab/                 provider Lab (a README when this was written; built and live since 2026-10-01)
 research/platforms/       current two-product architecture, specs and roadmaps
 apps/infrx-api/           gateway.py (compatibility entry point; the gateway code was extracted to infrx/ by task F1), infrx/ (auth, media, usage, gateway app factory, contracts v1), tests/ (legacy gateway tests + tests/contracts + per-track suites), deploy/ (systemd units, Caddyfile, install.sh, replay_usage.py), openrouter/ (provider document + listing plan), client_example.py
 research/                 METHODOLOGY.md (formulas, units, pinned inputs) and the trees below, each with a README index
@@ -405,3 +399,5 @@ BASE_URL=https://marlin2b.callbill.ai/v1 MARLIN_API_KEY=$KEY python3 models/marl
 
 - 2026-09-20: Added authoritative implementation package, incorporated review decisions, removed plaintext account password from this file and retained historical source context. No live infrastructure or application implementation changed.
 - 2026-09-21: Repository map and test command refreshed after F1/F2 integration on `claude/infrx-impl`; live-state sections above remain historical and were not re-verified by this edit. The I1 inventory (`research/plan/evidence/i/`) and `infra/README.md` hold the re-observed state, including the installer fail-open hazard (`O-FAILOPEN`).
+- 2026-10-01 (W6 docs-state): the five stacked dispatch banners collapsed to one dated line pointing at `research/plan/25-state-2026-10-01.md` (their links kept in that line); the map's `apps/lab/` row annotated; the historical body unchanged.
+- 2026-10-01 (W6 docs-state, DT-17): 25 root `HANDOFF-2026*.md` files moved (git mv, content unchanged) to `research/plan/handoffs/operational/`; `HANDOFF-20260924T2115Z.md` stays at the root until plans 16/21/24 re-point their links (wiring request); a pointer line above.

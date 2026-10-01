@@ -8,13 +8,14 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
 | Runbook | Answers alerts | Drilled locally by | Box / hosted drill |
 |---|---|---|---|
 | [restart.md](restart.md) — engine, worker, gateway, host, drain, saturation | ComponentDown, GpuUnavailable, PlatformFailureRate, LeaseLost, ReaperTerminalized, HostMemoryLow, InflightSaturated, RejectionsHigh, JournalSlow | `test_i3b_rc01`, `rc02`, `rc08`, `rc09` | pending coordinator |
-| [restore.md](restore.md) — hosted Supabase backup/restore, box snapshot | — (planned, and before every hosted migration) | `test_i3b_bk01`, `bk01b`, `bk01c`, `bk02`, `bk03` | pending coordinator — **the hosted project has no backup today** |
+| [restore.md](restore.md) — hosted Supabase backup/restore, box snapshot | — (planned, and before every hosted migration) | `test_i3b_bk01`, `bk01b`, `bk01c`, `bk02`, `bk03` | each hosted window took a verified W6 dump first (2026-09-29, 2026-09-30 twice; session-03 record lines 525, 591, 593); managed backup/PITR is `supabase_policy.py`'s report, not re-verified here |
 | [rollout.md](rollout.md) — phase-2 checklist: order, hosted backup, settings, triggers | — | W6 block run by ROLLOUT-PREP (backup, restore check, copy apply) | pending coordinator |
 | [rollback.md](rollback.md) — rollout rollback, maintenance switch | — | `test_i3b_bk04`; `rc10` pending I2B | pending I2B + coordinator |
 | [disk.md](disk.md) — disk exhaustion, slow preparation | DiskAlmostFull, DiskFilling, PreparationSlow | `test_i3b_rc07` | pending coordinator |
 | [index-loss.md](index-loss.md) — queue index loss, stall, saturation | QueueStalled, QueueSaturated, ComponentDown (index) | `test_i3b_rc06`, `rc09`; E3B `dr13` | pending coordinator |
 | [reconcile.md](reconcile.md) — money drift, unknown usage, unsettleable jobs | ReconciliationDrift, ReconciliationStale, UnsettleableJobs, UnknownUsageBacklog, SettlementSlow, MetricsSanitizerRejections | `reconcile()` after every drill | pending D5/Q3 |
 | [observe.md](observe.md) — continuous monitoring, the canary, alert delivery (I8) | every `infra/alerts/operations.json` rule; ScrapeFailed | `tests/i/test_observe.py`, `test_ops_steps.py` | steps 72/73/74, coordinator; delivery BLOCKED on P-25 |
+| [08-lab-internal-testing-rollout.md](../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md) — the Lab on the box and on Vercel: migrations, units, switches, memberships, checklist, rollback | — | `make lab-local` (E4-ON), `apps/infrx-api/tests/i/lab/` | ran 2026-09-30/10-01 (windows, box, Vercel); members and the checklist pending |
 | [../app/operations.md](../app/operations.md) — the App: combined checks, auth/credit cutover, browser error monitoring, App rollback (I3) | AppDown (`infra/alerts/app.json`, once WR-I3-3 merges it) | `tests/integration/ops/`, `apps/app/tests/i3/` | pending operator (Vercel, hosted) |
 
 I8's tools beside the runbooks (each read-only unless its runbook says otherwise):
@@ -62,36 +63,22 @@ after a rollback/restore), steps 79 (evidence export) and 86 (bounded cleanup).
 ## Running a step on the box (SSM)
 
 There is no session-manager plugin on the coordinator host; every box step is a script
-sent through `AWS-RunShellScript`, base64-wrapped so quoting survives. The shell's stale
-`AWS_*` keys must be unset (CLAUDE.md).
-
-```bash
-AWS="env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1"
-BOX=i-0e8449a4ffca29bab
-
-ssm() {  # ssm step.sh  -> runs step.sh on the box as root, prints status, stdout, stderr
-  local payload id
-  payload=$(python3 -c 'import json,sys; print(json.dumps({"commands": [sys.argv[1]]}))' \
-            "echo $(base64 -w0 "$1") | base64 -d | bash")
-  id=$($AWS ssm send-command --instance-ids "$BOX" --document-name AWS-RunShellScript \
-        --parameters "$payload" --query Command.CommandId --output text)
-  $AWS ssm wait command-executed --command-id "$id" --instance-id "$BOX" || true
-  $AWS ssm get-command-invocation --command-id "$id" --instance-id "$BOX" \
-       --query '[Status,StandardOutputContent,StandardErrorContent]' --output text
-}
-```
-
-A step is written as a `bash` block meant to be saved to a file and passed to `ssm`; blocks
-marked *coordinator host* run locally instead.
+sent through `AWS-RunShellScript` by [`infra/rollout/ssm.sh`](../rollout/ssm.sh)
+(`infra/rollout/ssm.sh <step.sh> [NAME=value …]`, base64-wrapped so quoting survives, non-secret
+arguments only; it unsets the shell's stale `AWS_*` keys, CLAUDE.md). A step below is written as a
+`bash` block meant to be saved to a file and passed to `ssm.sh`; blocks marked *coordinator host*
+run locally instead.
 
 ## Unit and path names
 
-Today's box runs the pre-refactor monolith (I1B inventory): `marlin2b-vllm.service`
-(engine, `127.0.0.1:8000`), `marlin2b-gateway.service` (`127.0.0.1:8001`), the `caddy`
-container. The worker, Valkey and reaper units, the drain/rollback scripts and the
-`/metrics` wiring arrive with I2B/W3; where a step needs one of them it says **PENDING I2B**
-(or W3) and gives the name proposed in `infra/README.md` §2, to be replaced by the name I2B
-ships.
+After the 2026-09-23 cutover the box (release 41693d5d, [state of record](../../research/plan/25-state-2026-10-01.md)) runs `marlin2b-vllm.service`
+(engine, `127.0.0.1:8000`), `marlin2b-gateway.service` (`uvicorn --factory
+infrx.gateway.app:create_app`, `127.0.0.1:8001`), `infrx-worker.service` (readyz `127.0.0.1:8002`),
+`infrx-valkey.service` and the `caddy` container (the edge; the I8 observe/canary units are
+[observe.md](observe.md)'s); beside them the Lab's `infrx-lab-control.service` (`127.0.0.1:8003`, ON since
+2026-10-01) and its worker units (`infrx-lab-{eval,judge,datasets,annotation,training,rollout,checkpoints}`,
+`infrx-lab-trace-gauges`), installed inert. Unit files: `apps/infrx-api/deploy/` and
+`apps/infrx-api/deploy/lab/`. Older runbook text that says **PENDING I2B** (or W3) predates the cutover.
 
 ## Verification log
 
@@ -102,3 +89,4 @@ ships.
   against hosted, read-only, and restored into a local copy).
 - 2026-09-24 (I8): observe.md indexed; rules 4 (single-GPU outage in numbers) and 6 (target
   allowlist) added; the I8 tools listed. Nothing run on the box or hosted by the lane.
+- 2026-10-01 (W6 docs-state): the inline `ssm()` copy replaced by `infra/rollout/ssm.sh`; the unit list brought to the post-cutover box (deploy/ and deploy/lab/ units); the Lab runbook 08 row added; the restore row cites the windows' verified dumps (session-03 lines 525/591/593). Doc only.
