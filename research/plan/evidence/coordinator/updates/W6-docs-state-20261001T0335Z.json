@@ -1,0 +1,32 @@
+{
+  "task": "W6-docs-state",
+  "lane": "docs-state",
+  "slice": "INT-05, INFRA-07, DT-02/03/07(docs)/08(state)/09/14/17, LAB-11 (docs half)",
+  "activity": "review",
+  "at": "2026-10-01T03:35:00Z",
+  "head": "a146fd07",
+  "base": "08983639",
+  "worktree": ".claude/worktrees/codex-w6-docs-state",
+  "branch": "codex/w6-docs-state",
+  "owned_paths": ["CLAUDE.md", "README.md", "HANDOFF.md", "research/plan/README.md", "research/plan/25-state-2026-10-01.md", "research/platforms/README.md", "apps/app/README.md", "apps/lab/README.md", "apps/infrx-api/README.md", "infra/lab/app/README.md", "infra/rollout/README.md", "infra/runbooks/README.md", "research/plan/consumer-v1/08-lab-internal-testing-rollout.md (head + state block)", "tests/integration/ENVIRONMENT.md", "HANDOFF-2026*.md -> research/plan/handoffs/operational/"],
+  "commands": [
+    {"cmd": "python3 scratchpad/cite_check.py research/plan/25-state-2026-10-01.md", "exit": 0, "summary": "red first (exit 1: instance id not in the three sources) -> 11 SHAs/digests + 3 origins, 0 missing"},
+    {"cmd": "grep -rn 'no application yet\\|preparation only\\|README scaffold' CLAUDE.md README.md HANDOFF.md apps/*/README.md infra/**/README.md", "exit": 0, "summary": "6 hits/5 files before -> 3 after: one 2026-09-27 log line kept (history) + infra/app/README.md:3 and infra/lab/observe/README.md:3 (unowned; WR-W6DS-1/2)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS after every commit; 949 links across 456 documents"},
+    {"cmd": "pytest -q tests/i/test_rollout.py tests/i/lab/test_lab_packaging.py tests/integration/backend/recovery/test_runbooks.py tests/integration/ops/test_i3_operations.py", "exit": 1, "summary": "60 passed, 1 failed: test_e4c_rb09 pre-existing (reads infra/runbooks/rollout.md, untouched)"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/i/lab/test_mutants.py", "exit": 0, "summary": "70 passed, 0 survivors"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py", "exit": 0, "summary": "470 passed, 4 skipped (harness-key not-run), 0 survivors; readme_* mutants 2/2 killed"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "medium", "basis": "docs only; one review round over 14 docs plus WR-W6DS-3's HANDOFF.md line if routed back", "at": "2026-10-01T03:35:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-W6DS-1 infra/app/README.md:3-6 dated 'has run' state paragraph",
+    "WR-W6DS-2 infra/lab/observe/README.md:3 'still disabled on 2026-10-01; not yet run'",
+    "WR-W6DS-3 plans 16/21/24 re-point ../../HANDOFF-20260924T2115Z.md + git mv it under research/plan/handoffs/operational/ + HANDOFF.md pointer",
+    "WR-W6DS-4 infra/lab/app/lab.json comment: enabled = repository default, never read by deploy; the switch is enable_marker",
+    "WR-W6DS-5 research/plan/consumer-v1/README.md index: 09 as entry 9, 10 register, link to 25-state",
+    "WR-W6DS-6 (infra-libs) 40-lab-control.sh:8 header root->ubuntu; test_lab_rollout_steps.py:416-417 docstring to the 0056/0057-0059 state",
+    "WR-W6DS-7 (lab-B) apps/lab/.env.example: add LAB_EVALS_PREVIEW and LAB_RELEASES_PREVIEW"
+  ],
+  "evidence": ["research/plan/evidence/w6/DOCS-STATE-a146fd0.md"]
+}
