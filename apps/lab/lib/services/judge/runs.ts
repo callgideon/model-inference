@@ -6,11 +6,10 @@
 // labels and statistics behind it (J3).
 import type { Actor, Result } from "../../../components/traces/detail/port.ts";
 import type { JudgePort, JudgeRefusal, JudgeRun } from "../../../components/traces/judge/port.ts";
+import { USD_RE as USD, UUID_RE as ID } from "../shapes.ts";
 import type { Rpc } from "./core.ts";
 
 export const RUNS_RPC = "lab_judge_runs";
-const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // PROVIDER_USD, exact to 1e-8 (R159)
 const MODES = ["dry_run", "live"];
 const STATES = ["estimated", "reserved", "submitted", "ambiguous", "collected", "released"];
 const CALIBRATION = ["uncalibrated", "insufficient", "calibrated"];
