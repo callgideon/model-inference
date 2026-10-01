@@ -1,12 +1,8 @@
 # Implementation handoffs — consumer App and provider Lab
 
-**Current start:** [Consumer v1 implementation program 22](22-consumer-v1-implementation.md) → [fresh-session handoff/prompt 24](24-consumer-v1-session-handoff.md) → [manifest](tasks.json). Fourteen corrective packages close audit findings; existing App tasks have detailed amended briefs. E3C/E4C gate the repaired backend, then E3A/E4 gate the App. [GPU hosting and Modal roadmap 23](23-inference-hosting-roadmap.md) is for the next discussion, not this dispatch. The dated sequence below preserves the original program history.
+**State 2026-10-01:** the consumer v1 is live, hosted is at 0001–0059 and the Lab is deployed for internal testing. Start at the [state of record 25](25-state-2026-10-01.md), then [the path to internal testing 09](consumer-v1/09-path-to-internal-testing.md) and the [v1 audit](evidence/coordinator/2026-10-01-v1-audit.md); the [manifest](tasks.json) holds task status.
 
-**Current review (2026-09-24):** [Consumer v1 readiness audit and proposed priorities](21-v1-consumer-readiness-review-2026-09-24.md), code reviewed at `d7dc3690` and refreshed with main `726d004d` acceptance evidence. The durable backend is implemented and a metered pilot is reported deployed; final certification and consumer App completion remain open. Backend acceptance still precedes App release, then Lab.
-
-**As-built context:** [As-built handoff 20, §14](20-platform-handoff-2026-09-24.md), [operational tail](../../HANDOFF-20260924T2115Z.md), then [review 21](21-v1-consumer-readiness-review-2026-09-24.md). The [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md) and [pending inputs](15-pending-inputs.md) retain the full App/Lab scope. The older [session prompt](16-fresh-session-handoff.md) is historical dispatch context; do not restart completed runtime tasks from it.
-
-Status: **wave-3 backend work and later runtime repairs are on main; E1B/E4B final release evidence remains open.** CREDIT/public onboarding and real consumer console integration are pending. The [wave-2 audit](10-wave2-platform-audit.md) and its [verification](evidence/wave2-platform-audit.md) remain historical evidence, not the current implementation boundary.
+**Historical dispatches (preserved, not current):** [program 22](22-consumer-v1-implementation.md) and [prompt 24](24-consumer-v1-session-handoff.md) (2026-09-24, E3C/E4C then App), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20 §14](20-platform-handoff-2026-09-24.md) with its [operational tail](../../HANDOFF-20260924T2115Z.md), the [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md), [pending inputs](15-pending-inputs.md), [session prompt 16](16-fresh-session-handoff.md) and the [GPU hosting roadmap 23](23-inference-hosting-roadmap.md). The sequence below describes the original program.
 
 ## Start here
 
@@ -55,3 +51,5 @@ The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocab
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
 
 - 2026-09-21: Imported `271add9`, audited wave 2 and reconciled product-v2 revisions in manifest v4; see `10-wave2-platform-audit.md`. Earlier remote-unverified statements are superseded for committed repository work only.
+
+- 2026-10-01 (W6 docs-state): the 2026-09-24 start/review/status banners replaced by one dated state line pointing at `25-state-2026-10-01.md`, 09 and the v1 audit; the older dispatches are kept, linked, as history.
