@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from ...contracts import errors
 from ...contracts.v2.records import AdmissionPins
+from ...state import rpc
 
 FIELDS = ("model_id", "requested_model", "deployment_revision_id", "serving_version_id",
           "rate_card_version", "policy_version")
@@ -23,12 +24,7 @@ async def pg_rows(connect, sql: str, params) -> list[tuple] | int:
     none. Every PostgreSQL failure, connecting included, is `DependencyUnavailable`."""
     from psycopg import Error
     try:
-        conn = await connect()
-        try:
-            cursor = await conn.execute(sql, params)
-            return await cursor.fetchall() if cursor.description else cursor.rowcount
-        finally:
-            await conn.close()
+        return await rpc.rows_or_count(connect, sql, params)
     except Error as failed:
         raise errors.DependencyUnavailable(f"postgres: {type(failed).__name__}") from None
 

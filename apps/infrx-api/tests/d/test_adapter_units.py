@@ -320,3 +320,98 @@ def test_the_harness_never_steps_around_a_guard_outside_a_test_database() -> Non
         with pytest.raises(RuntimeError):
             call()
     assert not [sql for sql in conn.sent if "alter table" in sql.lower()], conn.sent
+
+
+# --- W6 A5: the one-connection statement helper (`infrx.state.rpc`) -------------------
+class _Rpc:
+    """A `Connect` whose connection answers `answer` (or raises it) and records closes."""
+
+    def __init__(self, answer=None, *, connect_fails=None, description=True) -> None:
+        self.answer, self.connect_fails, self.description = answer, connect_fails, description
+        self.opened = self.closed = 0
+        self.sent: list = []
+
+    async def __call__(self):
+        if self.connect_fails is not None:
+            raise self.connect_fails
+        self.opened += 1
+        return self
+
+    async def execute(self, sql, params=()):
+        self.sent.append((sql, params))
+        if isinstance(self.answer, BaseException):
+            raise self.answer
+        return SimpleNamespace(fetchone=_async((self.answer,)), fetchall=_async(self.answer),
+                               description=self.description or None, rowcount=7)
+
+    async def close(self) -> None:
+        self.closed += 1
+
+
+def _operational(sqlstate=None):
+    return type("PgOperational", (psycopg.OperationalError,), {"sqlstate": sqlstate})("down")
+
+
+def test_rpc__a_call_is_one_named_function_on_its_own_closed_connection() -> None:
+    from infrx.state import rpc
+    conn = _Rpc({"ok": 1})
+    assert asyncio.run(rpc.call(conn, "admit", {"a": 1})) == {"ok": 1}
+    assert asyncio.run(rpc.call(conn, "admit", {"a": 2})) == {"ok": 1}
+    (sql, (args,)) = conn.sent[0]
+    assert sql == "select infrx.admit(%s)" and args.obj == {"a": 1}
+    assert (conn.opened, conn.closed) == (2, 2), "a connection was reused or left open"
+
+
+def test_rpc__a_refusal_is_typed_and_the_connection_still_closed() -> None:
+    from infrx.state import rpc
+    conn = _Rpc(_db_error("P0002", "not_found: x"))
+    _refused(errors.NotFound, rpc.call(conn, "f", {}, error=domain_error))
+    assert conn.closed == 1, "a refused statement leaked its connection"
+    raw = _db_error("P0002", "not_found: x")
+    _refused(type(raw), rpc.rows(_Rpc(raw), "select 1"))   # no mapping: the bug it is
+
+
+def _gone(coro) -> errors.DependencyUnavailable:
+    """The `DependencyUnavailable` the call raises; anything else is an assertion."""
+    try:
+        asyncio.run(coro)
+    except errors.DependencyUnavailable as gone:
+        return gone
+    except Exception as other:
+        raise AssertionError(f"an outage became {type(other).__name__}: {other}") from None
+    raise AssertionError("an unreachable store answered")
+
+
+def test_rpc__unreachable_is_a_retryable_503_connecting_or_executing() -> None:
+    from infrx.state import rpc
+    down = dict(unreachable="the store is unreachable", retry_after_s=30)
+    # 55000 is an OperationalError domain_error would read as "maintenance": an outage first
+    for conn in (_Rpc(connect_fails=_operational()), _Rpc(_operational("55000"))):
+        gone = _gone(rpc.call(conn, "f", {}, error=domain_error, **down))
+        assert (gone.retry_after_s, gone.detail) == (30, "the store is unreachable")
+    # Another error is still the adapter's refusal; without `unreachable` an outage is raw.
+    _refused(errors.NotFound, rpc.call(_Rpc(_db_error("P0002", "not_found: x")), "f", {},
+                                       error=domain_error, **down))
+    _refused(psycopg.OperationalError,
+             rpc.call(_Rpc(connect_fails=_operational()), "f", {}, error=domain_error))
+    _refused(psycopg.OperationalError, rpc.call(_Rpc(_operational()), "f", {}))
+
+
+def test_rpc__rows_are_every_row_or_the_count_of_a_statement_without_rows() -> None:
+    from infrx.state import rpc
+    assert asyncio.run(rpc.rows(_Rpc([(1,), (2,)]), "select")) == [(1,), (2,)]
+    assert asyncio.run(rpc.rows_or_count(_Rpc([(1,)]), "select")) == [(1,)]
+    assert asyncio.run(rpc.rows_or_count(_Rpc([], description=False), "update")) == 7
+
+
+def test_rpc__each_adapter_keeps_its_own_refusal() -> None:
+    """The moved decisions: the job store types its refusals; operations types a duplicate
+    key as a Conflict; lifecycle reads an outage as a retryable 503 (RV-03), connecting or
+    executing."""
+    from infrx.state.lifecycle import PgLifecycle
+    from infrx.state.operations import _Db
+    _refused(errors.NotFound,
+             PgJobStore(_Rpc(_db_error("P0002", "not_found: x")))._call("cancel", {}))
+    _refused(errors.Conflict, _Db(_Rpc(_db_error("23505", "duplicate"))).rows("insert"))
+    for conn in (_Rpc(connect_fails=_operational()), _Rpc(_operational())):
+        assert _gone(PgLifecycle(conn).expire(limit=1)).retry_after_s == 30

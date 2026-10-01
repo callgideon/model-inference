@@ -216,7 +216,7 @@ CODE_MUTANTS = (
        '"provider_org_id": provider_org_id, "states": list(states), "limit": limit})]',
        '"states": list(states), "limit": limit})]', JUDGE_RUNS_IN_UNITS),
     _p("d6j_py_untyped_refusal", "a SQL refusal is its typed error",
-       "            raise domain_error(failed) from None", "            raise", TYPED,
+       "function, args, error=domain_error)", "function, args, error=None)", TYPED,
        file="state/lab_data.py"),
 )
 

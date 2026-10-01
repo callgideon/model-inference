@@ -20,10 +20,18 @@ from pydantic import ValidationError
 
 from ..contracts import errors, ids
 from ..contracts.limits import MAX_FEEDBACK_TEXT_CHARS, MAX_RUBRIC_VERSION, MIN_RUBRIC_VERSION
-from ..contracts.records import (CalibrationLabel, Feedback, FeedbackChannel, IdempotencyRef,
-                                 visible_feedback)
+from ..contracts.records import (AuthContext, CalibrationLabel, Feedback, FeedbackChannel,
+                                 IdempotencyRef, visible_feedback)
 from ..contracts.wire import FeedbackSubmission
+from . import rpc
 from .jobstore import Connect, domain_error
+
+
+def _refusal(failed: Exception) -> Exception:
+    """The flag's refusal (0A000) is a typed 503; anything else is `domain_error`'s."""
+    if getattr(failed, "sqlstate", None) == "0A000":
+        return errors.DependencyUnavailable("feedback is not enabled")
+    return domain_error(failed)
 
 
 class PgFeedbackService:
@@ -35,25 +43,13 @@ class PgFeedbackService:
         self.channel = channel
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            if failed.sqlstate == "0A000":
-                raise errors.DependencyUnavailable("feedback is not enabled") from None
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=_refusal)
 
-    async def accept(self, auth, request_id: str, feedback: dict[str, Any],
+    async def accept(self, auth: AuthContext, request_id: str, feedback: dict[str, Any],
                      idem: IdempotencyRef) -> Feedback:
         return (await self.accept_with_replay(auth, request_id, feedback, idem))[0]
 
-    async def accept_with_replay(self, auth, request_id: str, feedback: dict[str, Any],
+    async def accept_with_replay(self, auth: AuthContext, request_id: str, feedback: dict[str, Any],
                                  idem: IdempotencyRef) -> tuple[Feedback, bool]:
         """`accept`, and whether it was a replay (WR-G4F-2: the route's `replayed`): a replay
         answers the stored row, whose id is not the one this call generated."""
@@ -86,8 +82,9 @@ class PgFeedbackService:
             "org_id": org_id, "request_id": request_id, "actor": actor,
             "reason": reason}))["scrubbed"]
 
-    async def label_calibration(self, auth, request_id: str, label: str, rubric_version: int,
-                                idem: IdempotencyRef, *, comment: str | None = None) -> Feedback:
+    async def label_calibration(self, auth: AuthContext, request_id: str, label: str,
+                                rubric_version: int, idem: IdempotencyRef, *,
+                                comment: str | None = None) -> Feedback:
         if not auth.is_operator:
             raise errors.Forbidden("labelling a calibration set requires a platform operator")
         if label not in tuple(CalibrationLabel):
@@ -110,13 +107,13 @@ class PgFeedbackService:
             "idem": idem.model_dump(mode="json")})
         return Feedback.model_validate(row)
 
-    async def list_owned(self, auth, request_id: str) -> tuple[Feedback, ...]:
+    async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
         rows = await self._call("request_feedback", {"request_id": request_id,
                                                      "org_id": auth.org_id})
         return visible_feedback(tuple(Feedback.model_validate(r) for r in rows),
                                 operator=bool(auth.is_operator))
 
-    async def list_calibration(self, auth, request_id: str) -> tuple[Feedback, ...]:
+    async def list_calibration(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
         if not auth.is_operator:
             raise errors.Forbidden("calibration labels are operator data")
         rows = await self._call("request_feedback", {"request_id": request_id,

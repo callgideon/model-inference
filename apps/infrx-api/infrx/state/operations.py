@@ -16,19 +16,23 @@ and A1's `claim_signup_grant`, whose triggers move the totals.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..contracts import errors, money
 from ..contracts.records import HoldState, Role, SettlementState, Usage, UsageCertainty
 from ..contracts.v2.money_units import Credit
 from ..contracts.v2.records import (CredentialAudience, CreditLedgerEntry,
                                     DeploymentRevision, RateCardSnapshot, ServingRevision,
-                                    UsageHistory, UsageRecordV2, WalletRef)
+                                    SignupGrant, UsageHistory, UsageRecordV2, WalletRef)
 from ..operations.ports import AuditEntry, HoldView, KeyRow, VerifiedIdentity
+from . import rpc
 from .jobstore import Connect, PgJobStore, domain_error
 from .signup import PgSignup
+
+if TYPE_CHECKING:
+    from psycopg.abc import Params
 
 _KEY = ("select id, org_id, audience, key_hash, prefix, name, user_id, created_at, revoked_at "
         "from public.api_keys where ")
@@ -42,24 +46,14 @@ class _Db:
     def __init__(self, connect: Connect) -> None:
         self._connect = connect
 
-    @asynccontextmanager
-    async def connection(self):
-        """The `pool.connection()` shape A1's `PgSignup` takes."""
-        conn = await self._connect()
-        try:
-            yield conn
-        finally:
-            await conn.close()
+    def connection(self) -> AbstractAsyncContextManager[Any]:
+        """The `pool.connection()` shape A1's `PgSignup` takes (`rpc.connection`)."""
+        return rpc.connection(self._connect)
 
-    async def rows(self, sql: str, params: tuple = ()) -> list[tuple]:
-        from psycopg import Error
-        async with self.connection() as conn:
-            try:
-                return await (await conn.execute(sql, params)).fetchall()
-            except Error as failed:
-                raise _typed(failed) from None
+    async def rows(self, sql: str, params: Params = ()) -> list[tuple]:
+        return await rpc.rows(self._connect, sql, params, error=_typed)
 
-    async def one(self, sql: str, params: tuple = ()) -> tuple | None:
+    async def one(self, sql: str, params: Params = ()) -> tuple | None:
         found = await self.rows(sql, params)
         return found[0] if found else None
 
@@ -384,7 +378,7 @@ class PgLedger:
         self._signup = PgSignup(self._db)
 
     async def grant_initial(self, identity: VerifiedIdentity, operation_id: str,
-                            at: datetime):
+                            at: datetime) -> tuple[SignupGrant, bool]:
         return await self._signup.grant_initial(identity, operation_id, at)
 
     async def adjust(self, wallet: WalletRef, amount: Credit, operation_id: str, actor: str,

@@ -9,10 +9,14 @@ for one provider. The current grant is the latest version.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from ..contracts.v2.records import AccessGrant, ProviderMembership
+from . import rpc
 from .jobstore import Connect, domain_error
+
+if TYPE_CHECKING:
+    from .lab_content import PgSampleRestrictions
 
 #: What `lab_provider_memberships` adds for the Lab shell (R156); not a membership field.
 DISPLAY_ONLY = ("provider_name",)
@@ -23,7 +27,7 @@ class PgAccessStore:
         self._connect = connect
 
     @property
-    def restrictions(self):
+    def restrictions(self) -> PgSampleRestrictions:
         """WR-DS5-1: N3's `lineage.reconcile` passes this store as its `directory`; give it
         the same `restrictions` port `PgLabDataStore` carries, over the same connection, so
         `lineage.restrictions_of` (which no longer reaches into a store's `_connect`) still
@@ -32,17 +36,7 @@ class PgAccessStore:
         return PgSampleRestrictions(self._connect)
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=domain_error)
 
     async def db_now(self) -> datetime:
         """The database clock (`infrx.now()`, R7) the L2 service judges currency on."""

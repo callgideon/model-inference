@@ -24,13 +24,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, NamedTuple, Sequence
 
 from ..contracts import errors
 from ..contracts.lab import records
 from ..contracts.v2.records import AccessGrant
 from ..lab.access import DatasetUse
+from . import rpc
 from .jobstore import Connect, domain_error
+
+if TYPE_CHECKING:
+    from .lab_content import PgSampleRestrictions
 
 
 def grant_ref(grant: AccessGrant) -> str:
@@ -53,20 +57,10 @@ class PgLabDataStore:
         self._connect = connect
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
-        from psycopg import Error
-        from psycopg.types.json import Jsonb
-        conn = await self._connect()
-        try:
-            cursor = await conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),))
-            (result,) = await cursor.fetchone()
-        except Error as failed:
-            raise domain_error(failed) from None
-        finally:
-            await conn.close()
-        return result
+        return await rpc.call(self._connect, function, args, error=domain_error)
 
     @property
-    def restrictions(self):
+    def restrictions(self) -> PgSampleRestrictions:
         """WR-DS5-1: N3's tombstones/bounds (`PgSampleRestrictions`) over this store's own
         connection, so `lineage.restrictions_of` never reaches into a store's `_connect`."""
         from .lab_content import PgSampleRestrictions
