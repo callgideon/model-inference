@@ -23,8 +23,8 @@
   "lab_box": "2026-10-01T01:26Z: the Lab on the box at 7ecbab0e — image sha256:870aa2ea…, every Lab unit installed (inert), the control service ON on 127.0.0.1:8003 (readyz 200; its login password set on hosted by the operator), smoke PASS on :8001/:8002/:8003, the lab-control.callbill.ai site on the edge (/lab/v1/* → 8003; a release list answers 401 without a token)",
   "lab_app": "2026-10-01T02:30Z: apps/lab on Vercel — project infrx-lab in team callgideon (Root Directory apps/lab, Next.js), production https://lab.callbill.ai (200), env NEXT_PUBLIC_LAB_URL/SUPABASE_URL/SUPABASE_ANON_KEY + LAB_*_API_URL=https://lab-control.callbill.ai; the CLI login is the operator's (the SSM token is invalid)"
  },
- "revision": 345,
- "updated": "2026-10-01T02:50:14Z",
+ "revision": 346,
+ "updated": "2026-10-01T03:20:40Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10457,17 +10457,17 @@
    "branch": "codex/w6-lab-A",
    "worktree": ".claude/worktrees/codex-w6-lab-A",
    "base": "08983639",
-   "head": null,
+   "head": "b07fae84",
    "isolation": {
     "ports": "-",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T03:20:40Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #69 (WR-W6-LABA-1/2, the loss-reason parity case, R268)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10482,6 +10482,45 @@
     "apps/lab/lib/services/rollouts/",
     "apps/lab/tests/r/",
     "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MERGE-69",
+   "task": null,
+   "slice": "merge batch #69 (Opus): lab-A b07fae84 (+WR-W6-LABA-1 Makefile line, LABA-2 turbopack root, the TraceLossReason parity case, README/launch comment edits, R268); workflow: see RESUME-NOW",
+   "agent": "opus",
+   "branch": "codex/w5-merge-69",
+   "worktree": ".claude/worktrees/codex-w5-merge-69",
+   "base": "44a41acb",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:20:40Z",
+   "updated": "2026-10-01T03:20:40Z",
+   "blocker": null,
+   "next_action": "integrate → dispatch lab-B and lab-E",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
