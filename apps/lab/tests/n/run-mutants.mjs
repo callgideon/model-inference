@@ -5,11 +5,12 @@
 // Usage: node tests/n/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../l/shell/harness.mjs";
 
-const SUITE = ["tests/n/port.test.ts", "tests/n/views.test.ts", "tests/n/flows.test.ts", "tests/l/shell/boundary.test.ts"];
+const SUITE = ["tests/n/port.test.ts", "tests/n/views.test.ts", "tests/n/flows.test.ts", "tests/n/wiring.test.ts", "tests/l/shell/boundary.test.ts"];
 
 const PORT = "lib/services/datasets/port.ts";
 const VIEWS = "lib/services/datasets/views.ts";
 const FLOWS = "lib/services/datasets/flows.ts";
+const SERVER = "lib/services/datasets/server.ts";
 const D = "app/(provider)/datasets";
 
 const C = {
@@ -18,6 +19,7 @@ const C = {
   p03: "N4-P03 a success the Lab does not understand is unavailable, never success",
   p04: "N4-P04 an unreachable or unconfigured service is unavailable for every call",
   p05: "N4-P05 a download route answers a failure with its status, never 200",
+  w01: "N4-W01 the datasets port reads its backend as the session's own access token; no token, no backend URL or no Lab config sends nothing",
   v01: "N4-V01 only a published import with its dataset reads as success; the rest say how to resume",
   v02: "N4-V02 the rejected-rows download is line, reason and detail only",
   v03: "N4-V03 the split summary counts samples and restrictions per split",
@@ -54,6 +56,10 @@ const MUTANTS = [
   m("N4-X16", "a published job without a dataset reads as imported", VIEWS, 'if (job.state === "published" && report?.datasetRef)', 'if (job.state === "published")', [C.v01]),
   m("N4-X17", "a running import is not followed", VIEWS, "this page refreshes until it ends.\", poll: true, again: false }", "this page refreshes until it ends.\", poll: false, again: false }", [C.v01]),
   m("N4-X40", "'Import again' is offered for a rejected import (its same rows reject again)", VIEWS, "start a new import (a new import id).`, poll: false, again: false };", "start a new import (a new import id).`, poll: false, again: true };", [C.v06]),
+  m("N4-X41", "the datasets port reads another family's old name", SERVER, "labApiUrl(process.env, \"datasets\")", "labApiUrl(process.env, \"traces\")", [C.w01]),
+  m("N4-X42", "an unset backend URL still builds the adapter", SERVER, "if (!baseUrl || config === null) return offlineDatasets();", "if (config === null) return offlineDatasets();", [C.w01]),
+  m("N4-X43", "the publishable key is sent as the credential", SERVER, "const token = await sessionToken(config)();", "const token = config.anonKey;", [C.w01]),
+  m("N4-X44", "a tokenless session still sends", SERVER, "return token ? httpDatasets({ baseUrl, token }) : offlineDatasets(\"the session has no token\");", "return httpDatasets({ baseUrl, token: token ?? \"\" });", [C.w01]),
   m("N4-X18", "the rejected-rows download carries the row", VIEWS, "JSON.stringify({ line: r.line, reason: r.reason, detail: r.detail })", "JSON.stringify(r)", [C.v02]),
   m("N4-X19", "restricted samples are not counted", VIEWS, "restricted: inSplit.filter((s) => s.restricted !== null).length", "restricted: 0", [C.v03]),
   m("N4-X20", "an unknown restriction reads as readable", VIEWS, "return RESTRICTED_COPY[reason] ?? `", 'return RESTRICTED_COPY[reason] ?? "readable" ?? `', [C.v04]),
@@ -77,7 +83,6 @@ const MUTANTS = [
     'export async function exportAction(_: ActionState<ExportRecord>, form: FormData): Promise<ActionState<ExportRecord>> {\n  const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
   m("N4-X38", "an export part is served without the guard", `${D}/exports/[id]/[part]/route.ts`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "" };', [C.b01]),
   m("N4-X39", "the version page renders without the guard", `${D}/[ref]/page.tsx`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
-  // N4-X41..X44 are reserved for WR-W6-LABB-2 (carried to the lab-E merge).
   m("N4-X45", "the derivation imports the read-back strictness (any version, either case)", FLOWS, "import { UUID_RE as UUID }", "import { UUID_ANY_RE as UUID }", [C.f08]),
 ];
 

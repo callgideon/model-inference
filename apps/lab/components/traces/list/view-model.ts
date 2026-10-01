@@ -3,7 +3,7 @@
  * everything the markup renders out. Pure, so `tests/v/list` pins it under `node --test`.
  *
  * Rows come only from the provider trace read's named fields, so an organization, key, size or content
- * cannot reach the list; content is labelled, never shown (the detail page reads it on demand, V2). A
+ * cannot reach the list; content is labelled, never shown (the detail page states it; C2 reads are WR-V2-2). A
  * missing piece of content is a state, and only a lost capture is a failure, with its reason. Requests
  * made with capture off have no trace row, so their absence is explained rather than drawn as a loss.
  */
