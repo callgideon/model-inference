@@ -835,10 +835,14 @@ def _window_root(tmp_path, *, dry=False):
     (root / "models" / "marlin2b" / "results").mkdir(parents=True)
     (root / "models" / "marlin2b" / "results" / "E4C-runbook.md").write_text(
         (MARLIN / "results" / "E4C-runbook.md").read_text())
-    for name in ("certify-window.sh", "certify-h6.sh", "certify-fill.py"):
+    for name in ("certify-window.sh", "certify-h6.sh", "certify-fill.py", "host-lib.sh"):
         (root / "infra" / "rollout" / name).write_text((ROLLOUT / name).read_text())
     (root / "apps" / "infrx-api" / ".venv" / "bin").mkdir(parents=True)
     (root / "apps" / "infrx-api" / ".venv" / "bin" / "python").symlink_to(sys.executable)
+    migrations = root / "apps" / "app" / "supabase" / "migrations"
+    migrations.mkdir(parents=True)
+    for name in ("0025_a.sql", "0026_b.sql", "README.md"):   # names only: the newest numbered file is the version
+        (migrations / name).write_text("")
     stub.mkdir()
     record = '#!{python}\nimport json, os, pathlib, sys\nhere = pathlib.Path(os.environ["STUBS"])\n' \
              'n = pathlib.Path(sys.argv[0]).name\nlog = here / (n + ".log")\n' \
@@ -862,7 +866,7 @@ def _window_root(tmp_path, *, dry=False):
 def _window(root, stub, *args, input="", **env):
     return subprocess.run(["bash", "infra/rollout/certify-window.sh", *args], cwd=root, capture_output=True,
                           text=True, timeout=120, input=input,
-                          env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                          env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "RELEASE": RELEASE_D3,
                                "HOME": str(root), "STUBS": str(stub), "POLL_S": "0.2", **env})
 
 
@@ -950,6 +954,77 @@ def test_certify_window__dry_run_prints_the_whole_plan_in_order_and_calls_nothin
     assert re.findall(r"^plan (\S+?):", only.stdout, re.M) == ["certify"], only.stdout
     bad = _window(root, stub, "--step", "nope", DRY_RUN="1", LOGDIR=str(tmp_path / "log"))
     assert bad.returncode == 2 and "unknown step nope" in bad.stderr
+
+
+RELEASE_LIVE = "41693d5de57746b7dd1d68e40230db6dcd8c4e20"   # the served release since 2026-09-29
+
+
+def test_certify_window__release_is_an_input_defaulting_to_origin_main_and_flows_into_every_step(tmp_path):
+    """INFRA-02: the window certifies the release the box serves, not a d3a99e01 literal. RELEASE
+    comes from the environment, else origin/main (the box's installed release); MIGRATION_VERSION
+    from the newest numbered migration file unless given. Oracle: a literal release or migration
+    left in the script; the environment's RELEASE ignored; the default read from anything but
+    origin/main; a short, empty or non-hex release accepted; README.md read as the newest migration;
+    a step that still names another release."""
+    root, stub = _window_root(tmp_path)
+    log = str(tmp_path / "log")
+    plan = lambda done: [l for l in done.stdout.splitlines() if l.startswith("plan ")]
+    given = _window(root, stub, DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert given.returncode == 0, given.stderr
+    named = {re.match(r"plan (\S+?)(?::| \()", l).group(1) for l in plan(given) if RELEASE_LIVE in l}
+    assert named == {"prep76", "profiles77", "certify", "e1b", "wc7", "rel-tree", "two-tenant-fill"}, named
+    assert "d3a99e01" not in given.stdout and f"e4c-side-{RELEASE_LIVE[:8]}-" in given.stdout
+    for step in ("profiles77", "two-tenant-fill"):
+        assert " MIGRATION_VERSION=0026 " in next(l for l in plan(given) if l.startswith(f"plan {step}:"))
+    newer = _window(root, stub, "--only", "profiles77", DRY_RUN="1", LOGDIR=log + "-0059", MIGRATION_VERSION="0059")
+    assert " MIGRATION_VERSION=0059 " in newer.stdout, newer.stdout
+    (stub / "out" / "git").write_text(RELEASE_LIVE + "\n")
+    default = _window(root, stub, DRY_RUN="1", LOGDIR=log, RELEASE="")
+    assert default.returncode == 0, default.stderr
+    assert _logged(stub, "git") == [["rev-parse", "--verify", "-q", "origin/main^{commit}"]]
+    assert plan(default) == plan(given), "the default is origin/main's commit, the same plan"
+    for bad in ("", "d3a99e01", "g" * 40, RELEASE_LIVE + "0"):
+        (stub / "out" / "git").write_text(bad + "\n")
+        refused = _window(root, stub, DRY_RUN="1", LOGDIR=log, RELEASE=bad)
+        assert refused.returncode == 2 and "RELEASE" in refused.stderr and "plan " not in refused.stdout, bad
+
+
+def test_certify_window__a_logdir_certifies_one_release_and_one_migration_version(tmp_path):
+    """0-CR-1: RELEASE and MIGRATION_VERSION are fixed at a LOGDIR's first run, like its window id;
+    a resume after a fetch or a new migration refuses rather than mixing two releases in one
+    window. Oracle: either pin dropped; the resume planning any step; the same values refused."""
+    root, stub = _window_root(tmp_path)
+    log = str(tmp_path / "log")
+    first = _window(root, stub, "--only", "profiles77", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert first.returncode == 0, first.stderr
+    again = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert again.returncode == 0 and "plan two-tenant-fill:" in again.stdout, again.stderr
+    moved = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE="1" * 40)
+    assert moved.returncode == 2 and RELEASE_LIVE in moved.stderr and "plan " not in moved.stdout, moved.stdout
+    (root / "apps" / "app" / "supabase" / "migrations" / "0027_c.sql").write_text("")
+    newer = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert newer.returncode == 2 and "0026" in newer.stderr and "plan " not in newer.stdout, newer.stdout
+
+
+def test_certify_window__an_unreadable_origin_main_or_no_migration_refuses_before_any_plan(tmp_path):
+    """Merge #78 lens CR-2: with RELEASE unset and `git rev-parse` failing (no origin/main), the
+    window exits 2 naming `git fetch origin`, not set -e's bare 1; run outside the repo root (no
+    numbered migration) it exits 2 rather than certifying MIGRATION_VERSION '[0-9'. Oracle: the
+    `|| true` dropped; the migration guard dropped; any plan line printed."""
+    root, stub = _window_root(tmp_path)
+    (stub / "git").write_text("#!/bin/sh\nexit 1\n")
+    unset = _window(root, stub, DRY_RUN="1", LOGDIR=str(tmp_path / "log"), RELEASE="")
+    assert unset.returncode == 2 and "git fetch origin" in unset.stderr, unset.stderr
+    assert "plan " not in unset.stdout, unset.stdout
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    outside = subprocess.run(["bash", str(root / "infra" / "rollout" / "certify-window.sh")], cwd=elsewhere,
+                             capture_output=True, text=True, timeout=120,
+                             env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "RELEASE": RELEASE_LIVE,
+                                  "HOME": str(root), "STUBS": str(stub), "DRY_RUN": "1",
+                                  "LOGDIR": str(tmp_path / "log2")})
+    assert outside.returncode == 2 and "run from the repo root" in outside.stderr, outside.stderr
+    assert "plan " not in outside.stdout and "[0-9" not in outside.stdout, outside.stdout
 
 
 def test_certify_window__h5_funds_only_the_certify_org_and_shreds_its_key_file(tmp_path):
@@ -1117,7 +1192,7 @@ def test_certify_window__a_killed_sequencer_leaves_its_live_cell_resumable(tmp_p
     logdir = tmp_path / "log"
     _certified(logdir)
     env = {"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "HOME": str(root), "STUBS": str(stub),
-           "POLL_S": "0.2", "LOGDIR": str(logdir)}
+           "POLL_S": "0.2", "LOGDIR": str(logdir), "RELEASE": RELEASE_D3}
     first = subprocess.Popen(["bash", "infra/rollout/certify-window.sh", "--only", "wc7"], cwd=root, env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
