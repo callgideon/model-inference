@@ -46,7 +46,7 @@ const HARNESS_MUTANTS = [
 const S = {
   O: "E2E-O o10 the Lab review panel renders the provider trace route's answer",
   o01: "E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else",
-  o02: "E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door",
+  o02: "E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door",
   o03: "E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request",
   o04: "E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer",
   r01: "E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success",
@@ -74,7 +74,7 @@ const stackMutant = (suite, ...args) => ({ suite, ...m(...args) });
 const STACK_MUTANTS = [
   stackMutant("observe", "E2E-S01", "a lost capture loses its reason in the list", LIST, "content: state === \"lost\" ? `${CONTENT_LABEL.lost}: ${reason}` : CONTENT_LABEL[state],", "content: CONTENT_LABEL[state],", [S.o01]),
   stackMutant("observe", "E2E-S02", "an ungranted request reads as expired content", DETAIL, 'if (d.access === "metadata") return "metadata_only";', 'if (d.access === "metadata") return "expired";', [S.o01, S.o04]),
-  stackMutant("observe", "E2E-S03", "content is loaded without being asked for", "app/(provider)/requests/[id]/page.tsx", 'const wanted = (await searchParams).content === "1";', "const wanted = true;", [S.o02]),
+  stackMutant("observe", "E2E-S03", "the content panel ignores the record's state", "components/traces/detail/panels.tsx", "{CONTENT_COPY[contentState(detail)]}", "{CONTENT_COPY.not_captured}", [S.o02]),
   stackMutant("observe", "E2E-S04", "a refused list reads as not found, whatever the reason", LIST, 'message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason]', "message: LIST_COPY.not_found", [S.o03]),
   stackMutant("observe", "E2E-S05", "a consumer-only account gets a workspace chooser", ACCESS, '  if (workspaces.length === 0) return { kind: "denied" };\n', "", [S.o03]),
   stackMutant("observe", "E2E-S06", "a metadata-only record shows an organization", DETAIL, 'if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', 'rows.push(["Organization", "—"]);\n  if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', [S.o04]),
