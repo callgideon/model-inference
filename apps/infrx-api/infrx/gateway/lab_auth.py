@@ -35,8 +35,12 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..contracts import errors
-from ..contracts.v2.records import ROLE_CAPABILITIES, ProviderCapability, ProviderMembership
-from ..contracts.v2.records import ProviderRole
+from ..contracts.v2.records import (
+    ROLE_CAPABILITIES,
+    ProviderCapability,
+    ProviderMembership,
+    ProviderRole,
+)
 from .routes import intake
 
 if TYPE_CHECKING:

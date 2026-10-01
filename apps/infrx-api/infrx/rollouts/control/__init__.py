@@ -51,6 +51,7 @@ from pydantic import Field
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
+from ...lab.time import iso_z
 
 
 class Plan(lab.LabModel):
@@ -224,7 +225,7 @@ class Controller:
                     "policy_ref": policy_ref,
                     "decision": "expand" if to == "approved" else "rollback",
                     "evidence_refs": list(verdict.evidence_refs), "decided_by": actor,
-                    "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+                    "decided_at": iso_z(now)}
         try:
             await self._store.transition(policy_ref, fence=release.fence, to=to,
                                          decision=decision, reasons=verdict.reasons)

@@ -325,3 +325,46 @@ def test_lab_datasets__a_failed_import_is_requeued_as_a_new_job_the_pool_works(m
     with TestClient(unwired.app(), raise_server_exceptions=False) as client:
         assert call(client, unwired.DEV_A, "POST", f"{path}/{import_id}/requeue").status_code \
             == 503
+
+
+def test_lab_datasets__a_derived_version_and_an_expired_or_cancelled_export(monkeypatch):
+    """L4-R2/L4-R1: a derived version's `created_at` is the Lab's `...:SSZ` instant (A6's
+    `iso_z`); an export part reads 200 while live, then 410 with the backend's `{detail}`
+    body once past `expires_at` or cancelled (A7: Gone is lab_auth's 410 on this path too)."""
+    import re
+    from datetime import datetime, timedelta
+
+    from infrx.datasets import versions
+
+    w = World()
+    with TestClient(w.app(), raise_server_exceptions=False) as client:
+        _, job = imported(w, client, w.DEV_A)
+        source = job.json()["report"]["dataset_ref"]
+        derived = call(client, w.DEV_A, "POST", base(w.A) + "/versions", {
+            "dataset_id": str(uuid.uuid4()), "version": 1, "add": [source],
+            "policy": {"seed": 7, "train_bp": 10000, "validation_bp": 0}})
+        assert derived.status_code == 200, derived.text
+        ref = derived.json()["dataset_ref"]
+        made = asyncio.run(w.store.resolve(ref, provider_org_id=w.A)).created_at
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", str(made)), made
+        for export_id, gone in ((str(uuid.uuid4()), "expired"),
+                                (str(uuid.uuid4()), "was cancelled")):
+            record = call(client, w.DEV_A, "POST", base(w.A) + "/exports",
+                          {"dataset_ref": ref, "export_id": export_id, "ttl_s": 60})
+            assert record.status_code == 200 and record.json()["parts"], record.text
+            path = base(w.A) + f"/exports/{export_id}/parts/0"
+            assert call(client, w.DEV_A, "GET", path).status_code == 200
+            if gone == "expired":
+                real = datetime
+
+                class Later(real):
+                    @classmethod
+                    def now(cls, tz=None):
+                        return real.now(tz) + timedelta(seconds=61)
+                monkeypatch.setattr(ld, "datetime", Later)
+            else:
+                monkeypatch.undo()
+                asyncio.run(versions.cancel(w.objects, provider_org_id=w.A, export_id=export_id))
+            answer = call(client, w.DEV_A, "GET", path)
+            assert answer.status_code == 410 and list(answer.json()) == ["detail"], answer.text
+            assert answer.json()["detail"].endswith(f"export {export_id} {gone}"), answer.text

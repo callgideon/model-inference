@@ -165,7 +165,59 @@ Contention note: earlier attempts in this round reported failures because anothe
 (`codex-w5-merge-75`, a coordinator merge run) used the same `l4` key at the same time. The harness refused with
 `HarnessBusy` ("Nothing was altered"). Those numbers were discarded, and the reruns above started after it stopped.
 
+## Merge (merge #79, coordinator lane `codex/w5-merge-79`)
+
+Lane head `011fbe50` merged `--no-ff` onto `21aefded` (merge-tree clean, no conflict). Verdict ACCEPT_WITH_FIXES
+(lenses ACCEPT_WITH_FIXES x2). Every PG and mutant run of this merge set `INFRX_D_TASK=l4`; nothing touched d1/55432.
+
+Wirings applied in the one wiring commit:
+
+- WR-L4-3 (`infrx/rollouts/control/__init__.py` `_decide`, unowned this wave): `"decided_at": iso_z(now)` +
+  `from ...lab.time import iso_z`; `tests/r/control/mutants.py` `r2_decided_at` old text re-pointed to `iso_z(now)`.
+- WR-L4-4 (`infrx/evaluation/checkpoints/__init__.py:359`): `now = iso_z(await self.access.store.db_now())` + the import.
+  (The checkpoints suite and list are `tests/b/checkpoints`; there is no `tests/e`.)
+- WR-L4-6 (`infrx/pipelines/annotations/__init__.py`): `Members.membership(...) -> ProviderMembership | None`,
+  `Members.db_now() -> datetime` (+ `ProviderMembership` imported from `contracts.v2.records`).
+
+Carried to api-L1 (its files; it dispatches after this merge), exact text:
+
+- WR-L4-1 (`infrx/gateway/pilot.py`): replace `_z`'s body with the shared formatter, keeping the name:
+  `-def _z(value) -> str: ... return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")`
+  `+from ..lab.time import iso_z as _z   # A6`; re-point `tests/g/mutants.py:1161` (`RELEASES_C6`) to file
+  `lab/time.py`, old `"    if at.tzinfo is not None:\n        at = at.astimezone(UTC)\n"`, new `""`.
+- WR-L4-2 (`infrx/lab/workers/__main__.py:762`): `"decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")` ->
+  `"decided_at": iso_z(now)` + `from ..time import iso_z`.
+
+Lens minors:
+
+- L4-R1: `tests/g/lab_datasets::test_lab_datasets__a_derived_version_and_an_expired_or_cancelled_export` - an
+  export part reads 200 while live, then 410 with a `{detail}`-only body after `expires_at` (the module clock moved
+  61 s past a 60 s TTL) and after cancel. Mutant `gone_dropped_from_the_datasets_path` (lab_auth's Gone row removed)
+  killed.
+- L4-R2: the same case asserts the derived manifest's `created_at` is `YYYY-MM-DDTHH:MM:SSZ`; mutant
+  `derived_created_at_not_iso_z` (`clock().isoformat()`) killed. Pipelines: the approval case already pins
+  `approved_at == "2026-09-27T12:00:00Z"`; mutant `approved_at_not_iso_z` (`now.isoformat()`) added, killed.
+- L4-R4 / L4-RV-2: `lab_auth.py`'s two `contracts.v2.records` imports merged into one parenthesized import;
+  `ruff check --select I001 apps/infrx-api/infrx/gateway/lab_auth.py` -> "All checks passed!" (exit 0).
+- L4-R5: `infrx/lab/time.py`'s A6 docstring names every call site: the four routes, WR-L4-3/4 (applied here) and
+  WR-L4-1/2 (through api-L1).
+- L4-RV-3: `iso_z` reading a naive value as UTC (where `pilot._z`/`strftime` read naive text as host-local) is an
+  accepted correction under wave rule 1: the box runs UTC, so no answer changes there.
+- L4-RV-4: the A8 oracle (`test_lab_auth__every_lab_family_shares_one_actor`) also asserts no
+  `intake.check_content_type` copy remains in lab_control / lab_evaluations / lab_pipelines / lab_releases.
+- L4-R3 / L4-RV-1 (the isolation incident above): recorded as row 80 of
+  `research/plan/consumer-v1/10-carried-work-register.md` with its log line: d1's scratch Lab databases recreated
+  2026-10-01 by an api-L4 rerun; the d1 holder (the coordinator's default harness) is informed; no container
+  recreated. No code change (WR-L4-7 stays a proposal to the pgharness owner).
+
+No ruling is numbered at this merge. Pre-commit runs in the merge worktree (INFRX_D_TASK=l4, INFRX_MUTANTS=all):
+lab_datasets 30, lab_pipelines 75, lab_auth 31, tests/r/control 81, tests/b/checkpoints 62, tests/p/annotations 79
+passed (0 survivors); focused suites `tests/g/lab_auth tests/g/lab_datasets tests/g/lab_pipelines tests/r/control
+tests/b/checkpoints tests/p`: 219 passed, 23 skipped. The merge's full check record (shared clone at the wiring
+head) is the coordinator's merge #79 entry.
+
 ## Log
 
 - 2026-10-01: written at code head f6cd2d20 by the api-L4 implementer.
 - 2026-10-01: fix round for 1-L4-RV-1 appended (incident re-examined, WR-L4-7, reruns on l4).
+- 2026-10-01: Merge section appended by the merge #79 coordinator lane (head 011fbe50; WR-L4-3/4/6 applied; WR-L4-1/2 carried to api-L1; the minors; the incident row).

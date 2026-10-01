@@ -11,6 +11,7 @@ providers A and B, developers of each, A's viewer, BOTH in both products, CONSUM
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 
 import httpx
@@ -167,6 +168,7 @@ def test_lab_auth__every_lab_family_shares_one_actor(world):
     for family in (lab_control, lab_evaluations, lab_pipelines, lab_releases):
         assert all(getattr(family, name, getattr(lab_auth, name)) is getattr(lab_auth, name)
                    for name in shared), family.__name__
+        assert "intake.check_content_type" not in inspect.getsource(family), family.__name__
     w = world
     who = run(lab_auth.lab_actor(Call(w.A, authorization=f"Bearer {JWT}"),
                                  Sessions({JWT: w.VIEWER_A}), w.access, Cap.read_aggregate_health))

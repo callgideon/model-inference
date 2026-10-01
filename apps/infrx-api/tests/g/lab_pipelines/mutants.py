@@ -136,6 +136,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '[{"sample_id": s, "annotation_refs": refs}', '[{"sample_id": s, "annotation_refs": []}',
        HUMAN),
     # --- gone, the ports, the body ------------------------------------------------------------
+    _m("approved_at_not_iso_z", "a batch's approved_at is the Lab's ...:SSZ (L4-R2)",
+       '"approved_at": iso_z(now)}', '"approved_at": now.isoformat()}', APPROVE),
     _m("gone_is_unavailable", "an expired export is 410 gone, not a retryable 503 (A7: "
        "lab_auth's one table)", '(errors.Gone, 410, "gone")', '(errors.Gone, 503, "unavailable")',
        GONE, file=auth.F),
