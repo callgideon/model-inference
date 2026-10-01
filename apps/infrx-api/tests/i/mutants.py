@@ -1827,6 +1827,16 @@ MUTANTS += (
        WIN, '[ "$(once "$1" "$2")" = "$2" ] ||', 'once "$1" "$2" > /dev/null ||', PIN),
 )
 
+# Merge #78 lens minors (CR-2): an unreadable origin/main and a run outside the repo root exit 2
+NOPLAN = "test_certify_window__an_unreadable_origin_main_or_no_migration_refuses_before_any_plan"
+MUTANTS += (
+    _m("certify_window_release_default_fails_set_e", "a failing origin/main read reaches the 40-hex refusal (exit 2)",
+       WIN, "git rev-parse --verify -q 'origin/main^{commit}' || true)}", "git rev-parse --verify -q 'origin/main^{commit}')}",
+       NOPLAN),
+    _m("certify_window_no_migration_guard", "outside the repo root no '[0-9' migration version is certified",
+       WIN, """[ -e "${m[-1]}" ] || { echo""", """true || { echo""", NOPLAN),
+)
+
 # CERTIFY-WINDOW fix round (1-CW-R1, 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3)
 REP2 = "test_certify_window__report_sees_certify_exit_past_ssm_24000_characters"
 GUARD = "test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer"

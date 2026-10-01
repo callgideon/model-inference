@@ -113,7 +113,10 @@ that residual risk and its bound).
 logging every step to its 0700 `LOGDIR`; `--step <step> --logdir <dir>` resumes, `--only <step>` runs one step,
 `DRY_RUN=1` prints the plan and its stop conditions and calls nothing. One sequencer holds a LOGDIR (`flock` on
 `$LOGDIR/.lock`); no step starts while another detached cell of the LOGDIR is live, and no step after `report` starts
-before `report` has seen the launched certify run's `exit N`. Its steps and helpers:
+before `report` has seen the launched certify run's `exit N`. `RELEASE=<40 hex>` names the served release
+(default: origin/main's commit, the box's installed release; 77 refuses any other build) and `MIGRATION_VERSION`
+defaults to the newest numbered file in `apps/app/supabase/migrations/`; both are fixed at a LOGDIR's first run and
+a resume with other values refuses (W6 INFRA-02). Its steps and helpers:
 
 | Script | Where | What | Stops / exits |
 |---|---|---|---|
@@ -199,3 +202,4 @@ release names are [`infra/lab/app/README.md`](../lab/app/README.md). Each box st
 - 2026-09-30 (KNOWN-GOOD-REPROOF-4, WR-KGR4-1): both targets proven through 0059 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0056 proof is kept in `superseded` in front of the through-0052 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md`; the row and the paragraph say 0059 and `files` 0019-0059. Task-local only, doc only; hosted stays where the operator's windows leave it (0051 now; 0056 after the first Lab window).
 - 2026-10-01 (W6 docs-state): the preamble states what has run and where it is recorded (the 2026-09-29 cutover, the two 2026-09-30 Lab windows, the 2026-10-01 box; session-03 lines 525/591–595, 09's log); §6 'The Lab on the box' indexes launch-v1.sh, lab-migrate.sh, lab-checkout.sh and the Lab steps with their exits. Doc only.
 - 2026-10-01 (merge #76, DS-3/DS-RV-2/DS-RV-4): §6's 50-lab-role.sh exits split as the script header states (2/3, 5, 4); the sequencer row names `lab-release.sh` (merged, wave 6 lab-release-tool) with `launch-v1.sh` as its deprecated shim.
+- 2026-10-01 (W6 certify-release, INFRA-02): `certify-window.sh` takes `RELEASE` from the environment (default origin/main) instead of the d3a99e01 literal and derives `MIGRATION_VERSION`; the pending E4C run on 41693d5d can start. `go-live-remaining.sh` retired (deleted): its steps h3 w8 w9 w10 w10b w11 user w12 main ran 2026-09-27 on d3a99e01 (RELEASE-d3a99e01.md, session-03 :454) and its INSTALL_ARGS served the 2026-09-29 window on 41693d5d (session-03 :525); no step of it remains. The next install passes `RELEASE=<sha> ENGINE_MAX_NUM_SEQS=8 INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8 DATABASE_POOL_MAX_SIZE=6 ACCOUNTING_REGIME=credit ACTIVE_RATE_CARD_VERSION=rc_marlin2b_20260925_launch" MIGRATION_DIGEST=<the window's digest>` to `steps/50-install.sh` (git show 2add8e0a:infra/rollout/go-live-remaining.sh keeps the whole script). Tested against stubs and a DRY_RUN (`apps/infrx-api/tests/i/test_rollout.py`); not run on the box, AWS or hosted.

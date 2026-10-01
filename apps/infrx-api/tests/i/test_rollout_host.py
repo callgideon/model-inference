@@ -22,7 +22,8 @@ BOX_LIB = ROLLOUT / "box-lib.sh"
 SECRET = f"{support.MARKER}-ssm-value"
 #: The coordinator-host scripts this lane owns that read AWS: each sources the one lib.
 HOST_SCRIPTS = ("ssm.sh", "hosted-migrate.sh", "operator-cli.sh", "unblock-coordinator.sh",
-                "../lab/rollout/lab-release.sh")   # WR-IL-1
+                "../lab/rollout/lab-release.sh",   # WR-IL-1
+                "certify-window.sh")   # WR-IL-2
 
 AWS = '''#!{python}
 import json, os, pathlib, sys

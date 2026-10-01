@@ -85,7 +85,39 @@ sentence (`git apply --check` clean at this head).
   `bash -n` passes.
 - Nothing ran against the box, AWS or hosted (DRY_RUN with stubs only).
 
+## Merge (#78, codex/w5-merge-78)
+
+- Merged at lane head `95f680a8` onto `c56cfce5` (no conflict; `tests/i/mutants.py` auto-merged: the lane's
+  CERTIFY-RELEASE blocks — the seven `certify_window_*` mutants and the fix round's three — are a sanctioned append
+  (LANE-RULES rule 13), in union with the tip's blocks).
+- The README patch applied (lens CR-4): its first hunk at an offset, the log line by hand after merge #76's (the
+  patch's context predated the docs-state lines): §5 names the RELEASE/MIGRATION_VERSION inputs and the
+  pinned-per-LOGDIR rule; the 2026-10-01 line records go-live-remaining.sh's retirement and the next 50-install's
+  INSTALL_ARGS.
+- WR-IL-2 applied (host-lib.sh landed at merge #72): `certify-window.sh` sets `HOST_LOG=$LOGDIR/window.log` and
+  sources `host-lib.sh` from its own directory; its local `aws()`/`say()` and venv check are gone (`need_venv`), its
+  `secret_to_file` is the lib's `ssm_to_file`; it is in `HOST_SCRIPTS` (`tests/i/test_rollout_host.py`). The
+  certify_window cases' scratch root copies `host-lib.sh` beside the script (their stub PATH still intercepts aws).
+- Lens minors: CR-2 — RELEASE unset with a failing `git rev-parse` exits 2 naming `git fetch origin` with no plan line
+  (mutant `certify_window_release_default_fails_set_e` drops `|| true`); outside the repo root (no numbered migration)
+  the window exits 2 `run from the repo root (no numbered migration found)` instead of certifying `[0-9` (mutant
+  `certify_window_no_migration_guard`); both in `test_certify_window__an_unreadable_origin_main_or_no_migration_refuses_before_any_plan`.
+  CR-3 — the header states the coupling: the MIGRATION_VERSION default holds only while the checkout's newest
+  migration is hosted's applied version; otherwise pass it explicitly.
+- Operational note: RELEASE must be passed explicitly once main is fast-forwarded past `41693d5d`
+  (`RELEASE=41693d5de57746b7dd1d68e40230db6dcd8c4e20`, or whatever the box serves); the `/tmp/e4c` wrapper sets
+  `RELEASE=origin/main` at launch time, which is right only until main moves.
+- No ruling is numbered at this merge (none proposed). Nothing ran against the box, AWS or hosted (DRY_RUN and stubs).
+
 ## Log
 
 - 2026-10-01T04:50Z: written by the certify-release lane at code head 2851d83f.
 - 2026-10-01T05:40Z: fix round (0-CR-1) appended by the certify-release lane.
+- 2026-10-01: merge #78 (CR-3, first lens): the whole-list mutant runs' skips (6 at 2851d83f, 16 at the fix round)
+  are I-HARNESS-KEY NOT RUN — the lens counts 8 i8-harness mutants (cases in tests/i/test_pooler, test_observe,
+  test_privilege_probe, test_rollback_drill) whose copy found the exclusive i8 lock held by another lane; NOT RUN is
+  not a kill, and none is in the CERTIFY-RELEASE blocks.
+- 2026-10-01: merge #78 (CR-5): a mismatched RELEASE with a bundle makes 76 move the measurement checkout (w3-checkout)
+  to that release before 77's served-build check refuses (exit 2); the stop is real but 76 has already acted, so pass
+  RELEASE explicitly after main moves.
+- 2026-10-01: merge #78 section appended by the coordinator merge lane (codex/w5-merge-78).

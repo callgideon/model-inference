@@ -12,6 +12,8 @@
 # is the release the box serves (default origin/main's commit: main = the box's installed release; 77
 # refuses a build other than RELEASE); MIGRATION_VERSION defaults to the newest numbered migration file.
 # Both are fixed at a LOGDIR's first run: a resume with other values refuses (exit 2; a new release, a new LOGDIR).
+# The MIGRATION_VERSION default holds only while this checkout's newest migration is hosted's applied version;
+# otherwise pass MIGRATION_VERSION explicitly (likewise RELEASE once main moves past the box's release).
 # Long cells (76, 80, E1B, WC-6/7, WC-9) run detached (setsid -f) and are polled: a resume re-attaches
 # to one still running and never starts it twice. The certify run is detached on the box; `report` polls
 # 78-e4b-report.sh with its RUN. One sequencer per LOGDIR (flock on $LOGDIR/.lock); no step starts while
@@ -28,6 +30,7 @@ RELEASE=${RELEASE:-$(git rev-parse --verify -q 'origin/main^{commit}' || true)}
 CERTIFY_ORG=15e766d0-8c4d-47a8-986f-22ed32f390c3     # the certify tenant (key id 142c7d81)
 CERTIFY_KEY_PARAM=/model-inference/e4b_api_key
 m=(apps/app/supabase/migrations/[0-9][0-9][0-9][0-9]_*.sql)
+[ -e "${m[-1]}" ] || { echo 'run from the repo root (no numbered migration found)' >&2; exit 2; }
 MIGRATION_VERSION=${MIGRATION_VERSION:-$(basename "${m[-1]}" | cut -c1-4)}
 EDGE=https://marlin2b.callbill.ai/v1
 BUCKET=llm-bootcamp-641134885443
@@ -45,14 +48,14 @@ ORDER=(prep76 o3 h4-check h5 h6 profiles77 freeze wc0-start certify report fetch
 START=""; for i in "${!ORDER[@]}"; do [ "${ORDER[$i]}" = "$STEP" ] && START=$i; done
 [ -n "$START" ] || { echo "unknown step $STEP (one of ${ORDER[*]})" >&2; exit 2; }
 umask 077; mkdir -p "$LOGDIR"; chmod 700 "$LOGDIR"
+HOST_LOG=$LOGDIR/window.log   # host-lib's say tees here
+. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"   # aws, say, need_venv, ssm_to_file
 if [ "$DRY" != 1 ]; then
-  [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
+  need_venv
   git rev-parse --verify -q "$RELEASE^{commit}" > /dev/null || { echo "RELEASE $RELEASE is not in this repository" >&2; exit 2; }
   exec 9> "$LOGDIR/.lock"   # held until this process exits; detached cells and sleeps close it (9>&-)
   flock -n 9 || { echo "another certify-window.sh holds $LOGDIR/.lock: one sequencer per LOGDIR" >&2; exit 2; }
 fi
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
-say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOGDIR/window.log"; }
 fail() { say "$1 STOP — $2"; exit 1; }
 SSM=infra/rollout/ssm.sh; CLI=infra/rollout/operator-cli.sh; H6=infra/rollout/certify-h6.sh; ST=infra/rollout/steps
 # run <name> <cmd…>: logged to $LOGDIR/<name>.log. DRY_RUN prints it instead.
@@ -103,7 +106,6 @@ jexpect() { if [ "$DRY" = 1 ]; then echo "  expect $1: $2 else STOP: $3"; return
 jget() { local -n _j=$1; if [ "$DRY" = 1 ]; then _j="<$1>"; return 0; fi
          _j=$(python3 -c "$J"'print(eval(sys.argv[2]))' "$LOGDIR/$2.log" "$3") && [ -n "$_j" ] || fail "$2" "no $1 in $LOGDIR/$2.log"; }
 once() { [ -s "$LOGDIR/$1" ] || printf '%s\n' "$2" > "$LOGDIR/$1"; cat "$LOGDIR/$1"; }   # a value fixed at first use
-secret_to_file() { aws ssm get-parameter --with-decryption --name "$1" --query Parameter.Value --output text > "$2" && [ -s "$2" ]; }
 shred_keys() { for k in "$LOGDIR/certify.key" "$@"; do [ ! -e "$k" ] || shred -u "$k"; done; }
 trap 'shred_keys' EXIT
 tenant_keys() {  # both tenants' keys into this process's environment (bench/curl read them by name)
@@ -139,7 +141,7 @@ do_h4-check() {
     "tenant 2 is not a verified individual holding exactly 10,000 CREDIT; issue no key"
 }
 do_h5() {
-  run h5-key secret_to_file "$CERTIFY_KEY_PARAM" "$LOGDIR/certify.key" || fail H5 "SSM read of $CERTIFY_KEY_PARAM failed"
+  run h5-key ssm_to_file "$CERTIFY_KEY_PARAM" "$LOGDIR/certify.key" || fail H5 "SSM read of $CERTIFY_KEY_PARAM failed"
   if ! run h5-statement "$CLI" statement --key-file "$LOGDIR/certify.key"; then shred_keys; fail H5 "statement failed"; fi
   shred_keys
   jexpect h5-statement "d['org_id'] == '$CERTIFY_ORG'" "the certify key's org is not $CERTIFY_ORG: nothing funded"

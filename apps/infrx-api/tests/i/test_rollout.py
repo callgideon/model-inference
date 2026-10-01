@@ -835,7 +835,7 @@ def _window_root(tmp_path, *, dry=False):
     (root / "models" / "marlin2b" / "results").mkdir(parents=True)
     (root / "models" / "marlin2b" / "results" / "E4C-runbook.md").write_text(
         (MARLIN / "results" / "E4C-runbook.md").read_text())
-    for name in ("certify-window.sh", "certify-h6.sh", "certify-fill.py"):
+    for name in ("certify-window.sh", "certify-h6.sh", "certify-fill.py", "host-lib.sh"):
         (root / "infra" / "rollout" / name).write_text((ROLLOUT / name).read_text())
     (root / "apps" / "infrx-api" / ".venv" / "bin").mkdir(parents=True)
     (root / "apps" / "infrx-api" / ".venv" / "bin" / "python").symlink_to(sys.executable)
@@ -1004,6 +1004,27 @@ def test_certify_window__a_logdir_certifies_one_release_and_one_migration_versio
     (root / "apps" / "app" / "supabase" / "migrations" / "0027_c.sql").write_text("")
     newer = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
     assert newer.returncode == 2 and "0026" in newer.stderr and "plan " not in newer.stdout, newer.stdout
+
+
+def test_certify_window__an_unreadable_origin_main_or_no_migration_refuses_before_any_plan(tmp_path):
+    """Merge #78 lens CR-2: with RELEASE unset and `git rev-parse` failing (no origin/main), the
+    window exits 2 naming `git fetch origin`, not set -e's bare 1; run outside the repo root (no
+    numbered migration) it exits 2 rather than certifying MIGRATION_VERSION '[0-9'. Oracle: the
+    `|| true` dropped; the migration guard dropped; any plan line printed."""
+    root, stub = _window_root(tmp_path)
+    (stub / "git").write_text("#!/bin/sh\nexit 1\n")
+    unset = _window(root, stub, DRY_RUN="1", LOGDIR=str(tmp_path / "log"), RELEASE="")
+    assert unset.returncode == 2 and "git fetch origin" in unset.stderr, unset.stderr
+    assert "plan " not in unset.stdout, unset.stdout
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    outside = subprocess.run(["bash", str(root / "infra" / "rollout" / "certify-window.sh")], cwd=elsewhere,
+                             capture_output=True, text=True, timeout=120,
+                             env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "RELEASE": RELEASE_LIVE,
+                                  "HOME": str(root), "STUBS": str(stub), "DRY_RUN": "1",
+                                  "LOGDIR": str(tmp_path / "log2")})
+    assert outside.returncode == 2 and "run from the repo root" in outside.stderr, outside.stderr
+    assert "plan " not in outside.stdout and "[0-9" not in outside.stdout, outside.stdout
 
 
 def test_certify_window__h5_funds_only_the_certify_org_and_shreds_its_key_file(tmp_path):
