@@ -264,8 +264,8 @@ def test_lab_release__web_validates_a_pasted_token_before_storing_it(tmp_path):
 def test_lab_release__web_deploys_infrx_lab_in_the_callgideon_scope(tmp_path):
     """INFRA-09: Enter = the stored token (or the CLI login); the project infrx-lab is linked in
     the App's team (callgideon unless VERCEL_SCOPE says otherwise), deployed from the repo root,
-    with the env list of the launch: LAB_API_URL plus the six deprecated Lab API names (kept until
-    the Vercel project has LAB_API_URL; the coordinator drops them)."""
+    with the env list of the launch: LAB_API_URL, the one Lab API name (the six deprecated names
+    were removed from the Vercel project on 2026-10-01 after the fallback landed, LAB-03)."""
     c = Checkout(tmp_path)
     c.params.write_text(json.dumps({**json.loads(c.params.read_text()),
                                     "/callgideon/prod/VERCEL_TOKEN": "good-token"}))
@@ -282,8 +282,7 @@ def test_lab_release__web_deploys_infrx_lab_in_the_callgideon_scope(tmp_path):
                      "NEXT_PUBLIC_SUPABASE_URL": "https://ref.supabase.co",
                      "NEXT_PUBLIC_SUPABASE_ANON_KEY": ANON,
                      **{k: "https://lab-control.callbill.ai" for k in (
-                         "LAB_API_URL", "LAB_CONTROL_URL", "LAB_TRACES_API_URL", "LAB_EVALS_API_URL",
-                         "LAB_PIPELINES_API_URL", "LAB_RELEASES_API_URL", "LAB_DATASETS_API_URL")}}
+                         "LAB_API_URL")}}
     assert ANON not in out
     c.log.unlink()
     assert c.run("web", SUPABASE_URL="https://ref.supabase.co", VERCEL_SCOPE="other")[0] == 0
