@@ -1,0 +1,8 @@
+{
+  "task": "E3A",
+  "lane": "E3A",
+  "activity": "queued",
+  "at": "2026-10-01T03:06:16Z",
+  "owned_paths": ["tests/integration/app/", "tests/integration/app-e2e.sh", "apps/app/tests/e2e/"],
+  "source": "W6 plan-ledger (audit INT-11): disjoint owned paths for the window-bound App lanes (E4C keeps tests/integration/backend/), each inside the task's manifest owned_paths; activity unchanged"
+}
