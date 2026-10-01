@@ -17,7 +17,7 @@ api-test:
 # pyright runs once over the config's `include` (infrx, deploy; ~0.8 GB RSS): the exit-250 OOM
 # (audit A13) was an unscoped run walking .venv. The gate is the 2026-10-01 error baseline:
 # lower it as errors are fixed, never raise it.
-API_PYRIGHT_BASELINE := 459
+API_PYRIGHT_BASELINE := 458
 
 api-lint:
 	@if [ -f $(API)/ruff.toml ] || grep -q '^\[tool\.ruff' $(API)/pyproject.toml; then \

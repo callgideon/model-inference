@@ -18,7 +18,8 @@ research that sizes it. Five model experiments under `models/`, one directory ea
 scripts in `models/common/`. `apps/app` is the consumer inference product (Next.js,
 Supabase auth/DB); `apps/lab` is the provider Lab (Next.js, same Supabase project;
 its control service runs on the pilot box). `apps/infrx-api` is their shared inference
-gateway/runtime. Consumer
+gateway/runtime; its composition roots are `infrx/gateway/pilot.py` (consumer) and
+`infrx/lab/compose.py` (the Lab). Consumer
 signup receives 10,000 CREDIT once per individual user. Preserve historical USD
 separately. Provider roles and source-data permissions are distinct from consumer
 ownership. `research/platforms/` is the current product specification.
@@ -147,3 +148,4 @@ and ships no MTP weights.
 - 2026-09-23: Cutover: the gateway entry point is `uvicorn --factory infrx.gateway.app:create_app`; `apps/infrx-api/gateway.py` and its legacy tests are retired (evidence `research/plan/evidence/g/CUTOVER-*.md`).
 - 2026-10-01 (W6 docs-state): entry point re-pointed at `research/plan/25-state-2026-10-01.md` after the v1 launch and the Lab deploy; `apps/lab` described as the live provider Lab; Commands list the lab-* targets, the Docker gates outside `check`, the gate switches and the box/Lab release tooling; application behavior unchanged.
 - 2026-10-01 (merge #76): Commands add `make api-lint`/`make api-typecheck` and the DT-16 wall-clock pointer; only lab-lint/lab-typecheck/lab-build fail fast on a missing install; Docker-gate ports from `infrx/contracts/tasklocal.py`; the Lab release tool is `lab-release.sh` (launch-v1.sh a deprecated shim); application behavior unchanged.
+- 2026-10-01 (merge #84): 'What this repo is' names `infrx/lab/compose.py` beside `infrx/gateway/pilot.py` as the Lab composition root (W6 api-L1 A1); application behavior unchanged.

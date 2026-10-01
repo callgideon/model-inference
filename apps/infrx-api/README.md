@@ -26,6 +26,7 @@ Valkey's and the engine is reached by the worker (`infrx/worker/`).
 | file | what |
 |---|---|
 | `infrx/gateway/` | the application factory (`uvicorn --factory infrx.gateway.app:create_app`) and routes |
+| `infrx/gateway/pilot.py`, `infrx/lab/compose.py` | the composition roots: `pilot.py` composes the consumer runtime, `lab/compose.py` the Lab (its surfaces, release read models and CLI helpers; `pilot` re-exports them, W6 A1) |
 | `infrx/auth/`, `infrx/media/`, `infrx/config.py` | auth cache, safe media fetch and video budget, settings (`infrx/usage.py` retired W6 A4, 2026-10-01) |
 | `infrx/contracts/` | executable contracts v1: records, ports, fixtures, fakes and conformance suites ([README](infrx/contracts/README.md)) |
 | `deploy/install.sh` | idempotent installer, run as root on the box |

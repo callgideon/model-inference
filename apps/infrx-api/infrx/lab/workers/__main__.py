@@ -494,7 +494,7 @@ async def collect_teachers(wiring) -> dict[str, int]:
     `collect` imports the labels once, records the per-item failures and settles once.
     ponytail: lists the Lab objects and replans each batch per pass; D8's listing of
     submitted runs (WR-LSQ-C2A) when that is too many keys."""
-    from ...gateway.routes.lab_pipelines import _teacher
+    from ...gateway.routes.lab_pipelines import teacher
     from ...pipelines import teachers as p2
     done, objects = {"collected": 0, "failed": 0}, wiring.objects
     for key in sorted(await objects.keys("lab/")):
@@ -504,7 +504,7 @@ async def collect_teachers(wiring) -> dict[str, int]:
         try:
             stored = json.loads(await objects.get(key.removesuffix("approval.json")
                                                   + "batch.json"))
-            batch = _teacher(stored, parts[1], json.loads(await objects.get(key))["approved_by"])
+            batch = teacher(stored, parts[1], json.loads(await objects.get(key))["approved_by"])
             planned = await p2.plan(batch, store=wiring.store, objects=objects,
                                     rates=wiring.rates, now=await wiring.ledger.db_now())
             runs = [run_id for run_id, _ in planned.chunks
