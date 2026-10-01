@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { Snippet, type SnippetKey } from "@/components/snippet";
+import { Snippet } from "@/components/snippet";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { displayCredit } from "@/lib/contracts/v2/money-units";
 import type { PublishedModel } from "@/lib/contracts/v2/published-model";
 import { dateTime } from "@/lib/format";
-import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
 import { CATALOG_EMPTY, CATALOG_UNAVAILABLE, PROVISIONAL_NOTE, requestFacts, videoFacts } from "../docs/content";
 import { buildExamples } from "../docs/examples";
 import { aliasResolutions, apiBaseUrl, loadCatalog, priceView } from "./catalog";
@@ -28,15 +26,6 @@ export default async function ModelsPage() {
     );
   }
 
-  const session = await getSession();
-  const supabase = await createClient();
-  const { data: keys } = await supabase
-    .from("api_keys")
-    .select("id, name, prefix")
-    .eq("org_id", session.orgId)
-    .is("revoked_at", null)
-    .order("created_at", { ascending: false });
-
   return (
     <>
       <PageHeader
@@ -50,7 +39,6 @@ export default async function ModelsPage() {
             model={model}
             published={catalog.models}
             baseUrl={catalog.baseUrl}
-            keys={(keys ?? []) as SnippetKey[]}
           />
         ))}
         {catalog.models.length === 0 ? (
@@ -67,12 +55,10 @@ function ModelCard({
   model,
   published,
   baseUrl,
-  keys,
 }: {
   model: PublishedModel;
   published: PublishedModel[];
   baseUrl: string;
-  keys: SnippetKey[];
 }) {
   const price = priceView(model);
   const available = model.availability === "available";
@@ -146,7 +132,7 @@ function ModelCard({
           </ul>
         </section>
 
-        <Snippet snippets={quickstart.snippets} baseUrl={baseUrl} keys={keys} />
+        <Snippet snippets={quickstart.snippets} baseUrl={baseUrl} />
         <p className="text-xs text-muted-foreground">
           Uploads, streaming, async jobs and retries:{" "}
           <Link href="/docs" className="underline underline-offset-4">

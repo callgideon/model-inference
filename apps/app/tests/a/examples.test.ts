@@ -28,7 +28,8 @@ const KEY = "sk-infrx-a3examplekey0000000000000000000000";
 const REVOKED = "sk-infrx-a3revokedkey000000000000000000000";
 const CLIP = Buffer.concat([Buffer.from("\x00\x00\x00\x18ftypmp42", "latin1"), Buffer.alloc(64)]);
 const LANGUAGES: Language[] = ["curl", "python", "javascript"];
-const EXAMPLES = buildExamples(MODEL);
+// The fake accepts any https URL; this one keeps the committed example-calls.json (the Python replay) unchanged.
+const EXAMPLES = buildExamples(MODEL, { videoUrl: "https://example.com/clip.mp4" });
 
 /** What each example must print when it worked (the fake answers with the frozen fixtures). */
 const EXPECT: Record<string, (out: string) => void> = {
@@ -57,7 +58,7 @@ const RUNNERS: Record<Language, { file: string; cmd: (file: string) => [string, 
 
 async function execute(example: Example, lang: Language, baseUrl: string, dir: string): Promise<string> {
   const key = example.id === "revoke" ? REVOKED : KEY;
-  const source = example.snippets[lang].replaceAll("{{BASE_URL}}", baseUrl).replaceAll("{{KEY}}", key);
+  const source = example.snippets[lang].replaceAll("{{BASE_URL}}", baseUrl);
   const file = join(dir, RUNNERS[lang].file);
   writeFileSync(file, source);
   const [cmd, args] = RUNNERS[lang].cmd(file);

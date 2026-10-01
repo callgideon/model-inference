@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { Snippet, type SnippetKey } from "@/components/snippet";
+import { Snippet } from "@/components/snippet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,8 +12,6 @@ import {
 } from "@/components/ui/table";
 import { displayCredit, type Credit } from "@/lib/contracts/v2/money-units";
 import { INITIAL_SIGNUP_GRANT_CREDIT } from "@/lib/contracts/v2/types";
-import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
 import { apiBaseUrl, holdCredit, loadCatalog, priceView } from "../models/catalog";
 import {
   CATALOG_EMPTY,
@@ -61,16 +59,6 @@ export default async function DocsPage() {
     );
   }
 
-  const session = await getSession();
-  const supabase = await createClient();
-  const { data: keyRows } = await supabase
-    .from("api_keys")
-    .select("id, name, prefix")
-    .eq("org_id", session.orgId)
-    .is("revoked_at", null)
-    .order("created_at", { ascending: false });
-  const keys = (keyRows ?? []) as SnippetKey[];
-
   const { baseUrl } = catalog;
   const price = priceView(model);
   const retention = model.retention;
@@ -104,7 +92,7 @@ export default async function DocsPage() {
           <Section key={example.id} title={example.title} id={example.id}>
             <p>{example.blurb}</p>
             <div className="not-prose pt-1">
-              <Snippet snippets={example.snippets} baseUrl={baseUrl} keys={keys} />
+              <Snippet snippets={example.snippets} baseUrl={baseUrl} />
             </div>
           </Section>
         ))}

@@ -1,21 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Language } from "@/lib/types";
 
-export type SnippetKey = { id: string; name: string; prefix: string };
+/** UX-04 (audit UX-A06): the code never holds a key in any form; it reads INFRX_API_KEY. */
+export const KEY_NOTE =
+  "Set INFRX_API_KEY in your shell to the full key you saved when you created it. This code never contains your key.";
+export const REFERENCE_NOTE = "This model is not accepting requests: this code is a reference, not a call you can make now.";
 
 const LABELS: Record<Language, string> = {
   curl: "cURL",
@@ -27,30 +22,27 @@ const ORDER: Language[] = ["curl", "python", "javascript"];
 export function Snippet({
   snippets,
   baseUrl,
-  keys,
   disabled = false,
 }: {
   snippets: Partial<Record<Language, string>>;
   baseUrl: string;
-  keys: SnippetKey[];
   disabled?: boolean;
 }) {
   const langs = ORDER.filter((l) => snippets[l]);
   const [lang, setLang] = useState<Language>(langs[0] ?? "curl");
-  const [keyId, setKeyId] = useState(keys[0]?.id ?? "");
   const [copied, setCopied] = useState(false);
 
-  const selected = keys.find((k) => k.id === keyId);
-  // Keys are stored hashed and the plaintext is shown once (U2), so the snippet carries the
-  // prefix and the reader pastes the rest.
-  const secret = selected ? `${selected.prefix}…` : "YOUR_API_KEY";
-
   function render(l: Language) {
-    return (snippets[l] ?? "").replaceAll("{{BASE_URL}}", baseUrl).replaceAll("{{KEY}}", secret);
+    return (snippets[l] ?? "").replaceAll("{{BASE_URL}}", baseUrl);
   }
 
   async function copy() {
-    await navigator.clipboard.writeText(render(lang));
+    try {
+      await navigator.clipboard.writeText(render(lang));
+    } catch {
+      toast.error("Copying was blocked; select the code and copy it by hand.");
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
     toast.success(`${LABELS[lang]} snippet copied`);
@@ -70,37 +62,10 @@ export function Snippet({
             ))}
           </TabsList>
 
-          <div className="flex items-center gap-2">
-            {keys.length > 0 ? (
-              <Select
-                value={keyId}
-                onValueChange={(v) => setKeyId(v as string)}
-                disabled={disabled}
-              >
-                <SelectTrigger size="sm" className="max-w-44">
-                  <SelectValue placeholder="Select a key" />
-                </SelectTrigger>
-                <SelectContent>
-                  {keys.map((k) => (
-                    <SelectItem key={k.id} value={k.id}>
-                      {k.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Link
-                href="/api-keys"
-                className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              >
-                Create a key
-              </Link>
-            )}
-            <Button size="sm" variant="outline" onClick={copy} disabled={disabled}>
-              {copied ? <Check /> : <Copy />}
-              Copy
-            </Button>
-          </div>
+          <Button size="sm" variant="outline" onClick={copy}>
+            {copied ? <Check /> : <Copy />}
+            Copy
+          </Button>
         </div>
 
         {langs.map((l) => (
@@ -113,11 +78,7 @@ export function Snippet({
       </Tabs>
 
       <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-        {disabled
-          ? "This model is not serving yet — the snippet is a preview."
-          : selected
-            ? "Replace the truncated key with the full secret you copied when you created it; we only store its hash."
-            : "Create an API key to fill this in."}
+        {disabled ? REFERENCE_NOTE : KEY_NOTE}
       </p>
     </div>
   );
