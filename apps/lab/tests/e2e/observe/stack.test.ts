@@ -36,14 +36,14 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
     for (const gone of ["foreign", "deleted", "ancient"] as const) assert.ok(!list.text.includes(ids[gone]), `${gone} is listed`);
   });
 
-  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door", async () => {
+  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door", async () => {
     const shared = await page(ids.granted);
     assert.match(shared.text, new RegExp(`Request ${ids.granted} .* Capture full Loss — Organization [0-9a-f-]{36} Content size 15 bytes`));
-    assert.ok(shared.text.includes(CONTENT_COPY.available) && shared.text.includes("Show content"), "content is offered, not loaded");
+    assert.ok(shared.text.includes(CONTENT_COPY.available) && !shared.text.includes("Show content"), "content is stated, never offered");
     assert.ok(shared.text.includes(FEEDBACK_COPY.not_found), "the feedback panel is 0038's door's answer (no feedback grant)");
     assert.ok(shared.text.includes(JUDGE_COPY.unavailable), "the judge panel is 0043's door's answer (submission off)");
     const asked = await page(ids.granted, "?content=1");
-    assert.ok(asked.text.includes(CONTENT_COPY.unavailable) && !asked.text.includes('"prompt"'), "C2's content port is not wired: nothing is shown");
+    assert.ok(asked.text.includes(CONTENT_COPY.available) && !asked.text.includes('"prompt"'), "?content=1 reads nothing: C2 reads are not wired (WR-V2-2)");
     assert.ok((await page(ids.expired)).text.includes(CONTENT_COPY.expired));
     assert.ok((await page(ids.lost)).text.includes(CONTENT_COPY.lost));
     const deleted = await page(ids.deleted);

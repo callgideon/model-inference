@@ -1,7 +1,7 @@
 // V2: rows and copy for one request, derived only from the read records. Nothing here remembers
-// what a button did, and every missing piece of content reads as a sentence, never a blank.
+// what a button did, and content reads as a sentence about its state, never a blank.
 import type { ReviewResult } from "../../../lib/services/review/index.ts";
-import type { Actor, ContentPort, TraceDetail, TraceRefusal } from "./port.ts";
+import type { TraceDetail, TraceRefusal } from "./port.ts";
 
 /** Another provider's request and one T2I has not projected yet are the same answer (TRACE-TENANT). */
 export const TRACE_COPY: Record<TraceRefusal, string> = {
@@ -10,16 +10,14 @@ export const TRACE_COPY: Record<TraceRefusal, string> = {
   unavailable: "Request records could not be read. Nothing is shown until they can be; try again shortly.",
 };
 
-export type ContentState = "available" | "not_captured" | "lost" | "metadata_only" | "expired" | "revoked" | "unavailable";
-export const CONTENT_COPY: Record<ContentState | "partial", string> = {
-  available: "Content is not loaded until you ask for it.",
-  partial: "The captured content is incomplete: it was truncated at capture.",
+export type ContentState = "available" | "not_captured" | "lost" | "metadata_only" | "expired";
+/** The Lab reads no content yet (C2 through the Lab is WR-V2-2): each state is a sentence, never a link. */
+export const CONTENT_COPY: Record<ContentState, string> = {
+  available: "This request's content was captured and is shared with this workspace, but content reads are not yet available in the Lab.",
   not_captured: "Content was not captured for this request: capture was off or metadata-only for its key.",
   lost: "This request's capture was lost before it was stored; only its metadata exists.",
   metadata_only: "Metadata only: this request's organization has no current grant sharing its content with this workspace (never given, revoked or expired).",
   expired: "This request's content is past its retention or was deleted, so it is not shown.",
-  revoked: "The grant that shared this request's content is no longer current, so it is not shown.",
-  unavailable: "Content could not be read. Nothing is shown until it can be; try again shortly.",
 };
 
 /** Named fields only: anything else a record carries (an identity, content) is never rendered. */
@@ -48,20 +46,6 @@ export function contentState(d: TraceDetail): ContentState {
   if (d.loss_reason !== "none") return "lost";
   if (d.access === "metadata") return "metadata_only";
   return d.content_available ? "available" : "expired";
-}
-
-export type ContentView = { state: ContentState; copy: string; text: string | null; expiresAt: string | null; offer: boolean };
-const view = (state: ContentState, offer = false): ContentView => ({ state, copy: CONTENT_COPY[state], text: null, expiresAt: null, offer });
-
-/** Read through C2 only when asked (`wanted`), only when the records allow it; a refusal is never text. */
-export async function contentView(port: ContentPort, actor: Actor, d: TraceDetail, wanted: boolean): Promise<ContentView> {
-  const state = contentState(d);
-  if (state !== "available" || d.access !== "content") return view(state);
-  if (!wanted) return view(state, true);
-  const read = await port.read(actor, d.grant_ref, d.request_id);
-  if (!read.ok) return view(read.reason === "expired" ? "expired" : read.reason === "unavailable" ? "unavailable" : "revoked");
-  const copy = d.content_complete ? "" : CONTENT_COPY.partial;
-  return { state, copy, text: read.value.text, expiresAt: read.value.expiresAt, offer: false };
 }
 
 export const FEEDBACK_COPY = {

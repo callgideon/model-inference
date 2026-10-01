@@ -1,0 +1,99 @@
+diff --git a/Makefile b/Makefile
+index b45b1201..b280190a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -151,7 +151,6 @@ lab-mutants:
+ 	cd apps/lab && node tests/c/judge/run-mutants.mjs
+ 	cd apps/lab && node tests/r/run-mutants.mjs
+ 	cd apps/lab && node tests/p/run-mutants.mjs
+-	cd apps/lab && node tests/c/content/run-mutants.mjs
+ 	cd apps/lab && node tests/b/run-mutants.mjs
+ 	cd apps/lab && node tests/n/run-mutants.mjs
+ 	cd apps/lab && node tests/e2e/run-mutants.mjs
+diff --git a/apps/lab/app/(provider)/requests/[id]/page.tsx b/apps/lab/app/(provider)/requests/[id]/page.tsx
+index 1b297946..ed2415f4 100644
+--- a/apps/lab/app/(provider)/requests/[id]/page.tsx
++++ b/apps/lab/app/(provider)/requests/[id]/page.tsx
+@@ -2,7 +2,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
+ import { reviewRequestFeedback } from "@/lib/services/review/actions";
+ import { ContentPanel, FeedbackPanel, MetadataPanel } from "@/components/traces/detail/panels";
+ import { tracePorts } from "@/components/traces/detail/port";
+-import { contentView, TRACE_COPY } from "@/components/traces/detail/view";
++import { TRACE_COPY } from "@/components/traces/detail/view";
+ import { JudgePanel } from "@/components/traces/judge/panel";
+ import { judgePort } from "@/components/traces/judge/port";
+ 
+@@ -10,21 +10,19 @@ export const metadata = { title: "Request · infrx Lab" };
+ 
+ // V2: one request on the provider's own deployments. The trace read and C3F's feedback are read
+ // independently, so feedback accepted before the projection lands still shows (FEEDBACK-ACK). Content
+-// is read through C2 only when asked for (?content=1). V3: the request's judge runs and calibration.
+-export default async function RequestDetail({ params, searchParams }: PageProps<"/requests/[id]">) {
++// reads (C2, WR-V2-2) are not wired: the panel states the record's content state. V3: the judge runs.
++export default async function RequestDetail({ params }: PageProps<"/requests/[id]">) {
+   const workspace = await requireProviderWorkspace();
+   const actor = { providerId: workspace.providerId, role: workspace.role };
+   const { id } = await params;
+-  const wanted = (await searchParams).content === "1";
+-  const { traces, content } = tracePorts();
++  const { traces } = tracePorts();
+   const [trace, feedback, judge] = await Promise.all([traces.detail(actor, id), reviewRequestFeedback(id), judgePort().runs(actor, id)]);
+-  const shown = trace.ok ? await contentView(content, actor, trace.value, wanted) : null;
+   return (
+     <>
+       <h1>Request</h1>
+       {!trace.ok && <p role="alert">{TRACE_COPY[trace.reason]}</p>}
+       {trace.ok && <MetadataPanel detail={trace.value} />}
+-      {trace.ok && shown !== null && <ContentPanel view={shown} href={`/requests/${encodeURIComponent(trace.value.request_id)}?content=1`} />}
++      {trace.ok && <ContentPanel detail={trace.value} />}
+       <FeedbackPanel result={feedback} />
+       {trace.ok && <JudgePanel result={judge} />}
+     </>
+diff --git a/apps/lab/components/traces/list/view-model.ts b/apps/lab/components/traces/list/view-model.ts
+index 24136fd2..23225834 100644
+--- a/apps/lab/components/traces/list/view-model.ts
++++ b/apps/lab/components/traces/list/view-model.ts
+@@ -18,8 +18,6 @@ export const CONTENT_LABEL: Record<ContentState, string> = {
+   not_captured: "Not captured",
+   lost: "Lost",
+   expired: "Expired",
+-  revoked: "Revoked",
+-  unavailable: "Unavailable",
+ };
+ 
+ /** The trace contract's loss reasons (infrx/contracts/records.py TraceLossReason). */
+diff --git a/apps/lab/tests/e2e/observe/stack.test.ts b/apps/lab/tests/e2e/observe/stack.test.ts
+index 0ca8560d..b2d9f617 100644
+--- a/apps/lab/tests/e2e/observe/stack.test.ts
++++ b/apps/lab/tests/e2e/observe/stack.test.ts
+@@ -36,14 +36,14 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
+     for (const gone of ["foreign", "deleted", "ancient"] as const) assert.ok(!list.text.includes(ids[gone]), `${gone} is listed`);
+   });
+ 
+-  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door", async () => {
++  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door", async () => {
+     const shared = await page(ids.granted);
+     assert.match(shared.text, new RegExp(`Request ${ids.granted} .* Capture full Loss — Organization [0-9a-f-]{36} Content size 15 bytes`));
+-    assert.ok(shared.text.includes(CONTENT_COPY.available) && shared.text.includes("Show content"), "content is offered, not loaded");
++    assert.ok(shared.text.includes(CONTENT_COPY.available) && !shared.text.includes("Show content"), "content is stated, never offered");
+     assert.ok(shared.text.includes(FEEDBACK_COPY.not_found), "the feedback panel is 0038's door's answer (no feedback grant)");
+     assert.ok(shared.text.includes(JUDGE_COPY.unavailable), "the judge panel is 0043's door's answer (submission off)");
+     const asked = await page(ids.granted, "?content=1");
+-    assert.ok(asked.text.includes(CONTENT_COPY.unavailable) && !asked.text.includes('"prompt"'), "C2's content port is not wired: nothing is shown");
++    assert.ok(asked.text.includes(CONTENT_COPY.available) && !asked.text.includes('"prompt"'), "?content=1 reads nothing: C2 reads are not wired (WR-V2-2)");
+     assert.ok((await page(ids.expired)).text.includes(CONTENT_COPY.expired));
+     assert.ok((await page(ids.lost)).text.includes(CONTENT_COPY.lost));
+     const deleted = await page(ids.deleted);
+diff --git a/apps/lab/tests/v/list/run-mutants.mjs b/apps/lab/tests/v/list/run-mutants.mjs
+index 9c76f4b7..b6b3aef2 100644
+--- a/apps/lab/tests/v/list/run-mutants.mjs
++++ b/apps/lab/tests/v/list/run-mutants.mjs
+@@ -69,7 +69,7 @@ const MUTANTS = [
+   m("V1M-X31", "a session without a token still sends", SERVER, "access_token ?? null", 'access_token ?? "eyJ0.x.y"', [C.w01]),
+   m("V1M-X32", "the Lab session cookie is not the one read", SERVER, "        cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
+   m("V1M-X33", "the request's cookies are not read", SERVER, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+-  m("V1M-X34", "the detail page is not wired to the adapter", WIRE, "  return { traces: labTraces(), content: UNAVAILABLE.content };\n}", "  return UNAVAILABLE;\n}", [C.w01]),
++  m("V1M-X34", "the detail page is not wired to the adapter", WIRE, "  return { traces: labTraces() };\n}", '  return { traces: { detail: async () => ({ ok: false, reason: "unavailable" }) } } as never;\n}', [C.w01]),
+   // URL state
+   m("V1M-X35", "the cursor is reported as ignored", QUERY, '.filter((name) => name !== "cursor")', ".filter(() => true)", [C.q01]),
+   m("V1M-X36", "ignored names are unsorted", QUERY, '.filter((name) => name !== "cursor").sort();', '.filter((name) => name !== "cursor");', [C.q01]),

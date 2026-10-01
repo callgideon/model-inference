@@ -1,6 +1,6 @@
 // V2 page and panels, read as source (a .tsx file cannot run under node --test): the session's
-// workspace is the only actor, feedback does not wait on the projection, content only on demand and
-// only as text, and every control is a native link (keyboard) in a layout that wraps (mobile).
+// workspace is the only actor, feedback does not wait on the projection, content is stated and never
+// read or offered (WR-V2-2 pending), and every control is a native link (keyboard) in a layout that wraps.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -21,14 +21,13 @@ test("V2-P01 the page reads as the session's workspace, and feedback shows whate
   assert.doesNotMatch(page, /providerId:\s*(id|params|searchParams)|formData/);
 });
 
-test("V2-P02 content is asked for by a link, read only for ?content=1 and rendered as text in a wrapping block", () => {
+test("V2-P02 content is never read or offered: the panel states the record's content state, and ?content= is ignored", () => {
   const page = read(PAGE);
   const panels = read(PANELS);
-  assert.match(page, /const wanted = \(await searchParams\)\.content === "1";/);
-  assert.match(page, /contentView\(content, actor, trace\.value, wanted\)/);
-  assert.match(page, /href=\{`\/requests\/\$\{encodeURIComponent\(trace\.value\.request_id\)\}\?content=1`\}/);
-  assert.match(panels, /\{view\.offer && <a href=\{href\}>Show content<\/a>\}/);
-  assert.match(panels, /<pre style=\{WRAP\}>\{view\.text\}<\/pre>/);
+  assert.match(page, /\{trace\.ok && <ContentPanel detail=\{trace\.value\} \/>\}/);
+  assert.doesNotMatch(page, /searchParams|content=1|contentView/);
+  assert.match(panels, /<p role="status">\{CONTENT_COPY\[contentState\(detail\)\]\}<\/p>/);
+  assert.doesNotMatch(panels, /Show content|href|<pre/);
   assert.match(panels, /const WRAP = \{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" \} as const;/);
   for (const source of [page, panels]) assert.doesNotMatch(source, /dangerouslySetInnerHTML|innerHTML|onClick|tabIndex|<table/);
   assert.match(read("app/(provider)/requests/[id]/loading.tsx"), /role="status"/);

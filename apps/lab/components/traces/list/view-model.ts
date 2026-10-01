@@ -18,8 +18,6 @@ export const CONTENT_LABEL: Record<ContentState, string> = {
   not_captured: "Not captured",
   lost: "Lost",
   expired: "Expired",
-  revoked: "Revoked",
-  unavailable: "Unavailable",
 };
 
 /** The trace contract's loss reasons (infrx/contracts/records.py TraceLossReason). */

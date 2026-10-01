@@ -1,17 +1,10 @@
 #!/usr/bin/env node
-// N4's mutant runner (R32; LANE-RULES addendum), L1's pattern (tests/l/shell/run-mutants.mjs): every N4
+// N4's mutant runner (R32; LANE-RULES addendum) on the shared harness (tests/l/shell/harness.mjs): every N4
 // decision is one edit that a case it names must fail by assertion. The suite includes L1's boundary
 // test, which kills an unguarded datasets page, route or action; every N4 case is named.
 // Usage: node tests/n/run-mutants.mjs [--only ID,ID]
-import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { m, runMutants } from "../l/shell/harness.mjs";
 
-const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const args = process.argv.slice(2);
-const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
 const SUITE = ["tests/n/port.test.ts", "tests/n/views.test.ts", "tests/n/flows.test.ts", "tests/l/shell/boundary.test.ts"];
 
 const PORT = "lib/services/datasets/port.ts";
@@ -42,7 +35,6 @@ const C = {
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
 };
 
-const m = (id, what, file, find, replace, cases) => ({ id, what, file, find, replace, cases });
 const MUTANTS = [
   m("N4-X01", "the backend gets a credential other than the user's session", PORT, "authorization: `Bearer ${token}`", "authorization: `Bearer service-role`", [C.p01]),
   m("N4-X02", "a provider id can rewrite the backend path", PORT, "/providers/${encodeURIComponent(provider)}/datasets", "/providers/${provider}/datasets", [C.p01]),
@@ -89,70 +81,5 @@ const MUTANTS = [
   m("N4-X45", "the derivation imports the read-back strictness (any version, either case)", FLOWS, "import { UUID_RE as UUID }", "import { UUID_ANY_RE as UUID }", [C.f08]),
 ];
 
-function copy() {
-  const root = mkdtempSync(join(tmpdir(), "n4-mutants-"));
-  cpSync(lab, root, { recursive: true, filter: (s) => !/(node_modules|\.next)(\/|$)/.test(s.slice(lab.length)) });
-  symlinkSync(join(lab, "node_modules"), join(root, "node_modules"), "dir");
-  return root;
-}
-
-function run(cwd) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", ...SUITE], { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (c) => (out += c));
-    child.stderr.on("data", (c) => (out += c));
-    child.on("close", (code) => done({ code, out }));
-  });
-}
-
-function failed(out) {
-  const cases = [];
-  const re = /^ *not ok \d+ - (.*)$/gm;
-  for (let hit = re.exec(out); hit !== null; hit = re.exec(out)) {
-    const rest = out.slice(hit.index + hit[0].length);
-    const end = rest.search(/^ *\.\.\.$/m);
-    cases.push({ name: hit[1].trim(), assertion: /code: 'ERR_ASSERTION'/.test(end === -1 ? rest : rest.slice(0, end)) });
-  }
-  return cases;
-}
-
-async function judge(mutant) {
-  const pristine = readFileSync(join(lab, mutant.file), "utf8");
-  const hits = pristine.split(mutant.find).length - 1;
-  if (hits !== 1) return `STALE (find matches ${hits} times)`;
-  const root = copy();
-  try {
-    writeFileSync(join(root, mutant.file), pristine.replace(mutant.find, mutant.replace));
-    const { code, out } = await run(root);
-    if (code === 0) return "SURVIVED (suite passed)";
-    const fails = failed(out);
-    if (fails.some((f) => /\.test\.ts$/.test(f.name))) return "RUNNER-ERROR (a test file did not load)";
-    const hit = fails.find((f) => f.assertion && mutant.cases.includes(f.name));
-    return hit ? `killed by "${hit.name}"` : `SURVIVED (failed only: ${fails.map((f) => f.name).join("; ")})`;
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-// Every case in the suite is named by at least one mutant, and every named case exists.
-const declared = new Set(MUTANTS.flatMap((x) => x.cases));
-const baseline = await run(lab);
-const cases = [...baseline.out.matchAll(/^ *ok \d+ - ((?:N4|L1)-\S+ .*)$/gm)].map((x) => x[1].trim());
-const problems = [
-  ...(baseline.code === 0 ? [] : ["the unmutated suite does not pass"]),
-  ...cases.filter((name) => name.startsWith("N4-") && !declared.has(name)).map((name) => `no mutant names "${name}"`),
-  ...[...declared].filter((name) => !cases.includes(name)).map((name) => `a mutant names a missing case "${name}"`),
-];
-const selected = only === null ? MUTANTS : MUTANTS.filter((x) => only.includes(x.id));
-if (selected.length === 0) problems.push("--only matched no mutant");
-for (const problem of problems) console.log(`FAIL ${problem}`);
-const bad = problems.length;
-let survivors = 0;
-for (const mutant of selected) {
-  const verdict = await judge(mutant);
-  if (!verdict.startsWith("killed")) survivors += 1;
-  console.log(`${verdict.startsWith("killed") ? "killed " : "NOT KILLED"} ${mutant.id} ${mutant.what} — ${verdict}`);
-}
-console.log(`\n${cases.length} cases, all named: ${bad === 0}; ${selected.length} mutants, ${selected.length - survivors} killed, ${survivors} not killed`);
-process.exit(bad === 0 && survivors === 0 ? 0 : 1);
+// N4 and L1 cases are counted; only N4's must each be named (L1's are its own runner's).
+process.exit(await runMutants({ suite: SUITE, prefix: "(?:N4|L1)", named: "N4", mutants: MUTANTS }));

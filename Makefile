@@ -173,7 +173,6 @@ lab-mutants:
 	cd apps/lab && node tests/c/judge/run-mutants.mjs
 	cd apps/lab && node tests/r/run-mutants.mjs
 	cd apps/lab && node tests/p/run-mutants.mjs
-	cd apps/lab && node tests/c/content/run-mutants.mjs
 	cd apps/lab && node tests/b/run-mutants.mjs
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
