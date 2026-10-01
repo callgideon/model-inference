@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
- "integration_head": "3cf1dcc6",
+ "integration_head": "9c7887b8",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 383,
- "updated": "2026-10-01T06:20:11Z",
+ "revision": 384,
+ "updated": "2026-10-01T06:39:23Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -11219,7 +11219,7 @@
   {
    "id": "W6-LAB-D",
    "task": null,
-   "slice": "wave 6 clean-up lane lab-D (Opus; LAB-07/08/09/13); workflow wf_fdc0c357-6b6",
+   "slice": "wave 6 clean-up lane lab-D (Opus; LAB-07/08/09/13); workflow wf_fdc0c357-6b6; merged #80",
    "agent": "opus",
    "branch": "codex/w6-lab-D",
    "worktree": ".claude/worktrees/codex-w6-lab-D",
@@ -11230,11 +11230,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T05:11:47Z",
-   "updated": "2026-10-01T06:20:11Z",
+   "updated": "2026-10-01T06:39:23Z",
    "blocker": null,
-   "next_action": "merge batch #80 (WR-1 regenerated after lab-E, WR-2/3 holds patches, WR-4 README conventions, LD-RV-1) → redeploy the Lab → drop the six env names",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -11469,22 +11469,22 @@
   {
    "id": "W6-MERGE-80",
    "task": null,
-   "slice": "merge batch #80 (Opus): lab-D c1728452 (+WR-1 regenerated on the merged tree, WR-2/WR-3 holds patches, WR-4 README conventions, LD-RV-1 case + mutant, the three-file ratification); workflow (see RESUME-NOW)",
+   "slice": "merge batch #80 (Opus): lab-D c1728452 (+WR-1 regenerated on the merged tree, WR-2/WR-3 holds patches, WR-4 README conventions, LD-RV-1 case + mutant, the three-file ratification); workflow wf_03765a89-6af; integrated at 9c7887b8",
    "agent": "opus",
    "branch": "codex/w5-merge-80",
    "worktree": ".claude/worktrees/codex-w5-merge-80",
    "base": "ecc0bce3",
-   "head": null,
+   "head": "184fb1a0",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T06:20:11Z",
-   "updated": "2026-10-01T06:20:11Z",
+   "updated": "2026-10-01T06:39:23Z",
    "blocker": null,
-   "next_action": "integrate → redeploy the Lab",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
