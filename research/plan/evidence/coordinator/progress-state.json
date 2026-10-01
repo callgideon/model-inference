@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 379,
- "updated": "2026-10-01T05:55:12Z",
+ "revision": 380,
+ "updated": "2026-10-01T06:03:49Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10656,17 +10656,17 @@
    "branch": "codex/w6-api-L4",
    "worktree": ".claude/worktrees/codex-w6-api-L4",
    "base": "08983639",
-   "head": null,
+   "head": "011fbe50",
    "isolation": {
     "ports": "l4",
     "prefix": "infrx-l4",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T06:03:49Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #79 (WR-L4-3/4/6; L4-R1/R2/R4/R5 minors; WR-L4-1/2 carried to api-L1; the d1 incident registered)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -11401,6 +11401,48 @@
    "updated": "2026-10-01T05:44:28Z",
    "blocker": null,
    "next_action": "integrate → the operator runs /tmp/e4c",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MERGE-79",
+   "task": null,
+   "slice": "merge batch #79 (Opus): api-L4 011fbe50 (+WR-L4-3/4/6 one-liners in unowned files, L4-R1/R2 cases + mutants, the ruff I001 fix; WR-L4-1/2 carried to api-L1; the d1 incident registered); workflow (see RESUME-NOW)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-79",
+   "worktree": ".claude/worktrees/codex-w5-merge-79",
+   "base": "21aefded",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T06:03:49Z",
+   "updated": "2026-10-01T06:03:49Z",
+   "blocker": null,
+   "next_action": "integrate → api-L1 after api-L3",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
