@@ -14,7 +14,8 @@ api-test:
 
 # W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config. Until it lands
 # each reports "not run" rather than a pass, as bench-test does. pyright runs one package
-# per process: a whole-tree run OOMs node here (exit 250, audit A13).
+# per process (then the top-level infrx/*.py modules in one): a whole-tree run OOMs node here
+# (exit 250, audit A13).
 api-lint:
 	@if [ -f $(API)/ruff.toml ] || grep -q '^\[tool\.ruff' $(API)/pyproject.toml; then \
 		cd $(API) && uv run --frozen ruff check infrx deploy tests; \
@@ -24,7 +25,7 @@ api-lint:
 
 api-typecheck:
 	@if [ -f $(API)/pyrightconfig.json ] || grep -q '^\[tool\.pyright' $(API)/pyproject.toml; then \
-		cd $(API) && rc=0; for pkg in infrx/*/; do uv run --frozen pyright "$$pkg" || rc=1; done; exit $$rc; \
+		cd $(API) && rc=0; for pkg in infrx/*/; do [ "$$pkg" = infrx/__pycache__/ ] && continue; uv run --frozen pyright "$$pkg" || rc=1; done; uv run --frozen pyright infrx/*.py || rc=1; exit $$rc; \
 	else \
 		echo "api-typecheck: not run - no pyright config in $(API) yet (api-L5 owns it)"; \
 	fi

@@ -98,3 +98,31 @@ outside the glob (the pin itself and `tests/integration/test_preflight.py` read 
 - Side check: `pytest tests/integration/test_preflight.py` 58 passed, 1 failed
   (`test_a_green_consumer_local_composition_passes_on_its_own_namespace`: `ModuleNotFoundError: infrx` at its
   in-test import; file untouched by this lane, not caused by the fix).
+
+## Merge (coordinator lane codex/w5-merge-73)
+
+Lane head `3208407a` merged `--no-ff` onto `4c11a462` (no conflict; merge #69's `tests/l/shared` runner
+line and merges #71/#72's Makefile state kept; every existing recipe line kept). No ruling numbered.
+
+Fix round confirmed in `3208407a`: 0-MP-RV-1 (runners outside `test_*mutants*.py`) - `runners()` adds every
+`test_*.py` reading `INFRX_MUTANTS` (today `apps/infrx-api/tests/d/test_signup.py` for `signup_mutants.py`);
+case `test_a_runner_outside_the_glob_is_found_by_reading_infrx_mutants`, mutant `mpm08`, both kept.
+`tests/d/test_upgrade_lab.py` reads no `INFRX_MUTANTS` (it is a plain `dlab` upgrade suite named once in
+api-mutants' first line), so the pin checks only that it exists.
+
+Lens minors applied in the wirings commit:
+- MP-RV-2 (first lens) / MP-RV-3 (second): `api-typecheck` skips `infrx/__pycache__/` in the per-package
+  loop and then checks the top-level modules (`uv run --frozen pyright infrx/*.py || rc=1`).
+- MP-RV-3 (first) / MP-RV-2 (second): the measured wall-clock table's two log-sourced rows state their
+  failures: `api-test` "6,637 passed, 35 failed (WR-LDP-5), exit 2"; `api-mutants` "line 1 FAIL: 22 failed /
+  3689 passed".
+- MP-RV-4: the pin requires each api-mutants recipe segment naming a runner to carry `INFRX_MUTANTS=all`
+  (`named(..., unarmed=True)`); case `test_a_runner_segment_without_infrx_mutants_all_is_reported`, mutant
+  `mpm09` (`if unarmed:`). Lab runners are node scripts that do not read the variable, so lab-mutants is exempt.
+
+Carried items (not done at this merge):
+- api-L5's exact `api-lint`/`api-typecheck` recipes swap in at the api-L5 merge; today's guarded lines stay
+  until then, and ruff/pyright join `uv.lock`'s dev group there.
+- CLAUDE.md / ENVIRONMENT.md pointers to the measured table belong to docs-state.
+- The stale `e3bm62` ROUTERS anchor goes to the api-L2 merge (pre-existing red in
+  `test_run::test_every_mutant_anchor_occurs_as_declared_on_the_checkout`).

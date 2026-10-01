@@ -5,7 +5,8 @@ Python mutant runner (`test_*mutants*.py`, or any test file reading INFRX_MUTANT
 apps/infrx-api/tests and tests/integration) is
 named exactly once by `api-mutants`, every Lab runner (`run-*mutants.mjs` under apps/lab/tests)
 exactly once by `lab-mutants`, and every path either target names exists - each resolved
-against the directory its recipe segment `cd`s into.
+against the directory its recipe segment `cd`s into. Each api-mutants segment that names a
+runner carries INFRX_MUTANTS=all (without it a runner's lists run nothing, silently).
 """
 from __future__ import annotations
 
@@ -28,8 +29,9 @@ NOT_RUNNERS = {"tests/integration/test_makefile_mutant_lists.py",
                "tests/integration/test_preflight.py"}
 
 
-def named(makefile: str, target: str) -> list[str]:
-    """Repo-relative paths of the test files the target's recipe names, one per mention."""
+def named(makefile: str, target: str, unarmed: bool = False) -> list[str]:
+    """Repo-relative paths of the test files the target's recipe names, one per mention;
+    with `unarmed`, only those named by a segment that lacks INFRX_MUTANTS=all."""
     recipe = re.search(rf"^{re.escape(target)}:.*\n((?:\t.*\n?)*)", makefile, re.M)
     assert recipe, f"no {target} recipe"
     paths = []
@@ -41,6 +43,8 @@ def named(makefile: str, target: str) -> list[str]:
             move = re.match(r"\s*cd (\S+)\s*$", segment)
             if move:
                 cwd = CD[move.group(1)]
+            if unarmed and "INFRX_MUTANTS=all" in segment:
+                continue
             paths += [os.path.normpath(f"{cwd}/{p}")
                       for p in re.findall(r"(?<!\S)(tests/\S+\.(?:py|mjs))", segment)]
     return paths
@@ -66,6 +70,8 @@ def problems(makefile: str) -> list[str]:
                 rel = runner.relative_to(REPO).as_posix()
                 if mentions[rel] != 1:
                     found.append(f"{target} names {rel} {mentions[rel]} times, not once")
+    found += [f"api-mutants runs {p} without INFRX_MUTANTS=all"
+              for p in named(makefile, "api-mutants", unarmed=True)]
     return found
 
 
@@ -119,3 +125,13 @@ def test_a_runner_outside_the_glob_is_found_by_reading_infrx_mutants():
     text = makefile().replace(" tests/d/test_signup.py", "", 1)
     assert problems(text) == ["api-mutants names apps/infrx-api/tests/d/test_signup.py "
                               "0 times, not once"]
+
+
+def test_a_runner_segment_without_infrx_mutants_all_is_reported():
+    """MP-RV-4: a runner named without INFRX_MUTANTS=all collects its lists empty and passes."""
+    text = makefile().replace("cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m "
+                              "pytest -q -p no:cacheprovider tests/integration/lab_local",
+                              "cd $(CURDIR) && $(API)/.venv/bin/python -m "
+                              "pytest -q -p no:cacheprovider tests/integration/lab_local", 1)
+    assert problems(text) == ["api-mutants runs tests/integration/lab_local/test_mutants.py "
+                              "without INFRX_MUTANTS=all"]

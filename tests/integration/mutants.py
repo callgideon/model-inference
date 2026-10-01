@@ -1379,6 +1379,10 @@ MUTANTS: tuple[Mutant, ...] = (
            MP_PIN, 'and "INFRX_MUTANTS" in p.read_text()}', "and False}", MP_SUITE,
            "outside_the_glob",
            cases=("test_a_runner_outside_the_glob_is_found_by_reading_infrx_mutants",)),
+    Mutant("mpm09", "a runner segment without INFRX_MUTANTS=all is reported (MP-RV-4)",
+           MP_PIN, 'if unarmed and "INFRX_MUTANTS=all" in segment:', "if unarmed:", MP_SUITE,
+           "without_infrx_mutants_all",
+           cases=("test_a_runner_segment_without_infrx_mutants_all_is_reported",)),
 )
 
 

@@ -257,8 +257,8 @@ Under a quiet host expect them faster; under load they are what you will see.
 
 | Target | Wall-clock | Result | Source |
 |---|---|---|---|
-| `api-test` | 1 h 28 min | 6,637 passed (key `lab-on`, concurrent lanes) | log: `research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md` (2026-09-29) |
-| `api-mutants` | >= 2 h 42 min | line 1 2:32:56 + E4B list 562 s; predates the Lab lists, so a lower bound | log: `research/plan/evidence/coordinator/G-GATES-9b21339.md` (2026-09-27) |
+| `api-test` | 1 h 28 min | 6,637 passed, 35 failed (WR-LDP-5), exit 2 (key `lab-on`, concurrent lanes) | log: `research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md` (2026-09-29) |
+| `api-mutants` | >= 2 h 42 min | line 1 FAIL: 22 failed / 3689 passed (2:32:56) + E4B list 562 s; predates the Lab lists, so a lower bound | log: `research/plan/evidence/coordinator/G-GATES-9b21339.md` (2026-09-27) |
 | ... its `lab_local` line | 224.6 s | 82 passed, 12 stack skips | meas. W6 |
 | `api-lint`, `api-typecheck` | 0.0 s | "not run" until api-L5's config lands | meas. W6 |
 | `bench-test` | 26.0 s | 121 passed | meas. W6 |
