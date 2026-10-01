@@ -13,3 +13,6 @@ systemctl show "$unit" -p ExecMainStatus -p NRestarts -p ActiveEnterTimestamp --
 docker ps -a --filter "name=$unit" --format '{{.Names}} {{.Status}} {{.Image}}' || true
 say "journal (last 60 lines; value-bearing lines dropped)"
 journalctl -u "$unit" -n 60 --no-pager -o short-iso 2>/dev/null | grep -viE 'password|secret|anon_key|bearer|DATABASE_URL=|postgres(ql)?://' || true
+port=${PORT:-8003}
+say "readiness body on 127.0.0.1:$port (value-bearing lines dropped)"
+curl -sS --max-time 5 "http://127.0.0.1:$port/readyz" 2>&1 | grep -viE 'password|secret|anon_key|bearer|postgres(ql)?://' | head -c 2000 || true; echo

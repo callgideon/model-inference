@@ -154,13 +154,13 @@ box() {
   say "L5s smoke"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh
   say "L6 the control origin on the edge (DNS lab-control.callbill.ai → the box is already set)"
   infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE="$RELEASE"
-  curl -s -o /dev/null -w 'https://lab-control.callbill.ai/healthz %{http_code}\n' https://lab-control.callbill.ai/healthz || true
+  curl -s -o /dev/null -w 'https://lab-control.callbill.ai/readyz %{http_code}\n' https://lab-control.callbill.ai/readyz || true
   say "L6s smoke + the App's external checks"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh; infra/rollout/verify-external.sh || true
   echo "L7 (eval/judge/datasets roles) is NOT run: no role login exists yet (WR-LDP-7); the control unit serves every Lab family (R237, 0056)."
 }
 
 vercel_lab() {
-  command -v vercel >/dev/null || npm i -g vercel >/dev/null
+  command -v vercel >/dev/null || vercel() { npx --yes vercel@latest "$@"; }   # no global install (EACCES on this host)
   say "a valid Vercel token in SSM $SSM_VERCEL (the stored one is invalid): paste a new one now, or Enter to use the stored one"
   read -rs -p "token (hidden): " T; echo
   if [ -n "$T" ]; then umask 077; printf '%s' "$T" > ~/.vt; aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$HOME/.vt" >/dev/null; shred -u ~/.vt; fi
