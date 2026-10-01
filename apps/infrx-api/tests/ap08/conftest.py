@@ -63,13 +63,10 @@ def pg_template():
 
 @pytest.fixture
 def pg(pg_template):
-    """A fresh copy of the world: (owner connection, the Lab login's DSN, the job id)."""
-    from psycopg.conninfo import make_conninfo
+    """A fresh copy of the world: the owner connection (`W["job"]` is its request)."""
     pgharness.assert_ours("copy a database in")
     with pgharness.connect("postgres") as admin:
         admin.execute(f'drop database if exists "{CASE}" with (force)')
         admin.execute(f'create database "{CASE}" template "{pg_template}"')
     with pgharness.connect(CASE) as conn:
-        lab = make_conninfo(pgharness.dsn(CASE), user="infrx_lab_control",
-                            password=LAB_PASSWORD)
-        yield conn, lab, W["job"]
+        yield conn
