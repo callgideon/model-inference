@@ -71,7 +71,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 | `ttft_p95_short_s` | 6.0 | 01 §2.3 interactive TTFT p95 for clips ≤ 30 s at ≤ 720p; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 2.4461 s at 0.5 req/s on run3 |
 | `short_clip_max_s` | 30.0 | 01 §2.3 (the clip class the TTFT row names) |
 | `short_clip_max_edge_px` | 1280 | 01 §2.3 "≤ 720p" read as the long edge of 1280×720 |
-| `e2e_p95_s_per_clip_minute` | 90.0 | latency p95 per clip-minute at 0.5 req/s; replaces 01 §2.3's provisional 45 (run3 failed it); decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 77.3142 s over 126 samples on run3 `bda1586` |
+| `e2e_p95_s_per_clip_minute` | 90.0 | latency p95 per clip-minute at 0.5 req/s, the clip-minute floored at `short_clip_max_s` (amendment 7); replaces 01 §2.3's provisional 45 (run3 failed it); decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 77.3142 s over 126 samples on run3 `bda1586` (unfloored); E4C run 1 on `41693d5d` 102.3 s unfloored, every breach a 2–3 s clip |
 | `latency_p95_s` | 9.0 | whole-request latency p95 at 0.5 req/s, judged beside the TTFT row; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 7.6688 s on run3 (`work/envelope-r0.5.jsonl`) |
 | `declared_rate_per_s` | 0.5 | box: the only rate the certificate supports; the envelope's P-18 rows are judged at this rung. Rungs 1.0 and 2.0 run and are reported as `measured_passing_rate_per_s`, never as supported; if this rung fails nothing is supported and the soak does not run; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`) |
 | `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion); decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`) |
@@ -274,3 +274,14 @@ run closed, and the coordinator's decision recorded in
   `--overload-profile` (a `public-edge` profile), else BLOCKED. (d) §5 states that the
   runner's failure rate counts transport failures too, and that the drill record prints each
   recovery time against its bound.
+- 2026-10-01 (E4C run 1 on `41693d5d`, `research/plan/evidence/e/E4C-41693d5/`), **amendment 7**, for the
+  next qualifying run (05 §7: run 1's verdict stands as measured): `e2e_p95_s_per_clip_minute` is judged
+  with the clip-minute floored at `short_clip_max_s` (30 s). Evidence: run 1's unfloored p95 was 102.3 s
+  with every breach a 2–3 s clip (the worst: 2 s, 6.7 s latency, 128 tokens = 201 s/clip-minute); clips
+  over 30 s scored a p95 of 14.9 s. Decode alone (median 233 tokens at 6.4 ms/token, unchanged since
+  run3) costs a 2 s clip 75 s per clip-minute, so below the short-clip class the ratio measures the
+  answer's length, not the platform. The threshold (90) is unchanged; short clips stay judged by
+  `ttft_p95_short` (6 s) and `latency_p95` (9 s). Recorded beside it, not hidden by it: run 1's TTFT
+  is slower than run3's on the same corpus (all requests: median 1.39 → 2.07 s, p95 4.19 → 7.36 s;
+  short clips: max 2.34 → 5.10 s) while decode is identical — an admission/queueing tail under
+  long-clip prefill, carried as register row 85.

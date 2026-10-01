@@ -1044,7 +1044,11 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
         assert _verdict(rung(mixed), "ttft_p95_short") == "pass", other
     slow = [_attempt("short", ttft=7.0) for _ in range(60)]
     assert _verdict(rung(slow), "ttft_p95_short") == "fail"
-    dragging = [_attempt("short", latency=16.0) for _ in range(60)]     # 96 s/clip-minute
+    # amendment 7: the clip-minute is floored at the 30 s short-clip class — a 10 s clip at
+    # 16 s is 32 s/clip-minute (its latency_p95 row still judges it), a 60 s clip at 96 s fails
+    floored = [_attempt("short", latency=16.0) for _ in range(60)]
+    assert _verdict(rung(floored), "e2e_p95_per_clip_minute") == "pass"
+    dragging = [_attempt("long", latency=96.0) for _ in range(60)]      # 96 s/clip-minute
     assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
     # box run2's e2e p95 is a measurement the release decision quotes with its p50 and count
     assert [row for row in rung(dragging) if row[0] == "e2e_p95_per_clip_minute"] == [(

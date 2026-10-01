@@ -1194,7 +1194,12 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float,
     accepted = [r for r in counted if r.get("outcome") == "accepted"]
     short = [r["ttft_s"] for r in accepted if r.get("ttft_s") is not None
              and short_clip(clips.get(r.get("clip_id"), {}))]
-    per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
+    # Amendment 7 (E4B-protocol §5, 2026-10-01): the clip-minute is floored at the short-clip
+    # class (`short_clip_max_s`): decode alone (≈230 tokens at 6.4 ms) costs a 2 s clip 75 s per
+    # clip-minute, so below the class the ratio measures token count, not the platform. Short
+    # clips are judged by ttft_p95_short and latency_p95.
+    floor_s = CRITERIA["short_clip_max_s"]
+    per_minute = [r["latency_s"] / (max(_duration(r, clips), floor_s) / 60) for r in accepted
                   if r.get("latency_s") is not None and _duration(r, clips) > 0]
     latency = [r["latency_s"] for r in accepted if r.get("latency_s") is not None]
     for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
