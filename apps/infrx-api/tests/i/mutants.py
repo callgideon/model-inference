@@ -1794,6 +1794,39 @@ MUTANTS += (
        WIN, """printf ' %q' "$@"; printf '\\n'; return 0; fi\n  say "== $name\"""", """printf ' %q' "$@"; printf '\\n'; fi\n  say "== $name\"""", DRY),
 )
 
+# CERTIFY-RELEASE (W6, INFRA-02): RELEASE is an input (default origin/main), the migration version derived
+REL = "test_certify_window__release_is_an_input_defaulting_to_origin_main_and_flows_into_every_step"
+MUTANTS += (
+    _m("certify_window_release_literal", "the window certifies the given release, not a literal",
+       WIN, "RELEASE=${RELEASE:-$(git rev-parse --verify -q 'origin/main^{commit}' || true)}",
+       "RELEASE=d3a99e01869b6b9c85173e25888abbbf9ed4dd29", REL),
+    _m("certify_window_release_env_ignored", "the environment's RELEASE wins over the default",
+       WIN, "RELEASE=${RELEASE:-$(git rev-parse --verify -q 'origin/main^{commit}' || true)}",
+       "RELEASE=$(git rev-parse --verify -q 'origin/main^{commit}' || true)", REL),
+    _m("certify_window_release_default_not_main", "the default release is origin/main's commit",
+       WIN, "'origin/main^{commit}'", "'HEAD^{commit}'", REL),
+    _m("certify_window_release_unchecked", "a release that is not a 40-hex commit is refused",
+       WIN, "[[ $RELEASE =~ ^[0-9a-f]{40}$ ]] ||", "true ||", REL),
+    _m("certify_window_release_unanchored", "the release is exactly 40 hex",
+       WIN, "[[ $RELEASE =~ ^[0-9a-f]{40}$ ]]", "[[ $RELEASE =~ [0-9a-f]{40} ]]", REL),
+    _m("certify_window_migration_any_file", "the migration version is the newest numbered file's, never README.md",
+       WIN, "m=(apps/app/supabase/migrations/[0-9][0-9][0-9][0-9]_*.sql)", "m=(apps/app/supabase/migrations/*)", REL),
+    _m("certify_window_migration_override_ignored", "a given MIGRATION_VERSION wins over the derived one",
+       WIN, 'MIGRATION_VERSION=${MIGRATION_VERSION:-$(basename "${m[-1]}" | cut -c1-4)}',
+       'MIGRATION_VERSION=$(basename "${m[-1]}" | cut -c1-4)', REL),
+)
+
+# CERTIFY-RELEASE fix round (0-CR-1): a LOGDIR certifies one release and one migration version
+PIN = "test_certify_window__a_logdir_certifies_one_release_and_one_migration_version"
+MUTANTS += (
+    _m("certify_window_release_unpinned", "a resume refuses a RELEASE other than the LOGDIR's",
+       WIN, 'pinned release "$RELEASE"; ', "", PIN),
+    _m("certify_window_migration_unpinned", "a resume refuses a MIGRATION_VERSION other than the LOGDIR's",
+       WIN, '; pinned migration-version "$MIGRATION_VERSION"', "", PIN),
+    _m("certify_window_pin_never_refuses", "a pin mismatch exits before any plan line",
+       WIN, '[ "$(once "$1" "$2")" = "$2" ] ||', 'once "$1" "$2" > /dev/null ||', PIN),
+)
+
 # CERTIFY-WINDOW fix round (1-CW-R1, 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3)
 REP2 = "test_certify_window__report_sees_certify_exit_past_ssm_24000_characters"
 GUARD = "test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer"
