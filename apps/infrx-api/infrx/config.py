@@ -57,6 +57,12 @@ class Settings:
     max_redirects: int = 3
     allowed_video_mime: set = field(default_factory=lambda: _mimes(DEFAULT_ALLOWED_VIDEO_MIME))
     ext_mime: dict = field(default_factory=lambda: dict(EXT_MIME))
+    # Read and unused since W6 A4 retired the legacy chat route and its usage spill: installed
+    # env files still carry USAGE_LOG (deploy/preflight.py's manifest; USAGE_FAILED_LOG is a
+    # tunable), and the schema pin (tests/i/test_packaging) wants every name it writes read
+    # here. Dropping the two names is preflight's change, with the box's env file, not this.
+    usage_log: str = "/opt/dlami/nvme/logs/usage.jsonl"
+    usage_failed_log: str | None = None
     supabase_url: str = ""
     supabase_key: str = ""
     fps: float = 2.0
@@ -98,6 +104,8 @@ def from_env(env=None):
         fetch_timeout_s=float(e.get("FETCH_TIMEOUT_S", "30")),
         max_redirects=int(e.get("MAX_REDIRECTS", "3")),
         allowed_video_mime=_mimes(e.get("ALLOWED_VIDEO_MIME", DEFAULT_ALLOWED_VIDEO_MIME)),
+        usage_log=e.get("USAGE_LOG", "/opt/dlami/nvme/logs/usage.jsonl"),
+        usage_failed_log=e.get("USAGE_FAILED_LOG"),
         supabase_url=e.get("SUPABASE_URL", "").rstrip("/"),
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         pilot=pilot_from_env(e),
