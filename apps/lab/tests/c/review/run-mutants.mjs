@@ -15,12 +15,14 @@ const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",
 const SUITE = ["tests/c/review/review.test.ts", "tests/l/shell/boundary.test.ts"];
 const R = "lib/services/review/index.ts";
 const A = "lib/services/review/actions.ts";
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 
 const C = {
   l01: "C3F-L01 the review reads through the one named door with the selected workspace and the request, no identity",
   l02: "C3F-L02 a malformed request id is not_found without asking the database",
   l03: "C3F-L03 the door's refusals keep their meaning; anything unexpected is unavailable, never an empty review",
   l04: "C3F-L04 a row that is not a shared customer signal fails the whole review closed",
+  l05: "C3F-L05 an uppercase or non-v4 request id reaches the door (shapes UUID_ANY_RE, LAB-10)",
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
 };
 
@@ -30,7 +32,7 @@ const MUTANTS = [
   m("C3F-LX02", "the review names another workspace than the selected one", R, "provider_org_id: workspace.providerId,", 'provider_org_id: "b0000009-0000-4000-8000-000000000009",', [C.l01]),
   m("C3F-LX03", "the review sends an identity", R, "request_id: requestId } }", 'request_id: requestId, user_id: workspace.providerId } }', [C.l01]),
   m("C3F-LX04", "a malformed request id reaches the database", R, '  if (typeof requestId !== "string" || !UUID.test(requestId)) return { ok: false, reason: "not_found" };\n', "", [C.l02]),
-  m("C3F-LX05", "a request id with trailing text passes", R, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
+  m("C3F-LX05", "a request id with trailing text passes", SHAPES, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
   m("C3F-LX06", "not_found reads as unavailable", R, 'if (code === "not_found") return { ok: false, reason: "not_found" };', "", [C.l03]),
   m("C3F-LX07", "a denied role reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "forbidden")', [C.l03]),
   m("C3F-LX08", "a role refusal reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "42501")', [C.l03]),
@@ -46,6 +48,7 @@ const MUTANTS = [
   m("C3F-LX18", "a judge's signal is refused", R, '["customer", "judge"].includes(r.author_role as string)', '["customer"].includes(r.author_role as string)', [C.l04]),
   m("C3F-LX19", "an unknown channel is reviewed", R, ' &&\n    ["api", "console"].includes(r.channel as string);', ";", [C.l04]),
   m("C3F-LX20", "the review action skips the provider guard", A, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: requestId, providerName: "", role: "developer" as const };', [C.b01]),
+  m("C3F-LX21", "the review imports the record-id strictness (lowercase v4)", R, "import { UUID_ANY_RE as UUID }", "import { UUID_RE as UUID }", [C.l05]),
 ];
 
 function copy() {

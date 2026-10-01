@@ -5,11 +5,12 @@
 // Usage: node tests/l/shell/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "./harness.mjs";
 
-const SUITE = ["access", "config", "request", "guard", "boundary", "session"].map((f) => `tests/l/shell/${f}.test.ts`);
+const SUITE = ["access", "config", "request", "guard", "boundary", "session", "shapes"].map((f) => `tests/l/shell/${f}.test.ts`);
 
 const ACCESS = "lib/auth/access.ts";
 const MEMBERS = "lib/auth/memberships.ts";
 const CONFIG = "lib/auth/config.ts";
+const SHAPES = "lib/services/shapes.ts"; // LAB-10
 const REQUEST = "lib/auth/request.ts";
 const GUARD = "lib/auth/guard.ts";
 const ACTION = "lib/auth/actions.ts";
@@ -32,11 +33,16 @@ const C = {
   m01: "L1-M01 the membership read is the named RPC over the user's own session, with no identity argument",
   m02: "L1-M02 an RPC error or a thrown transport is unavailable",
   m03: "L1-M03 a malformed, unknown-role or duplicate row fails the whole read closed",
+  m04: "L1-M04 a membership id is read back at any UUID version, either case (shapes UUID_ANY_RE, LAB-10)",
   c01: "L1-C01 the origin is explicit: development defaults to port 3100, production needs its own https origin",
   c02: "L1-C02 cookies are secure exactly when the origin is https",
   c03: "L1-C03 the Lab session cookie is its own and host-only: never the App's name, never a domain",
   c04: "L1-C04 the workspace preference cookie is http-only and bounded",
   c05: "L1-C05 every Lab response is private and no-store, and does not advertise the framework",
+  h01: "L1-H01 a record id is a lowercase v4 UUID, whole; a read-back id is any UUID in either case, whole",
+  h02: "L1-H02 a USD amount is exact to 1e-8: eight decimals, no leading zero, at most twelve integer digits",
+  h03: "L1-H03 a digest is sha256 and exactly 64 lowercase hex",
+  c06: "L1-C06 every Lab family reads LAB_API_URL first, then only its own old name; an empty value is unset",
   r01: "L1-R01 a misconfigured Lab is unavailable and builds no client",
   r02: "L1-R02 the session client is the Lab's: its cookie options, its env, and the request's cookie store",
   r03: "L1-R03 the user comes from the session and the workspace from the Lab's cookie, re-checked against memberships",
@@ -87,6 +93,31 @@ const MUTANTS = [
   m("L1-X26", "the Lab rides on the App's session cookie name", CONFIG, '"sb-infrx-lab-auth"', '"sb-fcbnscgsymzdykendbrc-auth-token"', [C.c03]),
   m("L1-X27", "the workspace cookie is readable by scripts", CONFIG, "return { httpOnly: true,", "return { httpOnly: false,", [C.c04]),
   m("L1-X28", "the workspace cookie never expires", CONFIG, ", maxAge: 60 * 60 * 24 * 30 }", " }", [C.c04]),
+  m("L1-X70", "LAB_API_URL is not read", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env[LEGACY_API_URL[family]] || null", [C.c06]),
+  m("L1-X71", "the old names are not a fallback", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env.LAB_API_URL || null", [C.c06]),
+  m("L1-X72", "an old name wins over LAB_API_URL", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env[LEGACY_API_URL[family]] || env.LAB_API_URL || null", [C.c06]),
+  m("L1-X73", "an empty LAB_API_URL counts as set", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env.LAB_API_URL ?? env[LEGACY_API_URL[family]] ?? null", [C.c06]),
+  m("L1-X74", "unset reads as undefined, not null", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env.LAB_API_URL || env[LEGACY_API_URL[family]]", [C.c06]),
+  m("L1-X75", "a family falls back to any family's old name", CONFIG, "env.LAB_API_URL || env[LEGACY_API_URL[family]] || null", "env.LAB_API_URL || Object.values(LEGACY_API_URL).map((n) => env[n]).find(Boolean) || null", [C.c06]),
+  m("L1-X76", "the control fallback is not the deployed name", CONFIG, "control: \"LAB_CONTROL_URL\"", "control: \"LAB_CONTROL_API_URL\"", [C.c06]),
+  m("L1-X77", "the traces fallback is not the deployed name", CONFIG, "traces: \"LAB_TRACES_API_URL\"", "traces: \"LAB_TRACE_API_URL\"", [C.c06]),
+  m("L1-X78", "the evaluation fallback is not the deployed name", CONFIG, "evaluation: \"LAB_EVALS_API_URL\"", "evaluation: \"LAB_EVALUATION_API_URL\"", [C.c06]),
+  m("L1-X79", "the pipelines fallback is not the deployed name", CONFIG, "pipelines: \"LAB_PIPELINES_API_URL\"", "pipelines: \"LAB_PIPELINE_API_URL\"", [C.c06]),
+  m("L1-X80", "the releases fallback is not the deployed name", CONFIG, "releases: \"LAB_RELEASES_API_URL\"", "releases: \"LAB_ROLLOUTS_API_URL\"", [C.c06]),
+  m("L1-X81", "the datasets fallback is not the deployed name", CONFIG, "datasets: \"LAB_DATASETS_API_URL\"", "datasets: \"LAB_DATASET_API_URL\"", [C.c06]),
+  m("L1-X82", "a record id may be any UUID version", SHAPES, "-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-", "-[0-9a-f]{4}-[0-9a-f]{4}-", [C.h01]),
+  m("L1-X83", "a record id may carry text around it", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(UUID)", [C.h01]),
+  m("L1-X84", "a record id may be upper case", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(`^${UUID}$`, \"i\")", [C.h01]),
+  m("L1-X85", "a read-back id is case-sensitive", SHAPES, "[0-9a-f]{12}$/i;", "[0-9a-f]{12}$/;", [C.h01]),
+  m("L1-X86", "a read-back id may be v4 only", SHAPES, "/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-", "/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-", [C.h01]),
+  m("L1-X87", "a read-back id may lead with text", SHAPES, "UUID_ANY_RE = /^", "UUID_ANY_RE = /", [C.h01]),
+  m("L1-X88", "a USD amount may have fewer than eight decimals", SHAPES, "\\.[0-9]{8}$/;", "\\.[0-9]{1,8}$/;", [C.h02]),
+  m("L1-X89", "a USD amount may lead with zero", SHAPES, "(0|[1-9][0-9]{0,11})", "[0-9]{1,12}", [C.h02]),
+  m("L1-X90", "a USD amount may exceed twelve integer digits", SHAPES, "[1-9][0-9]{0,11})", "[1-9][0-9]*)", [C.h02]),
+  m("L1-X91", "a USD amount may trail text", SHAPES, "[0-9]{8}$/;", "[0-9]{8}/;", [C.h02]),
+  m("L1-X92", "a digest may be any hex length", SHAPES, "sha256:[0-9a-f]{64}$/;", "sha256:[0-9a-f]+$/;", [C.h03]),
+  m("L1-X93", "a digest may name another algorithm", SHAPES, "DIGEST_RE = /^sha256:", "DIGEST_RE = /^[a-z0-9]+:", [C.h03]),
+  m("L1-X94", "the membership read imports the record-id strictness (lowercase v4)", MEMBERS, "import { UUID_ANY_RE as UUID }", "import { UUID_RE as UUID }", [C.m04]),
   m("L1-X29", "Lab responses become cacheable", NEXT, '"private, no-store"', '"public, max-age=60"', [C.c05]),
   m("L1-X30", "the framework header is advertised", NEXT, "poweredByHeader: false", "poweredByHeader: true", [C.c05]),
   m("L1-X31", "a misconfigured Lab still builds a client", REQUEST, '  if (config === null) return { kind: "unavailable" };\n', "  if (config === null) return resolveAccess({ userId: async () => null, memberships: async () => ({ ok: false }), selected: undefined });\n  makeClient(\"\", \"\", {} as ClientOptions);\n", [C.r01]),

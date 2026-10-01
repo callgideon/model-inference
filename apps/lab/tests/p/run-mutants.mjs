@@ -11,6 +11,8 @@ const ACTIONS = "lib/services/pipelines/actions.ts";
 const ANNOT = "app/(provider)/annotations/page.tsx";
 const TRAIN = "app/(provider)/training/page.tsx";
 const HTTP = "lib/services/pipelines/http.ts";
+const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
+const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 const SERVER = "lib/services/pipelines/server.ts";
 
 const C = {
@@ -136,8 +138,8 @@ const MUTANTS = [
   m("P4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
   m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
-  m("P4-X73", "any USD amount passes", ACTIONS, "const USD = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "const USD = /./;", [C.a03]),
-  m("P4-X74", "any id passes as a run id", ACTIONS, "const ID = new RegExp(`^${UUID}$`);", "const ID = /./;", [C.a03]),
+  m("P4-X73", "any USD amount passes", SHAPES, "USD_RE = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "USD_RE = /./;", [C.a03]),
+  m("P4-X74", "any id passes as a run id", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
   m("P4-X75", "any objective passes", ACTIONS, 'oneOf(data, "objective", ["sft", "preference"] as const)', 'text(data, "objective") as "sft"', [C.a03]),
   m("P4-X76", "any op reaches the service", ACTIONS, 'const op = oneOf(data, "op", ["submit", "finish", "cancel"] as const);', 'const op = text(data, "op") as "submit" | null;', [C.a03]),
   m("P4-X77", "a correction may accept", ACTIONS, '(raw === "" || (correction !== null && decision === "rejected"))', '(raw === "" || correction !== null)', [C.a03]),
@@ -165,13 +167,13 @@ const MUTANTS = [
   m("P4-X97", "a label's ground-truth status is not shown", ANNOT, "<td>{l.kind}</td><td>{l.truth}</td>", "<td>{l.kind}</td><td>{l.state}</td>", [C.p04]),
   m("P4-X98", "the preview label shows when the stand-in is off", TRAIN, '{isPreview() && <p role="note">', '{<p role="note">', [C.p04]),
   // the HTTP adapter (WR-P4-1, lane lab-api-2)
-  m("P4-X99", "the session token is not sent", HTTP, "authorization: `Bearer ${bearer}`", 'authorization: "Bearer"', [C.h01]),
-  m("P4-X100", "the provider is not the actor's", HTTP, "encodeURIComponent(actor.providerId)", '""', [C.h01]),
+  m("P4-X99", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),
+  m("P4-X100", "the provider is not the actor's", TRANSPORT, "encodeURIComponent(actor.providerId)", "\"\"", [C.h01]),
   m("P4-X101", "a list is not unwrapped from {data}", HTTP, "const list: Answer = (p) => camel(p.data);", "const list: Answer = (p) => camel(p);", [C.h01]),
-  m("P4-X102", "records keep the route's snake_case keys", HTTP, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
-  m("P4-X103", "bodies go out in the port's camelCase", HTTP, "k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)", "k", [C.h01]),
-  m("P4-X104", "nested keys are not renamed", HTTP, "[to(k), deep(v)]", "[to(k), v]", [C.h01]),
-  m("P4-X105", "a list of records is not renamed", HTTP, "Array.isArray(value) ? value.map(deep)", "Array.isArray(value) ? value", [C.h01]),
+  m("P4-X102", "records keep the route's snake_case keys", TRANSPORT, "k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())", "k", [C.h01]),
+  m("P4-X103", "bodies go out in the port's camelCase", TRANSPORT, "k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)", "k", [C.h01]),
+  m("P4-X104", "nested keys are not renamed", TRANSPORT, "[to(k), deep(v)]", "[to(k), v]", [C.h01]),
+  m("P4-X105", "a list of records is not renamed", TRANSPORT, "Array.isArray(value) ? value.map(deep)", "Array.isArray(value) ? value", [C.h01]),
   m("P4-X106", "the dataset is not the query's", HTTP, "`&dataset_ref=${encodeURIComponent(datasetRef)}`", '""', [C.h01]),
   m("P4-X107", "the bundle is not the route's JSON text", HTTP, "str, (p) => (obj({})(p) ? JSON.stringify(p) : null)", "str, list", [C.h01]),
   m("P4-X108", "the export pin is flattened", HTTP, "export: { format: exportFormat, export_id: exportId }", "export_format: exportFormat, export_id: exportId", [C.h01]),
@@ -179,18 +181,18 @@ const MUTANTS = [
   m("P4-X110", "a review answer leaks the route's record", HTTP, 'post(actor, "assignments", any, snake(input), none)', 'post(actor, "assignments", any, snake(input))', [C.h01]),
   m("P4-X111", "a submit is a read", HTTP, "submit: (actor, id) => post(actor, `${run(id)}/submit`, RUN)", "submit: (actor, id) => get(actor, `${run(id)}/submit`, RUN, camel)", [C.h01]),
   m("P4-X112", "the approval drops its run", HTTP, "{ external_run_id: externalRunId }", "{}", [C.h01]),
-  m("P4-X113", "the body is not declared JSON", HTTP, 'if (body !== undefined) headers["content-type"] = "application/json";', "", [C.h01]),
-  m("P4-X114", "an expired export reads as unavailable", HTTP, '410: "gone", ', "", [C.h02]),
-  m("P4-X115", "no session reads as unavailable", HTTP, '401: "denied", ', "", [C.h02]),
-  m("P4-X116", "a missing capability reads as not found", HTTP, '403: "denied"', '403: "not_found"', [C.h02]),
-  m("P4-X117", "an unmapped status is invalid", HTTP, '?? "unavailable"', '?? "invalid"', [C.h02]),
-  m("P4-X118", "no answer is invalid", HTTP, 'return { ok: false, reason: "unavailable" }; // transport', 'return { ok: false, reason: "invalid" }; // transport', [C.h02]),
+  m("P4-X113", "the body is not declared JSON", TRANSPORT, "if (body !== undefined) headers[\"content-type\"] = \"application/json\";", "", [C.h01]),
+  m("P4-X114", "an expired export reads as unavailable", HTTP, ", 410: \"gone\" as const", "", [C.h02]),
+  m("P4-X115", "no session reads as unavailable", TRANSPORT, "401: \"denied\", ", "", [C.h02]),
+  m("P4-X116", "a missing capability reads as not found", TRANSPORT, "403: \"denied\"", "403: \"not_found\"", [C.h02]),
+  m("P4-X117", "an unmapped status is invalid", TRANSPORT, "?? \"unavailable\"", "?? \"invalid\"", [C.h02]),
+  m("P4-X118", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-P4-1): the configured adapter, the session's token, the row check
   m("P4-X119", "the configured adapter is ignored", PORT, "return labPipelines(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
-  m("P4-X120", "another server env names the backend", SERVER, "env.LAB_PIPELINES_API_URL", "env.LAB_EVALS_API_URL", [C.w01]),
+  m("P4-X120", "another server env names the backend", SERVER, "labApiUrl(env, \"pipelines\")", "labApiUrl(env, \"evaluation\")", [C.w01]),
   m("P4-X121", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
-  m("P4-X122", "a call is sent without a session token", HTTP, '    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent\n', "", [C.h04, C.w01]),
-  m("P4-X123", "an answer is not checked", HTTP, 'return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" };', "return { ok: true, value: value as T };", [C.h03]),
+  m("P4-X122", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
+  m("P4-X123", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
   m("P4-X124", "an unknown label method is read", HTTP, 'const METHOD = oneOf("imported", "synthetic", "human");', "const METHOD = str;", [C.h03]),
   m("P4-X125", "a label without its ground-truth flag is read", HTTP, "method: METHOD, groundTruth: bool,", "method: METHOD,", [C.h03]),
   m("P4-X126", "an unknown label state is read", HTTP, 'state: oneOf("submitted", "accepted", "rejected", "superseded")', "state: str", [C.h03]),
@@ -218,7 +220,8 @@ const MUTANTS = [
   m("P4-X148", "an export's answer is not checked", HTTP, 'post(actor, "label-exports", EXPORT, snake(input))', 'post(actor, "label-exports", () => true, snake(input))', [C.h03]),
   m("P4-X149", "a checkpoint import's answer is not checked", HTTP, 'post(actor, "checkpoints", CHECKPOINT, snake(input))', 'post(actor, "checkpoints", () => true, snake(input))', [C.h03]),
   m("P4-X150", "an approval's answer is not checked", HTTP, "/approve`, CHECKPOINT, {", "/approve`, () => true, {", [C.h03]),
-  m("P4-X151", "a session-token getter that rejects escapes the adapter", HTTP, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
+  m("P4-X151", "a session-token getter that rejects escapes the adapter", TRANSPORT, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
+  m("P4-X215", "a write's answer keeps the route's snake_case keys (no rename)", HTTP, "410: \"gone\" as const }, rename: camel }", "410: \"gone\" as const } }", [C.h01]),
   // P4.b: teacher batches (P2 over the route) — the view
   m("P4-X152", "the teacher budget hides its payer", VIEW, "budget: `budget ${b.budgetUsd} USD · payer ${b.payerRef}`", "budget: `budget ${b.budgetUsd} USD`", [C.v15]),
   m("P4-X153", "an unpriced batch reads as priced", VIEW, 'b.ceilingUsd === null ? "Unpriced: no approved rate for this teacher, so it cannot be approved."', 'b.ceilingUsd === null ? "ceiling 0 USD"', [C.v15]),

@@ -116,3 +116,8 @@ test("L1-M03 a malformed, unknown-role or duplicate row fails the whole read clo
   assert.deepEqual(parseMemberships([{ ...row(A), provider_name: "" }]), { ok: false });
   assert.deepEqual(parseMemberships([row(A), row(A)]), { ok: false });
 });
+
+test("L1-M04 a membership id is read back at any UUID version, either case (shapes UUID_ANY_RE, LAB-10)", () => {
+  const v1 = { ...A, providerId: "6BA7B810-9DAD-11D1-80B4-00C04FD430C8" };
+  assert.deepEqual(parseMemberships([row(v1)]), { ok: true, memberships: [v1] });
+});

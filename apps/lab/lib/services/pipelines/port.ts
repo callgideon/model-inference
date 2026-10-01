@@ -1,5 +1,5 @@
 // P4: the Lab's view of P1 (infrx/pipelines/annotations) and P3 (infrx/pipelines/training) through
-// lab-api's LAB_PIPELINES route (WR-P4-1, `/lab/v1/pipelines`). With LAB_PIPELINES_API_URL set the port
+// lab-api's LAB_PIPELINES route (WR-P4-1, `/lab/v1/pipelines`). With LAB_API_URL (else LAB_PIPELINES_API_URL) set the port
 // is the HTTP adapter (server.ts); unset it is "unavailable" (fails closed), or, only outside production
 // and only when asked for, the labelled preview fake. The route derives the user from the forwarded session (LAB-AUTH) and
 // re-checks every call; the Lab only ever names the session's workspace.

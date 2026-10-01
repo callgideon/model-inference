@@ -1,15 +1,13 @@
 // WR-E3L-J: the control port over the Lab control service's `/lab/v1/control` (R186's factory,
-// routes/lab_control.py), in rollouts/http.ts's style: the credential is the session's own access token
+// routes/lab_control.py), on the shared transport (../http.ts): the credential is the session's own access token
 // (none: nothing is sent), the provider is the actor's (`provider_org_id`; the route re-derives both from
 // the session and L2), snake_case keys become the port's camelCase and no value is touched. Lists come as
 // `{data}`; a refusal is the route's status mapped to the port's reason; an answer holding one record the
 // pages cannot read is unavailable (fails closed).
-import { list, nul, num, obj, oneOf, str, type Check } from "../evaluation/shape.ts";
-import { camel } from "../rollouts/http.ts";
-import type { ControlPort, Refusal, Result, Actor } from "./port.ts";
+import { camel, labClient, list, nul, num, obj, oneOf, str, type HttpOptions } from "../http.ts";
+import type { ControlPort } from "./port.ts";
 
-const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 422: "invalid" };
-export type HttpOptions = { baseUrl: string; token: () => Promise<string | null>; fetch?: typeof fetch };
+export type { HttpOptions };
 
 const MODEL = obj({ modelId: str, revisionLabel: str, artifactDigest: str, schemaVersion: str, runtime: str, registeredAt: str });
 const DEPLOYMENT = obj({
@@ -22,32 +20,16 @@ const PROPOSAL = obj({
 });
 const AGGREGATE = obj({ deploymentRevisionId: str, windowStart: str, windowEnd: str, requests: num, errors: num, p95LatencyMs: nul(num) });
 
-export function httpControl({ baseUrl, token, fetch: send = fetch }: HttpOptions): ControlPort {
-  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1/control`;
-  async function call<T>(actor: Actor, method: "GET" | "POST", path: string, readable: Check, body?: unknown): Promise<Result<T>> {
-    const bearer = await token().catch(() => null);
-    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent
-    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}`;
-    const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
-    try {
-      const response = await send(url, { method, headers, cache: "no-store", body: body === undefined ? undefined : JSON.stringify(body) });
-      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
-      const payload = await response.json();
-      const value = camel(method === "GET" ? payload.data : payload); // a read is {data}
-      return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" }; // an unreadable record
-    } catch {
-      return { ok: false, reason: "unavailable" }; // transport or an unparseable answer
-    }
-  }
+export function httpControl(options: HttpOptions): ControlPort {
+  const { get, post } = labClient(options, "/lab/v1/control", { rename: camel });
   return {
-    models: (actor) => call(actor, "GET", "models", list(MODEL)),
-    deployments: (actor) => call(actor, "GET", "deployments", list(DEPLOYMENT)),
-    proposals: (actor) => call(actor, "GET", "proposals", list(PROPOSAL)),
-    aggregates: (actor) => call(actor, "GET", "aggregates", list(AGGREGATE)),
-    register: (actor, r) => call(actor, "POST", "register", DEPLOYMENT,
+    models: (actor) => get(actor, "models", list(MODEL)),
+    deployments: (actor) => get(actor, "deployments", list(DEPLOYMENT)),
+    proposals: (actor) => get(actor, "proposals", list(PROPOSAL)),
+    aggregates: (actor) => get(actor, "aggregates", list(AGGREGATE)),
+    register: (actor, r) => post(actor, "register", DEPLOYMENT,
       { name: r.name, artifact_digest: r.artifactDigest, schema_version: r.schemaVersion, runtime: r.runtime }),
-    smoke: (actor, id) => call(actor, "POST", `deployments/${encodeURIComponent(id)}/smoke`, DEPLOYMENT),
-    propose: (actor, kind, id) => call(actor, "POST", "proposals", PROPOSAL, { kind, deployment_revision_id: id }),
+    smoke: (actor, id) => post(actor, `deployments/${encodeURIComponent(id)}/smoke`, DEPLOYMENT),
+    propose: (actor, kind, id) => post(actor, "proposals", PROPOSAL, { kind, deployment_revision_id: id }),
   };
 }

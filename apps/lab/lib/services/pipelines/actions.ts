@@ -7,14 +7,11 @@
 import { redirect } from "next/navigation";
 import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
+import { DIGEST_RE as DIGEST, USD_RE as USD, UUID, UUID_RE as ID } from "../shapes.ts";
 import { ADAPTERS, EXPORT_FORMATS, holds, pipelinesPort, type Actor, type Capability, type Refusal, type Result } from "./port.ts";
 
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const ID = new RegExp(`^${UUID}$`);
 const SAMPLE = /^[A-Za-z0-9._:-]{1,200}$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/;
-const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // a Lab Amount value (R159), PROVIDER_USD
 const MAX_EXPORT_TTL_S = 604_800; // N2's bound, as P1 enforces it
 const MAX_TEXT = 1_000_000;
 const MAX_CHUNK = 200; // J1's scan bound, as P2 enforces it

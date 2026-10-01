@@ -5,10 +5,10 @@
 import { redirect } from "next/navigation";
 import type { Membership } from "../../auth/access.ts";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
+import { DIGEST_RE as DIGEST } from "../shapes.ts";
 import { controlPort, holds, type Actor, type Capability, type Refusal, type Result } from "./port.ts";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const IDENT = /^[A-Za-z0-9._:@/+-]{1,200}$/;
 const field = (data: FormData, name: string, shape: RegExp) => {
   const v = data.get(name);

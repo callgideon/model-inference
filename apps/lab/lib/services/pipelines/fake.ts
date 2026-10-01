@@ -14,13 +14,13 @@ import {
   type Disagreement, type ExportInput, type ImportInput, type ImportReceipt, type Label, type LabelExport, type PipelinesPort,
   type PrepareInput, type Refusal, type Result, type ReviewInput, type TeacherBatch, type TeacherInput, type TrainingRun,
 } from "./port.ts";
+import { USD_RE as USD } from "../shapes.ts";
 
 type Sample = { sampleId: string; split: "train" | "validation" | "holdout"; readable?: boolean };
 type Owned<T> = T & { providerId: string };
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const no = <T>(reason: Refusal): Result<T> => ({ ok: false, reason });
 const sha = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/;
 const METHODS: Record<string, Label["method"]> = { human: "imported", model: "synthetic" };
 const ROW_KEYS = new Set(["sample_id", "method", "method_version", "label", "ground_truth", "annotator", "model", "prompt", "confidence", "spans"]);
 const LIVE = ["submitted", "accepted"];

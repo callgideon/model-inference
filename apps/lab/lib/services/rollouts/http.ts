@@ -3,19 +3,12 @@
 // is sent) and the provider is the actor's, sent as `provider_org_id`; the route re-derives both. The
 // route speaks snake_case (D9/R1/R2/R3's records), the port camelCase: every key is renamed, no value is
 // touched. Lists come as `{data}`; every refusal is the route's status mapped to the port's reason; an
-// answer holding one record the pages cannot read is unavailable (fails closed).
-import { bool, list, nul, num, obj, oneOf, opt, str, type Check } from "../evaluation/shape.ts";
-import type { Actor, Refusal, ReleasesPort, Result } from "./port.ts";
+// answer holding one record the pages cannot read is unavailable (fails closed). The transport and the
+// rename are the shared ones (../http.ts).
+import { bool, camel, labClient, list, nul, num, obj, oneOf, opt, str, type HttpOptions } from "../http.ts";
+import type { ReleasesPort } from "./port.ts";
 
-const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 422: "invalid" };
-export type HttpOptions = { baseUrl: string; token: () => Promise<string | null>; fetch?: typeof fetch };
-
-/** snake_case keys to camelCase, deep; these records carry no data-keyed maps. */
-export const camel = (value: unknown): unknown =>
-  Array.isArray(value) ? value.map(camel)
-    : value !== null && typeof value === "object"
-      ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase()), camel(v)]))
-      : value;
+export type { HttpOptions };
 
 /** The port's records (camelCase, after the rename) as the pages read them. */
 const AMOUNT = obj({ amount: str, unit: oneOf("CREDIT", "PROVIDER_USD") });
@@ -47,30 +40,11 @@ const VARIANT = obj({
   })),
 });
 
-export function httpReleases({ baseUrl, token, fetch: send = fetch }: HttpOptions): ReleasesPort {
-  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1`;
-  async function call<T>(actor: Actor, path: string, readable: Check, body?: unknown): Promise<Result<T>> {
-    const bearer = await token().catch(() => null);
-    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent
-    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}`;
-    const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
-    try {
-      const response = await send(url, {
-        method: body === undefined ? "GET" : "POST", headers, cache: "no-store",
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
-      const payload = await response.json();
-      const value = camel(body === undefined ? payload.data : payload); // a read is {data}
-      return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" }; // an unreadable record
-    } catch {
-      return { ok: false, reason: "unavailable" }; // transport or an unparseable answer
-    }
-  }
+export function httpReleases(options: HttpOptions): ReleasesPort {
+  const { get, post } = labClient(options, "/lab/v1", { rename: camel });
   return {
-    releases: (actor) => call(actor, "releases", obj({ releases: list(RELEASE), decisions: list(DECISION), proposals: list(PROPOSAL) })),
-    variants: (actor) => call(actor, "optimizations", list(VARIANT)),
-    propose: (actor, kind, policyRef, fence) => call(actor, "releases/proposals", PROPOSAL, { kind, policy_ref: policyRef, fence }),
+    releases: (actor) => get(actor, "releases", obj({ releases: list(RELEASE), decisions: list(DECISION), proposals: list(PROPOSAL) })),
+    variants: (actor) => get(actor, "optimizations", list(VARIANT)),
+    propose: (actor, kind, policyRef, fence) => post(actor, "releases/proposals", PROPOSAL, { kind, policy_ref: policyRef, fence }),
   };
 }

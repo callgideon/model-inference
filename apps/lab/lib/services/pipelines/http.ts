@@ -4,12 +4,11 @@
 // records), the port camelCase: keys are renamed both ways, no value is touched; the bundle is the
 // route's JSON as text. Lists come as `{data}`; every refusal is the route's status mapped to the port's
 // reason (410: gone); an answer holding one record the pages cannot read is unavailable (fails closed).
-import { bool, list as many, nul, num, obj, oneOf, str, type Check } from "../evaluation/shape.ts";
-import { ADAPTERS, IMPORT_REFUSALS, TEACHER_CHUNK_STATES, type Actor, type PipelinesPort, type Refusal, type Result } from "./port.ts";
+// The transport, the renames and the row checks are the shared ones (../http.ts).
+import { bool, camel, labClient, list as many, nul, num, obj, oneOf, REASONS, snake, str, type Answer, type Check, type HttpOptions } from "../http.ts";
+import { ADAPTERS, IMPORT_REFUSALS, TEACHER_CHUNK_STATES, type PipelinesPort } from "./port.ts";
 
-const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 410: "gone", 422: "invalid" };
-export type HttpOptions = { baseUrl: string; token: () => Promise<string | null>; fetch?: typeof fetch };
-type Answer = (payload: { data?: unknown }) => unknown;
+export type { HttpOptions };
 
 /** The port's records (camelCase, after the rename) as the pages read them. port.ts loads this module
  *  (through server.ts) before its own constants exist, so those are read at call time. */
@@ -47,38 +46,12 @@ const TEACHER = obj({
   })),
 });
 
-const rename = (to: (key: string) => string) => {
-  const deep = (value: unknown): unknown =>
-    Array.isArray(value) ? value.map(deep)
-      : value !== null && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([k, v]) => [to(k), deep(v)])) : value;
-  return deep;
-};
-/** Deep key renames; these records and inputs carry no data-keyed maps. */
-export const camel = rename((k) => k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase()));
-export const snake = rename((k) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`));
 const list: Answer = (p) => camel(p.data);
 const none: Answer = () => null;
 const any: Check = () => true;
 
-export function httpPipelines({ baseUrl, token, fetch: send = fetch }: HttpOptions): PipelinesPort {
-  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1/pipelines`;
-  async function call<T>(actor: Actor, method: "GET" | "POST", path: string, read: Answer, readable: Check, body?: unknown, query = ""): Promise<Result<T>> {
-    const bearer = await token().catch(() => null);
-    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent
-    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}${query}`;
-    const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
-    try {
-      const response = await send(url, { method, headers, cache: "no-store", body: body === undefined ? undefined : JSON.stringify(body) });
-      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
-      const value = read(await response.json());
-      return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" }; // an unreadable record
-    } catch {
-      return { ok: false, reason: "unavailable" }; // transport or an unparseable answer
-    }
-  }
-  const get = <T>(actor: Actor, path: string, readable: Check, read: Answer = list, query = "") => call<T>(actor, "GET", path, read, readable, undefined, query);
-  const post = <T>(actor: Actor, path: string, readable: Check, body?: unknown, read: Answer = camel) => call<T>(actor, "POST", path, read, readable, body);
+export function httpPipelines(options: HttpOptions): PipelinesPort {
+  const { get, post } = labClient(options, "/lab/v1/pipelines", { reasons: { ...REASONS, 410: "gone" as const }, rename: camel });
   const set = (datasetRef: string) => `&dataset_ref=${encodeURIComponent(datasetRef)}`;
   const run = (id: string) => `training-runs/${encodeURIComponent(id)}`;
   return {

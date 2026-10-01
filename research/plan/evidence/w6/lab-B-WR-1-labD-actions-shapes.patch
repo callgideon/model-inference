@@ -1,0 +1,117 @@
+diff --git a/apps/lab/lib/services/control/actions.ts b/apps/lab/lib/services/control/actions.ts
+index e74261e1..c3d4d8e6 100644
+--- a/apps/lab/lib/services/control/actions.ts
++++ b/apps/lab/lib/services/control/actions.ts
+@@ -5,10 +5,10 @@
+ import { redirect } from "next/navigation";
+ import type { Membership } from "../../auth/access.ts";
+ import { requireProviderWorkspace } from "../../auth/guard.ts";
++import { DIGEST_RE as DIGEST } from "../shapes.ts";
+ import { controlPort, holds, type Actor, type Capability, type Refusal, type Result } from "./port.ts";
+ 
+ const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+-const DIGEST = /^sha256:[0-9a-f]{64}$/;
+ const IDENT = /^[A-Za-z0-9._:@/+-]{1,200}$/;
+ const field = (data: FormData, name: string, shape: RegExp) => {
+   const v = data.get(name);
+diff --git a/apps/lab/lib/services/evaluation/actions.ts b/apps/lab/lib/services/evaluation/actions.ts
+index 83f95790..b1b67843 100644
+--- a/apps/lab/lib/services/evaluation/actions.ts
++++ b/apps/lab/lib/services/evaluation/actions.ts
+@@ -6,10 +6,9 @@
+ import { redirect } from "next/navigation";
+ import type { Membership } from "../../auth/access.ts";
+ import { requireProviderWorkspace } from "../../auth/guard.ts";
++import { UUID, UUID_RE as ID } from "../shapes.ts";
+ import { evaluationPort, holds, type Actor, type Amount, type Launch, type Protocol, type Refusal, type Result, type SubscriptionRequest } from "./port.ts";
+ 
+-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+-const ID = new RegExp(`^${UUID}$`);
+ /** F3: an immutable `lab:<kind>:<provider>:<object>@sha256:<hex>` ref of the named kind. */
+ const ref = (kind: string) => new RegExp(`^lab:${kind}:${UUID}:${UUID}@sha256:[0-9a-f]{64}$`);
+ const CREDIT = /^(0|[1-9][0-9]{0,11})(\.[0-9]{1,8})?$/;
+diff --git a/apps/lab/lib/services/pipelines/actions.ts b/apps/lab/lib/services/pipelines/actions.ts
+index e50e1fd1..3744b519 100644
+--- a/apps/lab/lib/services/pipelines/actions.ts
++++ b/apps/lab/lib/services/pipelines/actions.ts
+@@ -7,14 +7,11 @@
+ import { redirect } from "next/navigation";
+ import type { Membership } from "../../auth/access.ts";
+ import { requireProviderWorkspace } from "../../auth/guard.ts";
++import { DIGEST_RE as DIGEST, USD_RE as USD, UUID, UUID_RE as ID } from "../shapes.ts";
+ import { ADAPTERS, EXPORT_FORMATS, holds, pipelinesPort, type Actor, type Capability, type Refusal, type Result } from "./port.ts";
+ 
+-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+-const ID = new RegExp(`^${UUID}$`);
+ const SAMPLE = /^[A-Za-z0-9._:-]{1,200}$/;
+ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/;
+-const DIGEST = /^sha256:[0-9a-f]{64}$/;
+-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // a Lab Amount value (R159), PROVIDER_USD
+ const MAX_EXPORT_TTL_S = 604_800; // N2's bound, as P1 enforces it
+ const MAX_TEXT = 1_000_000;
+ const MAX_CHUNK = 200; // J1's scan bound, as P2 enforces it
+diff --git a/apps/lab/tests/b/run-mutants.mjs b/apps/lab/tests/b/run-mutants.mjs
+index 44362ad7..06f3d212 100644
+--- a/apps/lab/tests/b/run-mutants.mjs
++++ b/apps/lab/tests/b/run-mutants.mjs
+@@ -17,6 +17,7 @@ const HTTP = "lib/services/evaluation/http.ts";
+ const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
+ const SERVER = "lib/services/evaluation/server.ts";
+ const SESSION = "lib/auth/session.ts"; // LAB-05: the one read-only session client
++const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
+ 
+ const C = {
+   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
+@@ -138,7 +139,7 @@ const MUTANTS = [
+   m("B4-X71", "malformed input reaches the service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
+   m("B4-X73", "a ref with trailing text passes", ACTIONS, "@sha256:[0-9a-f]{64}$`);", "@sha256:[0-9a-f]{64}`);", [C.a03]),
+-  m("B4-X74", "any record id passes", ACTIONS, "const ID = new RegExp(`^${UUID}$`);", "const ID = /./;", [C.a03]),
++  m("B4-X74", "any record id passes", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
+   m("B4-X75", "any CREDIT string passes", ACTIONS, "const CREDIT = /^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,8})?$/;", "const CREDIT = /^-?[0-9.e]+$/;", [C.a03]),
+   m("B4-X76", "an amount is not written with 8 decimals", ACTIONS, 'frac.padEnd(8, "0")', "frac", [C.a01]),
+   m("B4-X77", "zero cases may be launched", ACTIONS, 'max_cases: int(data, "max_cases", 1), run_limit: credit(data, "run_limit"), protocol', 'max_cases: int(data, "max_cases", 0), run_limit: credit(data, "run_limit"), protocol', [C.a03]),
+diff --git a/apps/lab/tests/l/ui/run-mutants.mjs b/apps/lab/tests/l/ui/run-mutants.mjs
+index d21062e7..91630536 100644
+--- a/apps/lab/tests/l/ui/run-mutants.mjs
++++ b/apps/lab/tests/l/ui/run-mutants.mjs
+@@ -10,6 +10,7 @@ const VIEW = "lib/services/control/view.ts";
+ const ACTIONS = "lib/services/control/actions.ts";
+ const HTTP = "lib/services/control/http.ts";
+ const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
++const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
+ const SERVER = "lib/services/control/server.ts";
+ const LAYOUT = "app/(provider)/layout.tsx";
+ const MODELS = "app/(provider)/models/page.tsx";
+@@ -77,7 +78,7 @@ const MUTANTS = [
+   m("L4-X33", "the actor's role is not the session's", ACTIONS, "role: w.role });", 'role: "administrator" });', [C.a01]),
+   m("L4-X34", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+   m("L4-X35", "malformed input reaches the control service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+-  m("L4-X36", "any artifact reference passes the shape check", ACTIONS, "const DIGEST = /^sha256:[0-9a-f]{64}$/;", "const DIGEST = /./;", [C.a03]),
++  m("L4-X36", "any artifact reference passes the shape check", SHAPES, "DIGEST_RE = /^sha256:[0-9a-f]{64}$/;", "DIGEST_RE = /./;", [C.a03]),
+   m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
+   m("L4-X38", "an unknown proposal kind is accepted", ACTIONS, '(kind === "publish" || kind === "rollback") && id !== null', "id !== null", [C.a03]),
+   m("L4-X39", "a refusal is dropped on the way back", ACTIONS, "redirect(result.ok ? page : `${page}?refused=${result.reason}`);", "redirect(page);", [C.a02, C.a04]),
+diff --git a/apps/lab/tests/p/run-mutants.mjs b/apps/lab/tests/p/run-mutants.mjs
+index 1d308a2f..9b933276 100644
+--- a/apps/lab/tests/p/run-mutants.mjs
++++ b/apps/lab/tests/p/run-mutants.mjs
+@@ -12,6 +12,7 @@ const ANNOT = "app/(provider)/annotations/page.tsx";
+ const TRAIN = "app/(provider)/training/page.tsx";
+ const HTTP = "lib/services/pipelines/http.ts";
+ const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
++const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
+ const SERVER = "lib/services/pipelines/server.ts";
+ 
+ const C = {
+@@ -137,8 +138,8 @@ const MUTANTS = [
+   m("P4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+   m("P4-X71", "malformed input reaches the pipeline service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+   m("P4-X72", "another provider's refs pass as this provider's", ACTIONS, ":${w.providerId}:${UUID}@", ":${UUID}:${UUID}@", [C.a03]),
+-  m("P4-X73", "any USD amount passes", ACTIONS, "const USD = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "const USD = /./;", [C.a03]),
+-  m("P4-X74", "any id passes as a run id", ACTIONS, "const ID = new RegExp(`^${UUID}$`);", "const ID = /./;", [C.a03]),
++  m("P4-X73", "any USD amount passes", SHAPES, "USD_RE = /^(0|[1-9][0-9]{0,11})\\.[0-9]{8}$/;", "USD_RE = /./;", [C.a03]),
++  m("P4-X74", "any id passes as a run id", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
+   m("P4-X75", "any objective passes", ACTIONS, 'oneOf(data, "objective", ["sft", "preference"] as const)', 'text(data, "objective") as "sft"', [C.a03]),
+   m("P4-X76", "any op reaches the service", ACTIONS, 'const op = oneOf(data, "op", ["submit", "finish", "cancel"] as const);', 'const op = text(data, "op") as "submit" | null;', [C.a03]),
+   m("P4-X77", "a correction may accept", ACTIONS, '(raw === "" || (correction !== null && decision === "rejected"))', '(raw === "" || correction !== null)', [C.a03]),
