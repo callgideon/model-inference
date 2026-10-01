@@ -477,6 +477,13 @@ LAB_LANE_PORTS = {
     # T lanes: a block, because a TASK_PORTS entry would inherit the track's native 59000
     "t2i": {"clickhouse": 57540, "s3": 57542}, "t2f": {"clickhouse": 57543, "s3": 57545, "postgres": 57549},
     "t3": {"clickhouse": 57546, "s3": 57548},
+    # LW7 (R270): the API-first lifecycle lanes, 57550-57569
+    "ap0": {"postgres": 57550}, "ap1": {"postgres": 57551}, "ap2": {"postgres": 57552},
+    "ap3": {"postgres": 57553}, "ap4": {"postgres": 57554, "s3": 57555},
+    "ap5": {"postgres": 57556, "engine-fake": 57557}, "ap6": {"postgres": 57558},
+    "ap7": {"postgres": 57559, "clickhouse": 57560, "s3": 57562},
+    "ap8": {"postgres": 57563, "judge-fake": 57564}, "ap9": {"postgres": 57565},
+    "ap10": {"postgres": 57566}, "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569},
 }
 
 
@@ -487,9 +494,9 @@ def test_every_lab_lane_port_sits_in_one_band():
         services = tasklocal.local_services(task)
         assert {name: s.host_port for name, s in services.items()} == ports, task
         assert all(s.container == f"infrx-{task}-{s.service}" for s in services.values())
-    for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547)):
+    for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547), ("ap7", 57561)):
         assert tasklocal.local_services(task)["clickhouse"].extra_ports == (native,), task
-    used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547}
+    used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547, 57561}
     reserved = tasklocal.all_host_ports()          # raises on any collision
     assert {port for port in reserved if port in LAB_BAND} == used
     assert used <= set(LAB_BAND)

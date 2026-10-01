@@ -1,23 +1,9 @@
 {
   "base": "9a6c3685",
   "files": {
-    "apps/app/lib/contracts/README.md": "af02a1db3ccaf934ae2ad27ed187b9005a2ba6c344a0043f795c3c49579c57fb",
-    "apps/app/lib/contracts/conformance.ts": "22a0a6c54cf4cba14651c12aa86399d7316122fcef9101c4fc7f16b0474221bb",
-    "apps/app/lib/contracts/fake-services.ts": "7af3fa7b5a9d16c2aeb1c05e22f9c6186cd4a4e70781fb87151c320c4b05f91f",
-    "apps/app/lib/contracts/fixtures/judge.json": "32f63a3a8a1c43a65a9e9d9f09624b3a0aeb3fa5dd77c55f2ab72457d6dc8569",
-    "apps/app/lib/contracts/fixtures/money.json": "2a6ecc87c7a49194a089e5fe593adbc1b8c0922301c0b2adfbffc76bdc0b38dd",
-    "apps/app/lib/contracts/fixtures/orgs.json": "49739b97a72f601604468c417690e1cb892cb6fc99fc0cbf7f1e895109756e3b",
-    "apps/app/lib/contracts/fixtures/traces.json": "8d72bbaa07dddf9d444b9a0f337506cd3a96b6d90316ebc5d6a5ac95137d32f5",
-    "apps/app/lib/contracts/money.ts": "e5ed469bb85f0a4366bd154dbbffe8024d89e4e8232678853c3e14e53babbade",
-    "apps/app/lib/contracts/services.ts": "93dc36c913d5c0d9f4877f450af581a8da68e14bfdbba113780865ded49d4cae",
-    "apps/app/lib/contracts/types.ts": "1dab1192fc5d4ecde96f0bbb520c8aae6c160db4d588ebe30b2bbea1e04843fa",
-    "apps/app/lib/contracts/v2/consumer.ts": "4c2da58ddc94572cbacabe879c435c16ddd6af24bc345648aab8dfb61ee3a0db",
-    "apps/app/lib/contracts/v2/lifecycle.ts": "04501b3195bab317413ce12ad79097c09d9f9d7913397120b37790d0834976ea",
-    "apps/app/lib/contracts/v2/money-units.ts": "113544a1453b130d54d87d2bcf94b882019d3d593ea1deac2a4fec6073aadeed",
-    "apps/app/lib/contracts/v2/published-model.ts": "d329fd81b72ad8af125e97f796bd8c98c0c633fe5283b88fab0d011f1a447511",
-    "apps/app/lib/contracts/v2/types.ts": "8829662d7f894055c1fba6c5cff0ff47b28d17073a36f43112f525fd27dc3116",
     "apps/infrx-api/infrx/contracts/README.md": "e49726400d96ddacdd98c2967df73de212e647589abba55c3658e53b69e3c340",
     "apps/infrx-api/infrx/contracts/__init__.py": "a0f21c85188638ad8a8f6de517261e55b6ec25431cec58017b9a0383a0d195dc",
+    "apps/infrx-api/infrx/contracts/api.py": "e30294ee3a67c14d660f5ae076e7ddbd705389d7d386fc9c1512fb1eef2eb5a3",
     "apps/infrx-api/infrx/contracts/codec.py": "b118ff8ac42aee0d61758048c50f9eef1e733697ef8d27232da1daf7d35e038e",
     "apps/infrx-api/infrx/contracts/conformance/__init__.py": "5acc7ecd482559f1a739cd50a0c573777a3bcd6a27cbe8995830ebb72546b611",
     "apps/infrx-api/infrx/contracts/conformance/acceptance.py": "8c129c66fb305c5c94437dd10b1d278926fc767ca7c04b2ef184f2ef29510d09",
@@ -132,7 +118,7 @@
     "apps/infrx-api/infrx/contracts/money.py": "c40bbac22c111f6590179300cee1794cf86452aa3b3775da8f72444cee1602ac",
     "apps/infrx-api/infrx/contracts/ports.py": "39a1d0f3913deb245080b98bd835014a7e2a7dc38a713eb0af74f262f3b0bed6",
     "apps/infrx-api/infrx/contracts/records.py": "91ccfefbcb5a783c1752915ebf101c8d3425d2aa50e479838121142d26095836",
-    "apps/infrx-api/infrx/contracts/tasklocal.py": "0624c8eb3b25dbdd163cf3160f7b3d3b5ce6f503c8cee42fa4618e6c347cf297",
+    "apps/infrx-api/infrx/contracts/tasklocal.py": "cc91af5076b99ea44ce1826e3e57f4fa212a05d0b66e8f6b1bdeef4f0b8e9772",
     "apps/infrx-api/infrx/contracts/traces_accounting.py": "5b4ff9d7396c23e11f7a66f298168577e1e06275baf1e48f6f9def979e6b872e",
     "apps/infrx-api/infrx/contracts/v2/__init__.py": "e616f36dd5f176652bf6fb416395dddf2731091740b3bedbcbbddc1c6043a161",
     "apps/infrx-api/infrx/contracts/v2/fixtures.py": "c36b7da7420803e2363eb907dac5c6305b3e48d943876f5b547b51719c838268",
@@ -147,7 +133,33 @@
     "apps/infrx-api/infrx/contracts/v2/published_fixtures.py": "420d5f1e84672028e5ff836e681f4c1e4507daeb58fae44e26f76f1c1ef6cdf3",
     "apps/infrx-api/infrx/contracts/v2/published_model.py": "290495b38589d470d6816cb4ff00f7c52a7716126b2875667348f0c9343e8963",
     "apps/infrx-api/infrx/contracts/v2/records.py": "6b9655ed4bbb72894a01d469edaa6a3917dd063fd9d48e0ed7e963dcf997bfbd",
-    "apps/infrx-api/infrx/contracts/wire.py": "fe579277c510824a620e763fd0e078a83629907c74b3572ea0b8aea92a9f946f"
+    "apps/infrx-api/infrx/contracts/wire.py": "fe579277c510824a620e763fd0e078a83629907c74b3572ea0b8aea92a9f946f",
+    "apps/app/lib/contracts/README.md": "af02a1db3ccaf934ae2ad27ed187b9005a2ba6c344a0043f795c3c49579c57fb",
+    "apps/app/lib/contracts/conformance.ts": "22a0a6c54cf4cba14651c12aa86399d7316122fcef9101c4fc7f16b0474221bb",
+    "apps/app/lib/contracts/fake-services.ts": "7af3fa7b5a9d16c2aeb1c05e22f9c6186cd4a4e70781fb87151c320c4b05f91f",
+    "apps/app/lib/contracts/fixtures/judge.json": "32f63a3a8a1c43a65a9e9d9f09624b3a0aeb3fa5dd77c55f2ab72457d6dc8569",
+    "apps/app/lib/contracts/fixtures/money.json": "2a6ecc87c7a49194a089e5fe593adbc1b8c0922301c0b2adfbffc76bdc0b38dd",
+    "apps/app/lib/contracts/fixtures/orgs.json": "49739b97a72f601604468c417690e1cb892cb6fc99fc0cbf7f1e895109756e3b",
+    "apps/app/lib/contracts/fixtures/traces.json": "8d72bbaa07dddf9d444b9a0f337506cd3a96b6d90316ebc5d6a5ac95137d32f5",
+    "apps/app/lib/contracts/money.ts": "e5ed469bb85f0a4366bd154dbbffe8024d89e4e8232678853c3e14e53babbade",
+    "apps/app/lib/contracts/services.ts": "93dc36c913d5c0d9f4877f450af581a8da68e14bfdbba113780865ded49d4cae",
+    "apps/app/lib/contracts/types.ts": "1dab1192fc5d4ecde96f0bbb520c8aae6c160db4d588ebe30b2bbea1e04843fa",
+    "apps/app/lib/contracts/v2/consumer.ts": "4c2da58ddc94572cbacabe879c435c16ddd6af24bc345648aab8dfb61ee3a0db",
+    "apps/app/lib/contracts/v2/lifecycle.ts": "04501b3195bab317413ce12ad79097c09d9f9d7913397120b37790d0834976ea",
+    "apps/app/lib/contracts/v2/money-units.ts": "113544a1453b130d54d87d2bcf94b882019d3d593ea1deac2a4fec6073aadeed",
+    "apps/app/lib/contracts/v2/published-model.ts": "d329fd81b72ad8af125e97f796bd8c98c0c633fe5283b88fab0d011f1a447511",
+    "apps/app/lib/contracts/v2/types.ts": "8829662d7f894055c1fba6c5cff0ff47b28d17073a36f43112f525fd27dc3116"
   },
-  "note": "sha256 of every v1/v2 contract file (Python and console) at the F3 base, read from git objects; tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical compares the tree to it. A deliberate contract revision (or the lab export wiring in infrx/contracts/__init__.py) updates its line here."
+  "note": "sha256 of every v1/v2 contract file (Python and console) at the F3 base, read from git objects; tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical compares the tree to it. A deliberate contract revision (or the lab export wiring in infrx/contracts/__init__.py) updates its line here.",
+  "revisions": [
+    {
+      "at": "2026-10-01",
+      "ruling": "R270",
+      "files": [
+        "apps/infrx-api/infrx/contracts/api.py",
+        "apps/infrx-api/infrx/contracts/tasklocal.py"
+      ],
+      "why": "wave-7 keystone: infrx/contracts/api.py added (the shared control-route wire contract); tasklocal.py gains the ap0..ap11 keys (57550-57569)"
+    }
+  ]
 }

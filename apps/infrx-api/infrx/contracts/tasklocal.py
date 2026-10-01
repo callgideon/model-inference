@@ -98,6 +98,14 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     # PostgreSQL port is the one the harness derives, 55532 + the block's offset, as e3c's.
     "e3l": {"postgres": 57032}, "e5l": {"postgres": 57132}, "e6l": {"postgres": 57232},
     "e7l": {"postgres": 57332}, "e8l": {"postgres": 57432},
+    # LW7 (R270): the API-first lifecycle lanes AP-00..AP-11, keys ap0..ap11, 57550-57569
+    # inside the Lab band (the UX lanes are fake-only). ap7's ClickHouse is a block (below).
+    "ap0": {"postgres": 57550}, "ap1": {"postgres": 57551}, "ap2": {"postgres": 57552},
+    "ap3": {"postgres": 57553}, "ap4": {"postgres": 57554, "s3": 57555},
+    "ap5": {"postgres": 57556, "engine-fake": 57557}, "ap6": {"postgres": 57558},
+    "ap7": {"postgres": 57559, "s3": 57562}, "ap8": {"postgres": 57563, "judge-fake": 57564},
+    "ap9": {"postgres": 57565}, "ap10": {"postgres": 57566},
+    "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569},
 }
 
 # A task's own block of a track service, replacing the track's (host port, extra ports).
@@ -119,6 +127,8 @@ TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "t2i": {"clickhouse": (57540, (57541,)), "s3": (57542, ())},
     "t2f": {"clickhouse": (57543, (57544,)), "s3": (57545, ()), "postgres": (57549, ())},
     "t3": {"clickhouse": (57546, (57547,)), "s3": (57548, ())},
+    # LW7: ap7 (AP-07 consent/traces) composes ClickHouse like the T lanes.
+    "ap7": {"clickhouse": (57560, (57561,))},
 }
 
 # track -> {service: (host port, extra ports)}

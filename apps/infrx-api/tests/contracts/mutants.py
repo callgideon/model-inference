@@ -1878,6 +1878,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "contracts/tasklocal.py", '"i", "l", "n", "h", "b", "p", "r", "x")', '"i")',
        "test_the_lab_tracks_develop_against_fakes",
        dies_by=("ValueError",)),          # the defect IS the raise: `unknown track`
+    # R270 (wave 7): the shared control-route wire contract (infrx/contracts/api.py).
+    _m("r270_subclass_status_after_its_base", "a subclass's status row precedes its base class's",
+       "contracts/api.py", '    (errors.OrgSuspended, 403, "suspended", False),\n', "",
+       "test_r270_status_mapping_puts_subclasses_first"),
+    _m("r270_envelope_leaks_operator_detail", "a domain error's operator-only detail never leaves",
+       "contracts/api.py", "code, message = exc.code, exc.message", "code, message = exc.code, str(exc)",
+       "test_r270_envelope_hides_a_bug_s_message_and_keeps_a_domain_message"),
+    _m("r270_error_response_is_cacheable", "an error response is no-store",
+       "gateway/control.py", "    headers = dict(NO_STORE)\n", "    headers = {}\n",
+       "test_r270_error_response_is_no_store_with_the_status"),
     _m("lw0_lane_port_outside_the_band", "every Lab lane port sits in 57500-57599",
        "contracts/tasklocal.py", '"dlab": {"postgres": 57500}', '"dlab": {"postgres": 57600}',
        "test_every_lab_lane_port_sits_in_one_band"),
@@ -3018,7 +3028,8 @@ CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.
                                               "tests/contracts/v2/test_conformance_v2.py",
                                               "tests/contracts/v2/test_lifecycle.py",
                                               "tests/contracts/v2/test_lifecycle_capability.py",
-                                              "tests/contracts/test_cancel_cause.py"))
+                                              "tests/contracts/test_cancel_cause.py",
+                                              "tests/contracts/test_api_wire.py"))   # R270 (wave 7)
 
 
 def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,
