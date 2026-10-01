@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
- "integration_head": "ed22c85d",
+ "integration_head": "815ae8ca",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 373,
- "updated": "2026-10-01T04:52:39Z",
+ "revision": 374,
+ "updated": "2026-10-01T05:09:35Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10816,7 +10816,7 @@
   {
    "id": "W6-LAB-B",
    "task": null,
-   "slice": "wave 6 clean-up lane lab-B (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_cf050177-8d7",
+   "slice": "wave 6 clean-up lane lab-B (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_cf050177-8d7; merged #74",
    "agent": "opus",
    "branch": "codex/w6-lab-B",
    "worktree": ".claude/worktrees/codex-w6-lab-B",
@@ -10827,11 +10827,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T04:48:08Z",
+   "updated": "2026-10-01T05:09:35Z",
    "blocker": null,
-   "next_action": "merge batch #74 (ratify the six consumer files; WR-LABB-1/3/4/5; F1 cases; LABB-RV-2 carried to lab-E) → dispatch lab-D → set LAB_API_URL on Vercel",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -11177,22 +11177,22 @@
   {
    "id": "W6-MERGE-74",
    "task": null,
-   "slice": "merge batch #74 (Opus): lab-B 3e6d78e8 (+the six-consumer ratification, WR-W6-LABB-1/3/4/5, F1 UUID-strictness cases; LABB-RV-2 carried to lab-E); workflow (see RESUME-NOW)",
+   "slice": "merge batch #74 (Opus): lab-B 3e6d78e8 (+the six-consumer ratification, WR-W6-LABB-1/3/4/5, F1 UUID-strictness cases; LABB-RV-2 carried to lab-E); workflow wf_488ca503-80f; integrated at 815ae8ca",
    "agent": "opus",
    "branch": "codex/w5-merge-74",
    "worktree": ".claude/worktrees/codex-w5-merge-74",
    "base": "519bfcc2",
-   "head": null,
+   "head": "6953e4c2",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T04:48:08Z",
-   "updated": "2026-10-01T04:48:08Z",
+   "updated": "2026-10-01T05:09:35Z",
    "blocker": null,
-   "next_action": "integrate → lab-D",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
