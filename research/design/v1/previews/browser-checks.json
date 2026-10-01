@@ -1,0 +1,91 @@
+{
+  "scope": "Design reference only; no backend acceptance",
+  "checks": [
+    {
+      "h1": "A clear path to your first deployment",
+      "pageWidth": 1440,
+      "screen": "infrx design · overview",
+      "width": 1440
+    },
+    {
+      "h1": "Register a private model revision",
+      "pageWidth": 1440,
+      "screen": "infrx design · register",
+      "width": 1440
+    },
+    {
+      "h1": "Marlin SOP · private revision",
+      "pageWidth": 1440,
+      "screen": "infrx design · deployments",
+      "width": 1440
+    },
+    {
+      "h1": "Requests",
+      "pageWidth": 1440,
+      "screen": "infrx design · requests",
+      "width": 1440
+    },
+    {
+      "h1": "Import a dataset",
+      "pageWidth": 1440,
+      "screen": "infrx design · datasets",
+      "width": 1440
+    },
+    {
+      "h1": "Compare revisions",
+      "pageWidth": 1440,
+      "screen": "infrx design · evaluations",
+      "width": 1440
+    },
+    {
+      "h1": "Improve your model",
+      "pageWidth": 1440,
+      "screen": "infrx design · training",
+      "width": 1440
+    },
+    {
+      "h1": "Make your first Marlin request",
+      "pageWidth": 1440,
+      "screen": "infrx design · consumer",
+      "width": 1440
+    },
+    {
+      "h1": "API keys",
+      "pageWidth": 1440,
+      "screen": "infrx design · keys",
+      "width": 1440
+    },
+    {
+      "h1": "Usage",
+      "pageWidth": 1440,
+      "screen": "infrx design · usage",
+      "width": 1440
+    },
+    {
+      "h1": "Credits",
+      "pageWidth": 1440,
+      "screen": "infrx design · credits",
+      "width": 1440
+    },
+    {
+      "pageWidth": 390,
+      "screen": "infrx design · consumer",
+      "width": 390
+    },
+    {
+      "pageWidth": 320,
+      "screen": "infrx design · consumer",
+      "width": 320
+    },
+    {
+      "pageWidth": 390,
+      "screen": "infrx design · overview",
+      "width": 390
+    },
+    {
+      "pageWidth": 768,
+      "screen": "infrx design · overview",
+      "width": 768
+    }
+  ]
+}

@@ -1,0 +1,174 @@
+API focused — final 25 lines (excerpt)
+........................................................................ [ 14%]
+...............s........................................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 74%]
+..s....ssss.s.s.s.s..s..........................s.s.s....ssss.s.s.s...ss [ 88%]
+s.s.s.s..ss.ssssss.s.s.s.s.s.s.s.s.s.s.s.s..s.ssss..ss                   [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/rey/Documents/GitHub/model-inference-v1-review/apps/infrx-api/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /Users/rey/Documents/GitHub/model-inference-v1-review/apps/infrx-api/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+432 passed, 54 skipped, 2 warnings in 15.02s
+
+App tests/lint/types — final 42 lines (excerpt)
+✔ U1-T16 the page model computes every href and page number the markup renders (17.514042ms)
+✔ U1-T19 the error boundaries wire up the recovery that can actually recover (0.858583ms)
+✔ U1-T17 a key filter naming a key of another organization is explained, not shown as silence (5.487125ms)
+✔ U1-T18 no usage-page string offers payment or calls promotional credit revenue (3.547459ms)
+(node:7066) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/tests/u/wiring-u2.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ U2-W01 the consumer navigation links Settings (1.283166ms)
+✔ U2-W02 no module remembers or recalls a key's plaintext (0.316958ms)
+✔ U2-W03 the keys page and the Docs carry the same P-26 revocation sentence (0.198375ms)
+(node:7067) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/tests/u/wiring-u3.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ U3-W02 the shared operator action runs through the audited RPC port as the signed-in operator (1.156416ms)
+✔ U3-W04 the operator's navigation entry is labelled as its page is titled (Operator) (0.442916ms)
+ℹ tests 650
+ℹ suites 4
+ℹ pass 591
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 59
+ℹ todo 0
+ℹ duration_ms 3350.851
+cd apps/app && pnpm lint
+
+> infrx-app@0.1.0 lint /Users/rey/Documents/GitHub/model-inference-v1-review/apps/app
+> eslint
+
+
+/Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/lib/contracts/conformance.ts
+  4294:35  warning  'ids' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/lib/contracts/fake-services.ts
+  81:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
+Generating route types...
+✓ Types generated successfully
+
+App build and bundle — final 35 lines (excerpt)
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ I2A-ENV-01 a complete production configuration starts (1.304ms)
+✔ I2A-ENV-02 production missing any required server-only variable fails closed, naming it (1.538541ms)
+✔ I2A-ENV-03 the production API origin is https with no path, credentials, query or fragment (0.225959ms)
+✔ I2A-ENV-04 production is bound to the production project and the production origin (0.123334ms)
+✔ I2A-ENV-05 a preview carrying production credentials is refused (0.273125ms)
+✔ I2A-ENV-06 the environment is stated, never guessed (0.137583ms)
+✔ I2A-ENV-07 the matrix: public names are NEXT_PUBLIC_, server-only names are not (0.076209ms)
+✔ I2A-AUTH-01 production allows only the production origin (0.078958ms)
+✔ I2A-AUTH-02 previews are this project's Vercel hosts only (0.106459ms)
+✔ I2A-AUTH-03 every callback the auth flows build is on its project's allowlist, and only there (0.400625ms)
+✔ I2A-AUTH-04 the P-05 settings the code expects are listed by name (0.130292ms)
+✔ I2A-REL-01 the release identity comes from the build, never invented (0.292166ms)
+✔ I2A-REL-03 the host's commit wins; a disagreeing INFRX_RELEASE_SHA makes the commit unknown (0.089292ms)
+(node:8008) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/tests/i2a/surface.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/rey/Documents/GitHub/model-inference-v1-review/apps/app/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ I2A-BUNDLE-01 no client module reaches a file that names a server-only variable (source walk) (35.937583ms)
+✔ I2A-ENV-08 every environment variable the App reads is in the matrix or named exempt (6.090708ms)
+✔ I2A-ENV-09 a variable is required only if the App reads it (4.910792ms)
+✔ I2A-START-01 the server checks its environment once at startup and fails closed (0.168292ms)
+✔ I2A-CACHE-01 every response defaults to private, no-store; only static assets are excluded (1.474792ms)
+✔ I2A-CACHE-02 a page may be cacheable only if it serves no per-person data (4.917583ms)
+✔ I2A-REL-02 the release identity route is private and built from the loader (0.305292ms)
+✔ I2A-BUILT-01 the built browser bundle names no server-only variable (19.249041ms)
+✔ I2A-BUILT-02 no private page was prerendered as shared static content (0.244875ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.978875
+
+Lab tests/lint/types — final 25 lines (excerpt)
+✔ V1M-L02 content reads honestly: shared, metadata only, not captured, lost with its reason, expired (0.162458ms)
+✔ V1M-L03 an empty workspace says capture-off requests leave no record; an empty page with more to come says so (0.16725ms)
+✔ V1M-L04 the next link is the server's cursor, and the way back to the first page shows only on a later page (0.127542ms)
+✔ V1M-L05 a refusal is fixed copy: a viewer's role, a lost workspace, an unreachable service; never rows (0.124709ms)
+(node:8512) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/rey/Documents/GitHub/model-inference-v1-review/apps/lab/tests/v/list/wiring.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/rey/Documents/GitHub/model-inference-v1-review/apps/lab/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ V1M-W01 the detail page's trace port is the Lab adapter, reading with the session's access token (36.170083ms)
+✔ V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent (1.192583ms)
+ℹ tests 276
+ℹ suites 0
+ℹ pass 262
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 14
+ℹ todo 0
+ℹ duration_ms 1702.589208
+cd apps/lab && pnpm lint
+
+> infrx-lab@0.1.0 lint /Users/rey/Documents/GitHub/model-inference-v1-review/apps/lab
+> eslint
+
+Generating route types...
+✓ Types generated successfully
+
+API lint — final 5 lines (excerpt)
+WARN Broken interpreter cache entry at /Users/rey/.cache/uv/interpreter-v4/ac57ab614d7f56de/7a162b02a2d40158.msgpack, removing: wrong msgpack marker FixArray(3)
+Installed 1 package in 5ms
+All checks passed!
+
+API types — final 5 lines (excerpt)
+Downloading pyright (5.9MiB)
+ Downloaded pyright
+Installed 3 packages in 107ms
+pyright: 458 errors (baseline 458)
+
+Combined benchmark/certify — final 30 lines (excerpt)
+
+models/marlin2b/tests/test_e1b_l8.py:95: AssertionError
+___ test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95 ___
+
+    def test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95():
+        """N14, from box run2: 120 requests over the full corpus held only 54/52/40 short clips
+        (the TTFT class: at most 30 s at no more than 720p), so the TTFT p95 was unknown at every
+        rung. A box rung sends its declared requests, or the fewest more for which bench's own
+        schedule (its shuffled cycle, this runner's seed) holds 60 short clips."""
+        assert certify.short_clip({"duration_s": 30.0, "width": 1280, "height": 720})
+        assert not certify.short_clip({"duration_s": 31.0, "width": 640, "height": 360})
+        assert not certify.short_clip({"duration_s": 10.0, "width": 1920, "height": 1080})
+        clips = certify.bench.load_corpus(str(certify.MARLIN / "corpus" / "manifest.json"),
+                                          "full")[0]
+
+        def shorts(n):
+            return sum(certify.short_clip(item["clip"]) for item in certify.bench.build_schedule(
+                n, clips, ["video_b64"], seed=certify.SEED))
+        declared, needed = certify.MATRIX["box"]["envelope"]["requests"], 60
+        sized = certify.rung_requests(declared, "full")
+>       assert shorts(declared) < needed <= shorts(sized) and shorts(sized - 1) < needed, sized
+E       AssertionError: 120
+E       assert (60 < 60)
+E        +  where 60 = <function test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95.<locals>.shorts at 0x10a05dc60>(120)
+
+tests/integration/backend/test_certify.py:1095: AssertionError
+=========================== short test summary info ============================
+FAILED models/marlin2b/tests/test_e1b_l8.py::test_the_reference_half_is_a_declared_stop_that_silences_and_restores_the_alert_cycle
+FAILED tests/integration/backend/test_certify.py::test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95
+2 failed, 168 passed in 19.49s
+
+Certification file alone — final 5 lines (excerpt)
+.................................................                        [100%]
+49 passed in 7.73s

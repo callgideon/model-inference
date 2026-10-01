@@ -1,92 +1,53 @@
-# model-inference
+# Model inference platform
 
-**State 2026-10-01:** the consumer App and its Marlin-2B inference API are live (runtime 41693d5d,
-CREDIT regime); the provider Lab is deployed for internal testing at `https://lab.callbill.ai`
-with its control service on the pilot box; hosted Supabase is at migrations 0001–0059.
-Start at the [state of record](research/plan/25-state-2026-10-01.md) and the
-[two-platform architecture](research/platforms/README.md). `apps/app` serves model consumers;
-`apps/lab` serves model providers. [HANDOFF.md](HANDOFF.md) preserves historical operational
-context; the dated dispatches it and the plan README carry (2026-09-21 to 2026-09-24) are history.
+We serve specialist open models through a metered API. Marlin-2B finite-video inference is the first workload; SOP verification over recorded robotics data is the intended application.
 
-Per-experiment inference and benchmarking code for the Gideon GPU work.
+Two products share the runtime:
 
-## Layout
+- **Inference App** (`apps/app`): consumer accounts, API keys, model catalog, credits, usage and results. Free plan; one-time 10,000 CREDIT per verified individual.
+- **Provider Lab** (`apps/lab`): provider workspaces, model versions, authorized observations, datasets, evaluations and improvement workflows. Several backend integrations remain incomplete.
 
-One directory per experiment, one branch per experiment. `main` carries the
-shared tooling and every experiment's metadata; experiment branches are where
-that experiment's serve configs, benchmarks and results diverge.
+**Deployed does not mean launch accepted.** The Marlin API and consumer App are deployed, public signup remains closed, and production acceptance is pending. The Lab is deployed for limited internal testing. Read [STATUS.md](STATUS.md) for the dated deployment inventory, evidence, open blockers and next work.
 
+## Start here
+
+1. [Current state](STATUS.md) — what is implemented, deployed, verified and still missing.
+2. [Launch review and production test sequence](research/plan/26-launch-readiness-review-2026-10-01.md).
+3. [Architecture and product requirements](research/platforms/README.md).
+4. [Implementation index](research/plan/README.md), [carried work](research/plan/consumer-v1/10-carried-work-register.md) and [contributor instructions](CLAUDE.md).
+5. [App and Lab UX designs / implementation package](research/design/v1/README.md) — live-screen audit, proposed visual reference, detailed screen states and parallel implementation handoff; not yet implemented.
+6. [API-first Marlin lifecycle](research/plan/api-lifecycle/README.md) — real API audit, thin-frontend contract, import/deployment/publication/trace/judge plans and API-only acceptance handoff.
+
+## Repository
+
+| Location | Purpose |
+|---|---|
+| [apps/app](apps/app/README.md) | Consumer Next.js App; Supabase auth and account data |
+| [apps/lab](apps/lab/README.md) | Separate provider Next.js Lab |
+| [apps/infrx-api](apps/infrx-api/README.md) | Durable inference gateway, workers, accounting, media and Lab services |
+| [apps/app/supabase](apps/app/supabase/README.md) | Shared, ordered database migration history |
+| [infra](infra/README.md) | Deployment, monitoring, recovery and release tooling |
+| [models/marlin2b](models/marlin2b/README.md) | Pinned serving recipe, client, corpus and benchmarks |
+| `models/common`, other `models/*` | Shared download tooling and additional model experiments; not a public model catalog |
+| [research](research/README.md) | Dated research, product specifications, plans and verification evidence |
+
+PostgreSQL owns accepted work, leases, output journal and accounting. Valkey is a rebuildable scheduling index; object storage holds serving media/results. Workers call the pinned engine. Neither web application is required for an already provisioned API client to perform inference.
+
+## Local checks
+
+```sh
+make api-env
+pnpm --dir apps/app install --frozen-lockfile
+pnpm --dir apps/lab install --frozen-lockfile
+make api-test console-test lab-test
 ```
-models/common/          shared logic — download, env. Fix things here, not five times.
-models/deepseek41f/     deepseek-ai/DeepSeek-V4.1-Flash          ~511GB
-models/deepseek41fnvfp4/ nvidia/DeepSeek-V4.1-Flash-NVFP4        ~492GB
-models/qwen3827b/       Qwen/Qwen3.8-27B                          ~54GB
-models/kimik3/          moonshotai/Kimi-K3                      ~1400GB
-models/marlin2b/        NemoStation/Marlin-2B (gated)              ~5GB
-apps/app/               consumer inference App (Next.js, Vercel, Supabase)
-apps/lab/               provider Lab (Next.js, Vercel; live for internal testing)
-apps/infrx-api/         shared inference gateway/runtime + deployment
-research/platforms/    current architecture, separate specs and roadmaps
-research/               sizing, scaling and platform research
-```
 
-Each experiment directory holds:
+Use each application's README for local configuration. Run checks appropriate to changed paths; the full command inventory and Docker-backed gates are in [the test guide](tests/integration/README.md) and [supported environment](tests/integration/ENVIRONMENT.md). Skipped checks are not passes. Current API typing uses an explicit error baseline.
 
-- `model.env` — metadata only: HF repo, S3 prefix, size, gated flag.
-- `download.sh` — fetch the weights.
+Production changes use the [rollout runbooks](infra/rollout/README.md), with a recorded release and operating window. A documentation push, successful build or public health response is not a release certificate.
 
-## Downloading weights
+## Later scope
 
-```bash
-./models/deepseek41f/download.sh       # S3 if reachable, else Hugging Face
-SOURCE=hf ./models/qwen3827b/download.sh # force Hugging Face
-DEST=/data/w ./models/kimik3/download.sh # somewhere other than WEIGHTS_ROOT
-```
+GPU autoscaling, scale-to-zero, general custom-model hosting, additional engines/hardware, payments and a complete model-improvement service are not delivered launch features. See the [hosting roadmap](research/plan/23-inference-hosting-roadmap.md) and [separate product roadmaps](research/platforms/README.md).
 
-S3 is tried first when `S3_BUCKET` is exported, because on an AWS node that copy
-is in-region over a gateway endpoint — free, and far faster than Hugging Face.
-With `S3_BUCKET` unset, or off AWS entirely, it falls through to Hugging Face
-rather than failing. That is what makes the same script usable on bare metal.
-
-`S3_BUCKET` is not hardcoded on purpose: this repo is public and the bucket name
-embeds an AWS account id. Export it on machines that should use the fast path.
-
-Weights default to `$WEIGHTS_ROOT/$EXP`, where `WEIGHTS_ROOT` is `/mnt/nvme` —
-instance-store NVMe on a p6 node. Override it anywhere that path is wrong.
-
-`marlin2b` is **gated**: accept the licence on Hugging Face and export
-`HF_TOKEN`, or the download fails with a 403.
-
-## Research
-
-Fact-checked GPU-inference research for these five experiments × the 8 GPUs
-in `research/gpus/`: fit, parallelism, executed weight format, throughput,
-latency and $/1M tokens, each numerically audited against the model vendor's
-own API price. Start at [`research/README.md`](research/README.md) — the
-index, legend and a headline table of the best GPU per model. The two
-matrices worth bookmarking: [`research/matrix/fit-matrix.md`](research/matrix/fit-matrix.md)
-(what fits where) and [`research/matrix/cost-matrix.md`](research/matrix/cost-matrix.md)
-($/1M tokens, every cell linked to its source). All formulas live in
-[`research/METHODOLOGY.md`](research/METHODOLOGY.md).
-For running these models at scale in production — cluster, serving, cost,
-reliability, and how commercial inference providers do it — see
-[`research/scaling/`](research/scaling/README.md). For taking the Marlin-2B
-endpoint to real users on AWS today — no dropped requests, autoscaling,
-caching, optimization — see [`research/production-api/`](research/production-api/README.md).
-For the closed-loop model-replacement platform built on top of this —
-tracing, annotation, distillation, evals, A/B-gated promotion — see
-[`research/platform/`](research/platform/README.md).
-
-## Notes
-
-- `S3_DIR` in `model.env` intentionally differs from the directory name. The S3
-  mirror was populated before these names existed; changing it means moving
-  objects, not editing a string.
-- `kimik3` is ~1.4TB (1,561GB on disk). It fits one 8×B300 node only because the
-  checkpoint is natively MXFP4 — do not assume an FP8 variant will. Note the
-  node has ~2,144GB usable (268GB/GPU on HGX/DGX B300 and AWS p6-b300), not
-  8×288GB = 2304GB; 288GB/GPU is the GB300 NVL72 figure. See `research/`.
-
-## Verification log
-
-- 2026-10-01 (W6 docs-state): the three stacked 2026-09-22/09-24 dispatch banners replaced by one dated state line pointing at `research/plan/25-state-2026-10-01.md`; `apps/lab/` described as built and deployed.
+Historical session handoffs were removed from the working tree. [Documentation history](research/plan/DOCUMENTATION.md) explains what was consolidated and how to retrieve dated evidence.

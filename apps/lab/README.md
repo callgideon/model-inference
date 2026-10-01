@@ -1,10 +1,16 @@
 # Provider Lab (`apps/lab`)
 
-**State 2026-10-01:** live for internal testing at `https://lab.callbill.ai` (Vercel project
-`infrx-lab`, team `callgideon`), reading the Lab control service at
-`https://lab-control.callbill.ai` on the pilot box. What runs where and what is pending:
-[state of record 25](../../research/plan/25-state-2026-10-01.md); the operator runbook is
-[08](../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md).
+**Deployed for limited internal testing**, not an accepted complete improvement platform.
+`https://lab.callbill.ai` (Vercel project `infrx-lab`, team `callgideon`) reads the control
+service at `https://lab-control.callbill.ai`. See [current state](../../STATUS.md), the
+[carried register](../../research/plan/consumer-v1/10-carried-work-register.md) and
+[operator runbook](../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md).
+
+Evaluation/pipeline listings, trace composition, dedicated worker logins and actual engine
+smoke have unresolved gaps. Other worker roles remain inert. The reported evaluation
+double-debit race must be fixed before enabling that worker; the trace pump needs its real
+lost-ack retry proof. The current tester checklist covers access/settings and a judge dry-run,
+not a complete dataset → evaluation → training → deployment workflow.
 
 The provider product: a model team signs in, selects a provider workspace, and works on its own
 models — deployments, authorized inference evidence, evaluation, data curation, improvement
@@ -46,8 +52,16 @@ Standalone install like `apps/app` (own `pnpm-lock.yaml`, no root workspace, whi
 the App's lockfile and Vercel build); Lab-only shared TypeScript comes from `packages/shared`
 (`link:` dependency; no reinstall after an edit there), never from `apps/app`. Dev port 3100 (the App keeps 3000).
 
+From the repository root:
+
 ```bash
-cd apps/lab && pnpm install --frozen-lockfile && pnpm dev
+pnpm --dir apps/lab install --frozen-lockfile
+pnpm --dir apps/lab dev
+```
+
+Checks, also from the repository root:
+
+```bash
 make lab-test lab-lint lab-typecheck lab-build lab-mutants   # in `make check`
 make lab-e2e                                                  # Docker, key l4; not in check
 ```

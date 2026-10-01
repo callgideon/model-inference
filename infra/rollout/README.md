@@ -6,17 +6,17 @@ hosted 0027–0051, the box at 41693d5d) and the two Lab windows (2026-09-30: ho
 box on 2026-10-01 (§6). The records are the
 [session-03 record](../../research/plan/evidence/coordinator/2026-09-24-session-03.md) (lines 525,
 591–595) and [09](../../research/plan/consumer-v1/09-path-to-internal-testing.md)'s log; what is
-still pending (E4C, §5) is the [state of record](../../research/plan/25-state-2026-10-01.md).
+still pending (E4C, §5) is the [current state](../../STATUS.md).
 **Coordinator- or operator-run.** The I2B session wrote and locally rehearsed these steps. Every box step is a script under `steps/`,
 sent by `ssm.sh` as root through `aws ssm send-command` (AWS-RunShellScript), base64-wrapped
 so no quoting survives the trip. Coordinator-host steps are the exact AWS/Docker commands
 below. Log purpose, expected cost and rollback in the coordinator record **before** each
 mutating step (session-02 operating rule), and hold the deployment lock of
-[infra/README.md §1](../README.md) for the whole window.
+[environment ownership](../README.md#window-ownership) for the whole window.
 
 ```bash
 aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
-export RELEASE=<the merged commit to deploy>          # a full SHA on claude/consumer-v1
+export RELEASE=<the merged commit to deploy>          # the recorded committed integration SHA
 export INSTANCE=i-0e8449a4ffca29bab
 ```
 

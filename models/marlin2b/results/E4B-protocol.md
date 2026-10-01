@@ -284,4 +284,4 @@ run closed, and the coordinator's decision recorded in
   `ttft_p95_short` (6 s) and `latency_p95` (9 s). Recorded beside it, not hidden by it: run 1's TTFT
   is slower than run3's on the same corpus (all requests: median 1.39 → 2.07 s, p95 4.19 → 7.36 s;
   short clips: max 2.34 → 5.10 s) while decode is identical — an admission/queueing tail under
-  long-clip prefill, carried as register row 85.
+  long-clip prefill, carried as register row 87 (numbered 85 before the lifecycle-plan merge).

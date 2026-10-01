@@ -4684,14 +4684,15 @@
  "product_revision": "2026-09-21-two-platforms-individual-grant",
  "implementation_baseline_commit": "271add946771ddc4efc3cbc2044758443080759b",
  "authority": [
+  "../../STATUS.md",
+  "26-launch-readiness-review-2026-10-01.md",
+  "README.md",
   "22-consumer-v1-implementation.md",
-  "24-consumer-v1-session-handoff.md",
   "21-v1-consumer-readiness-review-2026-09-24.md",
   "../platforms/README.md",
   "18-marlin-backend-first.md",
   "12-complete-build-plan.md",
   "15-pending-inputs.md",
-  "16-fresh-session-handoff.md",
   "10-wave2-platform-audit.md",
   "11-wave3-revision-handoffs.md",
   "08-platform-split.md",
@@ -4699,7 +4700,7 @@
   "13-lab-improvement-handoffs.md",
   "14-expansion-gates.md"
  ],
- "status_semantics": "Baseline integrated/implemented records describe the original v1 evidence, not product-v2 compatibility. amendment_status and revision_tasks record outstanding work. S1 audit is implemented and prepared for independent review; no deployment is implied.",
+ "status_semantics": "Implemented and integrated records identify code and local evidence, not deployed or production-accepted behavior. Current state is STATUS.md; release decisions require their recorded gates. Task statuses are unchanged by the documentation cleanup.",
  "release_gates": {
   "BACKEND-LOCAL": {
    "requires": [
@@ -4804,16 +4805,16 @@
  },
  "current_execution_scope": {
   "id": "BACKEND-FIRST-MARLIN",
-  "objective": "Complete robust, measured and optimized Marlin2B inference through a headless authenticated endpoint for SOP verification over large robotics datasets; then launch the consumer App, then provider Lab.",
-  "dispatch_now": "S3 evidence reconciliation and E2C environment inventory; F2C contract freeze, then E4C corrective dependency closure. Seven disjoint runtime lanes; M5 then M6 and shared runner edits serial. No App feature dispatch before accepted BACKEND-READY.",
-  "dispatch_later": "After accepted E4C, C0/C3A/A2/A3/U1R/U2/U3/U4 and E3A/I2A/I3/E4 deliver real consumer journey; Lab follows App. Missing external inputs do not auto-enable UI/fleet work.",
+  "objective": "Qualify the deployed Marlin endpoint and consumer App for a bounded invited production pilot, then public self-service; provider enablement and fleet/optimization follow their own gates.",
+  "dispatch_now": "Close E4C/operating evidence, hosted auth/CAPTCHA and the actual two-user consumer journey per review 26. Reuse implemented repairs and existing valid evidence; do not redispatch S3/F2C or completed App work from historical plans.",
+  "dispatch_later": "After consumer acceptance, prioritize the measured SOP workload and inference optimization. Provider workflow enablement, scaling and general hosting follow their independent roadmap/activation gates; do not redispatch completed consumer feature tasks.",
   "robustness": "Durable accepted work, exact accounting, isolated tenants, bounded overload, tested restart/restore/rollback and observable recovery inside a measured serving envelope. Single-GPU recovery does not establish high availability.",
   "optimization": "Baseline and profile first; controlled media/engine experiments and final combined load/soak/parity proof. No invented latency/throughput target or quality-preserving quantization claim.",
   "terminology": "SOP verification over robotics data is the application; verify the actual Marlin protocol. Native live-video transport and robot actuation are not inferred."
  },
  "consumer_v1_closure": {
   "program": "22-consumer-v1-implementation.md",
-  "handoff": "24-consumer-v1-session-handoff.md",
+  "handoff": "README.md",
   "baseline_commit": "6db71ee3",
   "backend_gate_task": "E4C",
   "finding_tasks": {

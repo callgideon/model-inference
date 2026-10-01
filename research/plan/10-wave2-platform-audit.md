@@ -1,6 +1,6 @@
 # Wave-2 audit and two-platform continuation
 
-> Follow-on scheduling: [complete build plan](12-complete-build-plan.md) and [fresh-session handoff](16-fresh-session-handoff.md). Historical counts/status evidence below describe the audit boundary; current manifest v4 includes later planned work and App-first Marlin priority.
+> **Historical September 21 audit.** Findings and counts below describe that baseline. Current state and next work are in [STATUS.md](../../STATUS.md) and [review 26](26-launch-readiness-review-2026-10-01.md).
 
 2026-09-21. Implementation baseline: `271add946771ddc4efc3cbc2044758443080759b`, pulled from `origin/main` with `--ff-only`. Audit branch: `codex/wave2-platform-audit`. This document supersedes the next-step ordering and single-product assumptions in the [wave-2 handoff](evidence/coordinator/2026-09-21-wave2-handoff.md). Preserve that handoff and its evidence as history. The implementation model or agent name does not affect task ownership or acceptance.
 

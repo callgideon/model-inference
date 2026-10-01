@@ -2,7 +2,7 @@
 
 Reviewed on 2026-09-24: code/tests at **`d7dc3690`**, then refreshed to main **`726d004d`** when new E1B results arrived during review. That delta adds measurements and coordination notes, with no runtime-code change. This is a repository and release-evidence audit, followed by a proposed priority order for discussion. It does not declare BACKEND-READY, authorize a hosted cutover, or mark pending tasks complete.
 
-Read this beside [handoff 20, especially §14](20-platform-handoff-2026-09-24.md), [the operational tail](handoffs/operational/HANDOFF-20260924T2115Z.md), and [tracker v46](evidence/coordinator/PROGRESS.md). Historical session records remain evidence for their own environments. Implementation-agent names have no bearing on the product architecture.
+Read this beside [handoff 20, especially §14](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/20-platform-handoff-2026-09-24.md), [the operational tail](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/handoffs/operational/HANDOFF-20260924T2115Z.md), and [tracker v46](evidence/coordinator/PROGRESS.md). Historical session records remain evidence for their own environments. Implementation-agent names have no bearing on the product architecture.
 
 ## 1. Decision supported by the review
 
@@ -208,4 +208,4 @@ See [audit probes](evidence/v1-review-20260924/reproduce.py) and [their recorded
 
 ## Consumer v1 implementation follow-through (2026-09-24)
 
-[Program 22](22-consumer-v1-implementation.md), [the five module briefs](consumer-v1/01-contracts-and-data.md), [manifest](tasks.json) and [handoff/prompt 24](24-consumer-v1-session-handoff.md) turn the reviewed gaps into corrective work. S3 reconciles any newer evidence before dispatch; E3C/E4C now gate repaired backend readiness. This addition does not alter the historical observations or claim a new runtime pass. [Roadmap 23](23-inference-hosting-roadmap.md) preserves the later hosting/scaling/Modal discussion.
+[Program 22](22-consumer-v1-implementation.md), [the five module briefs](consumer-v1/01-contracts-and-data.md), [manifest](tasks.json) and [handoff/prompt 24](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/24-consumer-v1-session-handoff.md) turn the reviewed gaps into corrective work. S3 reconciles any newer evidence before dispatch; E3C/E4C now gate repaired backend readiness. This addition does not alter the historical observations or claim a new runtime pass. [Roadmap 23](23-inference-hosting-roadmap.md) preserves the later hosting/scaling/Modal discussion.

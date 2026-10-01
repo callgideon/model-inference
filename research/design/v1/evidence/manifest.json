@@ -1,0 +1,138 @@
+{
+  "scope": "Live UI audit only",
+  "screenshots": [
+    {
+      "file": "01-lab-sign-in.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "1b1edf8c642cb7de2a484dcb7fee506fcf33fa97fd7049271bbcefd87e7b0eaa",
+      "written_at_utc": "2026-10-01T20:50:33.163361+00:00"
+    },
+    {
+      "file": "02-lab-overview.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "179e98903c42d7e91c0877648f21be99190bb72b0fc197c4fb382f742fc73adc",
+      "written_at_utc": "2026-10-01T20:51:07.422373+00:00"
+    },
+    {
+      "file": "03-lab-models.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "2eb747066403a041e35b3f2a890d2a826216245f469a6b2395dbf27ab2c89541",
+      "written_at_utc": "2026-10-01T20:51:48.689854+00:00"
+    },
+    {
+      "file": "04-lab-deployments.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "18bc35b8ba96f24f935b36397b675b04f379226299aec278bae0a528b85aec97",
+      "written_at_utc": "2026-10-01T20:51:58.443955+00:00"
+    },
+    {
+      "file": "05-lab-requests.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "9f38bd70ec0874fe37c30b6686c82cd1b15d984c7a559f2d81e317df567a277f",
+      "written_at_utc": "2026-10-01T20:51:59.351152+00:00"
+    },
+    {
+      "file": "06-lab-evaluations.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "52b8b9c99cafa1a3c974e59493698b403228efa070972c06af7793f0720459b4",
+      "written_at_utc": "2026-10-01T20:52:10.292382+00:00"
+    },
+    {
+      "file": "07-lab-datasets.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "ffb1d68de7cf1aa0e4eebb45c4e999f4cb6659989961998d8a979cef1c75cff1",
+      "written_at_utc": "2026-10-01T20:52:11.704819+00:00"
+    },
+    {
+      "file": "08-app-sign-in.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "285753be59039f9e60cdeded1f7dabc7e78e39479090930fe9ceecd304e68a73",
+      "written_at_utc": "2026-10-01T20:52:24.906168+00:00"
+    },
+    {
+      "file": "09-app-first-screen.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "7fb4e3015647c0ec6b5f72cffbffd9ec8b95a7275c10fdd792339e0b8a4d89bd",
+      "written_at_utc": "2026-10-01T20:52:46.580832+00:00"
+    },
+    {
+      "file": "10-app-api-keys.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "afbdde00c8ee176e812db209c2c6e0f4f89b079fe1c766c98fe9b8be7aae3874",
+      "written_at_utc": "2026-10-01T20:53:28.751405+00:00"
+    },
+    {
+      "file": "11-app-create-key.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "fd508d023ebeb4f0a48657ac326d83f4a95f78395866b939b2c5073309357c3d",
+      "written_at_utc": "2026-10-01T20:53:29.255870+00:00"
+    },
+    {
+      "file": "12-app-usage.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "cab891b1600c44ee942f90a222920ff984a2658d74613581e133d79fc037155f",
+      "written_at_utc": "2026-10-01T20:54:06.424924+00:00"
+    },
+    {
+      "file": "13-app-credits.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "a8bd43288f4ebbb3606d1985cdd0da5bacb5b2819333b3a36e27687548276de8",
+      "written_at_utc": "2026-10-01T20:54:33.220881+00:00"
+    },
+    {
+      "file": "14-app-docs.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "72b43a2f5f42144f86ee650b10b4fa8950cc4f6ee31efd130878563226dd6379",
+      "written_at_utc": "2026-10-01T20:54:50.595855+00:00"
+    },
+    {
+      "file": "15-app-settings.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "93491f925c0ab83c466b535e4fe1ebceff6df128892da7a020434ee6d6e14a17",
+      "written_at_utc": "2026-10-01T20:58:39.852736+00:00"
+    },
+    {
+      "file": "16-lab-settings.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "9639b7c35c950beaed5b04066585db79441d021829757d87a28b27f5b8b7c387",
+      "written_at_utc": "2026-10-01T20:58:40.197128+00:00"
+    },
+    {
+      "file": "17-app-retention.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "d31828635562b8aa51d126e85bc6fae59e1150eaace7760d46f4108adf3baa27",
+      "written_at_utc": "2026-10-01T20:59:08.348985+00:00"
+    },
+    {
+      "file": "18-app-mobile.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "4425fb4170fc5efb49124f9861da1373cfa03ba45b9d93a2f9f14c598fff3f38",
+      "written_at_utc": "2026-10-01T20:59:08.605644+00:00"
+    },
+    {
+      "file": "19-app-mobile-escape.png",
+      "width": 65536,
+      "height": 4292542531,
+      "sha256": "a11dcdea169fe95b733e45bda463ab9cada47a96c1612f79c1885b1916247d2f",
+      "written_at_utc": "2026-10-01T20:59:14.278638+00:00"
+    }
+  ]
+}

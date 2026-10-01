@@ -4,7 +4,7 @@ Status: planned. [Program](../22-consumer-v1-implementation.md) and [manifest](.
 
 ## S3 — Reconcile the actual baseline before coding
 
-Own a new dated coordinator evidence record and proposed status corrections; coordinator merges manifest changes. Fetch main, read `RESUME-NOW`, the newest operational tail, [handoff 20](../20-platform-handoff-2026-09-24.md) §14, [review 21](../21-v1-consumer-readiness-review-2026-09-24.md), progress tracker and current release decision. Do not assume the in-flight run3 is still running or that all RV findings remain open.
+Own a new dated coordinator evidence record and proposed status corrections; coordinator merges manifest changes. Fetch main, read `RESUME-NOW`, the newest operational tail, [handoff 20](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/20-platform-handoff-2026-09-24.md) §14, [review 21](../21-v1-consumer-readiness-review-2026-09-24.md), progress tracker and current release decision. Do not assume the in-flight run3 is still running or that all RV findings remain open.
 
 1. Record source SHA, deployed SHA/image/runtime/model/processor/config hashes, migration history, enabled regime/flags, effective limits and current traffic state. Read configuration through sanitized queries; never put credentials or customer prompts in evidence.
 2. Map every RV-01…RV-12 to open / fixed with evidence / superseded with reason. Preserve old task completion history while distinguishing implemented runner from accepted release. Reuse the bda1586 E1B 120-attempt cells only for the exact behavior/profile they measured; record any invalidated assumptions.

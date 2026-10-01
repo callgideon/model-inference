@@ -1,5 +1,7 @@
 # Pending work, decisions and environment inputs
 
+This is a dated decision history: later decisions/enactment supersede earlier pending rows. Use [STATUS.md](../../STATUS.md) and the [carried register](consumer-v1/10-carried-work-register.md) for current unresolved work. A decided input does not by itself prove hosted enactment or acceptance.
+
 **Current closure (2026-09-24):** [Program 22](22-consumer-v1-implementation.md) / E3C–E4C supersede the older release task references below. S3 revalidates dated resolutions against the current environment; historical authorization remains valid within its scope. This Mac planning host lacks Docker, which does not revoke the implementation host’s recorded availability. Current rates/limits/retention and test bounds must be pinned before live runs.
 
 Updated 2026-09-22. Current priority is the **Marlin inference backend**; App launch follows. This register complements [all task statuses](17-task-ledger.md); it is not permission to skip unresolved acceptance criteria. Owners record resolved values/evidence and date here without secrets. Missing inputs block only the stated boundary; continue independent work inside the active scope.

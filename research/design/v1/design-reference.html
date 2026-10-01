@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>infrx · App & Lab design reference</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0a0a;
+        --panel: #151515;
+        --raised: #1d1d1d;
+        --border: #303030;
+        --text: #f5f5f5;
+        --muted: #a8a8a8;
+        --green: #a5dfbd;
+        --amber: #e7c885;
+        --red: #f1aaaa;
+        --radius: 12px;
+        font-family:
+          Inter,
+          Geist,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 14px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      select,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button,
+      a {
+        touch-action: manipulation;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        color: #a5a5a5;
+      }
+      a {
+        color: inherit;
+        text-underline-offset: 4px;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid #b8d3ff;
+        outline-offset: 4px;
+      }
+      button {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #1b1b1b;
+        color: var(--text);
+        padding: 10px 14px;
+        min-height: 42px;
+        font-weight: 550;
+      }
+      button:hover {
+        background: #282828;
+      }
+      button.primary {
+        background: #ededed;
+        border-color: #ededed;
+        color: #101010;
+      }
+      button.primary:hover {
+        background: white;
+      }
+      button.subtle {
+        background: transparent;
+        border-color: transparent;
+        color: var(--muted);
+      }
+      .refbar {
+        min-height: 64px;
+        background: #20201d;
+        border-bottom: 1px solid #3b3b32;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 12px 24px;
+        position: relative;
+        z-index: 10;
+      }
+      .refbrand {
+        font-size: 12px;
+        font-weight: 650;
+        color: #f1e7c6;
+        letter-spacing: 0.06em;
+      }
+      .refnote {
+        font-size: 12px;
+        color: #c3beae;
+        flex: 1;
+      }
+      .seg {
+        display: flex;
+        background: #0d0d0d;
+        border: 1px solid #45443c;
+        padding: 3px;
+        border-radius: 8px;
+        gap: 3px;
+      }
+      .seg button {
+        font-size: 12px;
+        padding: 7px 12px;
+        min-height: 34px;
+        background: transparent;
+        border: 0;
+        color: var(--muted);
+      }
+      .seg button[aria-pressed="true"] {
+        background: #37362e;
+        color: #fff;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 232px minmax(0, 1fr);
+        min-height: calc(100vh - 64px);
+      }
+      aside {
+        background: #121212;
+        border-right: 1px solid var(--border);
+        padding: 26px 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        font-weight: 680;
+        font-size: 22px;
+        letter-spacing: -0.8px;
+      }
+      .brand span {
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0;
+        color: var(--muted);
+        border-left: 1px solid #444;
+        padding-left: 12px;
+      }
+      .workspace {
+        margin: 0 4px;
+        padding: 13px 10px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .workspace small {
+        display: block;
+        color: var(--muted);
+      }
+      .navgroup {
+        font-size: 10px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: #949494;
+        margin: 15px 12px 7px;
+      }
+      nav {
+        display: grid;
+        gap: 4px;
+      }
+      nav button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        text-align: left;
+        min-height: 42px;
+        background: transparent;
+        border: 0;
+        padding: 10px 12px;
+        color: #a8a8a8;
+        font-weight: 450;
+      }
+      nav button:hover {
+        background: #1d1d1d;
+      }
+      nav button[aria-current="page"] {
+        color: #fff;
+        background: #292929;
+      }
+      .navtag {
+        font-size: 10px;
+        letter-spacing: 0;
+        padding: 2px 5px;
+        color: #aca58e;
+        border: 1px solid #464237;
+        border-radius: 4px;
+      }
+      .sidefoot {
+        margin-top: auto;
+        padding: 18px 12px 0;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .sidefoot strong {
+        display: block;
+        color: #eee;
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .page {
+        min-width: 0;
+      }
+      .topline {
+        min-height: 57px;
+        border-bottom: 1px solid #242424;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        font-size: 12px;
+        color: var(--muted);
+        gap: 12px;
+      }
+      .topline b {
+        font-weight: 500;
+        color: #ddd;
+      }
+      .topline .right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mobilemenu {
+        display: none;
+      }
+      .content {
+        max-width: 1360px;
+        margin: auto;
+        padding: 34px 36px 48px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      h1 {
+        font-size: 28px;
+        letter-spacing: -0.75px;
+        line-height: 1.2;
+        font-weight: 600;
+        margin: 0 0 10px;
+      }
+      h2 {
+        font-size: 18px;
+        font-weight: 570;
+        letter-spacing: -0.3px;
+        margin: 0 0 10px;
+      }
+      h3 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
+      p {
+        color: var(--muted);
+        line-height: 1.65;
+        margin: 0 0 14px;
+      }
+      .pagehead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 26px;
+      }
+      .pagehead p {
+        margin: 0;
+        max-width: 700px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 500;
+        border-radius: 5px;
+        padding: 4px 7px;
+        border: 1px solid #3b3b3b;
+        color: #c3c3c3;
+        background: #1a1a1a;
+      }
+      .badge.good {
+        color: var(--green);
+        background: #162019;
+        border-color: #2f4436;
+      }
+      .badge.warn {
+        color: var(--amber);
+        background: #282216;
+        border-color: #514328;
+      }
+      .badge.bad {
+        color: var(--red);
+        background: #291a1a;
+        border-color: #573333;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      .card.flat {
+        background: transparent;
+      }
+      .cardtitle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 20px;
+      }
+      .cardtitle h2,
+      .cardtitle h3 {
+        margin: 0;
+      }
+      .grid {
+        display: grid;
+        gap: 20px;
+      }
+      .two {
+        grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
+      }
+      .even {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .metric {
+        padding: 22px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--panel);
+      }
+      .metric .value {
+        font-size: 26px;
+        letter-spacing: -0.7px;
+        font-weight: 550;
+        font-variant-numeric: tabular-nums;
+        margin: 10px 0 5px;
+      }
+      .metric small,
+      .muted {
+        color: var(--muted);
+      }
+      .metric .label {
+        font-size: 12px;
+        color: #b4b4b4;
+      }
+      .mono,
+      code,
+      pre {
+        font-family: GeistMono, "SFMono-Regular", Consolas, monospace;
+      }
+      .mono,
+      code {
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        font-size: 12px;
+        line-height: 1.85;
+        margin: 0;
+        white-space: pre;
+        overflow: auto;
+        padding: 20px;
+        border-top: 1px solid var(--border);
+        color: #d6d6d6;
+        background: #101010;
+        border-radius: 0 0 10px 10px;
+      }
+      .codebox {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .codehead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 14px;
+        background: #191919;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .codehead span {
+        color: #eee;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        gap: 14px;
+        padding: 20px 0;
+        border-bottom: 1px solid #2b2b2b;
+      }
+      .step:first-of-type {
+        padding-top: 3px;
+      }
+      .step:last-child {
+        border: 0;
+        padding-bottom: 0;
+      }
+      .number {
+        height: 28px;
+        width: 28px;
+        background: #272727;
+        border: 1px solid #454545;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .number.current {
+        background: #ddd;
+        color: #101010;
+        border-color: #ddd;
+      }
+      .step > div {
+        min-width: 0;
+      }
+      .step p {
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+      .step.future p {
+        margin-bottom: 0;
+      }
+      .step.future .number {
+        color: #929292;
+        background: transparent;
+      }
+      .line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .small {
+        font-size: 12px;
+      }
+      .note {
+        padding: 14px 16px;
+        border: 1px solid #4a402b;
+        border-radius: 9px;
+        background: #211e16;
+        color: #d7c89f;
+        font-size: 12px;
+        line-height: 1.65;
+        margin: 18px 0;
+      }
+      .note.neutral {
+        background: #181818;
+        border-color: #343434;
+        color: #b4b4b4;
+      }
+      .emptystate {
+        padding: 36px 20px;
+        text-align: center;
+        border: 1px dashed #3b3b3b;
+        border-radius: 10px;
+      }
+      .emptystate p {
+        max-width: 520px;
+        margin: 10px auto 18px;
+      }
+      .emblem {
+        height: 44px;
+        width: 44px;
+        border: 1px solid #464646;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 18px;
+        color: #bbb;
+        font-size: 20px;
+      }
+      .details {
+        display: grid;
+        gap: 0;
+        margin: 0;
+      }
+      .details > div {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 12px 0;
+        border-bottom: 1px solid #292929;
+      }
+      .details > div:last-child {
+        border: 0;
+      }
+      .details dt {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .details dd {
+        margin: 0;
+        text-align: right;
+        font-size: 12px;
+        max-width: 62%;
+        overflow-wrap: anywhere;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0 18px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 22px;
+      }
+      .field {
+        display: grid;
+        gap: 8px;
+        margin: 0 0 22px;
+      }
+      .field label {
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .field small {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .field input,
+      .field select,
+      .filterselect {
+        border: 1px solid #414141;
+        color: #eee;
+        background: #0f0f0f;
+        border-radius: 7px;
+        padding: 11px 12px;
+        min-height: 44px;
+        width: 100%;
+        min-width: 0;
+      }
+      .field input::placeholder {
+        color: #858585;
+      }
+      .field input[readonly] {
+        color: #aaa;
+        background: #181818;
+      }
+      .fieldgrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .formsteps {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+      }
+      .formsteps strong {
+        color: #f2f2f2;
+        font-weight: 550;
+      }
+      .formsteps span {
+        color: #646464;
+      }
+      .summarylabel {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 20px 0 8px;
+      }
+      .tablewrap {
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        white-space: nowrap;
+        text-align: left;
+      }
+      th {
+        font-size: 11px;
+        font-weight: 500;
+        color: #a9a9a9;
+        background: #1b1b1b;
+        padding: 13px 16px;
+      }
+      td {
+        padding: 16px;
+        border-top: 1px solid #2a2a2a;
+        vertical-align: middle;
+      }
+      td strong {
+        display: block;
+        font-weight: 500;
+        font-size: 13px;
+        margin-bottom: 5px;
+      }
+      td small {
+        color: var(--muted);
+      }
+      .filters {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      .filters label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .filters select {
+        width: auto;
+        min-width: 150px;
+      }
+      .tabs {
+        display: flex;
+        gap: 22px;
+        border-bottom: 1px solid #353535;
+        margin-bottom: 24px;
+        overflow: auto;
+      }
+      .tabs span {
+        padding: 0 0 13px;
+        font-size: 13px;
+        white-space: nowrap;
+        color: var(--muted);
+      }
+      .tabs span:first-child {
+        color: #fff;
+        border-bottom: 2px solid #e4e4e4;
+      }
+      .intro {
+        border-left: 2px solid #89816b;
+        padding-left: 14px;
+        font-size: 12px;
+        line-height: 1.7;
+        color: #c2baa6;
+        margin: 0 0 22px;
+      }
+      .answer {
+        line-height: 1.85;
+        font-size: 14px;
+        color: #dfdfdf;
+        white-space: pre-wrap;
+        background: #101010;
+        border: 1px solid #333;
+        padding: 20px;
+        border-radius: 9px;
+      }
+      .stage {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 16px 0;
+        border-bottom: 1px solid #292929;
+      }
+      .stage:last-child {
+        border: 0;
+      }
+      .stageicon {
+        border: 1px solid #4d4d4d;
+        border-radius: 50%;
+        width: 23px;
+        height: 23px;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        font-size: 11px;
+        color: #bbb;
+      }
+      .stageicon.done {
+        border-color: #45604f;
+        color: var(--green);
+        background: #1b2c21;
+      }
+      .stage p {
+        font-size: 12px;
+        margin: 4px 0 0;
+      }
+      .bullets {
+        padding-left: 17px;
+        color: var(--muted);
+        line-height: 1.9;
+        font-size: 13px;
+      }
+      .inline-link {
+        border: 0;
+        background: none;
+        padding: 0;
+        color: #dfdfdf;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+        min-height: 30px;
+        font-weight: 400;
+      }
+      .bottomnote {
+        font-size: 11px;
+        line-height: 1.7;
+        color: #969696;
+        margin-top: 28px;
+        border-top: 1px solid #262626;
+        padding-top: 16px;
+      }
+      .bottomnote a {
+        color: #b9b9b9;
+      }
+      .compact {
+        margin-bottom: 0;
+      }
+      .screenreader {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+      .skip {
+        position: absolute;
+        left: 12px;
+        top: -60px;
+        z-index: 99;
+        background: #fff;
+        color: #111;
+        padding: 12px;
+      }
+      .skip:focus {
+        top: 8px;
+      }
+      dialog {
+        background: #181818;
+        color: var(--text);
+        border: 1px solid #444;
+        border-radius: 14px;
+        width: min(460px, calc(100vw - 32px));
+        padding: 28px;
+      }
+      dialog::backdrop {
+        background: rgb(0 0 0/0.72);
+      }
+      dialog h2 {
+        margin-bottom: 12px;
+      }
+      .dialogclose {
+        float: right;
+        padding: 3px 10px;
+        min-height: 34px;
+      }
+      .dialognav button {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+        text-align: left;
+      }
+      .statebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: #1b1b18;
+        border: 1px solid #39392e;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 22px;
+        color: #bdb9a9;
+        font-size: 12px;
+      }
+      .statebar select {
+        background: #10100e;
+        color: #eee;
+        border: 1px solid #484737;
+        border-radius: 6px;
+        padding: 8px;
+        max-width: 65%;
+      }
+      .statusline {
+        color: var(--green);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .pillrow {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .budget {
+        font-size: 28px;
+        font-weight: 550;
+        font-variant-numeric: tabular-nums;
+        margin: 10px 0 8px;
+      }
+      .formerror {
+        color: #f1aaaa;
+        font-size: 13px;
+        margin-bottom: 18px;
+      }
+      @media (max-width: 1100px) {
+        .content {
+          padding: 28px 24px;
+        }
+        .two {
+          grid-template-columns: minmax(0, 1.4fr) minmax(250px, 1fr);
+        }
+        .refnote {
+          max-width: 320px;
+        }
+        .layout {
+          grid-template-columns: 210px minmax(0, 1fr);
+        }
+        aside {
+          padding-left: 10px;
+          padding-right: 10px;
+        }
+      }
+      @media (max-width: 900px) {
+        .two {
+          grid-template-columns: 1fr;
+        }
+        .refbar {
+          gap: 12px;
+          padding: 12px 16px;
+        }
+        .refnote {
+          display: none;
+        }
+        .topline {
+          padding: 0 24px;
+        }
+        .metric {
+          padding: 18px;
+        }
+      }
+      @media (max-width: 767px) {
+        .layout {
+          display: block;
+        }
+        .layout > aside {
+          display: none;
+        }
+        .mobilemenu {
+          display: inline-flex;
+          font-size: 12px;
+          min-height: 36px;
+          padding: 6px 10px;
+        }
+        .topline {
+          padding: 10px 16px;
+          min-height: 56px;
+        }
+        .topline .right {
+          display: none;
+        }
+        .refbar {
+          flex-wrap: wrap;
+          justify-content: space-between;
+        }
+        .refbrand {
+          font-size: 10px;
+        }
+        .seg button {
+          min-height: 38px;
+        }
+        .content {
+          padding: 24px 16px;
+        }
+        .pagehead {
+          display: block;
+          margin-bottom: 24px;
+        }
+        .pagehead > button {
+          margin-top: 18px;
+          width: 100%;
+        }
+        h1 {
+          font-size: 25px;
+        }
+        .card {
+          padding: 20px;
+        }
+        .three,
+        .even,
+        .fieldgrid {
+          grid-template-columns: 1fr;
+        }
+        .grid {
+          gap: 16px;
+        }
+        .metric .value {
+          font-size: 24px;
+        }
+        .three .metric {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .metric small {
+          width: 100%;
+        }
+        .metric .value {
+          margin: 0;
+        }
+        .line {
+          align-items: flex-start;
+        }
+        .actions button {
+          flex: 1;
+        }
+        .statebar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .statebar select {
+          max-width: 100%;
+          width: 100%;
+        }
+        .filters {
+          align-items: stretch;
+        }
+        .filters select {
+          flex: 1;
+          min-width: 140px;
+        }
+        .details > div {
+          gap: 12px;
+        }
+        .cardtitle {
+          align-items: flex-start;
+        }
+        .cardtitle .badge {
+          white-space: normal;
+        }
+        .codehead {
+          padding: 9px 12px;
+        }
+        .codehead button {
+          padding: 7px 10px;
+        }
+        .step {
+          gap: 10px;
+        }
+        .bottomnote {
+          font-size: 12px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to screen</a>
+    <header class="refbar">
+      <div class="refbrand">INFRX / DESIGN REFERENCE</div>
+      <div class="refnote">
+        Proposed screens · illustrative data · no live actions
+      </div>
+      <div class="seg" aria-label="Reference product">
+        <button id="labMode" aria-pressed="true" data-go="overview">
+          Provider Lab</button
+        ><button id="appMode" aria-pressed="false" data-go="consumer">
+          Consumer App
+        </button>
+      </div>
+    </header>
+    <div class="layout">
+      <aside id="sidebar"></aside>
+      <div class="page">
+        <div class="topline">
+          <div class="pillrow">
+            <button class="mobilemenu" id="menuButton">Menu</button
+            ><span id="crumb"></span>
+          </div>
+          <div class="right">
+            <span id="context"></span><span class="badge" id="role"></span>
+          </div>
+        </div>
+        <main id="main" class="content" tabindex="-1"></main>
+      </div>
+    </div>
+    <dialog id="navDialog" aria-labelledby="navTitle">
+      <button class="dialogclose" data-close>Close</button>
+      <h2 id="navTitle">Explore screens</h2>
+      <p>Design reference navigation</p>
+      <nav class="dialognav" id="mobileNav"></nav>
+    </dialog>
+    <dialog id="keyDialog" aria-labelledby="keyTitle">
+      <button class="dialogclose" data-close>Close</button>
+      <h2 id="keyTitle">Create an API key</h2>
+      <p>Use this key to call models from your code.</p>
+      <label class="field"
+        >Name<input
+          autocomplete="off"
+          placeholder="Robotics evaluation"
+        /><small
+          >A name to help you recognize where this key is used.</small
+        ></label
+      >
+      <div class="note neutral">
+        Reference only. No key is created here. In the implemented flow, the
+        secret is shown once and held only in memory.
+      </div>
+      <button class="primary" id="keyPreview">Preview next step</button>
+      <p id="keyPreviewStatus" class="statusline" role="status"></p>
+    </dialog>
+    <script>
+      const main = document.getElementById("main");
+      const labScreens = [
+        ["overview", "Overview"],
+        ["register", "Models"],
+        ["deployments", "Deployments"],
+        ["requests", "Requests"],
+        ["datasets", "Datasets"],
+        ["evaluations", "Evaluations"],
+        ["training", "Training"],
+      ];
+      const appScreens = [
+        ["consumer", "Models"],
+        ["keys", "API keys"],
+        ["usage", "Usage"],
+        ["credits", "Credits"],
+      ];
+      const labNames = new Set(labScreens.map((x) => x[0]));
+      let current = "overview";
+      const badge = (s, t = "") => `<span class="badge ${t}">${s}</span>`;
+      const head = (title, desc, action = "") =>
+        `<div class="pagehead"><div><div class="eyebrow">${labNames.has(current) ? "Provider workspace" : "Inference console"}</div><h1>${title}</h1><p>${desc}</p></div>${action}</div>`;
+      const go = (label, to, primary = false) =>
+        `<button class="${primary ? "primary" : ""}" data-go="${to}">${label}</button>`;
+      const note = (text) => `<div class="note neutral">${text}</div>`;
+      const details = (rows) =>
+        `<dl class="details">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
+      const navhtml = (isLab) =>
+        `${(isLab ? labScreens : appScreens).map(([id, name], i) => `${isLab && i === 4 ? '<div class="navgroup">Improve · staged rollout</div>' : ""}<button data-go="${id}" ${current === id ? 'aria-current="page"' : ""}>${name}${isLab && i >= 4 ? '<span class="navtag">L2</span>' : ""}</button>`).join("")}`;
+      const footer = () =>
+        `<div class="bottomnote">Illustrative screen; no account changes, inference or uploads. ${labNames.has(current) ? "Backend-dependent controls remain gated until their own acceptance tests pass." : "Rates, limits, availability and balances must come from real account/catalog data."} <a href="${labNames.has(current) ? "03-lab.md" : "04-consumer.md"}">Read screen specification</a> · <a href="README.md">Implementation package</a></div>`;
+      const steps = (active, items) =>
+        `<div class="formsteps">${items.map((x, i) => `${i ? "<span>→</span>" : ""}<${i === active ? "strong" : "div"}>${i + 1}. ${x}</${i === active ? "strong" : "div"}>`).join("")}</div>`;
+      function overview() {
+        return (
+          head(
+            "A clear path to your first deployment",
+            "Import and verify a model, qualify its private endpoint, then request publication.",
+            go("View existing-revision example", "register", true),
+          ) +
+          `<div class="grid two"><section class="card"><div class="cardtitle"><h2>Set up this workspace</h2>${badge("0 of 3 verified")}</div><div class="step"><div class="number current">1</div><div><h3>Add and verify your model</h3><p>First-model import needs the new artifact APIs. The current registration form only revises an already imported model. <a href="../../plan/api-lifecycle/contracts.md#4-artifact-and-model-project-onboarding">Read the Add model flow</a>.</p>${go("View existing-revision example", "register", true)}</div></div><div class="step future"><div class="number">2</div><div><h3>Verify private serving</h3><p>A registered record is the starting point. The serving engine and endpoint need their own checks.</p></div></div><div class="step future"><div class="number">3</div><div><h3>Request publication</h3><p>An administrator requests publication of the verified revision. An infrx operator approves it.</p></div></div></section><section class="card"><h2>Workspace</h2><p>Model team · Developer access</p>${details(
+            [
+              ["Private deployment records", "0"],
+              ["Public deployment records", "0"],
+              ["Publication requests", "0"],
+            ],
+          )}<div class="note">Customer content is only visible when a current grant permits it. Provider membership alone does not grant access.</div></section></div><section class="card"><div class="cardtitle"><h2>Measured traffic</h2><span class="small muted">No observation window available</span></div><div class="emptystate"><div class="emblem" aria-hidden="true">—</div><h3>No measured requests yet</h3><p>Once your deployment has measured traffic, you’ll see request counts, errors and latency here.</p>${go("View deployments", "deployments")}</div></section>`
+        );
+      }
+      function register(review = false) {
+        return (
+          head(
+            "New revision of an imported model",
+            "Requires weights already imported into this workspace and existing deployment limits. This form does not upload weights or launch an engine.",
+          ) +
+          `<div class="grid two"><section class="card">${steps(review ? 1 : 0, ["Revision details", "Review registration"])}${
+            review
+              ? `<h2>Review this revision</h2><p>These illustrative values are not submitted.</p>${details(
+                  [
+                    ["Model name", "marlin-sop"],
+                    ["Artifact digest", "sha256:… (full value in production)"],
+                    ["Schema", "Approved schema reference"],
+                    ["Runtime", "Approved runtime reference"],
+                  ],
+                )}<div class="note">Next: verify private serving with the operator. Registration alone does not create a working inference endpoint.</div><div class="actions"><button data-action="reg-back">Back</button><button class="primary" data-action="reg-explain">Register private revision</button></div><p id="regStatus" class="statusline" role="status"></p>`
+              : `<div class="field"><label for="modelName">Model name</label><input id="modelName" value="marlin-sop" readonly><small>Lowercase letters, numbers and hyphens. This is the model's persistent name.</small></div><div class="field"><label for="artifact">Artifact SHA-256</label><input id="artifact" placeholder="sha256:…" readonly><small>An existing imported weight-shard digest. This field cannot import a new artifact.</small></div><div class="fieldgrid"><div class="field"><label for="schema">Schema version</label><input id="schema" placeholder="Approved schema reference" readonly></div><div class="field"><label for="runtime">Runtime</label><input id="runtime" placeholder="Approved runtime reference" readonly></div></div><p class="small">These reference fields are illustrative. The implementation validates actual identifiers and preserves field errors.</p><div class="actions">${go("Back to overview", "overview")}<button class="primary" data-action="reg-review">Preview review step</button></div>`
+          }</section><section class="card flat"><h2>What happens next</h2><div class="stage"><span class="stageicon">1</span><div><h3>Private registration</h3><p>A versioned record ties the artifact to its schema and runtime.</p></div></div><div class="stage"><span class="stageicon">2</span><div><h3>Serving qualification</h3><p>Engine readiness is verified separately for the exact revision.</p></div></div><div class="stage"><span class="stageicon">3</span><div><h3>Publication request</h3><p>Your administrator requests public access after the required checks.</p></div></div>${note("Need to host new weights or choose hardware? That requires the operator preparation workflow; it is not part of this form.")}</section></div>`
+        );
+      }
+      function deployments() {
+        return (
+          head(
+            "Marlin SOP · private revision",
+            "Deployment record details and the evidence needed before serving.",
+            badge("Readiness not verified", "warn"),
+          ) +
+          `<div class="intro">Illustrative populated state. The current control port does not establish engine readiness or an authorized endpoint URL.</div><div class="grid two"><section class="card"><div class="cardtitle"><h2>Readiness and checks</h2>${badge("Private · dev")}</div><div class="stage"><span class="stageicon done">✓</span><div><h3>Revision registered</h3><p>An active private deployment record exists.</p></div></div><div class="stage"><span class="stageicon">2</span><div><h3>Serving engine · not verified here</h3><p>This view has no engine identity or readiness receipt. A recorded smoke result alone is insufficient.</p></div></div><div class="stage"><span class="stageicon">3</span><div><h3>Private smoke · no result</h3><p>The current engine-smoke adapter is unavailable. Enable this action only after a real adapter and operation recovery are verified.</p></div></div><div class="stage"><span class="stageicon">4</span><div><h3>Publication · not requested</h3><p>An administrator proposes publication; an operator decides.</p></div></div><div class="actions"><button data-action="smoke-explain">Why smoke is unavailable</button><span class="small muted">Reference only</span></div><p id="smokeStatus" class="statusline" role="status"></p></section><section class="card"><h2>Revision details</h2>${details(
+            [
+              ["Model", "marlin-sop"],
+              ["Revision", "Illustrative revision 1"],
+              ["Record state", "Active"],
+              ["Visibility", "Private"],
+              ["Runtime", "Not supplied in this reference"],
+              ["Rate card", "Not assigned"],
+            ],
+          )}<div class="note">Connection details become available after the actual serving setup is verified. No endpoint is implied by this record.</div></section></div>`
+        );
+      }
+      function requests(state = "unavailable") {
+        return (
+          head(
+            "Requests",
+            "Inspect requests on this workspace’s deployments and the evidence you’re permitted to read.",
+          ) +
+          `<div class="statebar"><label for="requestState">Reference state</label><select id="requestState"><option value="unavailable" ${state === "unavailable" ? "selected" : ""}>Service unavailable</option><option value="metadata" ${state === "metadata" ? "selected" : ""}>Metadata only</option><option value="shared" ${state === "shared" ? "selected" : ""}>Shared content</option></select></div>${state === "unavailable" ? `<section class="card"><div class="emptystate"><div class="emblem" aria-hidden="true">!</div><h2>We couldn’t load requests</h2><p>No request records could be retrieved. This does not mean your deployment has no traffic.</p><button data-action="request-retry">Try again</button><p id="requestStatus" class="small" role="status"></p></div></section>` : `<div class="tablewrap"><table><thead><tr><th>Request</th><th>Model / revision</th><th>Started</th><th>Mode</th><th>Content access</th></tr></thead><tbody><tr><td><strong class="mono">req_demo_01</strong><small>Illustrative record</small></td><td>marlin-sop · revision 1</td><td>Oct 1, 20:10 UTC</td><td>Async</td><td>${badge(state === "metadata" ? "Metadata only" : "Shared content", state === "shared" ? "good" : "")}</td></tr></tbody></table></div><section class="card" style="margin-top:20px"><div class="cardtitle"><h2>Request content</h2>${badge(state === "metadata" ? "Not shared" : "Illustrative grant")}</div>${state === "metadata" ? `<p>Content isn’t shared with this workspace. You can still inspect permitted request metadata.</p><div class="note neutral">No prompt, video or answer is fetched in this state. Your provider role does not override the customer’s content permissions.</div>` : `<p>In the implementation, this region displays only currently authorized content and clears it when access expires or is revoked.</p><div class="answer">Illustrative answer: The clip shows a work surface and a sequence of handling steps.\n\nNo customer video, prompt or actual inference result is included in this reference.</div><p class="small muted" style="margin-top:12px">Completeness and access expiry come from the permitted record, never a local assumption.</p>`}</section>`}`
+        );
+      }
+      function datasets() {
+        return (
+          head(
+            "Import a dataset",
+            "Turn your supported JSONL records into an immutable, traceable dataset version.",
+          ) +
+          `<div class="grid two"><section class="card">${steps(2, ["Source", "Mapping", "Validate", "Import"])}<div class="cardtitle"><h2>Review your mapping</h2>${badge("Preview only", "warn")}</div><p class="small">A preview checks the supplied sample, not every record in the file. Changing the source or mapping requires a new preview.</p><div class="tablewrap"><table><thead><tr><th>Line</th><th>Sample</th><th>Preview result</th></tr></thead><tbody><tr><td>1</td><td>clip-demo-001</td><td>${badge("Mapped", "good")}</td></tr><tr><td>2</td><td>clip-demo-002</td><td>${badge("Mapped", "good")}</td></tr><tr><td>3</td><td>clip-demo-003</td><td>${badge("Missing source reference", "warn")}</td></tr></tbody></table></div><div class="note">Resolve the rejected line, or explicitly choose the backend-supported partial import option. Nothing has been imported in this reference.</div><div class="field"><label for="rejectPolicy">If the import finds invalid records</label><select id="rejectPolicy"><option>Reject the import</option><option>Import valid rows and report rejections</option></select></div><div class="actions"><button data-action="mapping-explain">Edit mapping</button><button class="primary" data-action="import-explain">Review import</button></div><p id="datasetStatus" class="statusline" role="status"></p></section><section class="card flat"><h2>Keep the data trustworthy</h2><ul class="bullets"><li>Preserve source and permission references.</li><li>Keep training, validation and holdout separate.</li><li>Record accepted and rejected rows.</li><li>Retain lineage for every derived version.</li></ul>${note("The guided form must map the actual backend schema. Advanced mappings remain available; unsupported fields are never silently discarded.")}<h3>After import</h3><p class="small">Inspect the dataset version, create a split with a recorded seed, or export permitted records. Holdout and restricted samples are excluded where required.</p></section></div>`
+        );
+      }
+      function evaluations() {
+        return (
+          head(
+            "Compare revisions",
+            "A decision based on one frozen dataset, declared protocol and paired evidence.",
+            badge("Inconclusive", "warn"),
+          ) +
+          `<div class="intro">Illustrative report state. These are layout examples, not Marlin benchmark results or accepted thresholds.</div><div class="card"><div class="cardtitle"><h2>More evidence is needed</h2>${badge("Teacher judgment")}</div><p>The comparison has too few paired cases for its declared minimum. Do not interpret this as a candidate failure or approval.</p><div class="grid three"><div class="metric"><div class="label">Paired cases</div><div class="value">32 / 50</div><small>Observed / protocol minimum</small></div><div class="metric"><div class="label">Missing candidate cases</div><div class="value">8</div><small>Not scored as zero</small></div><div class="metric"><div class="label">Release decision</div><div class="value" style="font-size:20px">Not established</div><small>Under this protocol</small></div></div></div><div class="grid even"><section class="card"><h2>Frozen comparison</h2>${details(
+            [
+              ["Baseline", "Revision A · immutable ref"],
+              ["Candidate", "Revision B · immutable ref"],
+              ["Dataset", "SOP validation · version 3"],
+              ["Harness / evaluator", "Pinned references"],
+              ["Report identity", "Immutable digest"],
+            ],
+          )}</section><section class="card"><h2>Inspect the evidence</h2><p class="small">The implemented report includes per-slice confidence intervals, paired counts, missing/error counts and latency sample sizes.</p>${details(
+            [
+              ["Quality verdict", "Insufficient evidence"],
+              ["Cost", "Separate totals by unit"],
+              ["Protocol", "Predeclared, not a platform default"],
+            ],
+          )}<div class="note neutral">An “Accept” result would apply to this protocol and dataset. It would not certify every production SOP task.</div></section></div>`
+        );
+      }
+      function training() {
+        return (
+          head(
+            "Improve your model",
+            "Prepare teacher annotations or train externally with a reproducible dataset bundle.",
+          ) +
+          `<div class="tabs"><span>Training runs</span><span>Teacher annotation</span><span>Checkpoints</span></div><div class="grid two"><section class="card"><div class="cardtitle"><h2>External training</h2>${badge("Manual bundle")}</div><p>Export permitted examples, train with your chosen system, then import the checkpoint for qualification and evaluation.</p><div class="step"><div class="number current">1</div><div><h3>Prepare a versioned bundle</h3><p>Choose the frozen dataset, objective, adaptation and base model. Record the payer and exact budget.</p></div></div><div class="step future"><div class="number">2</div><div><h3>Train in your own environment</h3><p>The current connector exchanges a manual bundle. It does not provision a training cluster.</p></div></div><div class="step future"><div class="number">3</div><div><h3>Import and evaluate the checkpoint</h3><p>Qualify the artifact and compare it before proposing a release.</p></div></div></section><section class="card"><h2>Before this workflow is enabled</h2><ul class="bullets"><li>Dataset rights and holdout exclusions verified</li><li>Pipeline listing and role access proven</li><li>Accounting and retry gates passed</li></ul><div class="note">Provider training budgets use PROVIDER_USD. Consumer promotional credits are not a training balance.</div><p class="small">A submission with an unknown outcome must be reconciled using its existing identity. “Submit again” is not a safe recovery action.</p></section></div>`
+        );
+      }
+      function consumer() {
+        return (
+          head(
+            "Make your first Marlin request",
+            "Create a key, verify the connection, then analyze a finished video clip.",
+          ) +
+          `<div class="grid two"><section class="card"><div class="cardtitle"><h2>Your first call</h2>${badge("Quickstart")}</div><div class="step"><div class="number current">1</div><div><h3>Create an API key</h3><p>Save the secret once, then use it from your code.</p><button class="primary" data-action="key-dialog">Create API key</button></div></div><div class="step"><div class="number">2</div><div><h3>Check your connection</h3><p>Start with a small text request. This checks API access, not video quality.</p><div class="codebox"><div class="codehead"><span>cURL · connectivity test</span><button data-action="copy-example">Copy</button></div><pre id="quickCode" tabindex="0" aria-label="Connectivity example">curl https://marlin2b.callbill.ai/v1/chat/completions \\
+  -H "Authorization: Bearer $INFRX_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"nemostation/marlin-2b",
+       "max_tokens":128,
+       "messages":[{"role":"user","content":"Hello"}]}'</pre></div><p class="small" style="margin-top:10px">Set INFRX_API_KEY to your full saved secret in your local environment. A key prefix is not a credential.</p><p id="copyStatus" class="statusline" role="status"></p></div></div><div class="step future"><div class="number">3</div><div><h3>Inspect the result and charge</h3><p>Your request appears in Usage after it reaches the API.</p><button class="inline-link" data-go="usage">View usage →</button></div></div></section><div><section class="card"><div class="cardtitle"><h2>Marlin 2B</h2>${badge("Finite video")}</div><p>Describe recorded clips and locate events in time.</p><div class="chips">${badge("Video + text → text")}${badge("Async jobs")}${badge("Streamed text")}</div><div class="summarylabel">Input / output price</div><div class="budget" style="font-size:20px">400 / 1,200 CREDIT</div><p class="small">Per million input / output tokens. Actual charge depends on processed tokens.</p>${details(
+         [
+           ["Model ID", '<span class="mono">nemostation/marlin-2b</span>'],
+           ["Example clip ceiling", "82 seconds · 64 MiB"],
+           ["Video input", "Finished clips only"],
+         ],
+       )}<details style="margin-top:18px"><summary class="small">Advanced model details</summary><p class="small" style="margin-top:12px">The implementation loads revision, runtime, schema, rates and full limits from the live published catalog.</p></details></section><section class="card flat"><h3>Ready to use a video?</h3><p class="small">Use an accessible HTTPS clip or follow the upload guide for a local file. Replace input placeholders with your own supported clip.</p><a class="small" href="04-consumer.md">Read the video workflow specification →</a></section></div></div>`
+        );
+      }
+      function keys() {
+        return (
+          head(
+            "API keys",
+            "Manage access from your applications. Secrets are shown only when created.",
+            `<button class="primary" data-action="key-dialog">Create API key</button>`,
+          ) +
+          `<section class="card"><div class="emptystate"><div class="emblem" aria-hidden="true">＋</div><h2>Create a key to call Marlin</h2><p>Name it after the project or environment where you’ll use it. Save the secret when it is shown.</p><button class="primary" data-action="key-dialog">Create API key</button></div></section><div class="grid even"><section class="card flat"><h3>Use it from your code</h3><p>Keep the key in a server-side environment variable. Do not put it in public browser code or a repository.</p>${go("Open quickstart", "consumer")}</section><section class="card flat"><h3>Revoke when no longer needed</h3><p>Revoking stops new requests. The implemented UI explains how existing reads and cancellations behave under the actual revocation contract.</p></section></div>`
+        );
+      }
+      function usage(state = "ready") {
+        return (
+          head("Usage", "Inspect your requests, results and credit charges.") +
+          `<div class="statebar"><label for="resultState">Reference result state</label><select id="resultState"><option value="ready" ${state === "ready" ? "selected" : ""}>Readable result</option><option value="running" ${state === "running" ? "selected" : ""}>Running</option><option value="expired" ${state === "expired" ? "selected" : ""}>Expired</option><option value="unavailable" ${state === "unavailable" ? "selected" : ""}>Read unavailable</option></select></div><div class="intro">Synthetic request and amounts for layout review. No inference was run to create this example.</div><div class="grid two"><section class="card"><div class="cardtitle"><div><h2>Request result</h2><span class="mono muted">req_demo_01</span></div>${badge(state === "ready" ? "Succeeded" : state === "running" ? "Running" : state === "expired" ? "Expired" : "Read unavailable", state === "ready" ? "good" : "warn")}</div>${state === "ready" ? `<div class="answer">Illustrative result\n\nThe operator places a component on the work surface, aligns it, and reaches toward a nearby tool.\n\nA task-specific SOP judgment would require the agreed rubric and benchmark evidence.</div><div class="line" style="margin-top:16px"><span class="small muted">Access expiry is shown from the actual result receipt.</span></div>` : `<div class="emptystate"><h3>${state === "running" ? "The request is still running" : state === "expired" ? "This result is no longer available" : "We couldn’t load the result"}</h3><p>${state === "running" ? "You can leave this page. The accepted job continues independently." : state === "expired" ? "The result access window has ended. Request status and usage remain available." : "Retry only reads the existing result. It does not start another inference or charge."}</p>${state === "unavailable" ? '<button data-action="result-retry">Retry loading result</button><p id="resultRetryStatus" role="status" class="small"></p>' : ""}</div>`}</section><section class="card"><h2>Usage and charge</h2>${details(
+            [
+              ["Model", "Marlin 2B"],
+              [
+                "Input tokens",
+                state === "running" ? "Not yet reported" : "600",
+              ],
+              [
+                "Output tokens",
+                state === "running" ? "Not yet reported" : "180",
+              ],
+              [
+                "Charge",
+                state === "running" ? "Not settled" : "0.45600000 CREDIT",
+              ],
+              [
+                "Financial state",
+                state === "running"
+                  ? "Reservation separate from spend"
+                  : "Settled",
+              ],
+              ["Mode", "Async"],
+            ],
+          )}<div class="note neutral">Execution and financial settlement are separate states. Exact values come from the request and ledger records.</div>${go("View credits", "credits")}</section></div><section class="card flat"><h3>Technical details</h3><p class="small">The full view includes serving identity, rate card, timestamps, cause and the request ID used by support. No API secret is included.</p></section>`
+        );
+      }
+      function credits() {
+        return (
+          head(
+            "Credits",
+            "Your one-time promotional balance and how it is used.",
+          ) +
+          `<section class="card"><div class="cardtitle"><h2>Available to use</h2>${badge("Free plan")}</div><div class="budget" style="font-size:38px">9,999.544 <span style="font-size:15px;color:#aaa">CREDIT</span></div><p>Illustrative balance after the example request. Actual balances are loaded from your account.</p><div class="grid three" style="margin-top:24px"><div class="metric"><div class="label">Reserved</div><div class="value">0</div><small>Held for active requests</small></div><div class="metric"><div class="label">Spent</div><div class="value">0.456</div><small>Settled request charges</small></div><div class="metric"><div class="label">Balance</div><div class="value">9,999.544</div><small>Available + reserved</small></div></div></section><section class="card flat"><h2>One grant. No monthly refill.</h2><p>A verified individual receives 10,000 promotional credits once. Credits have no cash value or USD exchange rate.</p></section><div class="tablewrap"><table><thead><tr><th>Activity</th><th>Amount</th><th>Details</th></tr></thead><tbody><tr><td><strong>Request charge</strong><small>Illustrative request</small></td><td>−0.45600000 CREDIT</td><td class="mono">req_demo_01</td></tr><tr><td><strong>Promotional credit grant</strong><small>Granted once after verification</small></td><td>+10,000.00000000 CREDIT</td><td>One-time individual grant</td></tr></tbody></table></div>`
+        );
+      }
+      const screens = {
+        overview,
+        register,
+        deployments,
+        requests,
+        datasets,
+        evaluations,
+        training,
+        consumer,
+        keys,
+        usage,
+        credits,
+      };
+      function render(id, state, focus = true) {
+        current = id;
+        const isLab = labNames.has(id);
+        document
+          .getElementById("labMode")
+          .setAttribute("aria-pressed", String(isLab));
+        document
+          .getElementById("appMode")
+          .setAttribute("aria-pressed", String(!isLab));
+        document.getElementById("crumb").textContent = isLab
+          ? "Lab / " + labScreens.find((x) => x[0] === id)[1]
+          : "App / " + appScreens.find((x) => x[0] === id)[1];
+        document.getElementById("context").textContent = isLab
+          ? "Model team"
+          : "Example account";
+        document.getElementById("role").textContent = isLab
+          ? "Developer"
+          : "Verified";
+        document.getElementById("sidebar").innerHTML =
+          `<div class="brand">infrx <span>${isLab ? "Lab" : "App"}</span></div>${isLab ? '<div class="workspace">Model team<small>Developer · sample workspace</small></div>' : ""}<div><div class="navgroup">${isLab ? "Operate" : "Workspace"}</div><nav aria-label="Product screens">${navhtml(isLab)}</nav></div><div class="sidefoot"><strong>${isLab ? "Provider workspace" : "10,000 promotional credits"}</strong>${isLab ? "Customer content needs a separate grant." : "One-time grant per verified individual."}<br><a href="${isLab ? "03-lab.md" : "04-consumer.md"}">Full screen specifications</a><br><a href="07-handoff.md">Implementation handoff</a></div>`;
+        document.getElementById("mobileNav").innerHTML = navhtml(isLab);
+        main.innerHTML = screens[id](state) + footer();
+        document.title = `infrx design · ${id}`;
+        history.replaceState(null, "", "#" + id);
+        if (focus) {
+          main.focus({ preventScroll: true });
+          window.scrollTo({ top: 0 });
+        }
+      }
+      document.addEventListener("click", async (e) => {
+        const goButton = e.target.closest("[data-go]");
+        if (goButton) {
+          const d = document.getElementById("navDialog");
+          if (d.open) d.close();
+          render(goButton.dataset.go);
+          return;
+        }
+        const close = e.target.closest("[data-close]");
+        if (close) {
+          close.closest("dialog").close();
+          return;
+        }
+        const a = e.target.closest("[data-action]")?.dataset.action;
+        if (!a) return;
+        if (a === "reg-review") {
+          render("register", true);
+          return;
+        }
+        if (a === "reg-back") {
+          render("register", false);
+          return;
+        }
+        if (a === "reg-explain")
+          document.getElementById("regStatus").textContent =
+            "Reference only: the real action must return a private revision receipt. No registration was submitted.";
+        if (a === "smoke-explain")
+          document.getElementById("smokeStatus").textContent =
+            "The current backend uses NoEngine, so smoke is unavailable. A real adapter and durable recovery are required before enabling this action. No check runs in this reference.";
+        if (a === "key-dialog") {
+          document.getElementById("keyPreviewStatus").textContent = "";
+          document.getElementById("keyDialog").showModal();
+        }
+        if (a === "request-retry")
+          document.getElementById("requestStatus").textContent =
+            "This reference remains unavailable. In the app, retry performs a fresh authorized read.";
+        if (a === "mapping-explain")
+          document.getElementById("datasetStatus").textContent =
+            "Editing the mapping invalidates the prior preview. The actual form preserves supported advanced fields.";
+        if (a === "import-explain")
+          document.getElementById("datasetStatus").textContent =
+            "Reference only: the real review shows the source, mapping and rejection policy before a single import submission.";
+        if (a === "result-retry")
+          document.getElementById("resultRetryStatus").textContent =
+            "Reference only. The real action re-reads the existing result; it never submits a new inference.";
+        if (a === "copy-example") {
+          try {
+            await navigator.clipboard.writeText(
+              document.getElementById("quickCode").textContent,
+            );
+            document.getElementById("copyStatus").textContent =
+              "Copied. Set your full API secret in INFRX_API_KEY before running.";
+          } catch {
+            document.getElementById("copyStatus").textContent =
+              "Copy was unavailable. Select and copy the example above.";
+          }
+        }
+      });
+      document.addEventListener("change", (e) => {
+        if (e.target.id === "requestState") {
+          render("requests", e.target.value, false);
+          document.getElementById("requestState").focus();
+        }
+        if (e.target.id === "resultState") {
+          render("usage", e.target.value, false);
+          document.getElementById("resultState").focus();
+        }
+      });
+      document
+        .getElementById("menuButton")
+        .addEventListener("click", () =>
+          document.getElementById("navDialog").showModal(),
+        );
+      document
+        .getElementById("keyPreview")
+        .addEventListener(
+          "click",
+          () =>
+            (document.getElementById("keyPreviewStatus").textContent =
+              "After a real creation, the secret appears once with Copy and save guidance. This reference creates no key and displays no secret."),
+        );
+      render(
+        Object.hasOwn(screens, location.hash.slice(1))
+          ? location.hash.slice(1)
+          : "overview",
+        undefined,
+        false,
+      );
+    </script>
+  </body>
+</html>

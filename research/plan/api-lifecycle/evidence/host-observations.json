@@ -1,0 +1,20 @@
+[
+  {
+    "CommandId": "9ced133e-5951-436e-8a25-d6a566230785",
+    "InstanceId": "i-0e8449a4ffca29bab",
+    "Status": "Success",
+    "ExecutionStartDateTime": "2026-10-01T21:36:37.742Z",
+    "ExecutionEndDateTime": "2026-10-01T21:36:37.742Z",
+    "StandardOutputContent": "2026-10-01T21:36:37Z\nServices\n  UNIT                      LOAD   ACTIVE SUB     DESCRIPTION\n  infrx-lab-control.service loaded active running infrx Lab control service (provider control operations, 127.0.0.1:8003)\n  infrx-valkey.service      loaded active running Valkey scheduling index (loopback only; rebuildable from PostgreSQL, no persistence)\n  infrx-worker.service      loaded active running infrx worker (claim -> engine -> journal; drains on stop)\n  marlin2b-gateway.service  loaded active running infrx gateway (pinned runtime image, 127.0.0.1:8001)\n  marlin2b-vllm.service     loaded active running vLLM serving Marlin-2B (docker, 127.0.0.1:8000; never public)\n\nLegend: LOAD   \u2192 Reflects whether the unit definition was properly loaded.\n        ACTIVE \u2192 The high-level unit activation state, i.e. generalization of SUB.\n        SUB    \u2192 The low-level unit activation state, values depend on unit type.\n\n5 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\nContainers\ncranky_mcclintock infrx-certify:41693d5de57746b7dd1d68e40230db6dcd8c4e20 Up 3 hours\ninfrx-lab-control 870aa2ea9b0e Up 20 hours\ninfrx-gateway 423e9f9af764 Up 38 hours\ninfrx-worker 423e9f9af764 Up 38 hours\nmarlin2b-8000 4cbfd34aac14 Up 2 days\ninfrx-valkey d2e18f3410b6 Up 7 days\ncaddy 14a9c00d4e83 Up 7 days\nCertification reports\n",
+    "StandardErrorContent": ""
+  },
+  {
+    "CommandId": "0927b7e5-9ef1-4a87-8c8f-b06d08dd37c2",
+    "InstanceId": "i-0e8449a4ffca29bab",
+    "Status": "Success",
+    "ExecutionStartDateTime": "2026-10-01T21:37:37.417Z",
+    "ExecutionEndDateTime": "2026-10-01T21:37:37.417Z",
+    "StandardOutputContent": "container /infrx-lab-control image_id sha256:870aa2ea9b0e95c77212a282f4eb543171d388218226b4aef45386bb2b73a3cd\nTRACE_PUMPS unset\nLAB_CONTROL unset\nLAB_TRACES unset\nLAB_DATASETS unset\nLAB_EVALS unset\nLAB_PIPELINES unset\nLAB_RELEASES unset\nJUDGE_MODE unset\nCLICKHOUSE_URL unset\nS3_TRACE_BUCKET unset\nLAB_S3_BUCKET unset\nLAB_CHECKPOINT_KEYS unset\ncontainer /infrx-gateway image_id sha256:423e9f9af764f53e171643cc6e1a009aaced332b6589f2cd00d7cf4955e9b35d\nTRACE_PUMPS unset\nLAB_CONTROL unset\nLAB_TRACES unset\nLAB_DATASETS unset\nLAB_EVALS unset\nLAB_PIPELINES unset\nLAB_RELEASES unset\nJUDGE_MODE unset\nCLICKHOUSE_URL unset\nS3_TRACE_BUCKET unset\nLAB_S3_BUCKET unset\nLAB_CHECKPOINT_KEYS unset\ncontainer /cranky_mcclintock image_id sha256:f1c27cc1d606a4ba17b87cb2ea1322a4c6e9fc79f27595bcdb368e6e9b84417e\nstate {'Status': 'running', 'Running': True, 'StartedAt': '2026-10-01T18:11:10.131821299Z'}\nmounts [('/opt/dlami/nvme/w3-checkout', '/repo'), ('/opt/dlami/nvme/w3-corpus', '/corpus'), ('/opt/dlami/nvme/e4b', '/e4b'), ('/opt/dlami/nvme/e4b/20261001T181109Z', '/out')]\nrun_dirs ['20261001T181109Z', '20260924T172244Z', 'e4c', '20260924T202924Z', '20260924T165408Z', '20260924T202629Z', '20260924T202739Z']\n",
+    "StandardErrorContent": ""
+  }
+]

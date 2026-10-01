@@ -1,0 +1,581 @@
+{
+  "observed_at": "2026-10-01T21:40:25.694062+00:00",
+  "origins": {
+    "consumer": "https://marlin2b.callbill.ai",
+    "lab": "https://lab-control.callbill.ai"
+  },
+  "scope": "API read/refusal audit; not a successful full lifecycle test",
+  "session_bootstrap": "existing GoTrue identity; legacy membership RPC used outside FastAPI",
+  "inference_submissions": 0,
+  "deployments_launched": 0,
+  "judge_calls": 0,
+  "full_lifecycle": "BLOCKED",
+  "requests": [
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/health",
+      "authenticated": false,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "ok"
+      ],
+      "elapsed_ms": 253
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/readyz",
+      "authenticated": false,
+      "kind": "existing route",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 72
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/v1/models",
+      "authenticated": false,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data",
+        "object"
+      ],
+      "record_count": 1,
+      "public_response": {
+        "object": "list",
+        "data": [
+          {
+            "schema_version": 2,
+            "object": "model",
+            "id": "nemostation/marlin-2b",
+            "created": 1788220800,
+            "owned_by": "nemostation",
+            "model_revision": "nemostation/marlin-2b@2026-09-01",
+            "aliases": [
+              "nemostation/marlin-2b",
+              "nemostation/marlin-2b@2026-09-01"
+            ],
+            "listing_version": 2,
+            "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+            "serving": {
+              "schema_version": 2,
+              "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+              "revision_label": "2026-09-01",
+              "model_repo": "NemoStation/Marlin-2B",
+              "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+              "weight_shard_digests": [
+                "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+                "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+              ],
+              "adapter_digest": null,
+              "tokenizer_digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+              "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+              "digest_source": "served_bytes",
+              "prompt_harness_ref": "marlin2b.chat.v1",
+              "preprocessor_profile_version": "marlin2b.video.v1",
+              "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+              "runtime_image_digest": null,
+              "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+              "precision": "bfloat16"
+            },
+            "capability": {
+              "schema_version": 2,
+              "input_modalities": [
+                "text",
+                "video"
+              ],
+              "output_modalities": [
+                "text"
+              ],
+              "execution_modes": [
+                "async",
+                "stream",
+                "sync"
+              ],
+              "parameters": [
+                "frequency_penalty",
+                "max_completion_tokens",
+                "max_tokens",
+                "messages",
+                "model",
+                "n",
+                "presence_penalty",
+                "seed",
+                "stop",
+                "stream",
+                "temperature",
+                "top_p"
+              ],
+              "unsupported_parameters": [
+                "function_call",
+                "functions",
+                "logit_bias",
+                "logprobs",
+                "parallel_tool_calls",
+                "price_snapshot",
+                "response_format",
+                "tool_choice",
+                "tools",
+                "top_logprobs"
+              ],
+              "max_request_bytes": 100663296,
+              "max_context_tokens": 32768,
+              "max_input_tokens": 30720,
+              "max_output_tokens": 2048,
+              "video": {
+                "schema_version": 2,
+                "max_seconds": 82,
+                "max_bytes": 67108864,
+                "max_per_request": 1,
+                "mime_types": [
+                  "video/mp4",
+                  "video/quicktime",
+                  "video/webm"
+                ],
+                "live_stream": false,
+                "profile_version": "marlin2b.video.v1",
+                "fps": 2,
+                "min_frames": 4,
+                "max_frames": 240,
+                "max_pixels_per_frame": 200704
+              }
+            },
+            "pricing": {
+              "schema_version": 2,
+              "regime": "credit",
+              "credit": {
+                "schema_version": 2,
+                "rate_card_version": "rc_marlin2b_20260925_launch",
+                "unit": "CREDIT",
+                "meter": "tokens-v1",
+                "input_rate_per_million": "400.00000000",
+                "output_rate_per_million": "1200.00000000",
+                "effective_at": "2026-09-27T06:00:00Z",
+                "provisional": false
+              },
+              "legacy_usd": {
+                "schema_version": 2,
+                "price_version": "pv_marlin2b_usd_2026_09_r1",
+                "unit": "USD",
+                "model_revision": "nemostation/marlin-2b@2026-09-01",
+                "input_rate_per_million": "0.10000000",
+                "output_rate_per_million": "0.30000000",
+                "token_rules_version": "tr-1"
+              }
+            },
+            "retention": {
+              "schema_version": 2,
+              "zero_data_retention": false,
+              "capture_off_deletes_serving_content": false,
+              "trace_capture_default": "off",
+              "content_stored": [
+                "prepared_media",
+                "request_payload",
+                "result",
+                "source_media",
+                "stream_journal"
+              ],
+              "result_ttl_s": 86400,
+              "stream_journal_ttl_s": 3600,
+              "idempotency_ttl_s": 86400,
+              "processing_cache_ttl_s": 604800,
+              "physical_deletion_bound_s": null
+            },
+            "availability": "available",
+            "availability_as_of": "2026-10-01T21:40:08.441630Z"
+          }
+        ]
+      },
+      "elapsed_ms": 180
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/openapi.json",
+      "authenticated": false,
+      "kind": "documentation intentionally disabled in source",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 73
+    },
+    {
+      "surface": "consumer",
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "authenticated": false,
+      "kind": "unauthenticated refusal; no inference expected",
+      "status": 401,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "authentication_error",
+      "error_code": "invalid_api_key",
+      "elapsed_ms": 71
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/health",
+      "authenticated": false,
+      "kind": "existing route",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 241
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/readyz",
+      "authenticated": false,
+      "kind": "existing route",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 70
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/openapi.json",
+      "authenticated": false,
+      "kind": "documentation intentionally disabled in source",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 68
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/models",
+      "authenticated": false,
+      "kind": "unauthenticated refusal",
+      "status": 401,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 72
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/models",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 1480
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 733
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/proposals",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 699
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/aggregates",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 678
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/traces",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 404,
+      "top_level_fields": [
+        "detail"
+      ],
+      "elapsed_ms": 69
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/versions",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "record_count": 0,
+      "elapsed_ms": 404
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/catalog",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 387
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/runs",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 343
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/experiments",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 305
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/subscriptions",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 321
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/training-runs",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 371
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/checkpoints",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 335
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/teacher-batches",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 503,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 345
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/releases",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "elapsed_ms": 716
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/optimizations",
+      "authenticated": true,
+      "kind": "existing route",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 502
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/console/v1/me",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 229
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/console/v1/keys",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 72
+    },
+    {
+      "surface": "consumer",
+      "method": "GET",
+      "path": "/console/v1/credits",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "error"
+      ],
+      "error_type": "not_found_error",
+      "error_code": "not_found",
+      "elapsed_ms": 73
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/workspaces",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "detail"
+      ],
+      "elapsed_ms": 71
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/artifacts",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "detail"
+      ],
+      "elapsed_ms": 69
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/judge/runs",
+      "authenticated": true,
+      "kind": "proposed API namespace; absence corroborated by source, not status alone",
+      "status": 404,
+      "top_level_fields": [
+        "detail"
+      ],
+      "elapsed_ms": 69
+    },
+    {
+      "surface": "lab",
+      "method": "POST",
+      "path": "/lab/v1/control/register",
+      "authenticated": true,
+      "kind": "new workspace onboarding attempt with actual Marlin pins",
+      "status": 404,
+      "top_level_fields": [
+        "refusal"
+      ],
+      "elapsed_ms": 707
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/models",
+      "authenticated": true,
+      "kind": "registration postcondition",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 1452
+    },
+    {
+      "surface": "lab",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments",
+      "authenticated": true,
+      "kind": "registration postcondition",
+      "status": 200,
+      "top_level_fields": [
+        "data"
+      ],
+      "record_count": 0,
+      "elapsed_ms": 1313
+    }
+  ]
+}

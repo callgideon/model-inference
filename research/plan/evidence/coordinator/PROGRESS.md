@@ -1,24 +1,24 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 22:37Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 395, updated 2026-10-01 22:37Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 20:41Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 396, updated 2026-10-01 20:41Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
 **23 / 30** — backend corrections + App completion + 4 go-live steps. Lab, hosting and later work is listed at the end under “Later” and not counted; superseded tasks are not shown.
 
 - Backend corrections 13 / 14
-  - `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
+  - `E4C` window-bound: runs on the live system as the post-go-live test window; now: Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass.
 - App completion 8 / 12
-  - `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
+  - `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.
   - `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
   - `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
   - `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
 
 Remaining, in order:
 
-1. `E4C` window-bound: runs on the live system as the post-go-live test window; now: start dependencies met
+1. `E4C` window-bound: runs on the live system as the post-go-live test window; now: Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass.
 2. `BACKEND-READY` E4C certify + E1B cells on the live system, then the decision
-3. `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: lane active
+3. `I2A` go-live-bound: follows the live release and the BACKEND-READY decision; now: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.
 4. `E3A` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
 5. `I3` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
 6. `E4` go-live-bound: follows the live release and the BACKEND-READY decision; now: gated: dispatch only after BACKEND-READY is accepted
@@ -26,25 +26,27 @@ Remaining, in order:
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `6462ed06`), base `dff31efc`, main `db2f3445`.
+- Integration branch `main` (head `6462ed06`), base `dff31efc`, main `6462ed06`.
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
-- Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 6 active lanes, 2 reserved.
-- Validation: 0 error(s), 14 warning(s).
+- Lowest open band: V4 measured backend; bands with active work: none.
+- Agent slots: 16 total, 0 active lanes, 2 reserved.
+- Validation: 0 error(s), 0 warning(s).
 
 ### Actionable blockers
 
+- lane E4C blocked: Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass.
+- lane I2A blocked: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.
+- lane E3A blocked: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.
+- lane I3 blocked: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task.
 - P-11 open — Selected automatic training connector/provider and paid execution terms (15-pending-inputs.md P-11): E7L i07 training half and E4-ON o03 stay NOT RUN[P-11]; the training/annotation roles refuse by name (WR-I6-3b); register item 29 (owner operator / product; blocks )
-- e2c (55448/55493) + i8 (55450/55495/55496) held by G2-FIX until ≈2026-09-26 21:00Z
-- e3c compose block 56900–56999 held by BACKEND-MINORS
-- app-c0 55451 / app-u1r 55457 / app-u4 55456 held by APP-MINORS-2
+- pilot box i-0e8449a4ffca29bab (single GPU) held by operator — last reported E4C window; current ownership must be checked
 - E4C (BACKEND-READY): no GPU window allocated for E4C; no remaining-effort estimate for E4C
-- E3A (APP-LOCAL): no GPU window allocated for E4C; no remaining-effort estimate for E4C
-- E4 (APP-PILOT): no GPU window allocated for E4, E4C; no remaining-effort estimate for E4, E4C
+- E3A (APP-LOCAL): no GPU window allocated for E4C; no remaining-effort estimate for E3A, E4C
+- E4 (APP-PILOT): no GPU window allocated for E4, E4C; no remaining-effort estimate for E3A, E4, E4C, I2A, I3
 
 ### Next ready work
 
-- `E4C` Certify repaired CREDIT backend on final Marlin deployment (lanes E4C)
+- None.
 
 ## Progress summaries
 
@@ -53,7 +55,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
 | Backend corrections | 13 / 14 | none | BACKEND-LOCAL 7/7; BACKEND-READY 0/6 |
-| App completion | 8 / 12 | I2A | APP-LOCAL 17/17; APP-PILOT 0/5 |
+| App completion | 8 / 12 | none | APP-LOCAL 17/17; APP-PILOT 0/5 |
 | Activated post-launch (Lab / later) | 49 / 49 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
 
@@ -65,8 +67,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 |---|---|---|---|---|---|---|---|
 | `E3C` | BACKEND-LOCAL (ACCEPTED) | accepted | accepted 2026-09-26T04:07:41Z | explicit gate decision recorded | — | — | unknown |
 | `E4C` | BACKEND-READY (PENDING) | unknown | unknown: no GPU window allocated for E4C | no GPU window allocated for E4C; no remaining-effort estimate for E4C | — | — | unknown |
-| `E3A` | APP-LOCAL (PENDING) | unknown | unknown: no GPU window allocated for E4C | no GPU window allocated for E4C; no remaining-effort estimate for E4C | — | — | unknown |
-| `E4` | APP-PILOT (PENDING) | unknown | unknown: no GPU window allocated for E4, E4C | no GPU window allocated for E4, E4C; no remaining-effort estimate for E4, E4C | — | — | unknown |
+| `E3A` | APP-LOCAL (PENDING) | unknown | unknown: no GPU window allocated for E4C | no GPU window allocated for E4C; no remaining-effort estimate for E3A, E4C | — | — | unknown |
+| `E4` | APP-PILOT (PENDING) | unknown | unknown: no GPU window allocated for E4, E4C | no GPU window allocated for E4, E4C; no remaining-effort estimate for E3A, E4, E4C, I2A, I3 | — | — | unknown |
 
 ## Post-launch waves
 
@@ -113,13 +115,13 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | RV-01 | fixed | F2C (complete), G7 (complete), A3 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-02 | fixed | D10 (complete), M5 (complete), E1C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-03 | fixed | D10 (complete), M6 (complete), I8 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
-| RV-04 | open | S3 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-04 | open | S3 (complete), E4C (blocked) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-05 | fixed | F2C (complete), D10 (complete), W5 (complete), G7 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
-| RV-06 | fixed | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (queued) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
+| RV-06 | fixed | C0 (complete), C3A (complete), A2 (complete), A3 (complete), U1R (complete), U2 (complete), U3 (complete), U4 (complete), E3A (blocked) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-07 | fixed | E1C (complete), M5 (complete), G7 (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
-| RV-08 | open | E1C (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-09 | open | D10 (complete), I8 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
-| RV-10 | open | I8 (complete), E4C (queued) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-08 | open | E1C (complete), E4C (blocked) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-09 | open | D10 (complete), I8 (complete), E4C (blocked) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
+| RV-10 | open | I8 (complete), E4C (blocked) | dff31efc | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — stays open until the E4C window (P-17 check 8)` |
 | RV-11 | fixed | F2C (complete), D10 (complete), G7 (complete), U4 (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 | RV-12 | fixed | E2C (complete), E3C (complete) | 2026-09-26T18:20:00Z | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md — closed on the candidate (BACKEND-LOCAL re-proven on 400a7e94; APP-LOCAL 17/17 on 400a7e94)` |
 
@@ -138,7 +140,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (169.9 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (167.9 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -169,7 +171,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | G8 | G8 fix round: 0-G8-R1/2-ACC-1 (pre-freeze admission straddling the transition), 0-G8-R2/1-G8-RULES-1/2-ACC-2 (contracts run on 55432; evidence correction), 0-G8-R3 (revoked-key read bound routed to G7) | complete | codex/g8-credit-ops | dff31efc → 09f4ab2a | ports postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g8- | 2026-09-26 18:20Z | P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:44Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a) |
 | M6 | M6 phase 2 fix round: R1 prepared row-before-bytes proven; R3/R4/A2 pins hold on get, pin and evict; R2/A1 refetch race pinned as strict xfail (WR-7); A3 ruling, A4/A5 wiring | complete | codex/m6-phase2 | bd556c5f → dea32507 | ports postgres 55444 (INFRX_D_TASK=m6), prefix infrx-m6-, db infrx_m6* | 2026-09-26 18:20Z | implemented; RETENTION-DURABLE PASS end to end (E3C s06 + control); collector lag / pending-delete age on the box are measured during the E4C soak | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 03:36Z; basis: lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25 (refreshed at the 2026-09-26 03:40Z checkpoint) |
 | E3C | E3C harness-only rerun on the 0024/0025 tree (codex/d10-merge-2 9e4e34ca, merged as 8b824cd0) with both revert-type controls | complete | codex/e3c-rerun | 9e4e34ca → 1bfc327d | ports compose block 56900-56999 (postgres 56932), prefix infrx-e3c-, db infrx_e3c | 2026-09-26 05:16Z | rerun on 9e4e34ca merged; BACKEND-LOCAL candidate refreshed to the 0025 tree; E3C stays implemented | 0–0.5 h remaining (likely 0 h), confidence high, estimated 2026-09-26 05:16Z; basis: gate passed on the 0024/0025 tree; left is the coordinator merge |
-| E4C | E4C  | queued | — | — → — | none | 2026-10-01 06:08Z | the operator runs the certify window: /tmp/e4c (certify-window.sh unpinned at merge #78; inputs provisioned) | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
+| E4C | E4C  | blocked | — | — → — | none | 2026-10-01 20:41Z | Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass. | unknown (Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.) |
 | C0 | C0 fix round: 0-C0-V1 (consumerSession tested via consumerSessionFrom), 1-C0-V1 (consoleShell: operator bypass, route-gated redirects; WR-1 revised); 0-C0-V2/0-C0-V3 need coordinator WR-4/WR-1/WR-2 | complete | codex/app-c0 | 46776646 → ab0b5179 | ports app-c0 postgres 55451, prefix infrx-app-c0- | 2026-09-25 23:28Z | merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 23:28Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) |
 | U1R | U1R fix round: 0-U1R-V-01 (preview gate tested), 1-U1R-V01 (ledger page drops actor), 1-U1R-V02 lane side (sidebarCredits), 0-U1R-V-02 as exact D10 index WR | complete | codex/app-u1r | 46776646 → 7482c21a | ports postgres 55457 (INFRX_D_TASK=app-u1r), prefix infrx-app-u1r-, db infrx_app-u1r_credit, infrx_app-u1r_perf | 2026-09-25 23:28Z | merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 23:28Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) |
 | A2 | A2 fix round: 0-A2-CM-01..04, 1-A2-V-RS-01/02 — /welcome read, emailSettled, form wiring, grant RPC pin, sign-in claim + routing | complete | codex/app-a2 | 46776646 → cd4a688e | ports postgres 55460 (INFRX_D_TASK=app-a2), container removed at end, prefix infrx-app-a2-, db infrx_app-a2 | 2026-09-25 23:28Z | merged into claude/consumer-v1 via codex/app-union 7ebed92d at 68128815; manifest implemented (closure note lists the open wirings) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 23:28Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) |
@@ -178,10 +180,10 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | U4 | U4 verified ACCEPT_WITH_FIXES: V-01/V-02 fixed; V-03 (unknown-usage result served) closes with 0024 WR-U4-2 | complete | codex/app-u4 | 46776646 → d76f912f | ports app-u4 postgres 55456, prefix infrx-app-u4- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; U4-P08 flips at the 0024 merge | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
 | U2 | U2 verified ACCEPT_WITH_FIXES: U2-V-1..5 fixed and rechecked (failed key read never renders as empty; redaction; stuck pending; plaintext/lost-key seams; wiring tests) | complete | codex/app-u2 | 46776646 → 2bd04497 | ports fakes only, prefix infrx-app-u2- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; WR-U2-3 option (a) + U2-W03 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
 | U3 | U3 verified ACCEPT_WITH_FIXES: U3-V1..V3 fixed and rechecked (DUR-RLS on operator views can fail; form retry protection wired; Unavailable rendering tested) | complete | codex/app-u3 | 46776646 → b80c4cd8 | ports app-u3 postgres 55453, prefix infrx-app-u3- | 2026-09-26 01:02Z | merged via codex/app-union-2 (dec15244); manifest implemented; WR-U3-1 → D10 0025 lane after 0024 | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 01:02Z; basis: merged after the in-workflow verification (ACCEPT_WITH_FIXES) and the union round-2 checks |
-| I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | review | codex/i2a-prep | fd40748c → 8ca672d0 | ports none, prefix infrx-i2a-prep- | 2026-10-01 03:06Z | I2A-PREP merged a5ca1cd1 (+ wiring 416da075: /api/version public, console-built in check, trailing-dot refusal); R134 numbered. The live half (Vercel env, staging project, P-05 auth settings, deploy + smoke + known-good record) runs after BACKEND-READY with the operator inputs listed in i/I2A-prep-9fe9484.md | 2–12 h remaining (likely 5 h), confidence low, estimated 2026-09-26 00:33Z — STALE; basis: prep merged; the live deploy waits for the accepted backend and seven operator inputs |
-| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed | queued | codex/e3a-prep | fd40748c → 4391553c | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-10-01 03:06Z | E3A proper needs BACKEND-LOCAL (E3C) and a rerun on the merged SHA; still NOT RUN: operator-controls (operator identity + one U3 action with a reason), the four delegated cells, the expired-content display on /usage/<id>; E3A-WR-1/WR-2 with the E3C final run (overlay keeps the lane queued: the gate dispatches after BACKEND-READY) | 0.3–1 h remaining (likely 0.5 h), confidence high, estimated 2026-09-26 22:00Z — STALE; basis: candidate complete; the recorded decision waits on BACKEND-READY |
+| I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | blocked | codex/i2a-prep | fd40748c → 8ca672d0 | ports none, prefix infrx-i2a-prep- | 2026-10-01 20:25Z | Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task. | unknown (Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.) |
+| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b block (runner over the E3C world, Supabase stand-in edge, Playwright journey: 19 checks over the 17 E3A test_ids, app-e2e gate wiring); verified ACCEPT_WITH_FIXES, merged 6d55c5e0; gate not claimed | blocked | codex/e3a-prep | fd40748c → 4391553c | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-10-01 20:25Z | Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task. | unknown (Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.) |
 | P25-ENACT | support P-25 enactment as configuration (I8/M6 support lane): retention grace 3,600 s, cache cap 50 GiB, intervals pinned, alert + runbooks | complete | codex/p25-enact | 74183655 → a15393c5 | ports m6 block (postgres 55444), no Valkey/S3, prefix infrx-m6- | 2026-09-26 03:36Z | merged through the wave4b union at 51c1644d; WR-P25-5 logged in 15-pending-inputs | 0.5–2 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 00:51Z; basis: lane verified; remaining is the union round-3 merge and four coordinator wirings |
-| I3 | I3 I3-PREP (coordinator): infra/app/operations.md (C1–C5 checks, cutover X0–X9 + rollback, browser error monitoring, alert delivery, App rollback rule, budgets, OPS-APP scenario register), infra/app/rollback.py, App error pages + POST /api/client-errors + onRequestError, alerts/app.json AppDown, tests/i3 (9) + tests/integration/ops (21); verified ACCEPT_WITH_FIXES, merged; gate not claimed | queued | codex/i3-prep | 6badd4e1 → 39b78070 | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-10-01 03:26Z | I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands) | 3–14 h remaining (likely 6 h), confidence low, estimated 2026-09-26 02:11Z — STALE; basis: lane handback: preparation merged; the operator run needs hosted/Vercel/box windows and four pending inputs |
+| I3 | I3 I3-PREP (coordinator): infra/app/operations.md (C1–C5 checks, cutover X0–X9 + rollback, browser error monitoring, alert delivery, App rollback rule, budgets, OPS-APP scenario register), infra/app/rollback.py, App error pages + POST /api/client-errors + onRequestError, alerts/app.json AppDown, tests/i3 (9) + tests/integration/ops (21); verified ACCEPT_WITH_FIXES, merged; gate not claimed | blocked | codex/i3-prep | 6badd4e1 → 39b78070 | ports no compose block; task-local PostgreSQL app-i3 55461 only if needed, prefix infrx-i3-prep- | 2026-10-01 20:25Z | Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task. | unknown (Remaining live acceptance has no current estimate; old preparation estimate retired. Outcome/window must be reconciled first.) |
 | APP-E3A-FIX | support E3A support lane: F-1 (middleware 307 on the sign-in server action: claim never runs) and F-2 (/traces, /dedicated, /teams served to a consumer) fixed with fails-before tests; journey checks un-gated by C3A/U2/U3/U4 fitted to the merged pages; runner rerun on the e4b block | complete | codex/app-e3a-fix | 6d55c5e0 → 97dce397 | ports E3A runner inside the e4b block (56860/56861/56870; one runner at a time), prefix infrx-e4b- | 2026-09-26 02:24Z | merged --no-ff onto claude/consumer-v1 (ACCEPT; minors carried: plain-POST pass-through on /login,/signup, /admin keeps its own operator decision, ancestor loading.tsx assertion, update JSON exit codes) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-26 02:24Z; basis: merged after the in-workflow verification (ACCEPT) |
 | D10-APP-SQL | support D10 App-support SQL (0024 console read port): consumer_credit_ledger keyset RPC (C0 WR-5), credits-in partial index (U1R WR-3b), consumer_jobs filters (U1R WR-3a), addenda WR-U4-2, WR-C3A-4 (key insert = verified individual), WR-W5F5-1 (monitor grant on credit_wallet_holds); verified ACCEPT_WITH_FIXES | complete | codex/d10-app-sql | 273990a0 → 8f453b98 | ports revoke postgres 55459, prefix infrx-revoke- | 2026-09-26 05:11Z | 0024 merged on the tip at f95377b9 via D10-MERGE-2; R146 numbered; C0/U1R adoption = APP-0024-WIRE (running) | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-26 01:54Z; basis: lane verified; remaining is the ordered merge, three coordinator wirings and the App follow-up lane |
 | D10-0025 | support D10 migration 0025 (WR-U3-1, R143): the App's operator RPCs (adjust CREDIT, suspension, key revocation) as a committed migration; U3's in-test apply removed; D-style tests, mutants and privilege tables | complete | codex/d10-0025 | 8f453b98 → b5fc2fbc | ports revoke postgres 55459 (shared with D10-APP-SQL, which is done), prefix infrx-revoke- | 2026-09-26 05:11Z | 0025 merged on the tip at f95377b9 via D10-MERGE-2; R143 amended (codes, no-op re-revoke keeps its key, advisory lock) | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-26 01:59Z; basis: proposal SQL exists and is exercised by U3's 9-case stack; D10 conventions, mutants and both images remain |
@@ -389,9 +391,9 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W6-PLAN-LEDGER | support W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row; merged #70 | complete | codex/w6-plan-ledger | 08983639 → 143d2d92 | none | 2026-10-01 03:31Z | — | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-INFRA-LIBS | support wave 6 clean-up lane infra-libs (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_2be41693-24b; merged #72 | complete | codex/w6-infra-libs | 08983639 → 6be89bac | ports i5, prefix infrx-i5, db task-local | 2026-10-01 04:51Z | — | 4–12 h remaining (likely 7 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-LAB-RELEASE-TOOL | support wave 6 clean-up lane lab-release-tool (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_c5926c7c-285; merged #71 | complete | codex/w6-lab-release-tool | 08983639 → f4cdfb13 | ports i6, prefix infrx-i6, db task-local | 2026-10-01 04:02Z | — | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
-| W6-API-L2 | support wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0 | running | codex/w6-api-L2 | 08983639 → — | ports g7, prefix infrx-g7, db task-local | 2026-10-01 02:50Z | handback → merge | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-10-01 03:32Z — STALE; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
-| W6-API-L3 | support wave 6 clean-up lane api-L3 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_a1f4374c-9e4 | running | codex/w6-api-L3 | 08983639 → — | ports d10, prefix infrx-d10, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-10-01 03:32Z — STALE; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
-| W6-API-L4 | support wave 6 clean-up lane api-L4 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_b12e6bd8-f8c | review | codex/w6-api-L4 | 08983639 → 011fbe50 | ports l4, prefix infrx-l4, db task-local | 2026-10-01 06:03Z | merge batch #79 (WR-L4-3/4/6; L4-R1/R2/R4/R5 minors; WR-L4-1/2 carried to api-L1; the d1 incident registered) | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-10-01 03:32Z — STALE; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
+| W6-API-L2 | support wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0 | complete | codex/w6-api-L2 | 08983639 → — | ports g7, prefix infrx-g7, db task-local | 2026-10-01 20:25Z | Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane. | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
+| W6-API-L3 | support wave 6 clean-up lane api-L3 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_a1f4374c-9e4 | complete | codex/w6-api-L3 | 08983639 → — | ports d10, prefix infrx-d10, db task-local | 2026-10-01 20:25Z | Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane. | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
+| W6-API-L4 | support wave 6 clean-up lane api-L4 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_b12e6bd8-f8c | complete | codex/w6-api-L4 | 08983639 → 011fbe50 | ports l4, prefix infrx-l4, db task-local | 2026-10-01 20:25Z | Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane. | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-LAB-A | support wave 6 clean-up lane lab-A (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_4621c470-b7b; merged #69 | complete | codex/w6-lab-A | 08983639 → b07fae84 | ports -, prefix -, db - | 2026-10-01 03:34Z | — | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-69 | support merge batch #69 (Opus): lab-A b07fae84 (+WR-W6-LABA-1 Makefile line, LABA-2 turbopack root, the TraceLossReason parity case, README/launch comment edits, R268); workflow: see RESUME-NOW; integrated at 724c5b24 (R268) | complete | codex/w5-merge-69 | 44a41acb → 4ccb4440 | ports none (layer-1 only), prefix -, db - | 2026-10-01 03:34Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-70 | support merge batch #70 (Opus): plan-ledger 143d2d92 (+WR-PL-1 progress.py gate_records + indent-1 write_state, lens PL-1/2/3, WR-PL-2; WR-PL-3 carried to infra-libs); workflow wf_2aa5a4d5-392 | complete | codex/w5-merge-70 | 50d2b232 → 774bad02 | ports none (layer-1 only), prefix -, db - | 2026-10-01 03:31Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
@@ -399,7 +401,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W6-LAB-E | support wave 6 clean-up lane lab-E (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_98b2df61-077; merged #75 | complete | codex/w6-lab-E | 2add8e0a → adf27751 | ports -, prefix -, db - | 2026-10-01 06:09Z | — | 2–6 h remaining (likely 3 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-CERTIFY-RELEASE | support wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_41fb9a88-ad1; merged #78 | complete | codex/w6-certify-release | 2add8e0a → 95f680a8 | ports m6, prefix infrx-m6, db task-local | 2026-10-01 06:08Z | — | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-PGRESTORE-TESTS | support wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_d73a757d-83a; merged #77 | complete | codex/w6-pgrestore-tests | 2add8e0a → d0bb2299 | ports i3b, prefix infrx-i3b, db task-local | 2026-10-01 05:55Z | — | 2–6 h remaining (likely 3 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
-| W6-API-L5 | support wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_9771b2d5-76e | running | codex/w6-api-L5 | 2add8e0a → — | ports w5, prefix infrx-w5, db task-local | 2026-10-01 03:35Z | handback → merge | 4–12 h remaining (likely 6 h), confidence medium, estimated 2026-10-01 03:35Z — STALE; basis: wave6-plan.md brief estimate |
+| W6-API-L5 | support wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_9771b2d5-76e | complete | codex/w6-api-L5 | 2add8e0a → — | ports w5, prefix infrx-w5, db task-local | 2026-10-01 20:25Z | Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane. | 4–12 h remaining (likely 6 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-MAKEFILE-PINS | support wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54; merged #73 | complete | codex/w6-makefile-pins | 2add8e0a → 3208407a | ports -, prefix -, db - | 2026-10-01 04:40Z | — | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-MERGE-71 | support merge batch #71 (Opus): lab-release-tool f4cdfb13 (+the launch-v1.sh shim conflict, LRT-RV-1/2/3/4, WR-W6-LRT-3, R269); workflow wf_00e7119f-36e; integrated at c31b8ff2 (R269) | complete | codex/w5-merge-71 | 87637f37 → 836bf555 | ports none (layer-1 only), prefix -, db - | 2026-10-01 04:02Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-72 | support merge batch #72 (Opus): infra-libs 6be89bac (+the tests/i/mutants.py union with #71, WR-W6-LRT-1/WR-PL-3/WR-IL-1/WR-IL-3, IL-3/F2/F3/F4; WR-IL-2/4/5 carried); workflow wf_005217f5-e9b; integrated at ed22c85d | complete | codex/w5-merge-72 | efb398a8 → 1c3a423b | ports none (layer-1 only), prefix -, db - | 2026-10-01 04:51Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
@@ -410,34 +412,18 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W6-MERGE-76 | support merge batch #76 (Opus): docs-state 94d1b9cd (+union on apps/lab/README.md + 08 + consumer-v1/README; WR-W6DS-1..7; DS minors; the carried CLAUDE.md pointers); workflow wf_6091b234-cab; integrated at 1db1387f | complete | codex/w5-merge-76 | 70cf254f → fdff759e | ports none (layer-1 only), prefix -, db - | 2026-10-01 05:26Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-77 | support merge batch #77 (Opus): pgrestore-tests d0bb2299 (+PGR-1/PGR-2 cases and mutants; the D-form pre-existing problems registered); workflow wf_f83f9899-f41; integrated at 100a5d32 | complete | codex/w5-merge-77 | c56cfce5 → 1b5d205f | ports none (layer-1 only), prefix -, db - | 2026-10-01 05:55Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-78 | support merge batch #78 (Opus): certify-release 95f680a8 (+the README patch, WR-IL-2 host-lib, CR-2/3/5 minors; the pinned-per-LOGDIR RELEASE/MIGRATION_VERSION from the fix round); workflow wf_f3681060-6f0; integrated at a2608932 | complete | codex/w5-merge-78 | c56cfce5 → 6245378a | ports none (layer-1 only), prefix -, db - | 2026-10-01 06:08Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
-| W6-MERGE-79 | support merge batch #79 (Opus): api-L4 011fbe50 (+WR-L4-3/4/6 one-liners in unowned files, L4-R1/R2 cases + mutants, the ruff I001 fix; WR-L4-1/2 carried to api-L1; the d1 incident registered); workflow (see RESUME-NOW) | running | codex/w5-merge-79 | 21aefded → — | ports none (layer-1 only), prefix -, db - | 2026-10-01 06:03Z | integrate → api-L1 after api-L3 | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z — STALE; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
+| W6-MERGE-79 | support merge batch #79 (Opus): api-L4 011fbe50 (+WR-L4-3/4/6 one-liners in unowned files, L4-R1/R2 cases + mutants, the ruff I001 fix; WR-L4-1/2 carried to api-L1; the d1 incident registered); workflow (see RESUME-NOW) | complete | codex/w5-merge-79 | 21aefded → — | ports none (layer-1 only), prefix -, db - | 2026-10-01 20:25Z | Merged on reviewed main 252f3ea8. Remaining omissions are in the carried register; no active writer is claimed by this historical lane. | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-80 | support merge batch #80 (Opus): lab-D c1728452 (+WR-1 regenerated on the merged tree, WR-2/WR-3 holds patches, WR-4 README conventions, LD-RV-1 case + mutant, the three-file ratification); workflow wf_03765a89-6af; integrated at 9c7887b8 | complete | codex/w5-merge-80 | ecc0bce3 → 184fb1a0 | ports none (layer-1 only), prefix -, db - | 2026-10-01 06:39Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 
 ### Queues and locks
 
 - Review queue: empty.
 - Integration queue: empty.
-- e2c (55448/55493) + i8 (55450/55495/55496): G2-FIX until ≈2026-09-26 21:00Z. exclusive for the whole make check + tests/i run; no other user of either until the verdict
-- e3c compose block 56900–56999: BACKEND-MINORS. one E3C run at a time
-- app-c0 55451 / app-u1r 55457 / app-u4 55456: APP-MINORS-2. App real-PG worlds
-- pilot box i-0e8449a4ffca29bab (single GPU): unassigned. no window allocated; the E4C window pauses production admission (W5) and is operator-scheduled (B-11)
+- pilot box i-0e8449a4ffca29bab (single GPU): operator — last reported E4C window; current ownership must be checked. Operator last reported a mid-run diagnosis at 18:58Z; completion/current ownership unverified. No fresh rerun slot recorded. Empty forecast windows is not permission to use the box.
 
 ## Validation
 
-- warning: stale estimate: lane I2A estimated at 2026-09-26T00:33:19Z (older than 6 h)
-- warning: stale estimate: lane E3A estimated at 2026-09-26T22:00:00Z (older than 6 h)
-- warning: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
-- warning: stale estimate: lane W6-API-L2 estimated at 2026-10-01T03:32:15Z (older than 6 h)
-- warning: stale estimate: lane W6-API-L3 estimated at 2026-10-01T03:32:15Z (older than 6 h)
-- warning: stale estimate: lane W6-API-L4 estimated at 2026-10-01T03:32:15Z (older than 6 h)
-- warning: stale estimate: lane W6-API-L5 estimated at 2026-10-01T03:35:26Z (older than 6 h)
-- warning: stale estimate: lane W6-MERGE-79 estimated at 2026-10-01T03:32:15Z (older than 6 h)
-- warning: overlapping writers: W6-API-L2 (running) and W6-API-L4 (review) both own apps/infrx-api/tests/g/ / apps/infrx-api/tests/g/lab_*/
-- warning: overlapping writers: W6-API-L2 (running) and W6-MERGE-79 (running) both own apps/infrx-api/tests/g/ / apps/infrx-api/tests/g/lab_releases/
-- warning: overlapping writers: W6-API-L3 (running) and W6-API-L4 (review) both own tests/i/ / tests/i/lab_control/
-- warning: overlapping writers: W6-API-L3 (running) and W6-MERGE-79 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
-- warning: overlapping writers: W6-API-L4 (review) and W6-MERGE-79 (running) both own apps/infrx-api/tests/g/lab_*/ / apps/infrx-api/tests/g/lab_releases/
-- warning: 16 update file(s) not applied yet: W6-CERTIFY-RELEASE-20261001T0450Z.json, W6-api-L1-20261001T0800Z.json, W6-api-L2-20261001T0556Z.json, W6-api-L3-20261001T0620Z.json, W6-api-L4-20261001T1200Z.json, W6-api-L5-20261001T0526Z.json, W6-api-L5-20261001T0730Z.json, W6-docs-state-20261001T0335Z.json, W6-infra-libs-20261001T0324Z.json, W6-lab-A-20261001T0300Z.json, W6-lab-B-20261001T0413Z.json, W6-lab-D-20261001T0538Z.json, W6-lab-E-20261001T0404Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json, W6-pgrestore-tests-20261001T0500Z.json (run apply-updates)
+- Clean.
 
 ## Pending inputs
 
@@ -447,7 +433,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | P-02 | resolved | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion | coordinator (read-only dry-run) | E4C |
 | P-05 | resolved | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3 | operator-held (confirm 2nd user, verified-count read); then coordinator (grant/issue-key); A2/I2A public onboarding | E1B, E4C, I2A, E4 |
 | P-06 | resolved | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) [ENACTED 2026-09-26: served processor digests measured on the box = the repository copies; pinned in serving-version.json + artifacts.py PINNED] | coordinator (SSM inventory.sh); I8 (record + PINNED) | E4C |
-| P-17 | resolved | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab); E4C live window RUNNING 2026-10-01T20:45Z (run 20261001T181109Z on the installed 41693d5d: preconditions/config-pin/served-build/sop-parity ok; dataset-resume FAIL on the oracle — corrected on main 6462ed06; envelope FAIL at the declared 0.5/s pending detail; soak 4 h in progress; overload queued).; run 1 FINISHED 2026-10-01T22:37Z: dataset-resume oracle-only (fixed on main), envelope FAIL e2e_p95_per_clip_minute 102.3 > 90 s, soak PENDING (observe exporter absent: step 72), overload invalid (driver lag 1.020 s) — evidence e/E4C-41693d5; decisions pending. | coordinator at E4C handback | E4C |
+| P-17 | resolved | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) | coordinator at E4C handback | E4C |
 | P-18 | resolved | ENACTED (E4C-PREP dafd4030, R133): limits in E1B-protocol §4/§5 and certify.py CRITERIA (declared_rate 0.5/s, soak 0.25/s × 14,400 s); only the 0.1 timestamp check at the run remains. DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C | E4C lane (protocol §5 + certify.py thresholds before first qualifying run) | E4C |
 | P-19 | resolved | RESOLVED 2026-09-25: g6e.2xlarge row added to cloud-pricing.md §3.1 (est. derivations) (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures | research lane (cloud-pricing.md row) | E4C |
 | P-22 | resolved | CLOSED: decided 2026-09-24 as R109 (resolve, then price); Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows) | F2C-C/D10/G7 (D/G decision) | E4C |
@@ -627,6 +613,22 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - `I6-20260928T1025Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `I7-20260928T1025Z.json`: impossible transition queued → review: work that never ran cannot be in review, integration or complete
 - `L3-INTEGRATION-20260928T1330Z.json`: future-dated: at 2026-09-28T13:30:00Z is after host UTC now 2026-09-28T12:21:20Z (+15 min skew allowed); check the clock
+- `W6-lab-A-20261001T0300Z.json`: unknown task ID 'W6-lab-A'
+- `W6-lab-release-tool-20261001T0320Z.json`: unknown task ID 'W6-lab-release-tool'
+- `W6-docs-state-20261001T0335Z.json`: unknown task ID 'W6-docs-state'
+- `W6-infra-libs-20261001T0324Z.json`: unknown task ID 'W6-infra-libs'
+- `W6-CERTIFY-RELEASE-20261001T0450Z.json`: unknown activity 'review (fix round 0-CR-1 done)'
+- `W6-lab-B-20261001T0413Z.json`: unknown task ID 'W6-lab-B'
+- `W6-lab-E-20261001T0404Z.json`: unknown task ID 'W6-lab-E'
+- `W6-makefile-pins-20261001T0420Z.json`: unknown task ID 'W6-makefile-pins'
+- `W6-pgrestore-tests-20261001T0500Z.json`: unknown task ID 'W6-pgrestore-tests'
+- `W6-api-L5-20261001T0526Z.json`: unknown task ID 'W6-api-L5'
+- `W6-api-L2-20261001T0556Z.json`: unknown task ID 'W6-api-L2'
+- `W6-lab-D-20261001T0538Z.json`: unknown task ID 'W6-lab-D'
+- `W6-api-L3-20261001T0620Z.json`: unknown task ID 'W6-api-L3'
+- `W6-api-L5-20261001T0730Z.json`: unknown task ID 'W6-api-L5'
+- `W6-api-L1-20261001T0800Z.json`: unknown task ID 'W6-api-L1'
+- `W6-api-L4-20261001T1200Z.json`: unknown task ID 'W6-api-L4'
 
 ## Tasks (backend, App, activated, reused baseline)
 
@@ -665,7 +667,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `V2` | Trace detail, content and feedback | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `V3` | Judge score and calibration presentation | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I1` | Read-only inventory and deploy design | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I3` | Recovery, alarms and rollback runbooks | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
+| `I3` | Recovery, alarms and rollback runbooks | App completion | planned | blocked | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `E1` | Distinct corpus and authenticated benchmark client | Reused baseline | integrated | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E2` | Pinned integration services and fault harness | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E4` | Single-GPU release evidence and launch decision | App completion | planned | unassigned | blocked: gated: dispatch only after BACKEND-READY is accepted |
@@ -687,9 +689,9 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `L2` | Provider role and purpose-specific data-access services | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `L3` | Assisted model registration and dev/prod revision services | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `L4` | Model/deployment/publication UI and aggregate health | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `I2A` | Reproducible App and single-GPU runtime deployment | App completion | planned | review | active: lane active |
+| `I2A` | Reproducible App and single-GPU runtime deployment | App completion | planned | blocked | blocked: Live acceptance awaits the E4C result and a coordinated verification window; completed preparation/deployment is not a pending implementation task. |
 | `I2L` | Independent Lab app and control-service deployment | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
+| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | blocked | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `E3L` | Provider access, publication and rollback integration gate | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E5L` | Provider traces, review and evaluation integration gate | Activated post-launch (Lab / later) | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `F2R` | Close remaining wave-2 contract and verification carryovers | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -749,11 +751,34 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | queued | ready: start dependencies met |
+| `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | blocked | blocked: Complete report/decision pending after operator diagnosis at 18:58Z: dataset-resume oracle failure and envelope FAIL at 0.5/s. Source correction 6462ed06 is not a production pass. |
 | `U4` | Expose owned consumer request detail and result lifecycle | App completion | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 
 ## Activity log (newest first)
 
+- 2026-10-01 20:41Z UTC, review coordinator: Latest-main merge reconciliation: upstream/App 6462ed06, operator 18:58 E4C diagnosis preserved; dataset oracle correction does not close envelope failure or release gates. Public App version and API health/models checked at 20:40Z; no authenticated workload or production mutation.
+- 2026-10-01 20:25Z UTC, tracker: forecast E4: unknown: no GPU window allocated for E4, E4C → unknown: no GPU window allocated for E4, E4C (because: no GPU window allocated for E4, E4C; no remaining-effort estimate for E3A, E4, E4C, I2A, I3)
+- 2026-10-01 20:25Z UTC, tracker: forecast E3A: unknown: no GPU window allocated for E4C → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E3A, E4C)
+- 2026-10-01 20:25Z UTC, review coordinator: Reconciled reviewed main/App 252f3ea8; retired five stale W6 writers, old local lock assignments and three obsolete estimates; E4C result awaiting reconciliation. Official ingestion rejected 16 malformed legacy update files; their files and rejection reasons remain. No task status, release gate or production setting changed.
+- 2026-10-01 20:23Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4, E4C (because: no GPU window allocated for E4, E4C; no remaining-effort estimate for E4, E4C)
+- 2026-10-01 20:23Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E4C)
+- 2026-10-01 20:23Z UTC, tracker: forecast E4C: blocked pending P-01, P-02, P-05, P-17, P-24, P-25 → unknown: no GPU window allocated for E4C (because: no GPU window allocated for E4C; no remaining-effort estimate for E4C)
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L4'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L1'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L5'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L3'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-lab-D'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L2'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-api-L5'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-pgrestore-tests'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-makefile-pins'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-lab-E'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-lab-B'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown activity 'review (fix round 0-CR-1 done)'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-infra-libs'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-docs-state'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-lab-release-tool'
+- 2026-10-01 20:23Z UTC, tracker: rejected update: unknown task ID 'W6-lab-A'
 - 2026-10-01 03:26Z UTC, coordinator: I2A removed from review_queue: the W6 owned-paths update (updates/I2A-20261001T0306Z.json, activity review unchanged) re-queued it; I2A stays planned on purpose (closure note: decision deferred to E4C), activity left as it was. apply-updates cannot express review-but-not-queued, so the single writer (write_state) records the queue edit
 - 2026-10-01 03:26Z UTC, I3: queued → queued
 - 2026-10-01 03:22Z UTC, W6-PLAN-LEDGER: review → review; head ef222800; estimate likely 1 → 0.3 h (fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h))

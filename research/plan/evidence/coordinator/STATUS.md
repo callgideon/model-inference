@@ -1,12 +1,6 @@
-# Task pipeline board (coordinator-owned, restart reconciliation source)
+# Historical task pipeline board
 
-> **2026-09-22 dispatch:** backend-first Marlin endpoint. Follow [the backend plan](../../18-marlin-backend-first.md) and [updated prompt](../../16-fresh-session-handoff.md). App and Lab are subsequent. Historical entries and counts below remain unchanged.
-
-> Follow-on scheduling: [complete build plan](../../12-complete-build-plan.md) and [fresh-session handoff](../../16-fresh-session-handoff.md). Historical counts/status evidence below describe the audit boundary; current manifest v4 includes later planned work and App-first Marlin priority.
-
-> **Current reconciliation, 2026-09-21:** Imported main `271add9`; [wave-2 product audit](../../10-wave2-platform-audit.md) and manifest v3 govern continuation. Original board/log below is retained as historical evidence. S1 local audit implemented; F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R are explicit new revisions, not resets of original completion. New local fixes have no independent reviewer signoff or deployment claim.
-
-A task is complete only when every column is filled. A session restart can kill an agent between any two columns, so after any restart the coordinator re-derives this board from git (`git worktree list`, `git log <base>..<branch>`, `git status` in each `codex-*` worktree) and resumes each task at its first empty column. An uncommitted change in a task worktree means an agent died mid-edit: the next agent for that task reads it and continues. Nothing is marked from an agent's claim alone.
+This is the original September coordinator board and evidence log, retained for provenance. Its dispatch instructions, counts and branch identities are historical. Start with [current state](../../../../STATUS.md) and the [implementation index](../../README.md); use the current generated tracker for task activity.
 
 | Column | Meaning |
 |---|---|
