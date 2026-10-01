@@ -173,15 +173,15 @@ vercel_lab() {
   ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
   need SUPABASE_URL
   SCOPE=${VERCEL_SCOPE:-callgideon}   # the App's team (infrx-app lives there), never the login's default team
-  say "project infrx-lab in team $SCOPE"
-  (cd apps/lab && { vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \
-     || { vercel project add infrx-lab --scope "$SCOPE" && vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null; }; })
-  (cd apps/lab && for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \
+  say "project infrx-lab in team $SCOPE (Root Directory apps/lab, set in the dashboard; linked and deployed from the REPO ROOT so packages/shared, a file: dependency, is uploaded)"
+  vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \
+    || { vercel project add infrx-lab --scope "$SCOPE" && vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null; }
+  for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \
       "LAB_CONTROL_URL=https://lab-control.callbill.ai" "LAB_TRACES_API_URL=https://lab-control.callbill.ai" "LAB_EVALS_API_URL=https://lab-control.callbill.ai" \
       "LAB_PIPELINES_API_URL=https://lab-control.callbill.ai" "LAB_RELEASES_API_URL=https://lab-control.callbill.ai" "LAB_DATASETS_API_URL=https://lab-control.callbill.ai"; do
-      k=${kv%%=*}; v=${kv#*=}; vercel env rm "$k" production --yes >/dev/null 2>&1 || true; printf '%s' "$v" | vercel env add "$k" production >/dev/null; done
-    vercel --prod --yes | tail -3
-    vercel domains add lab.callbill.ai >/dev/null 2>&1 || true)
+    k=${kv%%=*}; v=${kv#*=}; vercel env rm "$k" production --yes >/dev/null 2>&1 || true; printf '%s' "$v" | vercel env add "$k" production >/dev/null; done
+  vercel --prod --yes | tail -3
+  vercel domains add lab.callbill.ai >/dev/null 2>&1 || true
   unset VERCEL_TOKEN ANON
   curl -s -o /dev/null -w 'https://lab.callbill.ai/ %{http_code}\n' https://lab.callbill.ai/ || true
   echo "Supabase Auth redirect URLs already include https://lab.callbill.ai/auth/callback** (set 2026-09-29)."
