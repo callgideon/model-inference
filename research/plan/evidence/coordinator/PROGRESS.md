@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 03:20Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 352, updated 2026-10-01 03:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 03:22Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 353, updated 2026-10-01 03:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -31,8 +31,8 @@ Remaining, in order:
 - Integration branch `claude/consumer-v1` (head `08983639`), base `dff31efc`, main `41693d5de57746b7dd1d68e40230db6dcd8c4e20`.
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 9 active lanes, 2 reserved.
-- Validation: 0 error(s), 31 warning(s).
+- Agent slots: 16 total, 10 active lanes, 2 reserved.
+- Validation: 0 error(s), 40 warning(s).
 
 ### Actionable blockers
 
@@ -388,7 +388,8 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W6-API-L2 | support wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0 | running | codex/w6-api-L2 | 08983639 → — | ports g7, prefix infrx-g7, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W6-API-L3 | support wave 6 clean-up lane api-L3 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_a1f4374c-9e4 | running | codex/w6-api-L3 | 08983639 → — | ports d10, prefix infrx-d10, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W6-API-L4 | support wave 6 clean-up lane api-L4 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_b12e6bd8-f8c | running | codex/w6-api-L4 | 08983639 → — | ports l4, prefix infrx-l4, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
-| W6-LAB-A | support wave 6 clean-up lane lab-A (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_4621c470-b7b | running | codex/w6-lab-A | 08983639 → — | ports -, prefix -, db - | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
+| W6-LAB-A | support wave 6 clean-up lane lab-A (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_4621c470-b7b | review | codex/w6-lab-A | 08983639 → b07fae84 | ports -, prefix -, db - | 2026-10-01 03:20Z | merge batch #69 (WR-W6-LABA-1/2, the loss-reason parity case, R268) | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
+| W6-MERGE-69 | support merge batch #69 (Opus): lab-A b07fae84 (+WR-W6-LABA-1 Makefile line, LABA-2 turbopack root, the TraceLossReason parity case, README/launch comment edits, R268); workflow: see RESUME-NOW | running | codex/w5-merge-69 | 44a41acb → — | ports none (layer-1 only), prefix -, db - | 2026-10-01 03:20Z | integrate → dispatch lab-B and lab-E | 1–4 h remaining (likely 2 h), confidence unknown, estimated — — STALE |
 
 ### Queues and locks
 
@@ -411,27 +412,36 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: stale estimate: lane W6-API-L3 estimated at an unknown time (older than 6 h)
 - warning: stale estimate: lane W6-API-L4 estimated at an unknown time (older than 6 h)
 - warning: stale estimate: lane W6-LAB-A estimated at an unknown time (older than 6 h)
+- warning: stale estimate: lane W6-MERGE-69 estimated at an unknown time (older than 6 h)
 - warning: overlapping writers: W6-DOCS-STATE (running) and W6-INFRA-LIBS (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-DOCS-STATE (running) and W6-LAB-RELEASE-TOOL (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-DOCS-STATE (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-DOCS-STATE (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-DOCS-STATE (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-DOCS-STATE (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-DOCS-STATE (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-DOCS-STATE (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
 - warning: overlapping writers: W6-INFRA-LIBS (running) and W6-LAB-RELEASE-TOOL (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-INFRA-LIBS (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-INFRA-LIBS (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-INFRA-LIBS (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
 - warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
 - warning: overlapping writers: W6-API-L2 (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-API-L2 (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-API-L2 (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-API-L2 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-API-L2 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
 - warning: overlapping writers: W6-API-L3 (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-API-L3 (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
-- warning: overlapping writers: W6-API-L4 (running) and W6-LAB-A (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-API-L3 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-API-L3 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+- warning: overlapping writers: W6-API-L4 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+- warning: overlapping writers: W6-API-L4 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+- warning: overlapping writers: W6-LAB-A (review) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+- warning: 1 update file(s) not applied yet: W6-PLAN-LEDGER-20261001T0321Z.json (run apply-updates)
 
 ## Pending inputs
 

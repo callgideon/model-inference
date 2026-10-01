@@ -29,7 +29,7 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 352,
+ "revision": 353,
  "updated": "2026-10-01T03:11:38Z",
  "agent_slots": {
   "total": 16,
@@ -10651,17 +10651,17 @@
    "branch": "codex/w6-lab-A",
    "worktree": ".claude/worktrees/codex-w6-lab-A",
    "base": "08983639",
-   "head": null,
+   "head": "b07fae84",
    "isolation": {
     "ports": "-",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T03:20:40Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #69 (WR-W6-LABA-1/2, the loss-reason parity case, R268)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
@@ -10676,6 +10676,45 @@
     "apps/lab/lib/services/rollouts/",
     "apps/lab/tests/r/",
     "research/plan/evidence/r/LAB-R3-IDENTITIES-*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MERGE-69",
+   "task": null,
+   "slice": "merge batch #69 (Opus): lab-A b07fae84 (+WR-W6-LABA-1 Makefile line, LABA-2 turbopack root, the TraceLossReason parity case, README/launch comment edits, R268); workflow: see RESUME-NOW",
+   "agent": "opus",
+   "branch": "codex/w5-merge-69",
+   "worktree": ".claude/worktrees/codex-w5-merge-69",
+   "base": "44a41acb",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T03:20:40Z",
+   "updated": "2026-10-01T03:20:40Z",
+   "blocker": null,
+   "next_action": "integrate → dispatch lab-B and lab-E",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
   }
