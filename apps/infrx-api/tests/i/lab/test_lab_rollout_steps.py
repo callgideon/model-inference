@@ -429,6 +429,26 @@ def test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app(tm
     assert (root / "etc/systemd/system/infrx-lab-eval.service").exists()
 
 
+def test_ldp__revert_and_site_off_reload_once_on_the_boxs_pre_w6_lib(tmp_path):
+    """90 and 45 STATE=off run with no RELEASE check, so ssm.sh sends this tree's step to a box
+    whose checkout may still carry the pre-W6 lib.sh (7ecbab0e = 08983639, no box-lib.sh, no
+    caddy_reload): both still exit 0 with exactly one Caddy reload (fix 0-F1/1-IL-1)."""
+    old = tmp_path / "old"
+    (old / "infra/lab/rollout").mkdir(parents=True)
+    # verbatim `git show 08983639:infra/lab/rollout/lib.sh` (the mutant copy is not a git tree)
+    (old / "infra/lab/rollout/lib.sh").write_text((Path(__file__).parent / "fixtures/lib-pre-w6.sh").read_text())
+    for step, env in (("90-lab-revert.sh", {}), ("45-lab-site.sh", {"STATE": "off"})):
+        (tmp_path / step).mkdir()
+        stub, root = box(tmp_path / step)
+        site = root / "etc/caddy/lab/lab-control.caddy"
+        site.parent.mkdir(parents=True)
+        site.write_text("x\n")
+        done = run(step, stub, root, REPO=str(old), **env)
+        assert done.returncode == 0 and not site.exists(), (step, done.stderr)
+        reloads = [a for a in calls(stub, "docker") if a[:2] == ["exec", "caddy"] and "reload" in a]
+        assert len(reloads) == 1, (step, calls(stub, "docker"))
+
+
 def test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps(tmp_path):
     """45 on: refused without WR-I2L-1's import line; the Lab site validated with the App's
     live Caddyfile by the pinned Caddy (no network) BEFORE it is renamed into place; a file that

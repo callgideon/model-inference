@@ -157,6 +157,7 @@ STAGED = "test_ldp__a_budget_or_preflight_refusal_replaces_nothing"
 REFUSES = "test_ldp__a_role_that_refuses_by_name_is_exit_5_and_other_unreadiness_exit_4"
 SMOKE = "test_ldp__the_smoke_checks_every_switch_that_is_on_and_the_app"
 REVERT = "test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app"
+PRE_W6 = "test_ldp__revert_and_site_off_reload_once_on_the_boxs_pre_w6_lib"
 SITE_CASE = "test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps"
 AGREE = "test_ldp__each_role_the_step_enables_can_start_on_the_names_it_allows"
 R151 = "test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions"
@@ -240,6 +241,9 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("revert_reloads_before_the_switches", "switches off before the edge", ST + "90-lab-revert.sh",
        'for role in "${ROLES[@]}"; do\n  systemctl disable', 'docker exec caddy caddy reload\n'
        'for role in "${ROLES[@]}"; do\n  systemctl disable', REVERT),
+    *(_m(f"pre_w6_lib_no_reload_{n}", "a pre-W6 box lib still reloads the edge once", ST + step,
+         "declare -F caddy_reload >/dev/null || caddy_reload()", "declare -F caddy_reload >/dev/null || _unused()",
+         PRE_W6) for n, step in (("revert", "90-lab-revert.sh"), ("site", "45-lab-site.sh"))),
     _m("site_installed_unvalidated", "the site reaches the edge only after it validates",
        ST + "45-lab-site.sh", '  || die 4 "the App\'s Caddyfile with the Lab site',
        '  || echo 4 "the App\'s Caddyfile with the Lab site', SITE_CASE),
