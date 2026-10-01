@@ -1,0 +1,100 @@
+{
+  "task": "W6-infra-libs",
+  "lane": "infra-libs",
+  "slice": "INFRA-05, INFRA-06 (+72 write_env bug), INFRA-11, INFRA-04(2,3), DT-04, DT-15",
+  "activity": "review (fix round done)",
+  "at": "2026-10-01T04:30Z",
+  "head": "6945a627",
+  "base": "08983639",
+  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-infra-libs",
+  "branch": "codex/w6-infra-libs",
+  "owned_paths": [
+    "infra/rollout/host-lib.sh",
+    "infra/rollout/box-lib.sh",
+    "infra/rollout/ssm.sh",
+    "infra/rollout/hosted-migrate.sh",
+    "infra/rollout/operator-cli.sh",
+    "infra/rollout/unblock-coordinator.sh",
+    "infra/rollout/steps/72-observe-install.sh",
+    "infra/lab/rollout/lib.sh",
+    "infra/lab/rollout/lab-checkout.sh",
+    "infra/lab/rollout/steps/40-lab-control.sh",
+    "infra/lab/rollout/steps/45-lab-site.sh",
+    "infra/lab/rollout/steps/60-lab-smoke.sh",
+    "infra/lab/rollout/steps/70-lab-status.sh",
+    "infra/lab/rollout/steps/90-lab-revert.sh",
+    "apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py",
+    "apps/infrx-api/tests/i/lab/mutants.py",
+    "apps/infrx-api/tests/i/test_rollout_host.py",
+    "apps/infrx-api/tests/i/mutants.py (anchors re-pointed + appended W6 blocks only)"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest tests/i/lab tests/i/test_rollout.py tests/i/test_rollout_host.py tests/i/test_ops_steps.py tests/i/test_known_good_proof.py -k 'not test_mutant_is_killed and not runner_cannot'",
+      "exit": 0,
+      "summary": "98 passed, 1 skipped, 4 deselected"
+    },
+    {
+      "cmd": "pytest tests/i/{test_install,test_migrate,test_release_bundle,test_envcheck,test_prereqs,test_alert_sns,test_artifacts,test_worker_unit,test_scripts,test_packaging}.py",
+      "exit": 0,
+      "summary": "125 passed"
+    },
+    {
+      "cmd": "pytest tests/integration/lab_observe/test_i2l_obs.py",
+      "exit": 0,
+      "summary": "13 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py",
+      "exit": 0,
+      "summary": "81 mutants killed, 0 survivors (85 passed)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/i/test_mutants.py::test_mutant_is_killed[<187 touched-file/case ids>] (4 shards)",
+      "exit": 0,
+      "summary": "187 killed, 0 survivors; the rest of the 471 not run (i8 stack is another key; files untouched)"
+    },
+    {
+      "cmd": "bash -n infra/rollout/*.sh infra/rollout/steps/*.sh infra/lab/rollout/*.sh infra/lab/rollout/steps/*.sh",
+      "exit": 0,
+      "summary": "54 scripts"
+    },
+    {
+      "cmd": "pytest tests/i/lab tests/i/test_rollout.py tests/i/test_rollout_host.py tests/i/test_ops_steps.py tests/i/test_known_good_proof.py -k 'not test_mutant_is_killed and not runner_cannot' (fix round)",
+      "exit": 0,
+      "summary": "99 passed, 1 skipped, 4 deselected"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py (fix round)",
+      "exit": 0,
+      "summary": "87 passed: 83 mutants killed incl. pre_w6_lib_no_reload_{revert,site}"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "fix round done; remaining = wiring requests WR-IL-1..5 and the 1-IL-2 union merge",
+    "at": "2026-10-01T04:30Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-IL-1 lab-release-tool: launch-v1.sh/lab-release.sh sources host-lib (aws, ssm_value for :167/:173)",
+    "WR-IL-2 certify-release: certify-window.sh need_venv + host-lib source + ssm_to_file for secret_to_file",
+    "WR-IL-3 deploy owner: release-bundle.sh:24 aws() -> host-lib source",
+    "WR-IL-4 docs-state: infra/lab/app/README.md:44/:111 control env file ubuntu:ubuntu",
+    "WR-IL-5 tests/integration owner: 72:64-65 comment once WR-OBS-5.diff is retired"
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/infra-libs-fa3addbd.md"
+  ],
+  "fix_round": {
+    "findings": {
+      "0-F1": "fixed",
+      "1-IL-1": "fixed",
+      "1-IL-2": "coordinator merge note: union-resolve tests/i/mutants.py appends with lab-release-tool, rerun the I guards"
+    },
+    "impl": "6945a627"
+  }
+}

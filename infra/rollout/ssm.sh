@@ -27,8 +27,7 @@ for pair in "$@"; do
                   *) echo "not NAME=VALUE: $pair" >&2; exit 2 ;; esac
 done
 b64=$( { printf '%s' "$header"; cat -- "$step"; } | base64 -w0)
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
-        aws --region "$REGION" "$@"; }
+. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"
 params=$(printf '{"commands":["echo %s | base64 -d > /root/infrx-step.sh && bash /root/infrx-step.sh; rc=$?; rm -f /root/infrx-step.sh; exit $rc"],"executionTimeout":["%s"]}' \
          "$b64" "${TIMEOUT_S:-3600}")
 id=$(aws ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \

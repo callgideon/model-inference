@@ -6,7 +6,7 @@
 #   infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE=<40 hex>
 set -euo pipefail
 : "${RELEASE:?the release commit}"
-repo=/home/ubuntu/model-inference
+repo=${REPO:-/home/ubuntu/model-inference}
 g() { sudo -u ubuntu git -C "$repo" "$@"; }
 g fetch --quiet origin "${BRANCH:-claude/consumer-v1}"
 g cat-file -e "$RELEASE^{commit}" || { echo "RELEASE $RELEASE is not on origin/${BRANCH:-claude/consumer-v1}" >&2; exit 2; }

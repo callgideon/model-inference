@@ -24,7 +24,8 @@ repo=${REPO:-/home/ubuntu/model-inference}
 for need in infra/observe/systemd infra/alerts/operations.json; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
   [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
 done
-R=${INFRX_ROOT:-}                     # empty on the box; a sandbox root in tests (lib.sh's seam)
+[ -f "$repo/infra/rollout/box-lib.sh" ] || { echo "BLOCKED: this step needs a checkout carrying infra/rollout/box-lib.sh (W6+)" >&2; exit 3; }
+. "$repo/infra/rollout/box-lib.sh"    # R (the sandbox seam), stage_env + place: an unreadable or empty SSM value is exit 2
 [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] \
   || { echo "the checkout is not $RELEASE" >&2; exit 2; }
 [ -f "$CANARY_VIDEO" ] || { echo "no clip at CANARY_VIDEO" >&2; exit 2; }
@@ -38,19 +39,10 @@ if [ -n "${ALERT_SNS_TOPIC_ARN:-}" ]; then
   [[ $ALERT_SNS_TOPIC_ARN =~ ^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$ ]] \
     || { echo "ALERT_SNS_TOPIC_ARN is not an SNS topic ARN" >&2; exit 2; }
 fi
-param() { aws ssm get-parameter --region us-east-1 --with-decryption --name "$1" \
-            --query Parameter.Value --output text; }
-write_env() {  # write_env FILE NAME=SSM-PARAM|NAME:=LITERAL ... - 0600 root, by rename
-  local file=$1 tmp; shift
-  tmp=$(umask 077; mktemp "$file.XXXXXX")
-  for spec in "$@"; do
-    case "$spec" in
-      *:=*) printf '%s=%s\n' "${spec%%:=*}" "${spec#*:=}" >> "$tmp" ;;
-      *=*)  printf '%s=%s\n' "${spec%%=*}" "$(param "${spec#*=}")" >> "$tmp" ;;
-    esac
-  done
-  chmod 0600 "$tmp"; mv -f "$tmp" "$file"
-  echo "wrote $file: $(cut -d= -f1 "$file" | tr '\n' ' ')"
+write_env() {  # write_env FILE NAME=/ssm/name|NAME:=LITERAL ... - 0600 root, by rename
+  local file=$1 staged; shift
+  staged=$(stage_env "$file" "$@")    # its own statement: a refusal (exit 2) stops the step here
+  place "$staged" "$file" root:root
 }
 install -d -o 10001 -g 10000 -m 0770 "$R/var/lib/infrx/metrics"
 # The monitor's own copy of its scripts and rules, replaced by one rename: the units run

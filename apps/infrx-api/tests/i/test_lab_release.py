@@ -93,6 +93,8 @@ class Checkout:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(rec)
             path.chmod(0o755)
+        host_lib = support.REPO / "infra" / "rollout" / "host-lib.sh"   # WR-IL-1: the tool sources it
+        (self.repo / "infra" / "rollout" / "host-lib.sh").write_bytes(host_lib.read_bytes())
         mig = self.repo / "apps" / "app" / "supabase" / "migrations"
         mig.mkdir(parents=True)
         (mig / "0060_beyond_any_reproof.sql").write_text("select 1;\n")   # no THROUGH level gates the tool

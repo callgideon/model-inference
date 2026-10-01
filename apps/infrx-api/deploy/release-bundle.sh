@@ -21,8 +21,7 @@ name=${NAME:-$sha}
 out=${OUT:-$(mktemp -d)}
 mkdir -p "$out"
 REF=refs/infrx/release
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
-        aws --region us-east-1 "$@"; }
+. "$repo/infra/rollout/host-lib.sh"   # aws() without the stale AWS_* keys (WR-IL-3)
 
 # A bundle needs a ref, and this repository's refs are not ours to add: a throwaway repo
 # that borrows its objects (alternates) carries the one ref.

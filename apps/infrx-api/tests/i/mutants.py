@@ -901,8 +901,8 @@ MUTANTS += (
     _m("bundle_ships_head", "the bundle carries the commit named, not HEAD",
        RB, 'update-ref "$REF" "$sha"', 'update-ref "$REF" "$(git -C "$repo" rev-parse HEAD)"',
        RB_OK),
-    _m("bundle_uploads_with_stale_keys", "the upload never uses the shell's stale AWS keys",
-       RB, "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \\",
+    _m("bundle_uploads_with_stale_keys", "the upload never uses the shell's stale AWS keys (host-lib's aws, WR-IL-3)",
+       "../../infra/rollout/host-lib.sh", "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \\",
        "aws() { env \\", RB_OK),
     _m("bundle_short_commit_accepted", "only a full lower-case commit id is shipped",
        RB, "^[0-9a-f]{40}$", "^[0-9a-fA-F]{7,40}$", RB_BAD),
@@ -1116,7 +1116,7 @@ MUTANTS += (
        "  || cat \"$env_file\" > \"$dsn_env\"",
        "test_ops_continuous__one_observe_cycle_probes_exports_evaluates_and_delivers"),
     _m("observe_install_env_world_readable", "the monitor's env files are root 0600",
-       STEP + "72-observe-install.sh", 'chmod 0600 "$tmp"; mv', 'chmod 0644 "$tmp"; mv',
+       "../../infra/rollout/box-lib.sh", 'chmod 0600 "$tmp"; echo "$tmp"', 'chmod 0644 "$tmp"; echo "$tmp"',   # W6: 72's write_env stages through box-lib
        "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"),
     _m("observe_runs_from_the_checkout", "the monitor survives a runtime rollback",
        OBS + "systemd/infrx-observe.service", "Environment=REPO=/opt/infrx/observe\n", "",
@@ -1849,12 +1849,12 @@ MUTANTS += (
     _m("lab_release_l0_dropped", "box makes the box's checkout RELEASE first (L0)",
        LR, '  infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE="$RELEASE"\n', "", LR_BOX),
     _m("lab_release_box_without_supabase_url", "box refuses before any call without SUPABASE_URL",
-       LR, '  need SUPABASE_URL\n  say "L0', '  say "L0', LR_BOX),
+       LR, '  need SUPABASE_URL\n  banner "L0', '  banner "L0', LR_BOX),
     _m("lab_release_control_dsn_renamed", "L5 passes the control DSN's SSM name",
        LR, 'CONTROL_DSN_PARAM="$SSM_CONTROL_DSN"', "CONTROL_DSN_PARAM=/model-inference/lab/control_dsn", LR_BOX),
     _m("lab_release_edge_before_control", "the edge (L6) opens only after the control service (L5) and its smoke",
-       LR, '  say "L5 control service ON', '  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on '
-       'RELEASE="$RELEASE"\n  say "L5 control service ON', LR_BOX),
+       LR, '  banner "L5 control service ON', '  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on '
+       'RELEASE="$RELEASE"\n  banner "L5 control service ON', LR_BOX),
     _m("lab_release_token_stored_before_whoami", "a pasted token is proven before it overwrites the stored one",
        LR, '    VERCEL_TOKEN=$(cat "$t") vercel whoami', "    " + LR_PUT + '; VERCEL_TOKEN=$(cat "$t") vercel whoami',
        LR_TOKEN),
@@ -1904,6 +1904,63 @@ MUTANTS += (
        LR_SHIM, '"${a/#vercel/web}"', '"$a"', LR_SHIM_CASE),
     _m("lab_release_shim_silent", "the shim names its successor",
        LR_SHIM, 'echo "launch-v1.sh is deprecated', ': "launch-v1.sh is deprecated', LR_SHIM_CASE),
+)
+
+# W6 infra-libs (INFRA-05): the one coordinator-host lib and the scripts that source it
+HOSTLIB, OPCLI = "../../infra/rollout/host-lib.sh", "../../infra/rollout/operator-cli.sh"
+HL_AWS = "test_rollout_host__aws_drops_the_stale_keys_and_pins_the_region"
+HL_SSM = "test_rollout_host__ssm_to_file_is_0600_and_refuses_an_empty_value"
+HL_VENV = "test_rollout_host__need_venv_refuses_outside_the_repo_root"
+HL_SAY = "test_rollout_host__say_stamps_and_appends_to_the_host_log"
+HL_ONE = "test_rollout_host__every_host_script_sources_the_one_lib"
+HL_CLI = "test_rollout_host__operator_cli_reads_its_two_secrets_by_name_into_the_environment"
+MUTANTS += (
+    _m("host_aws_keeps_the_stale_keys", "the stale AWS_* exports never reach the CLI",
+       HOSTLIB, "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN",
+       "aws() { env -u AWS_SESSION_TOKEN", HL_AWS, HL_CLI),
+    _m("host_aws_region_ignored", "every call names its region (REGION, default us-east-1)",
+       HOSTLIB, 'aws --region "${REGION:-us-east-1}" "$@"', 'aws --region us-east-1 "$@"', HL_AWS),
+    _m("host_ssm_file_world_readable", "an SSM value lands in a 0600 file",
+       HOSTLIB, "(umask 077; ssm_value", "(umask 022; ssm_value", HL_SSM),
+    _m("host_ssm_empty_accepted", "an empty SSM value is a failure, never a blank secret",
+       HOSTLIB, """&& grep -q '[^[:space:]]' "$2"; then""", "; then", HL_SSM),
+    _m("host_ssm_value_on_argv_name", "the parameter is read by NAME with decryption",
+       HOSTLIB, "aws ssm get-parameter --with-decryption --name", "aws ssm get-parameter --name", HL_SSM),
+    _m("host_venv_unchecked", "the host scripts stop outside the repo root / before make api-env",
+       HOSTLIB, "  [ -x apps/infrx-api/.venv/bin/python ] || {", "  true || {", HL_VENV),
+    _m("host_say_unlogged", "say appends to the run's log",
+       HOSTLIB, 'tee -a "${HOST_LOG:-/dev/null}"', "cat", HL_SAY),
+    _m("host_script_own_aws", "a host script keeps no aws() of its own",
+       OPCLI, "INFRX_OPERATOR_KEY=$(ssm_value /model-inference/operator_key)\n",
+       "aws() { command aws \"$@\"; }\nINFRX_OPERATOR_KEY=$(ssm_value /model-inference/operator_key)\n", HL_ONE, HL_CLI),
+    _m("operator_cli_empty_secret_runs", "an empty operator secret never starts the CLI",
+       OPCLI, '[ -n "$OPERATIONS_DATABASE_URL" ] && [ -n "$INFRX_OPERATOR_KEY" ] || {', "true || {", HL_CLI),
+    # merge #72 lens minors: F2 (hosted-migrate's run log), F4 (unblock-coordinator's region)
+    _m("hosted_migrate_unlogged", "hosted-migrate's say lines reach its run log",
+       HOSTED_MIGRATE, '/host-lib.sh"; HOST_LOG=$LOG   #', '/host-lib.sh"   #',
+       "test_rollout_host__hosted_migrate_says_into_its_run_log"),
+    _m("unblock_region_default", "unblock-coordinator runs in us-east-1 unless AWS_REGION says otherwise",
+       "../../infra/rollout/unblock-coordinator.sh", "REGION=${AWS_REGION:-us-east-1}", "REGION=${AWS_REGION:-us-west-2}",
+       "test_rollout_host__unblock_coordinator_runs_aws_in_aws_region"),
+    _m("unblock_region_unmapped", "AWS_REGION picks unblock-coordinator's region",
+       "../../infra/rollout/unblock-coordinator.sh", "REGION=${AWS_REGION:-us-east-1}", "REGION=us-east-1",
+       "test_rollout_host__unblock_coordinator_runs_aws_in_aws_region"),
+)
+
+# W6 infra-libs (INFRA-06): the box lib as 72-observe-install.sh uses it
+BOXLIB = "../../infra/rollout/box-lib.sh"
+BL_72 = "test_rollout_host__observe_install_refuses_an_unreadable_or_empty_secret"
+MUTANTS += (
+    _m("box_empty_secret_written", "an empty SSM value never lands in an env file",
+       BOXLIB, 'value=$(param "${spec#*=}") && [ -n "$value" ] \\', 'value=$(param "${spec#*=}") \\', BL_72),
+    _m("box_failed_read_written", "a failed SSM read never lands in an env file",
+       BOXLIB, 'value=$(param "${spec#*=}") && [ -n "$value" ]', 'value=$(param "${spec#*=}" || true) && [ -n "$value" ]',
+       BL_72),
+    _m("observe_install_refusal_swallowed", "72 stops on a refused env file (exit 2), nothing placed",
+       STEP + "72-observe-install.sh", 'staged=$(stage_env "$file" "$@")    #', 'staged=$(stage_env "$file" "$@") || true    #',
+       BL_72),
+    _m("observe_install_without_the_lib", "a checkout without box-lib.sh is BLOCKED by name (exit 3)",
+       STEP + "72-observe-install.sh", '[ -f "$repo/infra/rollout/box-lib.sh" ] || {', "true || {", BL_72),
 )
 
 COPY_ROOT = pathlib.Path("apps/infrx-api")

@@ -32,7 +32,7 @@ git diff --quiet "$RELEASE" HEAD -- "${INPUTS[@]}" || { echo "HEAD $(git rev-par
 [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
-EXPECTED_PENDING="0057, 0058, 0059"   # the second R151 window (runbook 08 §2): 0001-0056 -> 0001-0059, the trace consent read and the Lab migrations; both targets proven through 0059 (KNOWN-GOOD-REPROOF-4)
+EXPECTED_PENDING="0057, 0058, 0059"   # the second R151 window (runbook 08 §2): 0001-0056 -> 0001-0059, the trace consent read and the Lab migrations; both targets proven through 0059 (KNOWN-GOOD-REPROOF-4); applied 2026-09-30T08:01Z - the next window is 0060+ (a reviewed edit)
 EXPECTED_FLAGS="credit_admission=true legacy_usd_admission=false signup_grant=true"   # hosted since the W7f CREDIT activation (2026-09-27); the Lab window changes no flag
 PORT=${PGPORT_LOCAL:-55697}
 BACKUP_ROOT=${BACKUP_ROOT:-$HOME/infrx-backups}
@@ -41,8 +41,7 @@ BACKUP="$BACKUP_ROOT/hosted-$STAMP"
 LOG="$BACKUP_ROOT/migrate-$STAMP.log"       # outside restore.md's hosted-* prune glob
 CONTAINER=infrx-rollout-restore
 LOCALPW=infrx-rollout-local
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
-say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
+. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"; HOST_LOG=$LOG   # aws, say (tee -a $LOG), ssm_value
 OWN=; VERIFIED=; STARTED=; WROTE=
 # errexit-safe: local cleanup always completes; implicit set -e exits are normalized to 10 (before any
 # hosted write) or 20 (after one), the documented codes 0/2/3/10/20 pass through unchanged
@@ -58,7 +57,7 @@ fi
 command -v ss >/dev/null && docker info >/dev/null 2>&1 || { say "stop: ss or docker unavailable"; exit 3; }
 [ -z "$(ss -Hltn "sport = :$PORT")" ] || { say "stop: port $PORT is busy"; exit 3; }
 docker container inspect "$CONTAINER" >/dev/null 2>&1 && { say "stop: container $CONTAINER exists (left as is)"; exit 3; }
-PGPASSWORD=$(aws ssm get-parameter --with-decryption --name /INFRX-SUPABASE-PROD/db_password --query Parameter.Value --output text)
+PGPASSWORD=$(ssm_value /INFRX-SUPABASE-PROD/db_password)
 [ -n "$PGPASSWORD" ] || { say "stop: empty db password from SSM"; exit 3; }
 export PGPASSWORD
 

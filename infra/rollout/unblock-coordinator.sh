@@ -19,9 +19,10 @@
 # that picks up monitor_database_url — until then infrx_monitor is NOLOGIN (0021).
 set -euo pipefail
 
+. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"   # aws (in REGION), ssm_to_file
+REGION=${AWS_REGION:-us-east-1}
 REPO=$(git rev-parse --show-toplevel)
 cd "$REPO"
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region "${AWS_REGION:-us-east-1}" "$@"; }
 INSTANCE=${INSTANCE:-i-0e8449a4ffca29bab}
 TOPIC_NAME=${TOPIC_NAME:-infrx-pilot-alerts}
 ALERT_EMAIL=${ALERT_EMAIL:-}
@@ -70,8 +71,8 @@ if v=$(have "$p"); then
   fi
   echo "$p exists (version $v): kept"
 else
-  aws ssm get-parameter --with-decryption --name "$PREFIX/pg_journal_url" --query Parameter.Value --output text > "$work/owner"
-  aws ssm get-parameter --with-decryption --name "$PREFIX/infrx_monitor_password" --query Parameter.Value --output text > "$work/monpw"
+  ssm_to_file "$PREFIX/pg_journal_url" "$work/owner"
+  ssm_to_file "$PREFIX/infrx_monitor_password" "$work/monpw"
   python3 - "$work" <<'PY'
 import os, re, sys, urllib.parse
 w = sys.argv[1]

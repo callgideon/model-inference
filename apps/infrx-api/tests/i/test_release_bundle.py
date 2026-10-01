@@ -47,6 +47,8 @@ def world(tmp_path):
     repo = tmp_path / "repo"
     (repo / "deploy").mkdir(parents=True)
     shutil.copy2(SCRIPT, repo / "deploy" / "release-bundle.sh")
+    (repo / "infra" / "rollout").mkdir(parents=True)   # WR-IL-3: the script sources the host lib
+    shutil.copy2(support.REPO / "infra" / "rollout" / "host-lib.sh", repo / "infra" / "rollout" / "host-lib.sh")
     git(repo, "init", "-q")
     for n in (1, 2, 3):
         (repo / "f").write_text(str(n))

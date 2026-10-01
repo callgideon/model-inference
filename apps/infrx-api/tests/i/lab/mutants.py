@@ -144,6 +144,7 @@ MUTANTS: tuple[Mutant, ...] = (
 STEPS_FILE = "tests/i/lab/test_lab_rollout_steps.py"
 LR = "../../infra/lab/rollout/"
 LIB, GATE = LR + "lib.sh", LR + "lab-migrate.sh"
+BOX = "../../infra/rollout/box-lib.sh"     # W6: the generic half of lib.sh (at_release, stage_env, place, ...)
 ST = LR + "steps/"
 STRICT = "test_ldp__every_step_is_strict_bash_on_the_releases_own_helpers"
 PREFLIGHT = "test_ldp__preflight_refuses_another_checkout_and_reports_names_never_values"
@@ -156,6 +157,7 @@ STAGED = "test_ldp__a_budget_or_preflight_refusal_replaces_nothing"
 REFUSES = "test_ldp__a_role_that_refuses_by_name_is_exit_5_and_other_unreadiness_exit_4"
 SMOKE = "test_ldp__the_smoke_checks_every_switch_that_is_on_and_the_app"
 REVERT = "test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app"
+PRE_W6 = "test_ldp__revert_and_site_off_reload_once_on_the_boxs_pre_w6_lib"
 SITE_CASE = "test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps"
 AGREE = "test_ldp__each_role_the_step_enables_can_start_on_the_names_it_allows"
 R151 = "test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions"
@@ -169,7 +171,7 @@ SECRETS = (" LAB_DATABASE_URL LAB_EVAL_ENDPOINT_KEY LAB_ANNOTATION_TEACHER_TOKEN
 STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("step_not_strict", "every step stops on its first failure", ST + "60-lab-smoke.sh",
        "\nset -euo pipefail\n", "\nset -uo pipefail\n", STRICT),
-    _m("preflight_any_checkout", "a step runs only on the RELEASE checkout", LIB,
+    _m("preflight_any_checkout", "a step runs only on the RELEASE checkout", BOX,
        '    || die 2 "the checkout $repo is not $RELEASE"', '    || true', PREFLIGHT),
     _m("preflight_prints_values", "names only, never a value", ST + "10-lab-preflight.sh",
        '"env $file: $(cut -d= -f1 "$file" | tr \'\\n\' \' \')"', '"env $file: $(cat "$file")"',
@@ -190,7 +192,7 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
        '"INFRX_LAB_DATABASE_URL:=$CONTROL_DSN_PARAM"', CONTROL_ON),
     _m("control_without_the_switch", "the control service runs only with its marker",
        ST + "40-lab-control.sh", 'touch "$MARKER"\n', "", CONTROL_ON),
-    _m("env_file_world_readable", "an env file is 0600", LIB, 'chmod 0600 "$tmp"; echo "$tmp"',
+    _m("env_file_world_readable", "an env file is 0600", BOX, 'chmod 0600 "$tmp"; echo "$tmp"',
        'chmod 0644 "$tmp"; echo "$tmp"', CONTROL_ON, ROLE),
     _m("control_off_keeps_the_marker", "off removes the switch", ST + "40-lab-control.sh",
        'rm -f "${MARKER:?}"; say', 'say', CONTROL_OFF),
@@ -239,6 +241,9 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("revert_reloads_before_the_switches", "switches off before the edge", ST + "90-lab-revert.sh",
        'for role in "${ROLES[@]}"; do\n  systemctl disable', 'docker exec caddy caddy reload\n'
        'for role in "${ROLES[@]}"; do\n  systemctl disable', REVERT),
+    *(_m(f"pre_w6_lib_no_reload_{n}", "a pre-W6 box lib still reloads the edge once", ST + step,
+         "declare -F caddy_reload >/dev/null || caddy_reload()", "declare -F caddy_reload >/dev/null || _unused()",
+         PRE_W6) for n, step in (("revert", "90-lab-revert.sh"), ("site", "45-lab-site.sh"))),
     _m("site_installed_unvalidated", "the site reaches the edge only after it validates",
        ST + "45-lab-site.sh", '  || die 4 "the App\'s Caddyfile with the Lab site',
        '  || echo 4 "the App\'s Caddyfile with the Lab site', SITE_CASE),
@@ -258,6 +263,56 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
        GATE, 'post="*\\"${stem:0:4} ${stem:5}\\"', 'post="*\\"${stem}\\"', TODAY),
     _m("r151_no_known_good", "condition 1: a KNOWN-GOOD target at the newest migration", GATE,
        '  || stop "condition 1:', '  || true "condition 1:', R151),
+)
+
+# W6 infra-libs: DT-04 (the env files' owner), DT-15 + INFRA-04(3) + INFRA-11 (70's scrub, ROLE,
+# 60's wait), INFRA-04(2) (lab-checkout.sh)
+CHECKOUT_SH = LR + "lab-checkout.sh"
+SMOKE_WAIT = "test_ldp__the_smoke_waits_thirty_tries_by_default"
+STATUS = "test_ldp__status_prints_unit_state_and_drops_value_bearing_lines"
+LAB_LOG_CASE = "test_ldp__a_steps_lines_reach_the_lab_log"
+CHECKOUT = "test_ldp__the_lab_checkout_fetches_guards_the_engine_pin_and_delegates_once"
+STEP_MUTANTS += (
+    _m("control_env_root_owned", "the control env file is the unit user's (User=ubuntu reads --env-file)",
+       ST + "40-lab-control.sh", 'place "$staged" "$CONTROL_ENV" ubuntu:ubuntu', 'place "$staged" "$CONTROL_ENV" root:root',
+       CONTROL_ON),
+    _m("role_env_root_owned", "a role env file is the unit user's", ST + "50-lab-role.sh",
+       'place "$staged" "$env_file" ubuntu:ubuntu', 'place "$staged" "$env_file" root:root', ROLE),
+    _m("env_owner_never_set", "place gives the file the owner it was asked for", BOX,
+       'chown "$3" "$1" 2>/dev/null || true', "true", CONTROL_ON, ROLE),
+    _m("smoke_ready_s_short", "the smoke waits 30 tries by default (INFRA-11)", ST + "60-lab-smoke.sh",
+       "READY_S=${READY_S:-30}", "READY_S=${READY_S:-10}", SMOKE_WAIT),
+    _m("status_journal_unscrubbed", "a journal line that could carry a value never reaches the output",
+       ST + "70-lab-status.sh",
+       " 2>/dev/null | grep -viE 'password|secret|anon_key|bearer|DATABASE_URL=|postgres(ql)?://' || true",
+       " 2>/dev/null || true", STATUS),
+    _m("status_readiness_unscrubbed", "a readiness line that could carry a value never reaches the output",
+       ST + "70-lab-status.sh", "2>&1 | grep -viE 'password|secret|anon_key|bearer|postgres(ql)?://' | head -c 2000",
+       "2>&1 | head -c 2000", STATUS),
+    _m("status_unit_fixed", "ROLE picks the unit (INFRA-11)", ST + "70-lab-status.sh",
+       'unit=${UNIT:-$(basename "$(unit_file "$role")" .service)}', "unit=${UNIT:-infrx-lab-control}", STATUS),
+    _m("status_port_fixed", "ROLE picks the unit's health port (INFRA-11)", ST + "70-lab-status.sh",
+       'port=${PORT:-$(health_port "$role" 2>/dev/null || true)}', "port=${PORT:-8003}", STATUS),
+    # merge #72 lens minors: IL-3 (70 refuses an unknown ROLE), F3 (lib.sh wires the Lab log)
+    _m("status_any_role", "70 refuses a ROLE lib.sh does not know (exit 2)", ST + "70-lab-status.sh",
+       '*) die 2 "unknown ROLE $role', '*) : "unknown ROLE $role', STATUS),
+    _m("lab_log_unwired", "every Lab step's say lines reach the Lab rollout log", LIB,
+       "BOX_LOG=$LAB_LOG STEP=${STEP:-lab}", "STEP=${STEP:-lab}", LAB_LOG_CASE),
+    _m("checkout_not_strict", "lab-checkout.sh stops on its first failure", CHECKOUT_SH,
+       "\nset -euo pipefail\n", "\nset -uo pipefail\n", STRICT),
+    _m("checkout_no_fetch", "the integration branch is fetched first", CHECKOUT_SH,
+       'g fetch --quiet origin "${BRANCH:-claude/consumer-v1}"\n', "true\n", CHECKOUT),
+    _m("checkout_unknown_release", "a RELEASE that is no commit on the branch is refused by name", CHECKOUT_SH,
+       'g cat-file -e "$RELEASE^{commit}" || {', "true || {", CHECKOUT),
+    _m("checkout_reapplies_the_release", "a checkout already at RELEASE is left alone", CHECKOUT_SH,
+       'if [ "$(g rev-parse HEAD)" = "$RELEASE" ]; then', "if false; then", CHECKOUT),
+    _m("checkout_engine_unchecked", "a RELEASE whose serve.sh differs is a consumer window", CHECKOUT_SH,
+       'g diff --quiet HEAD "$RELEASE" -- models/marlin2b/serve.sh models/marlin2b/serving-version.json',
+       'g diff --quiet HEAD "$RELEASE" -- models/marlin2b/serving-version.json', CHECKOUT),
+    _m("checkout_as_root", "git runs as the checkout's owner", CHECKOUT_SH,
+       'g() { sudo -u ubuntu git -C "$repo" "$@"; }', 'g() { git -C "$repo" "$@"; }', CHECKOUT),
+    _m("checkout_not_delegated", "40-checkout.sh does the checkout, once", CHECKOUT_SH,
+       'RELEASE="$RELEASE" bash "$repo/infra/rollout/steps/40-checkout.sh"', 'echo "checked out"', CHECKOUT),
 )
 MUTANTS = MUTANTS + STEP_MUTANTS
 
@@ -291,7 +346,8 @@ def _steps_layout(root: pathlib.Path) -> pathlib.Path:
     for part in ("infra/lab/rollout", "infra/lab/workers", "apps/app/supabase/migrations"):
         shutil.copytree(REPO / part, root / part, ignore=shutil.ignore_patterns("__pycache__"))
     (root / "infra" / "rollout").mkdir()
-    shutil.copy2(REPO / "infra/rollout/hosted-migrate.sh", root / "infra/rollout/hosted-migrate.sh")
+    for name in ("hosted-migrate.sh", "box-lib.sh"):          # W6: lib.sh sources box-lib.sh
+        shutil.copy2(REPO / "infra/rollout" / name, root / "infra/rollout" / name)
     git = ["git", "-C", str(root), "-c", "user.name=m", "-c", "user.email=m@x"]
     subprocess.run([*git, "init", "-q"], check=True)
     subprocess.run([*git, "add", "-A", "infra", "apps/infrx-api/deploy", "apps/app"], check=True)

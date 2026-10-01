@@ -11,6 +11,8 @@ set -euo pipefail
 STEP=90-lab-revert
 repo=${REPO:-/home/ubuntu/model-inference}
 . "$repo/infra/lab/rollout/lib.sh"
+# a box checkout older than W6 has no box-lib.sh (caddy_reload): this step runs without at_release
+declare -F caddy_reload >/dev/null || caddy_reload() { docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock; }
 for role in "${ROLES[@]}"; do
   systemctl disable --now "infrx-lab-$role.service" 2>/dev/null || true
   rm -f "${LAB_ETC:?}/${role:?}.env"
@@ -22,7 +24,7 @@ say "Lab control OFF"
 site=$R/etc/caddy/lab/lab-control.caddy
 if [ -f "$site" ]; then
   rm -f "${site:?}"
-  docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock
+  caddy_reload
   say "Lab site removed; edge reloaded"
 fi
 say "hosted Lab migrations are not reverted (additive, R151): see the runbook's rollback notes"

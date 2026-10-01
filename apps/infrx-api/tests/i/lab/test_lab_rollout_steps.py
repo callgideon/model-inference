@@ -51,7 +51,7 @@ def box(tmp_path, outputs=None):
     """The stand-in: stubs on PATH and a sandbox root with the Lab's image id recorded."""
     stub = tmp_path / "bin"
     stub.mkdir()
-    for tool in ("aws", "systemctl", "docker", "curl", "python3"):
+    for tool in ("aws", "systemctl", "docker", "curl", "python3", "journalctl", "chown"):
         (stub / tool).write_text(STUB.format(python=sys.executable))
         (stub / tool).chmod(0o755)
     outputs = {"aws": SECRET, **(outputs or {})}
@@ -119,7 +119,7 @@ SECRETS = {"LAB_DATABASE_URL": "eval", "LAB_EVAL_ENDPOINT_KEY": "eval", "CLICKHO
 def test_ldp__every_step_is_strict_bash_on_the_releases_own_helpers():
     """Each step stops on the first failure (`set -euo pipefail`), is valid bash as ssm.sh sends
     it (one file), and reads its helpers from the checked-out release, never from the host."""
-    for script in sorted(STEPS.glob("*.sh")) + [ROLLOUT / "lab-migrate.sh"]:
+    for script in sorted(STEPS.glob("*.sh")) + [ROLLOUT / "lab-migrate.sh", ROLLOUT / "lab-checkout.sh"]:
         text = script.read_text()
         assert "\nset -euo pipefail\n" in text, script.name
         assert subprocess.run(["bash", "-n", str(script)]).returncode == 0, script.name
@@ -191,6 +191,9 @@ def test_ldp__control_on_writes_its_env_by_ssm_name_then_the_switch_then_readine
                      "INFRX_LAB_SUPABASE_ANON_KEY", "INFRX_LAB_ORIGIN"]
     assert f"INFRX_LAB_IMAGE={IMAGE}" in env_file.read_text() and SECRET in env_file.read_text()
     assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    owner, staged = (calls(stub, "chown") or [["never chowned", ""]])[0]          # DT-04: the unit's User=ubuntu reads it (box 2026-09-30)
+    assert len(calls(stub, "chown")) == 1 and owner == "ubuntu:ubuntu" \
+        and staged.startswith(f"{env_file}.staged."), (owner, staged)
     assert [c[c.index("--name") + 1] for c in calls(stub, "aws")] == \
         ["/model-inference/lab/control_dsn", "/model-inference/lab/anon"]
     assert (root / "etc/infrx-lab/enabled").exists()
@@ -244,6 +247,9 @@ def test_ldp__a_role_env_file_is_its_switch_and_carries_only_its_names(tmp_path)
                      "LAB_EVAL_ENDPOINT_KEY"]
     assert f"INFRX_IMAGE={IMAGE}" in env_file.read_text()
     assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    owner, staged = (calls(stub, "chown") or [["never chowned", ""]])[0]          # DT-04: the unit runs docker as User=ubuntu
+    assert len(calls(stub, "chown")) == 1 and owner == "ubuntu:ubuntu" \
+        and staged.startswith(f"{env_file}.staged."), (owner, staged)
     budget = calls(stub, "python3")[-1]
     assert budget[0].endswith("infra/lab/workers/eval/pool_budget.py") and "--lab-env-dir" in budget
     assert calls(stub, "systemctl")[:2] == [["enable", "infrx-lab-eval.service"],
@@ -307,6 +313,112 @@ def test_ldp__the_smoke_checks_every_switch_that_is_on_and_the_app(tmp_path):
     assert run("60-lab-smoke.sh", stub, root, STUB_EXIT_curl="7").returncode == 1
 
 
+def test_ldp__the_smoke_waits_thirty_tries_by_default(tmp_path):
+    """INFRA-11: 60's READY_S default is 30 tries (a control restart during the smoke takes
+    longer than 10 s, which read FAIL); READY_S still overrides it."""
+    stub, root = box(tmp_path)
+    assert run("60-lab-smoke.sh", stub, root, READY_S="", STUB_EXIT_curl="7").returncode == 1
+    tries = [c for c in calls(stub, "curl") if c[-1] == "http://127.0.0.1:8001/readyz"]
+    assert len(tries) == 30, len(tries)
+
+
+VALUE = "canary-lab-value-77d1"     # no scrubbed word in it: each pattern must drop its own line
+
+
+def test_ldp__status_prints_unit_state_and_drops_value_bearing_lines(tmp_path):
+    """70 (read-only, DT-15 / INFRA-04(3)): the unit's state, restarts, container and journal,
+    and the readiness body, each line that could carry a value (a DSN, a password, a bearer
+    token, the anon key, a secret) dropped whatever the unit logged. INFRA-11: ROLE picks the
+    unit and its health port as lib.sh derives them; the control service (:8003) by default."""
+    journal = "\n".join(["2026-10-01T01:30 started ok", f"DATABASE_URL=postgresql://u:{VALUE}@h/d",
+                         f"Authorization: Bearer {VALUE}", f"password={VALUE}", f"anon_key={VALUE}",
+                         f"client_secret {VALUE}", f"dsn postgres://u:{VALUE}@h/d"]) + "\n"
+    stub, root = box(tmp_path, {"journalctl": journal, "systemctl": "NRestarts=22\n",
+                                "curl": f'{{"ready": false}}\nlogin postgresql://u:{VALUE}@h/d\n'})
+    install_units(root)
+    for role, unit, port in ((None, "infrx-lab-control", 8003), ("eval", "infrx-lab-eval", 8012)):
+        done = run("70-lab-status.sh", stub, root, RELEASE=head(), **({"ROLE": role} if role else {}))
+        assert done.returncode == 0, done.stderr
+        assert VALUE not in done.stdout + done.stderr, done.stdout
+        assert f"{unit}:" in done.stdout and "NRestarts=22" in done.stdout, done.stdout
+        assert "started ok" in done.stdout and '"ready": false' in done.stdout, done.stdout
+        assert calls(stub, "journalctl")[-1][:2] == ["-u", unit]
+        assert calls(stub, "curl")[-1][-1] == f"http://127.0.0.1:{port}/readyz"
+    # IL-3: a ROLE lib.sh does not know is refused (exit 2) before any unit is looked at
+    seen = len(calls(stub))
+    done = run("70-lab-status.sh", stub, root, RELEASE=head(), ROLE="bogus")
+    assert done.returncode == 2 and "unknown ROLE bogus" in done.stderr, done.stderr
+    assert len(calls(stub)) == seen, calls(stub)[seen:]
+
+
+def test_ldp__a_steps_lines_reach_the_lab_log(tmp_path):
+    """F3: lib.sh hands box-lib's say the Lab log (BOX_LOG=$LAB_LOG): each line a step prints
+    with say is also appended to $R/var/log/infrx-lab-rollout.log, the box's rollout record."""
+    stub, root = box(tmp_path)
+    done = run("10-lab-preflight.sh", stub, root, RELEASE=head())
+    assert done.returncode == 0, done.stderr
+    said = [line for line in done.stdout.splitlines() if " 10-lab-preflight " in line]
+    log = root / "var" / "log" / "infrx-lab-rollout.log"
+    assert said and log.exists() and log.read_text().splitlines() == said, done.stdout
+
+
+def checkout_box(tmp_path):
+    """lab-checkout.sh's stand-in: an origin with the integration branch, the box's clone at its
+    first commit, a recording `sudo` (it drops `-u ubuntu` and runs the rest) and a recording
+    40-checkout.sh in the checkout. Returns the commits: c1 (HEAD), c2 (Lab-only), c3 (serve.sh)."""
+    def git(cwd, *args):
+        return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@x",
+                               *args], check=True, capture_output=True, text=True).stdout.strip()
+    origin, repo, stub = tmp_path / "origin", tmp_path / "repo", tmp_path / "bin"
+    for path, text in (("models/marlin2b/serve.sh", "IMAGE=a\n"), ("models/marlin2b/serving-version.json", "{}\n"),
+                       ("infra/rollout/steps/40-checkout.sh", 'echo "40-checkout $RELEASE" >> "$CHECKOUT_LOG"\n')):
+        (origin / path).parent.mkdir(parents=True, exist_ok=True)
+        (origin / path).write_text(text)
+    git(origin, "init", "-q", "-b", "claude/consumer-v1")
+    git(origin, "add", "-A")
+    git(origin, "commit", "-q", "-m", "c1")
+    subprocess.run(["git", "clone", "-q", str(origin), str(repo)], check=True)
+    commits = [git(origin, "rev-parse", "HEAD")]
+    for path, text in (("apps/lab/page.tsx", "x\n"), ("models/marlin2b/serve.sh", "IMAGE=b\n")):
+        (origin / path).parent.mkdir(parents=True, exist_ok=True)
+        (origin / path).write_text(text)
+        git(origin, "add", "-A")
+        git(origin, "commit", "-q", "-m", path)
+        commits.append(git(origin, "rev-parse", "HEAD"))
+    stub.mkdir()
+    (stub / "sudo").write_text('#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$(dirname "$0")/sudo.log"\n'
+                               '[ "$1" = -u ] && shift 2\nexec "$@"\n')
+    (stub / "sudo").chmod(0o755)
+    return repo, stub, commits
+
+
+def test_ldp__the_lab_checkout_fetches_guards_the_engine_pin_and_delegates_once(tmp_path):
+    """L0 (lab-checkout.sh, INFRA-04(2)): every git call is the ubuntu user's in the checkout;
+    the integration branch is fetched first; a RELEASE that is no commit there is exit 2; the
+    checkout already at RELEASE is left alone (exit 0); a RELEASE whose serve.sh or pin differ
+    is exit 2 (a consumer window, not a Lab checkout); otherwise 40-checkout.sh runs exactly once."""
+    repo, stub, (c1, c2, c3) = checkout_box(tmp_path)
+    log = tmp_path / "checkout.log"
+
+    def checkout(release):
+        return subprocess.run(["bash", str(ROLLOUT / "lab-checkout.sh")], capture_output=True, text=True,
+                              env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path),
+                                   "REPO": str(repo), "RELEASE": release, "CHECKOUT_LOG": str(log)})
+    done = checkout("f" * 40)
+    assert done.returncode == 2 and "is not on origin/claude/consumer-v1" in done.stderr, done.stderr
+    done = checkout(c1)
+    assert done.returncode == 0 and f"already at {c1}" in done.stdout, done.stderr
+    done = checkout(c3)
+    assert done.returncode == 2 and "engine script or its pin" in done.stderr, done.stderr
+    assert not log.exists()
+    done = checkout(c2)
+    assert done.returncode == 0, done.stderr
+    assert log.exists() and log.read_text().splitlines() == [f"40-checkout {c2}"]
+    sudo = (stub / "sudo.log").read_text().splitlines() if (stub / "sudo.log").exists() else []
+    assert sudo and all(line.startswith(f"-u ubuntu git -C {repo} ") for line in sudo), sudo
+    assert sudo[0] == f"-u ubuntu git -C {repo} fetch --quiet origin claude/consumer-v1", sudo
+
+
 def test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app(tmp_path):
     """90: every role and the control service off (switches removed) BEFORE the edge reload,
     and the App's readiness last; the units stay installed (inert)."""
@@ -331,6 +443,26 @@ def test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app(tm
     assert [argv[-1] for tool, argv in order[reload_at + 1:]] == \
         ["http://127.0.0.1:8001/readyz", "http://127.0.0.1:8002/readyz"]
     assert (root / "etc/systemd/system/infrx-lab-eval.service").exists()
+
+
+def test_ldp__revert_and_site_off_reload_once_on_the_boxs_pre_w6_lib(tmp_path):
+    """90 and 45 STATE=off run with no RELEASE check, so ssm.sh sends this tree's step to a box
+    whose checkout may still carry the pre-W6 lib.sh (7ecbab0e = 08983639, no box-lib.sh, no
+    caddy_reload): both still exit 0 with exactly one Caddy reload (fix 0-F1/1-IL-1)."""
+    old = tmp_path / "old"
+    (old / "infra/lab/rollout").mkdir(parents=True)
+    # verbatim `git show 08983639:infra/lab/rollout/lib.sh` (the mutant copy is not a git tree)
+    (old / "infra/lab/rollout/lib.sh").write_text((Path(__file__).parent / "fixtures/lib-pre-w6.sh").read_text())
+    for step, env in (("90-lab-revert.sh", {}), ("45-lab-site.sh", {"STATE": "off"})):
+        (tmp_path / step).mkdir()
+        stub, root = box(tmp_path / step)
+        site = root / "etc/caddy/lab/lab-control.caddy"
+        site.parent.mkdir(parents=True)
+        site.write_text("x\n")
+        done = run(step, stub, root, REPO=str(old), **env)
+        assert done.returncode == 0 and not site.exists(), (step, done.stderr)
+        reloads = [a for a in calls(stub, "docker") if a[:2] == ["exec", "caddy"] and "reload" in a]
+        assert len(reloads) == 1, (step, calls(stub, "docker"))
 
 
 def test_ldp__the_site_reaches_the_edge_only_after_it_validates_with_the_apps(tmp_path):
@@ -414,12 +546,15 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
 
 def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
-    (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052-0056, its W7 post-check `*"0056 lab_control_grants"`), so condition 2
+    (--hosted-at is read from hosted-migrate.sh's HOSTED_APPLIED anchor, so the case follows
+    each window's reviewed edit without a sed), so condition 2
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
     newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
+    hosted_at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ',
+                          (REPO / "infra/rollout/hosted-migrate.sh").read_text())[1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
-                           "--hosted-at", "0056", "--window", "P-08:dry"], capture_output=True,
+                           "--hosted-at", hosted_at, "--window", "P-08:dry"], capture_output=True,
                           text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
                                                     "PY": "/usr/bin/env"})
     assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr

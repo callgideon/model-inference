@@ -11,11 +11,12 @@ set -euo pipefail
 STEP=45-lab-site
 repo=${REPO:-/home/ubuntu/model-inference}
 . "$repo/infra/lab/rollout/lib.sh"
+# a box checkout older than W6 has no box-lib.sh (caddy_reload): this step runs without at_release
+declare -F caddy_reload >/dev/null || caddy_reload() { docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock; }
 caddy_dir=$R/etc/caddy
 site=$caddy_dir/lab/lab-control.caddy
-reload() { docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock; }
 case "${STATE:-}" in
-  off) if [ -f "$site" ]; then rm -f "${site:?}"; reload; say "site removed; edge reloaded"
+  off) if [ -f "$site" ]; then rm -f "${site:?}"; caddy_reload; say "site removed; edge reloaded"
        else say "no Lab site installed; nothing to do"; fi; exit 0 ;;
   on) ;;
   *) die 2 "STATE must be on or off" ;;
@@ -35,5 +36,5 @@ docker run --rm --network none -v "$stage:/etc/caddy:ro" "$image" \
 install -d -m 0755 "$caddy_dir/lab"
 cp "$stage/lab/lab-control.caddy" "$site.tmp"
 mv -f "$site.tmp" "$site"
-reload
+caddy_reload
 say "Lab site installed and the edge reloaded (validated with the App's Caddyfile first)"
