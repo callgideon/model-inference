@@ -6,7 +6,6 @@
 // page, and fails closed.
 import type { Membership, Role } from "../../auth/access.ts";
 import { authCookieOptions, labConfig } from "../../auth/config.ts";
-import { USD_RE as USD, UUID, UUID_RE as ID } from "../shapes.ts";
 
 export type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
 export type Outcome = { ok: true; data: unknown } | { ok: false; reason: "invalid" | "denied" | "unavailable" };
@@ -20,8 +19,11 @@ export const RPC = {
 } as const;
 export const PAGE_MAX = 50;
 export const MAX_SAMPLES = 200; // J1's candidate scan bound
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const ID = new RegExp(`^${UUID}$`);
 // packages/shared REF_RE for kind `payer` (node --test cannot strip types under node_modules).
 const PAYER = new RegExp(`^lab:payer:(${UUID}):${UUID}@sha256:[0-9a-f]{64}$`);
+const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // a Lab Amount value (R159)
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 const RANK: Record<Role, number> = { viewer: 0, developer: 1, administrator: 2 };
 // What the RPCs raise for a caller they refuse (insufficient_privilege, no_data_found).

@@ -15,7 +15,6 @@ const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",
 const SUITE = ["tests/c/review/review.test.ts", "tests/l/shell/boundary.test.ts"];
 const R = "lib/services/review/index.ts";
 const A = "lib/services/review/actions.ts";
-const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
 
 const C = {
   l01: "C3F-L01 the review reads through the one named door with the selected workspace and the request, no identity",
@@ -31,7 +30,7 @@ const MUTANTS = [
   m("C3F-LX02", "the review names another workspace than the selected one", R, "provider_org_id: workspace.providerId,", 'provider_org_id: "b0000009-0000-4000-8000-000000000009",', [C.l01]),
   m("C3F-LX03", "the review sends an identity", R, "request_id: requestId } }", 'request_id: requestId, user_id: workspace.providerId } }', [C.l01]),
   m("C3F-LX04", "a malformed request id reaches the database", R, '  if (typeof requestId !== "string" || !UUID.test(requestId)) return { ok: false, reason: "not_found" };\n', "", [C.l02]),
-  m("C3F-LX05", "a request id with trailing text passes", SHAPES, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
+  m("C3F-LX05", "a request id with trailing text passes", R, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
   m("C3F-LX06", "not_found reads as unavailable", R, 'if (code === "not_found") return { ok: false, reason: "not_found" };', "", [C.l03]),
   m("C3F-LX07", "a denied role reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "forbidden")', [C.l03]),
   m("C3F-LX08", "a role refusal reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "42501")', [C.l03]),

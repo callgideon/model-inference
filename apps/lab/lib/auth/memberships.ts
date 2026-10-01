@@ -2,12 +2,12 @@
 // own session. The database takes the identity from auth.uid() and judges currency on its own clock,
 // the same set L2's port answers (apps/infrx-api/tests/d/test_l2sql_self.py), so no identity is ever
 // sent. Any bad row fails the read closed.
-import { UUID_ANY_RE as UUID } from "../services/shapes.ts";
 import { ROLES, type Membership, type MembershipRead, type Role } from "./access.ts";
 
 export const MEMBERSHIPS_RPC = "lab_provider_memberships";
 export type RpcClient = { rpc: (name: string) => PromiseLike<{ data: unknown; error: unknown }> };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function parseMemberships(data: unknown): MembershipRead {
   if (!Array.isArray(data)) return { ok: false };
