@@ -1,7 +1,8 @@
 import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { evaluationPort, isPreview } from "@/lib/services/evaluation/port";
 import { comparison, REFUSAL_COPY, runRow } from "@/lib/services/evaluation/view";
-import { PreviewNote, RunsTable } from "../../evaluations/runs";
+import { RunsTable } from "../../evaluations/runs";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Experiment · infrx Lab" };
 
@@ -10,8 +11,7 @@ export const metadata = { title: "Experiment · infrx Lab" };
 export default async function ExperimentPage({ params }: PageProps<"/experiments/[id]">) {
   const workspace = await requireProviderWorkspace();
   const { id } = await params;
-  const actor = { providerId: workspace.providerId, role: workspace.role };
-  const list = await evaluationPort().experiments(actor);
+  const list = await evaluationPort().experiments(workspace);
   if (!list.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const e = list.value.find((x) => x.experiment_id === id);
   if (e === undefined) return <p role="alert">{REFUSAL_COPY.not_found}</p>;
@@ -20,7 +20,7 @@ export default async function ExperimentPage({ params }: PageProps<"/experiments
   return (
     <>
       <h1>Experiment {e.experiment_id}</h1>
-      {isPreview() && <PreviewNote />}
+      {isPreview() && <PreviewNote records="evaluation" service="evaluation" />}
       <h2>Protocol, declared at launch</h2>
       <p>{`${p.confidence} confidence · margin ${p.margin} · at least ${p.min_cases} paired cases · ${p.metric_source.replace("_", " ")}`}</p>
       <ul>{Object.entries(p.required_slices).map(([s, r]) => <li key={s}>{`slice ${s}: margin ${r.margin}, at least ${r.min_cases} cases`}</li>)}</ul>

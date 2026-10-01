@@ -19,6 +19,7 @@ const NEXT = "next.config.ts";
 const SIGNIN = "lib/auth/sign-in.ts";
 const ROUTES = "lib/auth/routes.ts";
 const FORM = "lib/auth/sign-in-form.tsx";
+const PORTS = ["control", "evaluation", "pipelines"].map((f) => `lib/services/${f}/port.ts`); // LAB-07: they re-export access.ts's holds
 
 const C = {
   a01: "L1-A01 a signed-in user with no provider membership (consumer-only) is denied",
@@ -30,6 +31,8 @@ const C = {
   a07: "L1-A07 the selection action accepts only one of the user's own workspaces",
   a08: "L1-A08 the denial copy keeps consumer onboarding in the App: no signup, credits or onboarding offer",
   a09: "L1-A09 a page needs a selected workspace; the selection action needs a provider session",
+  a10: "L1-A10 holds() grants exactly the contracts/v2 ROLE_CAPABILITIES, for every role and capability",
+  a11: "L1-A11 every family port answers capabilities from that one table, not a table of its own",
   m01: "L1-M01 the membership read is the named RPC over the user's own session, with no identity argument",
   m02: "L1-M02 an RPC error or a thrown transport is unavailable",
   m03: "L1-M03 a malformed, unknown-role or duplicate row fails the whole read closed",
@@ -52,6 +55,8 @@ const C = {
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
   b02: "L1-B02 the provider layout renders its children only for a ready workspace",
   b03: "L1-B03 the selection action stores the membership it validated, never the submitted value",
+  b06: "L1-B06 the action, refusal-copy and preview boilerplate lives once, in lib/services/common.ts and components/preview-note.tsx",
+  b07: "L1-B07 every page types its props with Next's PageProps and has a title; app code imports lib and components by @/",
   b04: "L1-B04 the Lab never imports the App: shared code comes only from packages/shared",
   b05: "L1-B05 a signed-out visitor gets the Lab sign-in form, and every signed-in state can sign out",
   s01: "L1-S01 sign-in sets the Lab session through the Lab's own client and lands on the home page",
@@ -162,6 +167,23 @@ const MUTANTS = [
   m("L1-X67", "a consumer-only user cannot sign out", LAYOUT, '      {access.kind === "denied" && <SignOut />}\n', "", [C.b05]),
   m("L1-X68", "the form shows the action's raw error", FORM, "SIGN_IN_COPY[state.error]", "String(state.error)", [C.b05]),
   m("L1-X69", "the sign-in notice repeats the auth server", ACCESS, '"That email and password did not sign you in.', '"Invalid login credentials. That email and password did not sign you in.', [C.s02]),
+  // LAB-07: the one role table (each family runner kills its own role mutants on it too)
+  m("L1-X95", "an administrator loses manage_members", ACCESS, '"propose_publication", "manage_members"]', '"propose_publication"]', [C.a10]),
+  m("L1-X96", "a role holds customer content", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "read_customer_content"],', [C.a10]),
+  m("L1-X97", "holds ignores the role", ACCESS, "ROLE_CAPABILITIES[role].includes(capability)", "CAPABILITIES.includes(capability)", [C.a10]),
+  m("L1-X98", "a developer holds manage_members", ACCESS, '"manage_dev_deployment", "run_evaluation"],\n  administrator', '"manage_dev_deployment", "run_evaluation", "manage_members"],\n  administrator', [C.a10]),
+  ...PORTS.map((port, i) => m(`L1-X${99 + i}`, `${port} answers from a table of its own`, port,
+    'export { holds, type Actor, type Capability } from "../../auth/access.ts";',
+    'export { type Actor, type Capability } from "../../auth/access.ts";\nexport const holds = (role: string, capability: string): boolean => role !== "viewer" || capability === "read_aggregate_health";', [C.a11])),
+  // LAB-09: the boilerplate lives once
+  m("L1-X102", "a family keeps its own refusal guard", "lib/services/rollouts/view.ts", "export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);",
+    "export const refusalCopy = (value: unknown) => ((REFUSALS as readonly unknown[]).includes(value) ? REFUSAL_COPY[value as Refusal] : null);", [C.b06]),
+  m("L1-X103", "a page inlines its own preview copy", LAYOUT, '<PreviewNote records="control" service="control" />',
+    '<p role="note">Preview: control records come from an in-memory stand-in, not the control service.</p>', [C.b06]),
+  // LAB-13: the page conventions
+  m("L1-X104", "a page types its params by hand", "app/(provider)/datasets/[ref]/page.tsx", 'PageProps<"/datasets/[ref]">', "{ params: Promise<{ ref: string }> }", [C.b07]),
+  m("L1-X105", "a page has no title", "app/(provider)/datasets/page.tsx", 'export const metadata = { title: "Datasets · infrx Lab" };\n', "", [C.b07]),
+  m("L1-X106", "a route climbs to lib by a relative path", "app/(provider)/experiments/[id]/report/route.ts", 'from "@/lib/auth/guard";', 'from "../../../../../lib/auth/guard.ts";', [C.b07]),
   m("L1-X40", "the Lab imports the App's code", ACCESS, "export const ROLES", 'import type {} from "../../../app/lib/types.ts";\nexport const ROLES', [C.b04]),
 ];
 

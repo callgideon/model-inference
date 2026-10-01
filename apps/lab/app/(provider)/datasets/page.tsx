@@ -6,6 +6,8 @@ import { datasetsPort } from "@/lib/services/datasets/server";
 import { FAILURE_COPY } from "@/lib/services/datasets/views";
 import { ImportWizard } from "./forms";
 
+export const metadata = { title: "Datasets · infrx Lab" };
+
 export default async function Datasets() {
   const workspace = await requireProviderWorkspace();
   const versions = await (await datasetsPort()).versions(workspace.providerId);

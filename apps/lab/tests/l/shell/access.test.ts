@@ -1,13 +1,20 @@
 // L1 LAB-ACCESS: who gets a provider workspace. Memberships come only from the L2 read (the
 // user's own session, no client-supplied identity); a cookie is a preference, never authorization.
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
   ACCESS_COPY,
+  CAPABILITIES,
   chooseWorkspace,
+  holds,
   providerAccess,
   readyWorkspace,
   resolveAccess,
+  ROLE_CAPABILITIES,
+  ROLES,
   sessionAccess,
   type Membership,
 } from "../../../lib/auth/access.ts";
@@ -120,4 +127,22 @@ test("L1-M03 a malformed, unknown-role or duplicate row fails the whole read clo
 test("L1-M04 a membership id is read back at any UUID version, either case (shapes UUID_ANY_RE, LAB-10)", () => {
   const v1 = { ...A, providerId: "6BA7B810-9DAD-11D1-80B4-00C04FD430C8" };
   assert.deepEqual(parseMemberships([row(v1)]), { ok: true, memberships: [v1] });
+});
+
+// LAB-07: one role table, a copy of the frozen contract's (the Lab never imports the App at runtime: L1-B04).
+test("L1-A10 holds() grants exactly the contracts/v2 ROLE_CAPABILITIES, for every role and capability", async () => {
+  // The App's frozen contract, found through the repo checkout @infrx/shared links into (a mutant copy symlinks node_modules).
+  const repo = resolve(realpathSync(new URL("../../../node_modules/@infrx/shared", import.meta.url)), "../..");
+  const v2 = await import(pathToFileURL(join(repo, "apps/app/lib/contracts/v2/types.ts")).href);
+  assert.deepEqual([...ROLES], [...v2.PROVIDER_ROLES]);
+  assert.deepEqual([...CAPABILITIES], [...v2.PROVIDER_CAPABILITIES]);
+  for (const role of ROLES) {
+    for (const capability of CAPABILITIES) assert.equal(holds(role, capability), v2.ROLE_CAPABILITIES[role].includes(capability), `${role} ${capability}`);
+  }
+  assert.deepEqual(ROLE_CAPABILITIES, v2.ROLE_CAPABILITIES);
+});
+
+test("L1-A11 every family port answers capabilities from that one table, not a table of its own", async () => {
+  const ports = await Promise.all(["control", "evaluation", "pipelines", "rollouts"].map((f) => import(`../../../lib/services/${f}/port.ts`)));
+  for (const port of ports) assert.equal(port.holds, holds);
 });

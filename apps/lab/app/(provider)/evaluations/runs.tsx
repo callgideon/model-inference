@@ -27,5 +27,3 @@ export function RunsTable({ rows }: { rows: RunRow[] }) {
     </table>
   );
 }
-
-export const PreviewNote = () => <p role="note">Preview: evaluation records come from an in-memory stand-in, not the evaluation service.</p>;

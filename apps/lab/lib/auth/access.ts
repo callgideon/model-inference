@@ -4,6 +4,31 @@
 export const ROLES = ["viewer", "developer", "administrator"] as const;
 export type Role = (typeof ROLES)[number];
 export type Membership = { providerId: string; providerName: string; role: Role };
+/** Who a port call acts as: always the session's workspace (lib/auth/guard.ts), never a form value. A
+ * Membership is one, so pages and actions pass the workspace itself (LAB-08: replaces four copies). */
+export type Actor = Pick<Membership, "providerId" | "role">;
+
+/**
+ * contracts/v2 ROLE_CAPABILITIES (apps/app/lib/contracts/v2/types.ts PROVIDER_CAPABILITIES and
+ * ROLE_CAPABILITIES), copied because the Lab never imports the App (tests/l/shell L1-A10 pins the copy).
+ * The one role table (LAB-07: replaces the control, evaluation and pipelines tables); the backends
+ * re-check every call. `read_customer_content` is deliberately in no role's set.
+ */
+export const CAPABILITIES = [
+  "read_aggregate_health",
+  "manage_dev_deployment",
+  "run_evaluation",
+  "propose_publication",
+  "manage_members",
+  "read_customer_content",
+] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = Object.freeze({
+  viewer: ["read_aggregate_health"],
+  developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],
+  administrator: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation", "propose_publication", "manage_members"],
+});
+export const holds = (role: Role, capability: Capability): boolean => ROLE_CAPABILITIES[role].includes(capability);
 /** The L2 read of the signed-in user's own provider memberships; `ok: false` is a failed read. */
 export type MembershipRead = { ok: true; memberships: Membership[] } | { ok: false };
 

@@ -1,7 +1,7 @@
 // N4: the datasets server actions' decisions, pure over a port and the selected workspace (node --test
 // runs them; app/(provider)/datasets/actions.ts only adds the guard and the real port). The provider is
 // always the guarded workspace's, never a form field, and a viewer is refused before any call.
-import type { Membership } from "../../auth/access.ts";
+import { holds, type Membership } from "../../auth/access.ts";
 import type { DatasetsPort, Derived, ExportRecord, Failure, ImportJob, ImportReport, Leak, Preview } from "./port.ts";
 import { UUID_RE as UUID } from "../shapes.ts";
 import { FAILURE_COPY } from "./views.ts";
@@ -21,7 +21,7 @@ const refused = (message: string) => ({ status: "error", message }) as const;
 const failed = (f: Failure) => ({ status: "error", message: `${FAILURE_COPY[f.error]} ${f.detail}`, leaks: f.leaks, report: f.report }) as const;
 
 function writer(w: Membership): boolean {
-  return w.role === "developer" || w.role === "administrator";
+  return holds(w.role, "run_evaluation"); // datasets feed evaluations and training (LAB-07)
 }
 
 function spec(form: FormData): { ok: true; value: unknown } | { ok: false } {

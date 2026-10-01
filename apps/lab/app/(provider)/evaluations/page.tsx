@@ -3,7 +3,8 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { launchExperiment } from "@/lib/services/evaluation/actions";
 import { evaluationPort, holds, isPreview } from "@/lib/services/evaluation/port";
 import { comparison, refusalCopy, REFUSAL_COPY, runRow } from "@/lib/services/evaluation/view";
-import { PreviewNote, RunsTable } from "./runs";
+import { RunsTable } from "./runs";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Evaluations · infrx Lab" };
 
@@ -12,15 +13,14 @@ export const metadata = { title: "Evaluations · infrx Lab" };
 export default async function Evaluations({ searchParams }: PageProps<"/evaluations">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = evaluationPort();
-  const [runs, experiments, catalog] = await Promise.all([port.runs(actor), port.experiments(actor), port.catalog(actor)]);
+  const [runs, experiments, catalog] = await Promise.all([port.runs(workspace), port.experiments(workspace), port.catalog(workspace)]);
   if (!runs.ok || !experiments.ok || !catalog.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const c = catalog.value;
   return (
     <>
       <h1>Evaluations</h1>
-      {isPreview() && <PreviewNote />}
+      {isPreview() && <PreviewNote records="evaluation" service="evaluation" />}
       {refused && <p role="alert">{refused}</p>}
       <p><Link href="/evaluations/checkpoints">Checkpoint subscriptions</Link></p>
       <h2>Experiments</h2>

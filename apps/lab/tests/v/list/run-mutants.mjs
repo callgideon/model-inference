@@ -104,8 +104,8 @@ const MUTANTS = [
   m("V1M-X61", "a lost workspace reads as a request not found", VIEW, 'result.reason === "not_found" ? LIST_COPY.not_found : ', "", [C.l05]),
   m("V1M-X62", "a refusal mid-walk has no way back", VIEW, '{ kind: "error", message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason], firstHref }', '{ kind: "error", message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason], firstHref: null }', [C.l05]),
   // the page and markup
-  m("V1M-X63", "the provider comes from the URL", PAGE, "const actor = { providerId: workspace.providerId,", "const actor = { providerId: String((await searchParams).provider_org_id),", [C.p01]),
-  m("V1M-X64", "the page ignores the cursor", PAGE, "labTraces().list(actor, params.cursor)", "labTraces().list(actor, null)", [C.p01]),
+  m("V1M-X63", "the provider comes from the URL", PAGE, "labTraces().list(workspace,", "labTraces().list({ ...workspace, providerId: String((await searchParams).provider_org_id) },", [C.p01]),
+  m("V1M-X64", "the page ignores the cursor", PAGE, "labTraces().list(workspace, params.cursor)", "labTraces().list(workspace, null)", [C.p01]),
   m("V1M-X65", "refused parameters are silent", PAGE, "      <RejectedParams rejected={params.rejected} ignored={params.ignored} />\n", "", [C.p01]),
   m("V1M-X66", "a row is not a link to its request", TABLE, "<a href={r.href}>{r.requestId}</a>", "<span>{r.requestId}</span>", [C.p02]),
   m("V1M-X67", "a row hides its content state", TABLE, "{r.started} · {r.duration} · {r.model} · {r.content}", "{r.started} · {r.duration} · {r.model}", [C.p02]),

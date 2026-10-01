@@ -65,7 +65,7 @@ const MUTANTS = [
   m("N4-X20", "an unknown restriction reads as readable", VIEWS, "return RESTRICTED_COPY[reason] ?? `", 'return RESTRICTED_COPY[reason] ?? "readable" ?? `', [C.v04]),
   m("N4-X21", "a leak is not shown", VIEWS, "for (const leak of result.leaks ?? [])", "for (const leak of [] as Leak[])", [C.v05]),
   m("N4-X22", "a holdout relative is not shown", VIEWS, 'if (o.reason === "related_to_holdout")', "if (false)", [C.v05]),
-  m("N4-X23", "a viewer reaches the backend", FLOWS, 'return w.role === "developer" || w.role === "administrator";', "return true;", [C.f01]),
+  m("N4-X23", "a viewer reaches the backend", FLOWS, 'return holds(w.role, "run_evaluation");', "return true;", [C.f01]),
   m("N4-X24", "the provider comes from the form", FLOWS, "port.startImport(w.providerId,", 'port.startImport(String(form.get("providerId") ?? w.providerId),', [C.f02]),
   m("N4-X25", "accepting rejects is ignored", FLOWS, 'form.get("accept_rejects") === "on"', "false", [C.f02]),
   m("N4-X26", "an array spec is sent", FLOWS, "typeof value === \"object\" && value !== null && !Array.isArray(value)", "typeof value === \"object\" && value !== null", [C.f03]),

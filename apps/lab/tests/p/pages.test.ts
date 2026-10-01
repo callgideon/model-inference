@@ -16,7 +16,8 @@ test("P4-P01 each page reads the pipeline records as the session's workspace and
   for (const path of PAGES) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.match(page, /const refused = refusalCopy\(query\.refused\);/, path);
     assert.doesNotMatch(page, /success|succeeded!|saved|done=|\.providerId\s*=/i, path);
   }
@@ -44,7 +45,7 @@ test("P4-P03 the paid forms show the USD budget and named payer, and no form pic
 test("P4-P04 labels show their kind and ground-truth status apart; the preview stand-in is labelled only when it is on", () => {
   const annotations = read(ANNOTATIONS);
   assert.match(annotations, /<td>\{l\.kind\}<\/td><td>\{l\.truth\}<\/td>/);
-  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <p role="note">Preview: /, path);
+  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote records="pipeline" service="pipeline" \/>\}/, path);
 });
 
 test("P4-P05 the teacher section: a dry-run form with its batch id minted at render, its USD budget and payer; approval only where the view allows it; unavailable said as such", () => {
@@ -57,4 +58,10 @@ test("P4-P05 the teacher section: a dry-run form with its batch id minted at ren
   assert.match(training, /\{b\.budget\}.*\{b\.ceiling\}/);
   assert.match(training, /!batches\.ok \? <p role="note">\{TEACHER_UNAVAILABLE\}<\/p>/);
   assert.doesNotMatch(training, /name="live"|name="approve"/);
+});
+
+test("P4-P06 each page shows the first failed read's fixed copy (common.ts firstFailure)", () => {
+  assert.match(read(TRAINING), /if \(!runs\.ok \|\| !checkpoints\.ok\) return <p role="alert">\{REFUSAL_COPY\[firstFailure\(runs, checkpoints\)!\]\}<\/p>;/);
+  assert.match(read(ANNOTATIONS), /const failed = firstFailure\(imports, exports, labels, disputes\);/);
+  assert.match(read(ANNOTATIONS), /\{failed !== null \? \(\n\s+<p role="alert">\{REFUSAL_COPY\[failed\]\}<\/p>/);
 });

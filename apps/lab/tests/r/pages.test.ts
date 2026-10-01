@@ -14,7 +14,8 @@ test("R4-P01 each page reads the records as the session's workspace and shows ?r
   for (const path of PAGES) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /\{ providerId: workspace\.providerId, role: workspace\.role \}/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
     assert.match(page, /if \(!\w+\.ok\) return <p role="alert">\{REFUSAL_COPY\.unavailable\}<\/p>;/, path);
   }
@@ -28,7 +29,7 @@ test("R4-P02 no page offers a launch or allocation control or claims success; th
     const page = read(path);
     assert.doesNotMatch(page, /success|succeeded|rolled back!|saved/i, path);
     assert.doesNotMatch(page, /name="(mode|cohort|weight\w*|budget|candidate\w*|endpoint\w*)"/, path);
-    assert.match(page, /\{isPreview\(\) && <p role="note">Preview: /, path);
+    assert.match(page, new RegExp(`\\{isPreview\\(\\) && <PreviewNote records="${path.includes("releases") ? "release" : "variant"}" service="rollout" \\/>\\}`), path);
   }
   assert.equal([...read(PAGES[0]).matchAll(/<form /g)].length, 1, "one form: the expand/rollback proposal");
   assert.doesNotMatch(read(PAGES[1]), /<form /);

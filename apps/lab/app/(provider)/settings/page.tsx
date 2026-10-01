@@ -1,5 +1,5 @@
 import { requireProviderWorkspace } from "@/lib/auth/guard";
-import { holds } from "@/lib/services/control/port";
+import { holds } from "@/lib/auth/access";
 
 export const metadata = { title: "Settings · infrx Lab" };
 

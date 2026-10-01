@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
+import { firstFailure } from "@/lib/services/common";
 import { adjudicateSample, assignReviewer, exportLabels, importLabels, reviewLabel } from "@/lib/services/pipelines/actions";
 import { ADAPTERS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY } from "@/lib/services/pipelines/view";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Annotations · infrx Lab" };
 
@@ -12,26 +14,25 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
   const workspace = await requireProviderWorkspace();
   const query = await searchParams;
   const refused = refusalCopy(query.refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const shape = new RegExp(`^lab:dataset:${workspace.providerId}:[0-9a-f-]{36}@sha256:[0-9a-f]{64}$`);
   const dataset = typeof query.dataset === "string" && shape.test(query.dataset) ? query.dataset : null;
   const port = pipelinesPort();
   const [imports, exports, labels, disputes] = await Promise.all([
-    port.imports(actor), port.exports(actor),
-    dataset === null ? null : port.labels(actor, dataset), dataset === null ? null : port.disagreements(actor, dataset),
+    port.imports(workspace), port.exports(workspace),
+    dataset === null ? null : port.labels(workspace, dataset), dataset === null ? null : port.disagreements(workspace, dataset),
   ]);
-  const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);
+  const failed = firstFailure(imports, exports, labels, disputes);
   return (
     <>
       <h1>Annotations</h1>
-      {isPreview() && <p role="note">Preview: pipeline records come from an in-memory stand-in, not the pipeline service.</p>}
+      {isPreview() && <PreviewNote records="pipeline" service="pipeline" />}
       {refused && <p role="alert">{refused}</p>}
       <form method="get">
         <label>Dataset version <input name="dataset" required defaultValue={dataset ?? ""} placeholder="lab:dataset:…@sha256:…" /></label>
         <button type="submit">Open</button>
       </form>
-      {failed && !failed.ok ? (
-        <p role="alert">{REFUSAL_COPY[failed.reason]}</p>
+      {failed !== null ? (
+        <p role="alert">{REFUSAL_COPY[failed]}</p>
       ) : (
         <>
           {dataset !== null && labels?.ok && disputes?.ok && (

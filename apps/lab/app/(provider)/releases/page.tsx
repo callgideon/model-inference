@@ -2,6 +2,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { proposeRelease } from "@/lib/services/rollouts/actions";
 import { isPreview, releasesPort } from "@/lib/services/rollouts/port";
 import { refusalCopy, releaseRows, REFUSAL_COPY } from "@/lib/services/rollouts/view";
+import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Releases · infrx Lab" };
 
@@ -12,13 +13,13 @@ const LABEL = { expand: "Propose expansion", rollback: "Propose rollback" } as c
 export default async function Releases({ searchParams }: PageProps<"/releases">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const records = await releasesPort().releases({ providerId: workspace.providerId, role: workspace.role });
+  const records = await releasesPort().releases(workspace);
   if (!records.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const rows = releaseRows(workspace.role, records.value);
   return (
     <>
       <h1>Releases</h1>
-      {isPreview() && <p role="note">Preview: release records come from an in-memory stand-in, not the rollout service.</p>}
+      {isPreview() && <PreviewNote records="release" service="rollout" />}
       {refused && <p role="alert">{refused}</p>}
       <p>An operator launches each shadow or canary release from its frozen plan and decides every proposal made here.</p>
       {rows.length === 0 ? (

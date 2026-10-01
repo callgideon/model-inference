@@ -13,10 +13,9 @@ export const metadata = { title: "Request · infrx Lab" };
 // reads (C2, WR-V2-2) are not wired: the panel states the record's content state. V3: the judge runs.
 export default async function RequestDetail({ params }: PageProps<"/requests/[id]">) {
   const workspace = await requireProviderWorkspace();
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const { id } = await params;
   const { traces } = tracePorts();
-  const [trace, feedback, judge] = await Promise.all([traces.detail(actor, id), reviewRequestFeedback(id), judgePort().runs(actor, id)]);
+  const [trace, feedback, judge] = await Promise.all([traces.detail(workspace, id), reviewRequestFeedback(id), judgePort().runs(workspace, id)]);
   return (
     <>
       <h1>Request</h1>
