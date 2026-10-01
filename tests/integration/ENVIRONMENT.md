@@ -87,10 +87,23 @@ FAIL > INVALID > BLOCKED > NOT RUN > PASS.
   FAIL. At layer 1, `tests/integration` skips 103 stack cases (79 backend, 24 seeded
   services), so `integration-l1` is BLOCKED; they run at layer 3.
 - **Quarantine** is a strict `xfail` (or a skip): the stage is BLOCKED and lists the reasons, so
-  the gate cannot be PASS while one stands. tests/d carries five today (0007 public-listing
-  case, two unbuilt provider_dev admissions, the 0011 `state_conflict` vs fake
-  `idempotency_conflict` delta, the F2 two-organization case); none records an owner or expiry
-  yet - add them to the reason when quarantining.
+  the gate cannot be PASS while one stands. Convention: the reason names its **owner** (a task,
+  lane or WR) and its **trigger** ("until <WR/ruling/task>"); a strict xfail turns red (XPASS) the
+  day the trigger lands, which is the expiry. Six stand on 2026-10-01 (`apps/infrx-api/tests/`):
+
+  | Case (file:line of the reason) | Owner | Until |
+  |---|---|---|
+  | `d/test_jobstore_conformance.py:45` the F2 two-organization case | F (conformance) | the case stops reusing one key across two organizations |
+  | `d/test_credit_jobstore_conformance.py:30` refusals leave no job/hold | G1R request 2(c) (unassigned) | PostgreSQL admits a provider_dev key on its own dev endpoint |
+  | `d/test_credit_jobstore_conformance.py:31` unknown-usage hold reconciled | G1R request 2(c) (unassigned) | as above |
+  | `d/test_credit_jobstore_conformance.py:32` the replay regime pin | F / coordinator | the 0011 `state_conflict` vs fake `idempotency_conflict` contract delta is ruled |
+  | `d/test_catalog_pg.py:300` alias moved after acceptance | D (0007) | a private-deployment listing exists (0007 lists public deployments only) |
+  | `i/test_observe.py:132` every alert rule names a produced metric | W5/G (F4) | the runtime producers of `KNOWN_UNPRODUCED` (ComponentDown, QueueStalled, QueueSaturated, RejectionsHigh, PlatformFailureRate, LeaseLost, ReaperTerminalized) exist |
+
+  The tests/d five need the task-local PostgreSQL (they skip with the module otherwise);
+  `g/test_relay_readiness.py:37` is a conditional strict xfail that is inactive while M6 phase 2 is
+  present (it passes today). Owner tags are recorded here; the reasons in the test files are their
+  owners' to amend.
 - pytest stages run with a private `--basetemp` (`mkdtemp`, mode 0700, `$TMPDIR/infrx-e2c-<stage>-*`,
   removed afterwards): pytest < 9.0.3 roots its temporary directories in the shared
   `/tmp/pytest-of-<user>` (GHSA-6w46-j5rx-g56g). `TMPDIR` is deliberately not moved: the D/Q
@@ -179,3 +192,4 @@ INVALID.
 - 2026-09-26: `app-e2e` profile declares python/uv/Docker, the E2 images and namespace `e4b`; the gate ends with E3A's browser journey (E3A-PREP merge, wiring E3A-WR-3); no behaviour change to the other gates.
 - 2026-09-26 (SWEEP-1): e2c's `services` gain `valkey-q` 55430, so consumer-local's preflight probes Q's own Valkey port (BLOCKED when held); the e2c rows name `INFRX_Q_VALKEY_PORT` = e2c `valkey-q` 55430 (container `infrx-q3-valkey-55430`), not the e2c Valkey port (WR-G2FIX-3, G2-FIX SC-3); mutant `e2cg13` pins the gate's Q port.
 - 2026-09-27 (SWEEP-2, SW1-R3/RV-2): the e2c row and environment.json (`undetected_containers`, `undetected_note`) state that Q's `infrx-q3-valkey-55430` is not seen by preflight's stale-container rule (vkharness names it, not tasklocal) and why that is not a blocker; `test_preflight.py` pins the name against vkharness (mutant `e2cp08`). A tasklocal per-service container override would be registry logic, not a one-line edit, so the prefix is unchanged.
+- 2026-10-01 (W6 docs-state, DT-14): the quarantine bullet enumerates the six standing strict xfails with file:line, owner and trigger (tests/d five read from their PENDING tables, not run — this lane has no docker key; tests/i/test_observe.py:132 rerun: XFAIL at 08983639) and states the owner/trigger convention; doc only.
