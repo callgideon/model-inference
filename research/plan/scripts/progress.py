@@ -283,6 +283,12 @@ class Model:
                 err(f"{g} decision {v.get('decision')!r} not in accepted/rejected/null")
             if v.get("decision") == "accepted" and not gv["green"]:
                 err(f"impossible gate transition: {g} decision accepted but {'; '.join(gv['why'])}")
+        for g, v in s.get("gate_records", {}).items():  # local gate records (R222): shown, never forecast, never a release-gate decision
+            for c in v.get("cells", []):
+                if c.get("verdict") not in VERDICTS:
+                    err(f"gate record {g} cell {c.get('id')}: verdict {c.get('verdict')!r} not in {VERDICTS}")
+                elif c["verdict"] != "PASS" and not (c.get("class") and c.get("rerun")):
+                    err(f"gate record {g} cell {c.get('id')}: {c['verdict']} without its class and rerun (R222)")
         for x in self.lanes:
             a, t, est = x.get("activity"), x.get("task"), x.get("estimate") or {}
             if a not in ACTIVITIES:
@@ -606,7 +612,7 @@ def write_state(path, state, expected_revision):
         on_disk = json.loads(path.read_text()).get("revision", 0) if path.exists() else 0
         if on_disk != expected_revision:
             raise SystemExit(f"revision conflict: {path.name} is at {on_disk} but this writer read {expected_revision}; re-run")
-        text = json.dumps({**state, "revision": expected_revision + 1}, indent=2, ensure_ascii=False) + "\n"
+        text = json.dumps({**state, "revision": expected_revision + 1}, indent=1, ensure_ascii=False) + "\n"  # the committed form: indent 1, trailing newline
         atomic_write(path, text)
         state["revision"] = expected_revision + 1
     finally:
@@ -1061,6 +1067,10 @@ manifest v{e(M.m['schema_version'])} · {link(s.get('program_doc', ''))} · gene
          e(", ".join(f"{k} {x}" for k, x in (v.get("candidate") or {}).items() if x) or "none recorded"), f"{v['passed']} / {len(v['cells'])}",
          " ".join(f"{e(c['id'])} {pill(c['verdict'])}" for c in v["cells"] if c.get("verdict") != "PASS"),
          e(f"{v.get('decision') or 'none'} {hm(v.get('decided_at')) if v.get('decided_at') else ''}"), e(v.get("note"))] for g, v in M.gates.items()]))
+    H.append('<h3 style="margin-top:16px">Local gate records (R222)</h3>' + table(["Record", "Manifest gate", "Candidate", "Cells", "Decision", "Ruling", "Evidence"], [
+        [e(g), e(v.get("manifest_gate")), f"<code>{e((v.get('candidate') or {}).get('source'))}</code>",
+         " ".join(f"{e(c['id'])} {pill(c['verdict'])}" for c in v.get("cells", [])), e(f"{v.get('decision')} {v.get('decided_at') or ''}"),
+         e(v.get("ruling")), " ".join(link(x) for x in v.get("evidence", []))] for g, v in s.get("gate_records", {}).items()]))
     mapping = M.m.get("consumer_v1_closure", {}).get("finding_tasks", {})
     H.append('<h3 style="margin-top:16px">Readiness findings (RV)</h3>' + table(["Finding", "Status", "Corrective tasks", "As of", "Source"], [
         [e(f["id"]), pill(f.get("status")), " ".join(f"<code>{e(i)}</code> {pill(M.activity(i))}" for i in mapping.get(f["id"], [])), f"<code>{e(f.get('at'))}</code>",
@@ -1157,6 +1167,9 @@ def render_md(M):
     L += ["## Gates", ""] + mdt(["Gate", "Roots", "Cells PASS", "Not PASS", "Decision", "Note"], [
         [f"{g} **{v['label']}**", ", ".join(f"{r} ({M.tasks[r]['status']})" for r in v["roots"]), f"{v['passed']} / {len(v['cells'])}",
          ", ".join(f"{c['id']} {c['verdict']}" for c in v["cells"] if c.get("verdict") != "PASS"), v.get("decision") or "none", v.get("note")] for g, v in M.gates.items()])
+    L += ["### Local gate records (R222)", ""] + mdt(["Record", "Manifest gate", "Candidate", "Not PASS", "Decision", "Ruling"], [
+        [g, v.get("manifest_gate"), (v.get("candidate") or {}).get("source"), ", ".join(f"{c['id']} {c['verdict']} [{c.get('class')}]" for c in v.get("cells", []) if c["verdict"] != "PASS") or "none",
+         f"{v.get('decision')} {v.get('decided_at') or ''}", v.get("ruling")] for g, v in s.get("gate_records", {}).items()])
     mapping = M.m.get("consumer_v1_closure", {}).get("finding_tasks", {})
     L += ["### Readiness findings (RV)", ""] + mdt(["Finding", "Status", "Corrective tasks", "As of", "Source"], [
         [f["id"], f.get("status"), ", ".join(f"{i} ({M.activity(i)})" for i in mapping.get(f["id"], [])), f.get("at"), mdlink(f.get("source", ""))] for f in s.get("findings", [])])

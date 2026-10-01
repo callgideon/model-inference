@@ -200,3 +200,24 @@ No dedup was made, so there are no line-count pairs. The added files are the reg
 **Wiring.** WR-PL-4 is withdrawn, because the tip already has the W6 lanes. New: **WR-PL-5** (coordinator). Correct the owned_paths of the 7 W6 stubs, which were copied from LAB-R3 (`apps/infrx-api/infrx/rollouts/optimization/`, `pilot.py`, and others), to each lane's own paths. All 36 overlap warnings come from them. If the tip moves again before the merge, run `overlay_merge.py` inside the conflicted merge, then `progress.py` and `progress.py check`.
 
 **Estimate.** Optimistic 0.1 h, likely 0.3 h, pessimistic 1 h; confidence medium. What remains is the coordinator's merge and WR-PL-1.
+
+## Merge (2026-10-01, coordinator merge #70)
+
+Merged `codex/w6-plan-ledger` at head `143d2d92` into `codex/w5-merge-70` (base `50d2b232`) with `--no-ff` as `d9dd43d1`. No conflict: the lane's fix round had already merged the tip (`ef222800`). Verdict ACCEPT_WITH_FIXES, open []. No ruling is numbered at this merge (the lane proposed none).
+
+Wirings, in one follow-up commit:
+
+- **WR-PL-1 applied.** `git apply -p1` of `PLAN-LEDGER-raw/WR-PL-1-progress-gate-records.patch` to `research/plan/scripts/`. Lens PL-3 fixed in `GateRecords.test_records_render_and_do_not_forecast`: the baseline ETA is computed before `gate_records` is set, and the ETA set and each row are asserted unchanged after. `progress.py write_state` now serializes the overlay with indent 1, the committed form, with the trailing newline kept. The new case `Writes.test_committed_overlay_round_trips_byte_identical` checks that a load→write of the committed file is byte-identical apart from the revision line.
+- **Lens PL-1.** I2A is out of the overlay `review_queue`. Its activity stays `review`, and I2A stays planned on purpose. `apply-updates` cannot express a lane that is in review but not queued, so the queue edit went through the single writer `write_state` with an activity-log line (rev 355 → 356).
+- **Lens PL-2.** `apps/app/tests/i3/` is dropped from the I3 lane's owned paths through `updates/I3-20261001T0326Z.json` and `apply-updates` (rev 354 → 355). The path is outside I3's manifest `owned_paths`, and the manifest does not grow in W6.
+- **Lens PL-3 (second lens).** Register row 3 (E4C) gains readiness findings RV-04/08/09/10, closed by P-17 check 8 in the E4C window; blocks testing: no. A log line is added.
+- **WR-PL-2.** `consumer-v1/README.md` gets index entries 9 and 10 and the log line.
+- **WR-PL-3 carried** to the `infra-libs` merge, which owns `tests/i/lab/test_lab_rollout_steps.py` and the comments in `hosted-migrate.sh`. WR-PL-4's RESUME-NOW pointer is the coordinator's (a gitignored file). WR-PL-5 (the W6 stubs' copied LAB-R3 owned paths) stays with the coordinator. The other W6 lanes' update files are left to their own merges.
+- **Also fixed:** the pre-existing `test_validate_plan.test_app_cannot_dispatch_early` KeyError. On the current model, A2 has no `dispatch_after_gate`, and the user's recorded override lifts the gate. The case now asserts that there is no error with the override, and an error once the override is removed.
+
+The overlay is at revision 356 (above the tip's 346). It has 239 lanes with unique ids: every tip lane is present, and W6-PLAN-LEDGER appears once. `progress.py check` gives 0 errors and 39 warnings:
+
+- 11 stale estimates: the window-bound I2A/E3A/I3, plus the eight W6 coordinator stubs, which have no estimate time;
+- 28 overlapping writers, all among the W6 stubs' copied LAB-R3 paths (WR-PL-5).
+
+`validate_plan.py --write-ledger` passes, and the ledger is current.

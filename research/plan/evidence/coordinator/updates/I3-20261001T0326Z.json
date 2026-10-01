@@ -1,0 +1,8 @@
+{
+  "task": "I3",
+  "lane": "I3",
+  "activity": "queued",
+  "at": "2026-10-01T03:26:39Z",
+  "owned_paths": ["tests/integration/ops/", "infra/runbooks/", "infra/alerts/"],
+  "source": "merge #70 (plan-ledger) lens PL-2: apps/app/tests/i3/ dropped from the I3 lane's owned paths - it is outside I3's manifest owned_paths (infra/, tests/integration/) and the manifest does not grow in W6; activity unchanged"
+}

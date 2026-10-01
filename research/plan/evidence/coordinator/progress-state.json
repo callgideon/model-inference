@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 354,
- "updated": "2026-10-01T03:22:20Z",
+ "revision": 356,
+ "updated": "2026-10-01T03:26:46Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -1952,7 +1952,7 @@
    },
    "activity": "queued",
    "started": "2026-09-26T01:18:15Z",
-   "updated": "2026-10-01T03:06:16Z",
+   "updated": "2026-10-01T03:26:39Z",
    "blocker": "I3 proper (operator run) needs BACKEND-READY, the I2A live half, P-01/P-05/P-24/P-25 (overlay keeps the lane queued: the gate dispatches after BACKEND-READY; the prep work is merged and recorded in head/evidence/commands)",
    "next_action": "merged; WR-I3-1 (middleware PUBLIC + I3-ROUTE-03), WR-I3-2 (canary App probe), WR-I3-3 (rules.py merges app.json; test_observe pin a1+o2+p1; mutants layout) applied by the coordinator; GAP-I3-1 (audited signup_grant off) → after the union, point the cutover rollback at 0022's flag writer (I3R-7); I3 proper after BACKEND-READY: X0–X9, C1–C5, Vercel rollback drill, AppDown delivery — GAP-I3-1 / I3R-7 CLOSED at e7b1c272 (G8-FLAG verb; cutover rollback step 2 rewritten).",
    "estimate": {
@@ -1991,7 +1991,6 @@
    ],
    "owned_paths": [
     "tests/integration/ops/",
-    "apps/app/tests/i3/",
     "infra/runbooks/",
     "infra/alerts/"
    ]
@@ -10719,12 +10718,6 @@
  ],
  "review_queue": [
   {
-   "since": "2026-10-01T03:06:16Z",
-   "lane": "I2A",
-   "task": "I2A",
-   "head": "8ca672d0"
-  },
-  {
    "since": "2026-10-01T03:11:37Z",
    "lane": "W6-PLAN-LEDGER",
    "task": "W6-PLAN-LEDGER",
@@ -14091,6 +14084,18 @@
    "by": "W6-PLAN-LEDGER",
    "what": "review → review; head ef222800; estimate likely 1 → 0.3 h (fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h))",
    "source": "updates/W6-PLAN-LEDGER-20261001T0321Z.json"
+  },
+  {
+   "at": "2026-10-01T03:26:39Z",
+   "by": "I3",
+   "what": "queued → queued",
+   "source": "updates/I3-20261001T0326Z.json"
+  },
+  {
+   "at": "2026-10-01T03:26:46Z",
+   "by": "coordinator",
+   "source": "merge #70 (plan-ledger) lens PL-1",
+   "what": "I2A removed from review_queue: the W6 owned-paths update (updates/I2A-20261001T0306Z.json, activity review unchanged) re-queued it; I2A stays planned on purpose (closure note: decision deferred to E4C), activity left as it was. apply-updates cannot express review-but-not-queued, so the single writer (write_state) records the queue edit"
   }
  ],
  "history": {
@@ -16054,10 +16059,14 @@
   "W6-PLAN-LEDGER-20261001T0321Z.json": {
    "status": "applied",
    "at": "2026-10-01T03:22:20Z"
+  },
+  "I3-20261001T0326Z.json": {
+   "status": "applied",
+   "at": "2026-10-01T03:26:39Z"
   }
  },
  "eta": {
-  "computed_at": "2026-10-01T03:22:20Z",
+  "computed_at": "2026-10-01T03:26:39Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
