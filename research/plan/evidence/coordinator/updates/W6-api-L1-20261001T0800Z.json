@@ -1,0 +1,81 @@
+{
+ "task": "W6-api-L1",
+ "slice": "A1, A3, A9, A11 (document), A15 (pilot docstring), WR-L4-1, WR-L4-2",
+ "activity": "review",
+ "head": "51c5863f",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-api-L1",
+ "branch": "codex/w6-api-L1",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/pilot.py",
+  "apps/infrx-api/infrx/lab/compose.py",
+  "apps/infrx-api/infrx/lab/control/app.py",
+  "apps/infrx-api/infrx/lab/workers/__main__.py",
+  "apps/infrx-api/infrx/worker/__main__.py",
+  "apps/infrx-api/infrx/operations/cli.py",
+  "apps/infrx-api/infrx/state/jobstore.py (login parser only)",
+  "apps/infrx-api/tests/g/test_startup.py",
+  "apps/infrx-api/tests/g/mutants.py",
+  "apps/infrx-api/tests/w/ anchors",
+  "apps/infrx-api/infrx/lab/time.py (api-L4's, byte-identical)"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/g/test_startup.py -k composition_root (db2f3445+tests)",
+   "exit": 1,
+   "summary": "RED: No module named 'infrx.lab.compose'; no jobstore.login_user"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/g/test_startup.py -k composition_root",
+   "exit": 0,
+   "summary": "3 passed"
+  },
+  {
+   "cmd": "uv run --frozen python -c 'import infrx.gateway.pilot, infrx.lab.compose'",
+   "exit": 0,
+   "summary": "no cycle"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 pytest -q tests/g tests/w tests/l + 110 files importing touched modules -k 'not mutant_is_killed'",
+   "exit": 0,
+   "summary": "1961 passed, 63 skipped (other keys/MinIO), 4 xfailed"
+  },
+  {
+   "cmd": "INFRX_D_TASK=p3 runmut (touched-file mutants of 13 lists; 4 lists whole)",
+   "exit": 0,
+   "summary": "508 selected, 497 killed, 0 survivors, 1 broken_runner fixed then killed, 10 NOT RUN (cases off-key l4/r2 or need MinIO)"
+  },
+  {
+   "cmd": "pytest touched test_mutants.py -k 'not test_mutant_is_killed' (9 files)",
+   "exit": 0,
+   "summary": "55 passed"
+  },
+  {
+   "cmd": "pytest tests/integration/lab_rollout/test_mutants.py -k 'well_formed or every_case or false_kill'",
+   "exit": 0,
+   "summary": "4 passed; stack mutants NOT RUN (no kept stack)"
+  },
+  {
+   "cmd": "anchor scanner over all *mutants*.py vs db2f3445 baseline",
+   "exit": 0,
+   "summary": "0 new broken anchors (7418 mutants)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1,
+  "pessimistic_h": 3,
+  "confidence": "medium",
+  "basis": "code done and green on p3; remaining = merge resolution with api-L2/api-L4 (tests/g/mutants.py, test_startup.py, g/lab_releases/mutants.py:21-22) and the l4/r2/MinIO-gated mutants rerun on their keys",
+  "at": "2026-10-01T08:00Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-L1-1 merge: g/lab_releases/mutants.py:21-22 -> P = \"lab/compose.py\"; FILES = (F, auth.F, P, T); lab/time.py identical (blob a5d56b67)",
+  "WR-L1-2 api-L4: export routes/lab_pipelines._teacher publicly (lab workers collect_teachers imports the private name)",
+  "WR-L1-3 docstrings rollouts/optimization/__init__.py:171, state/lab_variants.py:9 -> infrx.lab.compose",
+  "WR-L1-4 docs-state: name infrx/lab/compose.py as the Lab composition root beside gateway/pilot.py"
+ ],
+ "evidence": [
+  "research/plan/evidence/w6/api-L1-51c5863.md"
+ ]
+}
