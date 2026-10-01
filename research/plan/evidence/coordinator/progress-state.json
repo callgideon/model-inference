@@ -4,7 +4,7 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
- "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+ "main": "db2f3445",
  "integration_head": "9c7887b8",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
@@ -27,10 +27,11 @@
    "research/plan/evidence/coordinator/2026-09-24-session-03.md (lines 525, 589-595)",
    "research/plan/consumer-v1/09-path-to-internal-testing.md (log 2026-09-29T09:50Z to 2026-10-01T02:21Z)"
   ],
-  "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
+  "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3.",
+  "main": "db2f3445 (fast-forwarded 2026-10-01T07:05Z from 41693d5d; the App's Vercel project infrx-app builds main — the wave-6 tip; the box's consumer runtime stays installed at 41693d5d until a consumer window)"
  },
- "revision": 385,
- "updated": "2026-10-01T06:53:25Z",
+ "revision": 386,
+ "updated": "2026-10-01T07:10:57Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
