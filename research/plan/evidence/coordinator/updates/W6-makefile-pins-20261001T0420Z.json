@@ -3,30 +3,111 @@
   "lane": "makefile-pins",
   "slice": "DT-10, DT-11, DT-16 + guarded api-lint/api-typecheck",
   "activity": "review",
-  "at": "2026-10-01T04:20:00Z",
-  "head": "f17e8d40",
+  "at": "2026-10-01T05:00:00Z",
+  "head": "8a8e9c17",
   "base": "2add8e0a",
   "worktree": ".claude/worktrees/codex-w6-makefile-pins",
   "branch": "codex/w6-makefile-pins",
-  "owned_paths": ["Makefile", "tests/integration/test_makefile_mutant_lists.py", "tests/integration/mutants.py", "tests/integration/README.md", "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4.md", "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4-timings.txt", "research/plan/evidence/coordinator/updates/W6-makefile-pins-20261001T0420Z.json"],
-  "commands": [
-    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py -k exactly_once (2add8e0a Makefile)", "exit": 1, "summary": "red first: tests/h/test_mutants.py named 2 times, lab_local/test_mutants.py 0 times"},
-    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "5 passed"},
-    {"cmd": "tests/integration/mutants.py --only mpm01..mpm07", "exit": 0, "summary": "7/7 killed, pristine baselines green"},
-    {"cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py", "exit": 0, "summary": "82 passed, 12 skipped (stack) in 223.68s"},
-    {"cmd": "INFRX_MUTANTS=all pytest --collect-only <api-mutants line 1> before/after", "exit": 0, "summary": "5931 -> 5892; delta 39 = tests/h's cases, still run once on line 2"},
-    {"cmd": "pytest tests/integration/{pin,test_run,test_harness,test_preflight,test_fake_vllm,test_lab_package_isolation}.py", "exit": 1, "summary": "182 passed, 2 failed, both pre-existing on 2add8e0a (e3bm62 stale anchor; gates.API_SUITES vs discovered suites)"},
-    {"cmd": "make -n check", "exit": 0, "summary": "15 prerequisites, 0 duplicates"},
-    {"cmd": "make api-lint api-typecheck", "exit": 0, "summary": "not run: no ruff/pyright config yet (api-L5)"},
-    {"cmd": "make <13 container-free targets>, timed sequentially", "exit": 0, "summary": "all exit 0; lab-mutants 838.3s, console-mutants 871.1s, rest <= 26s"},
-    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  "owned_paths": [
+    "Makefile",
+    "tests/integration/test_makefile_mutant_lists.py",
+    "tests/integration/mutants.py",
+    "tests/integration/README.md",
+    "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4.md",
+    "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4-timings.txt",
+    "research/plan/evidence/coordinator/updates/W6-makefile-pins-20261001T0420Z.json"
   ],
-  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "high", "basis": "lane work done in ~1.5h; remaining = swapping in api-L5's exact api-lint/api-typecheck lines once sent (two recipes) and one review round", "at": "2026-10-01T04:20:00Z"},
+  "commands": [
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py -k exactly_once (2add8e0a Makefile)",
+      "exit": 1,
+      "summary": "red first: tests/h/test_mutants.py named 2 times, lab_local/test_mutants.py 0 times"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 0,
+      "summary": "5 passed"
+    },
+    {
+      "cmd": "tests/integration/mutants.py --only mpm01..mpm07",
+      "exit": 0,
+      "summary": "7/7 killed, pristine baselines green"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/integration/lab_local/test_mutants.py",
+      "exit": 0,
+      "summary": "82 passed, 12 skipped (stack) in 223.68s"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest --collect-only <api-mutants line 1> before/after",
+      "exit": 0,
+      "summary": "5931 -> 5892; delta 39 = tests/h's cases, still run once on line 2"
+    },
+    {
+      "cmd": "pytest tests/integration/{pin,test_run,test_harness,test_preflight,test_fake_vllm,test_lab_package_isolation}.py",
+      "exit": 1,
+      "summary": "182 passed, 2 failed, both pre-existing on 2add8e0a (e3bm62 stale anchor; gates.API_SUITES vs discovered suites)"
+    },
+    {
+      "cmd": "make -n check",
+      "exit": 0,
+      "summary": "15 prerequisites, 0 duplicates"
+    },
+    {
+      "cmd": "make api-lint api-typecheck",
+      "exit": 0,
+      "summary": "not run: no ruff/pyright config yet (api-L5)"
+    },
+    {
+      "cmd": "make <13 container-free targets>, timed sequentially",
+      "exit": 0,
+      "summary": "all exit 0; lab-mutants 838.3s, console-mutants 871.1s, rest <= 26s"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py (new case, df1266cf pin)",
+      "exit": 1,
+      "summary": "red first: test_signup.py drop undetected; 1 failed, 5 passed"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 0,
+      "summary": "6 passed (0-MP-RV-1 fixed)"
+    },
+    {
+      "cmd": "tests/integration/mutants.py --only mpm01..mpm08",
+      "exit": 0,
+      "summary": "8/8 killed; list 307 -> 308"
+    },
+    {
+      "cmd": "reviewer repro: drop tests/d/test_signup.py from Makefile, run pin",
+      "exit": 1,
+      "summary": "5 failed, 1 passed (now reported)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.25,
+    "pessimistic_h": 1.0,
+    "confidence": "high",
+    "basis": "fix round done; remaining = api-L5's exact api-lint/api-typecheck lines when sent",
+    "at": "2026-10-01T05:00:00Z"
+  },
   "blockers": [],
   "wiring_requests": [
     "api-L5 -> makefile-pins/coordinator: send the exact api-lint/api-typecheck recipes; the guarded ones at f17e8d40 run `uv run --frozen ruff check infrx deploy tests` and `uv run --frozen pyright <pkg>` per infrx/*/ (ruff/pyright must enter the dev group + uv.lock)",
     "docs-state: CLAUDE.md Commands: add `make api-lint`, `make api-typecheck` to the canonical targets and 'measured per-target wall-clocks: tests/integration/README.md (W6)'; ENVIRONMENT.md the same pointer",
     "api-L2 or coordinator (after api-L2 merges): re-point tests/integration/mutants.py e3bm62 before/after to the then-current `ROUTERS = (...)` line in infrx/gateway/app.py (after = the same tuple without `uploads`); stale since f4bceeba"
   ],
-  "evidence": ["research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4.md", "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4-timings.txt"]
+  "evidence": [
+    "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4.md",
+    "research/plan/evidence/w6/MAKEFILE-PINS-f17e8d4-timings.txt"
+  ],
+  "fix_round": {
+    "0-MP-RV-1": "fixed at 8a8e9c17"
+  }
 }

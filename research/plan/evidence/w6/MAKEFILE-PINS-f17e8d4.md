@@ -80,3 +80,21 @@ api-mutants ≥ 2 h 42 min (G-GATES-9b21339, 2026-09-27, pre-Lab lists) + lab_lo
 - Console runners are not pinned (apps/app/tests/c/run-mutants.mjs is named twice by design: `--self-test` then the run);
   extending the pin to console-mutants needs a self-test-aware count — not in this brief.
 - CLAUDE.md commands / ENVIRONMENT.md timing line (audit DT-16 wording) belong to docs-state: wiring request in the handback.
+
+## Fix round (review of df1266cf; fix at 8a8e9c17)
+
+**0-MP-RV-1 (major) — fixed.** The pin found Python runners only by the `test_*mutants*.py` glob, so
+`apps/infrx-api/tests/d/test_signup.py` (the `INFRX_MUTANTS=all` runner for `tests/d/signup_mutants.py`) could be
+dropped from `api-mutants` silently. A scan of every `test_*.py` reading `INFRX_MUTANTS` finds it as the only runner
+outside the glob (the pin itself and `tests/integration/test_preflight.py` read it without running a list).
+- Test first: `test_a_runner_outside_the_glob_is_found_by_reading_infrx_mutants` (drop ` tests/d/test_signup.py`
+  → reported 0 times) — red on df1266cf's pin: `1 failed, 5 passed`.
+- Fix: `runners()` adds every `test_*.py` under the Python bases that reads `INFRX_MUTANTS`, minus `NOT_RUNNERS`
+  (pin, test_preflight.py). `pytest tests/integration/test_makefile_mutant_lists.py`: `6 passed`.
+- Reviewer's repro at 8a8e9c17 (`sed -i 's# tests/d/test_signup.py##' Makefile`): the pin now fails
+  (`5 failed, 1 passed`); Makefile restored with `git checkout Makefile`.
+- Mutants: `mpm08` (content scan off: `and False}`) **killed**; mpm01–mpm07 re-run, all killed. 8/8.
+  List size 307 → 308 (`mutants.py --list`).
+- Side check: `pytest tests/integration/test_preflight.py` 58 passed, 1 failed
+  (`test_a_green_consumer_local_composition_passes_on_its_own_namespace`: `ModuleNotFoundError: infrx` at its
+  in-test import; file untouched by this lane, not caused by the fix).
