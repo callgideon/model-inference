@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import runpy
-import subprocess
 import sys
 
 import pytest
@@ -318,43 +318,14 @@ def test_ops_recover__every_evidence_path_the_record_names_exists():
             assert (support.REPO / path).exists(), (real["sha"], path)
 
 
-def test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them(tmp_path):
-    """KGR4-RV-1: the second window's reviewed patch applies only on hosted-migrate.sh with the
-    first window's patch applied, and leaves EXPECTED_PENDING 0057-0059 and the W7 post-check at
-    0059; launch-v1.sh's THROUGH table maps each window to hosted's prior level and its patch, and
-    `window` pushes the release's commits as launch/window-$THROUGH, never claude/consumer-v1 (R264)."""
-    rollout = support.REPO / "infra" / "lab" / "rollout"
-    (tmp_path / "infra" / "rollout").mkdir(parents=True)
-    script = tmp_path / "infra" / "rollout" / "hosted-migrate.sh"
-    script.write_bytes((support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_bytes())
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-
-    def apply(*args):
-        return subprocess.run(["git", "apply", *args], cwd=tmp_path, capture_output=True, text=True)
-
-    first = str(rollout / "hosted-migrate-0052-0056.patch")
-    second = str(rollout / "hosted-migrate-0057-0059.patch")
-    # The ordering proof starts from the file BEFORE the first window: the tree as it stands carries
-    # that window's patch since 2026-09-30 (launch/window-0056 merged) and, after the second window,
-    # both — reverse whatever is there first (no git history: the mutant layout is a plain copy).
-    apply("-R", second)                                          # only after the second window
-    undone = apply("-R", first)
-    assert undone.returncode == 0, undone.stderr
-    assert apply("--check", second).returncode != 0          # not before the first window's
-    today = (support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_text()
-    assert ('\nEXPECTED_PENDING="0052, 0053, 0054, 0055, 0056"' in today      # hosted 0001-0056 since 2026-09-30T07:38Z
-            or '\nEXPECTED_PENDING="0057, 0058, 0059"' in today)             # or 0001-0059 after the second window
-    done = apply(first)
-    assert done.returncode == 0, done.stderr
-    done = apply("--check", second)
-    assert done.returncode == 0, done.stderr
-    assert apply(second).returncode == 0
-    text = script.read_text()
-    assert '\nEXPECTED_PENDING="0057, 0058, 0059"' in text
-    assert """case "$POST" in *"0059 lab_control_grants_2"$'\\n'"nothing pending") ;;""" in text
-    assert 'case "$HOSTED_APPLIED" in *"0056 lab_control_grants") ;;' in text
-    launch = (rollout / "launch-v1.sh").read_text()
-    assert '  0056) HOSTED_AT="0051 lab_import_jobs"; PATCH=infra/lab/rollout/hosted-migrate-0052-0056.patch' in launch
-    assert '  0059) HOSTED_AT="0056 lab_control_grants"; PATCH=infra/lab/rollout/hosted-migrate-0057-0059.patch' in launch
-    assert '  git push origin "HEAD:refs/heads/launch/window-$THROUGH"' in launch
-    assert "git push origin claude/consumer-v1" not in launch
+def test_ops_recover__hosted_migrate_expects_exactly_the_migrations_after_its_anchor():
+    """INFRA-03/DT-12 (supersedes KGR4-RV-1's patch-order case; the spent window patches are
+    research/plan/evidence/i/hosted-migrate-*.patch): hosted-migrate.sh's EXPECTED_PENDING is this
+    tree's migrations after its HOSTED_APPLIED anchor (computed as lab-migrate.sh computes it) and its
+    W7 post-check names the newest - so the next window is one reviewed edit of those three lines."""
+    text = (support.REPO / "infra" / "rollout" / "hosted-migrate.sh").read_text()
+    at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ', text)[1]
+    files = sorted(p.name for p in (support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql"))
+    assert re.search(r'^EXPECTED_PENDING="([^"]*)"', text, re.M)[1] == ", ".join(f[:4] for f in files if f[:4] > at)
+    newest = files[-1][:-4]
+    assert f'case "$POST" in *"{newest[:4]} {newest[5:]}"$\'\\n\'"nothing pending") ;;' in text
