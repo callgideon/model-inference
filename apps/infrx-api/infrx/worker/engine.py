@@ -58,7 +58,7 @@ import codecs
 import contextlib
 import json
 import math
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from itertools import zip_longest
 from types import SimpleNamespace
@@ -677,7 +677,7 @@ class VllmEngine:
                 break
         return body[:ERROR_BODY_MAX_BYTES].decode("utf-8", "replace")
 
-    async def _run(self, stream: EngineStream) -> AsyncIterator[EngineEvent]:
+    async def _run(self, stream: EngineStream) -> AsyncGenerator[EngineEvent, None]:
         """The generate boundary: a refusal, an `EngineFailure`, or nothing at all."""
         inner = self._generate(stream)
         try:
@@ -695,7 +695,7 @@ class VllmEngine:
             # loop finalises an abandoned async generator.
             await inner.aclose()
 
-    async def _generate(self, stream: EngineStream) -> AsyncIterator[EngineEvent]:
+    async def _generate(self, stream: EngineStream) -> AsyncGenerator[EngineEvent, None]:
         lease = stream.lease
         key = (lease.job_id, lease.generation)
         if key in self.finished:
@@ -751,7 +751,7 @@ class VllmEngine:
                 await self.reprepare(stream.lease.job_id, videos[0].profile_version)
 
     async def _attempt(self, stream: EngineStream,
-                       key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
+                       key: tuple[str, int]) -> AsyncGenerator[EngineEvent, None]:
         prepared = stream.prepared
         await self._hold_media(stream)                   # released by `_generate`
         body = self.upstream_body(prepared)              # DomainError before anything runs

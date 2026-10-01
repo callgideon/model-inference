@@ -50,10 +50,22 @@ import logging
 import signal
 import time
 from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..contracts.records import IndexEvent
 from ..observe.metrics import CONTENT_TYPE, record_pool, record_reconciliation
 from .loop import DrainReport, WorkerLoop
+
+if TYPE_CHECKING:                                # A13: annotations only, nothing at runtime
+    from collections.abc import Awaitable, Callable, Coroutine
+
+    from ..contracts.ports import Engine, JobStore
+    from ..observe.metrics import Registry
+
+    class ReapedStore(JobStore, Protocol):
+        """The store the reaper drives: `ports.JobStore` plus the sweep's report."""
+
+        unsettleable: dict[str, str]
 
 log = logging.getLogger("infrx.worker")
 
@@ -95,19 +107,20 @@ class PgReconciliation:
 @dataclass
 class WorkerService:
     loop: WorkerLoop
-    jobs: object                                 # ports.JobStore
-    engine: object                               # ports.Engine
+    jobs: ReapedStore                            # ports.JobStore
+    engine: Engine                               # ports.Engine
     concurrency: int = 1
     drain_s: float | None = None                 # None: the generation budget
     reap_interval_s: float = REAP_INTERVAL_S
     health_host: str = "127.0.0.1"
     health_port: int | None = None               # None: no listener (embedded use)
-    metrics: object | None = None                # observe.metrics.Registry, on GET /metrics
-    pool: object | None = None                   # psycopg_pool, read into metrics at scrape
+    metrics: Registry | None = None              # observe.metrics.Registry, on GET /metrics
+    pool: Any | None = None                      # psycopg_pool, read into metrics at scrape
     preparation: WorkerLoop | None = None        # PREP-WORKER: the prepare_dispatch pool
     preparation_concurrency: int = 1
-    reconciliation: object | None = None         # S3 F4: async () -> (drift, unknown holds)
-    housekeeping: dict = field(default_factory=dict)   # name -> () -> coroutine, run forever
+    reconciliation: Callable[[], Awaitable[tuple[int, int]]] | None = None   # S3 F4
+    housekeeping: dict[str, Callable[[], Coroutine[Any, Any, None]]] = field(
+        default_factory=dict)                    # name -> () -> coroutine, run forever
     reaped: int = 0
     reap_errors: int = 0
     last_drain: DrainReport | None = None
@@ -115,7 +128,7 @@ class WorkerService:
     _reaper: asyncio.Task | None = field(default=None, repr=False)
     _preparing: asyncio.Task | None = field(default=None, repr=False)
     _server: asyncio.AbstractServer | None = field(default=None, repr=False)
-    _housekeeping: list = field(default_factory=list, repr=False)
+    _housekeeping: list[asyncio.Task] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
         self._check_loopback()
@@ -230,23 +243,25 @@ class WorkerService:
             running.add_signal_handler(sig, stop.set)
         try:
             await self.start()
+            pool, reaper, preparation = self._pool, self._reaper, self.preparation
+            assert pool is not None and reaper is not None     # start() created both
             waiting = asyncio.create_task(stop.wait())
-            while not self.loop._tasks and not self._pool.done():
+            while not self.loop._tasks and not pool.done():
                 await asyncio.sleep(0)            # the pool's first step creates its runners
-            while self._preparing is not None and not self.preparation._tasks \
-                    and not self._preparing.done():
+            while self._preparing is not None and preparation is not None \
+                    and not preparation._tasks and not self._preparing.done():
                 await asyncio.sleep(0)
             # ponytail: crash-only - a transient store error costs a drain and a restart; a
             # runner that retries in place (backoff plus its own liveness signal) is the
             # upgrade if measured blips make that matter.
-            await asyncio.wait({waiting, self._pool, self._reaper, *self.loop._tasks,
+            await asyncio.wait({waiting, pool, reaper, *self.loop._tasks,
                                 *self._preparation_tasks()},
                                return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
             # Each death with its cause: `_died()` retrieves the exception and `gather` in
             # stop() swallows it, so nothing else would ever print it. The pool itself only
             # raises before it has runners (a bad `concurrency`).
-            for task in (*self._died(), self._pool, *self._preparation_tasks()[:1]):
+            for task in (*self._died(), pool, *self._preparation_tasks()[:1]):
                 if task.done() and not task.cancelled() and task.exception() is not None:
                     log.error("%s died; draining for a restart", task.get_name(),
                               exc_info=task.exception())
@@ -265,7 +280,7 @@ class WorkerService:
 
     def _preparation_tasks(self) -> tuple[asyncio.Task, ...]:
         """The preparation pool and its runners, when there is one."""
-        if self._preparing is None:
+        if self._preparing is None or self.preparation is None:
             return ()
         return (self._preparing, *self.preparation._tasks)
 

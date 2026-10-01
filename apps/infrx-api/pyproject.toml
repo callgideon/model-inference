@@ -34,6 +34,18 @@ pythonpath = ["."]
 addopts = "--import-mode=importlib"
 markers = ["pg: runs on the lane's task-local PostgreSQL"]
 
+# A13 (W6): `make api-typecheck` = `uvx pyright@1.1.414` from this directory, gated on the
+# baseline error count. `include` keeps the run off `.venv` (an unscoped run exhausts node's
+# heap, exit 250); `uvx pyright@1.1.414 infrx/<pkg>` checks one package. Basic mode;
+# `RefOf(...)` call annotations are pydantic's, not a typing error.
+[tool.pyright]
+include = ["infrx", "deploy"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+reportInvalidTypeForm = false
+
 # A14 (W6): `make api-lint` = `uvx ruff@0.15.12 check` from this directory. ruff's
 # default rules (E4, E7, E9, F) plus pyupgrade on the pinned Python.
 [tool.ruff]

@@ -267,8 +267,8 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        "        return [task for task in (*self.loop._tasks, *self._preparation_tasks())",
        REAPER_DEAD),
     _m("serve_ignores_a_dead_reaper", "a dead reaper ends serve (the unit restarts)",
-       V, "{waiting, self._pool, self._reaper, *self.loop._tasks,",
-       "{waiting, self._pool, *self.loop._tasks,", REAPER_DEAD),
+       V, "{waiting, pool, reaper, *self.loop._tasks,",
+       "{waiting, pool, *self.loop._tasks,", REAPER_DEAD),
     _m("start_does_not_reap", "a restart requeues what died with its predecessor first",
        V, "        await self.reap_once()                    # a restart requeues",
        "        pass                    # a restart requeues", RESTART),
@@ -310,15 +310,15 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        V, "            running.add_signal_handler(sig, stop.set)",
        "            pass", SIGTERM),
     _m("serve_waits_only_for_a_signal", "a pool that died ends serve by itself",
-       V, "            await asyncio.wait({waiting, self._pool, self._reaper, "
+       V, "            await asyncio.wait({waiting, pool, reaper, "
           "*self.loop._tasks,\n"
           "                                *self._preparation_tasks()},\n"
           "                               return_when=asyncio.FIRST_COMPLETED)",
        "            await waiting", READY, DEAD),
     # --- review S1: a pool one runner short ---------------------------------------------
     _m("serve_waits_for_the_whole_pool", "one dead runner ends serve (the unit restarts)",
-       V, "{waiting, self._pool, self._reaper, *self.loop._tasks,",
-       "{waiting, self._pool, self._reaper,", DEAD),
+       V, "{waiting, pool, reaper, *self.loop._tasks,",
+       "{waiting, pool, reaper,", DEAD),
     _m("serve_skips_the_drain", "serve drains what still runs before it returns",
        V, "            return await self.stop()", "            return DrainReport()",
        SIGTERM, DEAD),
@@ -326,10 +326,10 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        V, "                              exc_info=task.exception())",
        "                              exc_info=None)", DEAD),
     _m("runner_death_unlogged", "a runner or reaper death is logged",
-       V, "            for task in (*self._died(), self._pool, *self._preparation_tasks()[:1]):",
-       "            for task in (self._pool, *self._preparation_tasks()[:1]):", DEAD),
+       V, "            for task in (*self._died(), pool, *self._preparation_tasks()[:1]):",
+       "            for task in (pool, *self._preparation_tasks()[:1]):", DEAD),
     _m("pool_death_unlogged", "a pool that raised is logged",
-       V, "            for task in (*self._died(), self._pool, *self._preparation_tasks()[:1]):",
+       V, "            for task in (*self._died(), pool, *self._preparation_tasks()[:1]):",
        "            for task in (*self._died(), *self._preparation_tasks()[:1]):", DEAD),
     _m("dead_runner_uncounted", "readiness counts the runners that died",
        V, "        return [task for task in (*self.loop._tasks, *self._preparation_tasks(), "
