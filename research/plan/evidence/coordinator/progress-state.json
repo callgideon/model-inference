@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
- "integration_head": "1db1387f",
+ "integration_head": "100a5d32",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 378,
- "updated": "2026-10-01T05:44:28Z",
+ "revision": 379,
+ "updated": "2026-10-01T05:55:12Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10936,7 +10936,7 @@
   {
    "id": "W6-PGRESTORE-TESTS",
    "task": null,
-   "slice": "wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_d73a757d-83a",
+   "slice": "wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_d73a757d-83a; merged #77",
    "agent": "opus",
    "branch": "codex/w6-pgrestore-tests",
    "worktree": ".claude/worktrees/codex-w6-pgrestore-tests",
@@ -10947,11 +10947,11 @@
     "prefix": "infrx-i3b",
     "db": "task-local"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T05:41:24Z",
+   "updated": "2026-10-01T05:55:12Z",
    "blocker": null,
-   "next_action": "merge batch #77 (PGR-1 mixed-roles case + i3bm40h; PGR-2 privilege assertions + i3bm40i)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 3,
@@ -11343,22 +11343,22 @@
   {
    "id": "W6-MERGE-77",
    "task": null,
-   "slice": "merge batch #77 (Opus): pgrestore-tests d0bb2299 (+PGR-1/PGR-2 cases and mutants; the D-form pre-existing problems registered); workflow (see RESUME-NOW)",
+   "slice": "merge batch #77 (Opus): pgrestore-tests d0bb2299 (+PGR-1/PGR-2 cases and mutants; the D-form pre-existing problems registered); workflow wf_f83f9899-f41; integrated at 100a5d32",
    "agent": "opus",
    "branch": "codex/w5-merge-77",
    "worktree": ".claude/worktrees/codex-w5-merge-77",
    "base": "c56cfce5",
-   "head": null,
+   "head": "1b5d205f",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T05:41:24Z",
-   "updated": "2026-10-01T05:41:24Z",
+   "updated": "2026-10-01T05:55:12Z",
    "blocker": null,
-   "next_action": "integrate",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
