@@ -41,8 +41,7 @@ BACKUP="$BACKUP_ROOT/hosted-$STAMP"
 LOG="$BACKUP_ROOT/migrate-$STAMP.log"       # outside restore.md's hosted-* prune glob
 CONTAINER=infrx-rollout-restore
 LOCALPW=infrx-rollout-local
-aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
-say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
+. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"; HOST_LOG=$LOG   # aws, say (tee -a $LOG), ssm_value
 OWN=; VERIFIED=; STARTED=; WROTE=
 # errexit-safe: local cleanup always completes; implicit set -e exits are normalized to 10 (before any
 # hosted write) or 20 (after one), the documented codes 0/2/3/10/20 pass through unchanged
@@ -58,7 +57,7 @@ fi
 command -v ss >/dev/null && docker info >/dev/null 2>&1 || { say "stop: ss or docker unavailable"; exit 3; }
 [ -z "$(ss -Hltn "sport = :$PORT")" ] || { say "stop: port $PORT is busy"; exit 3; }
 docker container inspect "$CONTAINER" >/dev/null 2>&1 && { say "stop: container $CONTAINER exists (left as is)"; exit 3; }
-PGPASSWORD=$(aws ssm get-parameter --with-decryption --name /INFRX-SUPABASE-PROD/db_password --query Parameter.Value --output text)
+PGPASSWORD=$(ssm_value /INFRX-SUPABASE-PROD/db_password)
 [ -n "$PGPASSWORD" ] || { say "stop: empty db password from SSM"; exit 3; }
 export PGPASSWORD
 

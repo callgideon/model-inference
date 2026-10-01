@@ -5,7 +5,8 @@
 #     ANON_KEY_PARAM=/model-inference/lab/supabase_anon_key \
 #     SUPABASE_URL=https://<project>.supabase.co LAB_ORIGIN=https://lab.callbill.ai
 #   infra/rollout/ssm.sh infra/lab/rollout/steps/40-lab-control.sh STATE=off
-# on: /etc/infrx-lab-control.env (root, 0600, by rename) from the two SSM parameters (read by
+# on: /etc/infrx-lab-control.env (ubuntu:ubuntu, 0600, by rename: the unit runs docker as
+# User=ubuntu, which reads --env-file) from the two SSM parameters (read by
 # NAME on the box) and the two https origins, INFRX_LAB_IMAGE from 20-lab-image.sh; then the
 # marker, enable + restart, and 127.0.0.1:8003/readyz. off: disable --now, marker removed.
 # Exit 2 = refused before any change; 4 = started but not ready (journalctl -u infrx-lab-control).

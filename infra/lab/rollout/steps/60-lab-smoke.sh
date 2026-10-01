@@ -8,7 +8,7 @@ set -euo pipefail
 STEP=60-lab-smoke
 repo=${REPO:-/home/ubuntu/model-inference}
 . "$repo/infra/lab/rollout/lib.sh"
-READY_S=${READY_S:-10}
+READY_S=${READY_S:-30}                  # a control restart during the smoke takes longer than 10 s
 bad=0
 check() {  # check NAME PORT
   if ready "$2"; then say "PASS $1 127.0.0.1:$2/readyz"; else say "FAIL $1 127.0.0.1:$2/readyz"; bad=1; fi
