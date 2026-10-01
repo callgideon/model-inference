@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
- "integration_head": "100a5d32",
+ "integration_head": "a2608932",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 380,
- "updated": "2026-10-01T06:03:49Z",
+ "revision": 381,
+ "updated": "2026-10-01T06:08:44Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -1236,9 +1236,9 @@
    },
    "activity": "queued",
    "started": null,
-   "updated": "2026-10-01T03:00:09Z",
-   "blocker": "the operator's certify window on the box at the launched release 41693d5d (certify-window.sh stops pinning d3a99e01 in W6 lane certify-release, INFRA-02)",
-   "next_action": "State 2026-10-01 (W6 plan-ledger, INT-01): hosted 0001-0059 and the box runtime 41693d5d (CREDIT) are live; the Lab control unit is ON at 7ecbab0e and lab.callbill.ai serves the Lab app. The four remaining steps, in order: (1) members - provider org infrx-internal + tester memberships on hosted (launch-v1.sh members; lab-release.sh members after W6); (2) main - fast-forward origin/main 41693d5d to the post-W6 tip (operator); (3) E4C certify on the box at the served release (certify-window.sh with RELEASE as an input, e4c-certify.sh; then the BACKEND-READY and APP-PILOT decisions; E1B/E4/E3A/I3 cells are window-bound on the same run); (4) one tester's internal-testing checklist (08-lab-internal-testing-rollout.md §8) recorded as INTERNAL-TESTING accepted. Register: research/plan/consumer-v1/10-carried-work-register.md",
+   "updated": "2026-10-01T06:08:44Z",
+   "blocker": "the operator runs the certify window: /tmp/e4c (certify-window.sh unpinned at merge #78; inputs provisioned)",
+   "next_action": "operator: /tmp/e4c from a real terminal (DRY_RUN=1 first) → BACKEND-READY (P-17 checks) → I2A/E3A/I3/E4 → APP-PILOT",
    "estimate": {
     "optimistic_h": null,
     "likely_h": null,
@@ -10899,7 +10899,7 @@
   {
    "id": "W6-CERTIFY-RELEASE",
    "task": null,
-   "slice": "wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_41fb9a88-ad1",
+   "slice": "wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_41fb9a88-ad1; merged #78",
    "agent": "opus",
    "branch": "codex/w6-certify-release",
    "worktree": ".claude/worktrees/codex-w6-certify-release",
@@ -10910,11 +10910,11 @@
     "prefix": "infrx-m6",
     "db": "task-local"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T05:44:28Z",
+   "updated": "2026-10-01T06:08:44Z",
    "blocker": null,
-   "next_action": "merge batch #78 (PRIORITY: unblocks the E4C window; README patch; WR-IL-2; CR minors)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -11385,22 +11385,22 @@
   {
    "id": "W6-MERGE-78",
    "task": null,
-   "slice": "merge batch #78 (Opus): certify-release 95f680a8 (+the README patch, WR-IL-2 host-lib, CR-2/3/5 minors; the pinned-per-LOGDIR RELEASE/MIGRATION_VERSION from the fix round); workflow (see RESUME-NOW)",
+   "slice": "merge batch #78 (Opus): certify-release 95f680a8 (+the README patch, WR-IL-2 host-lib, CR-2/3/5 minors; the pinned-per-LOGDIR RELEASE/MIGRATION_VERSION from the fix round); workflow wf_f3681060-6f0; integrated at a2608932",
    "agent": "opus",
    "branch": "codex/w5-merge-78",
    "worktree": ".claude/worktrees/codex-w5-merge-78",
    "base": "c56cfce5",
-   "head": null,
+   "head": "6245378a",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T05:44:28Z",
-   "updated": "2026-10-01T05:44:28Z",
+   "updated": "2026-10-01T06:08:44Z",
    "blocker": null,
-   "next_action": "integrate → the operator runs /tmp/e4c",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
