@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 07:16Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 387, updated 2026-10-01 07:16Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 07:22Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 388, updated 2026-10-01 07:22Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -26,7 +26,7 @@ Remaining, in order:
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `bb378d33`), base `dff31efc`, main `db2f3445`.
+- Integration branch `claude/consumer-v1` (head `541570f7`), base `dff31efc`, main `db2f3445`.
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
 - Agent slots: 16 total, 6 active lanes, 2 reserved.
@@ -138,7 +138,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (154.5 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (154.6 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -432,7 +432,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: W6-API-L3 (running) and W6-API-L4 (review) both own tests/i/ / tests/i/lab_control/
 - warning: overlapping writers: W6-API-L3 (running) and W6-MERGE-79 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
 - warning: overlapping writers: W6-API-L4 (review) and W6-MERGE-79 (running) both own apps/infrx-api/tests/g/lab_*/ / apps/infrx-api/tests/g/lab_releases/
-- warning: 10 update file(s) not applied yet: W6-CERTIFY-RELEASE-20261001T0450Z.json, W6-docs-state-20261001T0335Z.json, W6-infra-libs-20261001T0324Z.json, W6-lab-A-20261001T0300Z.json, W6-lab-B-20261001T0413Z.json, W6-lab-D-20261001T0538Z.json, W6-lab-E-20261001T0404Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json, W6-pgrestore-tests-20261001T0500Z.json (run apply-updates)
+- warning: 11 update file(s) not applied yet: W6-CERTIFY-RELEASE-20261001T0450Z.json, W6-api-L3-20261001T0620Z.json, W6-docs-state-20261001T0335Z.json, W6-infra-libs-20261001T0324Z.json, W6-lab-A-20261001T0300Z.json, W6-lab-B-20261001T0413Z.json, W6-lab-D-20261001T0538Z.json, W6-lab-E-20261001T0404Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json, W6-pgrestore-tests-20261001T0500Z.json (run apply-updates)
 
 ## Pending inputs
 

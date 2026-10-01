@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "db2f3445",
- "integration_head": "bb378d33",
+ "integration_head": "541570f7",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -30,8 +30,8 @@
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3.",
   "main": "db2f3445 (fast-forwarded 2026-10-01T07:05Z from 41693d5d; the App's Vercel project infrx-app builds main — the wave-6 tip; the box's consumer runtime stays installed at 41693d5d until a consumer window)"
  },
- "revision": 387,
- "updated": "2026-10-01T07:16Z",
+ "revision": 388,
+ "updated": "2026-10-01T07:22Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10647,7 +10647,9 @@
     "pins.py",
     "tests/i/"
    ],
-   "wiring_requests": []
+   "wiring_requests": [],
+   "status": "integrated",
+   "note": "merge #81 integrated 541570f7"
   },
   {
    "id": "W6-API-L4",
