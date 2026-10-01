@@ -42,26 +42,29 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
 from pydantic import Field
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
+from ...contracts.v2.money_units import ProviderUsd
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...datasets.imports import write_once
-from ...contracts.v2.money_units import ProviderUsd
 from ...datasets.versions import MAX_EXPORT_TTL_S
 from ...judge.cost import JUDGE_MODE_LIVE, worst_case
 from ...judge.dryrun import MAX_CANDIDATES
 from ...judge.submit import require_own_payer
+from ...lab.time import iso_z
 from ...pipelines import annotations as p1
 from ...pipelines import teachers as p2
 from ...pipelines import training as p3
 from .. import lab_auth
-from .lab_evaluations import held, lab_actor, lab_body, require
+from ..lab_auth import Actor, held, lab_actor, lab_body, require
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 PIPELINES_PREFIX = "/lab/v1/pipelines"
 MAX_BODY_BYTES = 4 * 2**20                  # a label import's rows (the Lab caps them at 1 MB)
@@ -160,16 +163,18 @@ class RunListing(Protocol):
 
     async def run_rows(self, provider_org_id: str) -> Sequence[tuple[str, dict[str, Any]]]:
         """(external_run_id, the ledger row) of every run of the provider."""
+        ...
 
     async def checkpoint_rows(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
         """Every checkpoint receipt (D7) of the provider with P3's outcome note:
         `{checkpoint_id, external_run_ref, artifact_digest, state, reason}`."""
+        ...
 
 
 @dataclass(frozen=True)
 class LabPipelines:
     sessions: lab_auth.Sessions
-    access: object                          # infrx.lab.access.LabAccess (its store: members)
+    access: LabAccess                       # its store: members
     store: object | None = None             # D7: infrx.state.lab_data.PgLabDataStore
     objects: object | None = None           # the Lab object store (bundles, exports, receipts)
     log: object | None = None               # D8: P1's LabelLog
@@ -177,7 +182,7 @@ class LabPipelines:
     evals: object | None = None             # B3: P3's Evaluations
     teachers: object | None = None          # P2's TeacherWiring (ledger: D8 PgTeacherLedger)
 
-    def port(self, name: str):
+    def port(self, name: str) -> Any:
         value = getattr(self, name)
         if value is None:                   # expected until its table merges: a 503
             raise errors.DependencyUnavailable(f"{name} is not wired")
@@ -212,7 +217,7 @@ async def _now(x: LabPipelines) -> Any:
 
 
 # --- P1: labels -----------------------------------------------------------------------------
-async def labels(x: LabPipelines, who, dataset_ref: str) -> list[dict[str, Any]]:
+async def labels(x: LabPipelines, who: Actor, dataset_ref: str) -> list[dict[str, Any]]:
     store, provider = x.port("store"), who.provider_org_id
     # ponytail: P1's lineage-aware read is private; ask P1 for a public `labels()` if it moves
     _, found = await p1._labels(store, x.port("log"), provider, dataset_ref)
@@ -226,7 +231,7 @@ async def labels(x: LabPipelines, who, dataset_ref: str) -> list[dict[str, Any]]
     return out
 
 
-async def disagreements(x: LabPipelines, who, dataset_ref: str) -> list[dict[str, Any]]:
+async def disagreements(x: LabPipelines, who: Actor, dataset_ref: str) -> list[dict[str, Any]]:
     found = await p1.disagreements(x.port("store"), x.port("log"),
                                    provider_org_id=who.provider_org_id, dataset_ref=dataset_ref)
     return [{"sample_id": s, "annotation_refs": refs} for s, refs in sorted(found.items())]
@@ -240,7 +245,7 @@ def _receipt(stored: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in stored.items() if k != "request_sha256"}
 
 
-async def import_labels(x: LabPipelines, who, body: ImportBody) -> dict[str, Any]:
+async def import_labels(x: LabPipelines, who: Actor, body: ImportBody) -> dict[str, Any]:
     objects, provider = x.port("objects"), who.provider_org_id
     key = _receipt_key(provider, body.import_id)
     asked = _digest(body.model_dump(mode="json"))
@@ -261,13 +266,13 @@ async def import_labels(x: LabPipelines, who, body: ImportBody) -> dict[str, Any
     return _receipt(receipt)
 
 
-async def imports(x: LabPipelines, who) -> list[dict[str, Any]]:
+async def imports(x: LabPipelines, who: Actor) -> list[dict[str, Any]]:
     objects = x.port("objects")
     keys = await objects.keys(f"lab/{who.provider_org_id}/label-imports/")
     return [_receipt(json.loads(await objects.get(key))) for key in sorted(keys)]
 
 
-async def assign(x: LabPipelines, who, body: AssignBody) -> dict[str, Any]:
+async def assign(x: LabPipelines, who: Actor, body: AssignBody) -> dict[str, Any]:
     await p1.assign(x.port("log"), x.access.store, provider_org_id=who.provider_org_id,
                     user_id=who.user_id, dataset_ref=body.dataset_ref,
                     sample_id=body.sample_id, reviewer_id=body.reviewer_id,
@@ -275,7 +280,7 @@ async def assign(x: LabPipelines, who, body: AssignBody) -> dict[str, Any]:
     return {}
 
 
-async def review(x: LabPipelines, who, body: ReviewBody) -> dict[str, Any]:
+async def review(x: LabPipelines, who: Actor, body: ReviewBody) -> dict[str, Any]:
     correction = None if body.correction is None else _json(body.correction)
     ref = await p1.review(x.port("store"), x.port("log"), x.access.store,
                           provider_org_id=who.provider_org_id, user_id=who.user_id,
@@ -285,7 +290,7 @@ async def review(x: LabPipelines, who, body: ReviewBody) -> dict[str, Any]:
     return {"annotation_ref": ref}
 
 
-async def adjudicate(x: LabPipelines, who, body: AdjudicateBody) -> dict[str, Any]:
+async def adjudicate(x: LabPipelines, who: Actor, body: AdjudicateBody) -> dict[str, Any]:
     ref = await p1.adjudicate(x.port("store"), x.port("log"), x.access.store,
                               provider_org_id=who.provider_org_id, user_id=who.user_id,
                               dataset_ref=body.dataset_ref, sample_id=body.sample_id,
@@ -297,7 +302,7 @@ def _export_key(provider: str, export_id: str) -> str:
     return f"lab/{provider}/label-exports/{export_id}/export.json"
 
 
-async def export_labels(x: LabPipelines, who, body: ExportBody) -> dict[str, Any]:
+async def export_labels(x: LabPipelines, who: Actor, body: ExportBody) -> dict[str, Any]:
     objects, provider = x.port("objects"), who.provider_org_id
     stored = await objects.get(_export_key(provider, body.export_id))
     if stored is None:
@@ -314,7 +319,7 @@ async def export_labels(x: LabPipelines, who, body: ExportBody) -> dict[str, Any
     return record
 
 
-async def exports(x: LabPipelines, who) -> list[dict[str, Any]]:
+async def exports(x: LabPipelines, who: Actor) -> list[dict[str, Any]]:
     objects = x.port("objects")
     keys = await objects.keys(f"lab/{who.provider_org_id}/label-exports/")
     return [json.loads(await objects.get(key)) for key in sorted(keys)
@@ -348,18 +353,18 @@ async def _answer(x: LabPipelines, provider: str, external_run_id: str) -> dict[
     return await _training_run(x, provider, external_run_id, row)
 
 
-async def training_runs(x: LabPipelines, who) -> list[dict[str, Any]]:
+async def training_runs(x: LabPipelines, who: Actor) -> list[dict[str, Any]]:
     provider = who.provider_org_id
     return [await _training_run(x, provider, rid, row)
             for rid, row in await x.port("ledger").run_rows(provider)]
 
 
-async def bundle(x: LabPipelines, who, external_run_id: str) -> dict[str, Any]:
+async def bundle(x: LabPipelines, who: Actor, external_run_id: str) -> dict[str, Any]:
     await p3._run(x.port("ledger"), who.provider_org_id, external_run_id)
     return await _bundle(x, who.provider_org_id, external_run_id)
 
 
-async def prepare(x: LabPipelines, who, body: PrepareBody) -> dict[str, Any]:
+async def prepare(x: LabPipelines, who: Actor, body: PrepareBody) -> dict[str, Any]:
     provider = who.provider_org_id
     await p3.prepare(x.port("store"), x.port("objects"), x.port("ledger"),
                      provider_org_id=provider, actor=who.user_id,
@@ -370,7 +375,7 @@ async def prepare(x: LabPipelines, who, body: PrepareBody) -> dict[str, Any]:
     return await _answer(x, provider, body.external_run_id)
 
 
-async def move(x: LabPipelines, who, external_run_id: str, op: str) -> dict[str, Any]:
+async def move(x: LabPipelines, who: Actor, external_run_id: str, op: str) -> dict[str, Any]:
     provider, ledger, manual = who.provider_org_id, x.port("ledger"), p3.ManualConnector()
     if op == "submit":
         await p3.submit(x.port("store"), x.port("objects"), ledger, manual, x.access.store,
@@ -398,7 +403,7 @@ async def _checkpoint(x: LabPipelines, provider: str, row: dict[str, Any]) -> di
             "eligible": eligible is not None}
 
 
-async def checkpoints(x: LabPipelines, who) -> list[dict[str, Any]]:
+async def checkpoints(x: LabPipelines, who: Actor) -> list[dict[str, Any]]:
     provider = who.provider_org_id
     return [await _checkpoint(x, provider, row)
             for row in await x.port("ledger").checkpoint_rows(provider)]
@@ -412,7 +417,7 @@ async def _one_checkpoint(x: LabPipelines, provider: str, checkpoint_id: str) ->
     return await _checkpoint(x, provider, row)
 
 
-async def import_checkpoint(x: LabPipelines, who, body: CheckpointBody) -> dict[str, Any]:
+async def import_checkpoint(x: LabPipelines, who: Actor, body: CheckpointBody) -> dict[str, Any]:
     await p3.import_checkpoint(x.port("store"), x.port("objects"), x.port("ledger"),
                                x.port("evals"), provider_org_id=who.provider_org_id,
                                external_run_id=body.external_run_id,
@@ -422,7 +427,7 @@ async def import_checkpoint(x: LabPipelines, who, body: CheckpointBody) -> dict[
     return await _one_checkpoint(x, who.provider_org_id, body.checkpoint_id)
 
 
-async def approve(x: LabPipelines, who, checkpoint_id: str, body: ApproveBody) -> dict:
+async def approve(x: LabPipelines, who: Actor, checkpoint_id: str, body: ApproveBody) -> dict:
     await p3.approve(x.port("objects"), x.port("ledger"), x.port("evals"), x.access.store,
                      provider_org_id=who.provider_org_id, user_id=who.user_id,
                      external_run_id=body.external_run_id, checkpoint_id=checkpoint_id)
@@ -472,7 +477,7 @@ async def _teacher_batch(x: LabPipelines, provider: str, stored: dict) -> dict[s
             "approval": approval and json.loads(approval), "chunks": chunks}
 
 
-async def teacher_batches(x: LabPipelines, who) -> list[dict[str, Any]]:
+async def teacher_batches(x: LabPipelines, who: Actor) -> list[dict[str, Any]]:
     objects, provider = x.port("objects"), who.provider_org_id
     x.port("teachers")
     keys = await objects.keys(f"lab/{provider}/teacher-batches/")
@@ -480,7 +485,7 @@ async def teacher_batches(x: LabPipelines, who) -> list[dict[str, Any]]:
             for key in sorted(keys) if key.endswith("/batch.json")]
 
 
-async def plan_teachers(x: LabPipelines, who, body: TeacherBody) -> dict[str, Any]:
+async def plan_teachers(x: LabPipelines, who: Actor, body: TeacherBody) -> dict[str, Any]:
     """The dry run: stored once per batch id, planned, nothing reserved or sent."""
     objects, wiring, provider = x.port("objects"), x.port("teachers"), who.provider_org_id
     try:
@@ -499,7 +504,7 @@ async def plan_teachers(x: LabPipelines, who, body: TeacherBody) -> dict[str, An
     return await _teacher_batch(x, provider, stored)
 
 
-async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any]:
+async def approve_teachers(x: LabPipelines, who: Actor, batch_id: str) -> dict[str, Any]:
     """The administrator's live submit, within the batch's budget; a resume sends nothing
     twice (P2's run ids and J2's one submit intent per run)."""
     objects, provider = x.port("objects"), who.provider_org_id
@@ -516,24 +521,15 @@ async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any
     if wiring.settings.judge_mode != JUDGE_MODE_LIVE:
         raise errors.DependencyUnavailable("live teacher submission is off")
     await objects.put_if_absent(_batch_key(provider, batch_id, "approval.json"), lab.canonical({
-        "approved_by": who.user_id, "approved_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}),
+        "approved_by": who.user_id, "approved_at": iso_z(now)}),
         "application/json")
     await p2.run_batch(batch, wiring=wiring)
     return await _teacher_batch(x, provider, stored)
 
 
 # --- the routes -----------------------------------------------------------------------------
-def _guarded(handler):
-    """`lab_auth.guarded`, plus P1/P3's `Gone` (an expired export) as the port's `gone`."""
-    async def wrapped(request: Request):
-        try:
-            return await handler(request)
-        except errors.Gone:
-            return JSONResponse({"refusal": "gone"}, status_code=410, headers=lab_auth.NO_STORE)
-    return lab_auth.guarded(wrapped)
-
-
-def register(app, rt, pipelines: LabPipelines | None = None):
+def register(app: FastAPI, rt: Any, pipelines: LabPipelines | None = None
+             ) -> LabPipelines | None:
     """Mount the pipeline routes over `pipelines` (default `rt.lab_pipelines`); without one
     nothing is mounted and `None` is returned."""
     x = pipelines if pipelines is not None else getattr(rt, "lab_pipelines", None)
@@ -541,13 +537,13 @@ def register(app, rt, pipelines: LabPipelines | None = None):
         return None
     P = PIPELINES_PREFIX
 
-    async def actor(request: Request, capability: Cap):
+    async def actor(request: Request, capability: Cap) -> Actor:
         return await lab_actor(request, x.sessions, x.access, capability)
 
     def route(method: str, path: str, answer, *, model=None, status: int = 200,
               capability: Cap = Cap.run_evaluation, listing: bool = False, query=()):
         """`answer(x, who, *path params, *query params, body)`."""
-        @_guarded
+        @lab_auth.guarded                   # P1/P3's `Gone` (an expired export): 410 gone
         async def handler(request: Request):
             who = await actor(request, capability)
             args = [*request.path_params.values(),

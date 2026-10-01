@@ -17,19 +17,37 @@ then, with nothing cached between calls:
 
 `refusal` renders every failure as the Lab port's fixed reason (`port.ts` REFUSALS plus
 `unauthenticated`); the token never reaches a log line or a response body.
+
+The session families' shared helpers live here too (A8: they were in `routes/lab_evaluations`
+and copied in `routes/lab_control`): `lab_actor` (the `Actor` of a call), `require` (a write's
+role, checked once its record is found), `held` (a ref not held is the form's 422) and
+`lab_body` (the bounded, validated JSON body).
 """
 from __future__ import annotations
 
 import logging
 import re
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol, TypeVar
 
 import httpx
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..contracts import errors
-from ..contracts.v2.records import ROLE_CAPABILITIES, ProviderCapability, ProviderMembership
+from ..contracts.v2.records import (
+    ROLE_CAPABILITIES,
+    ProviderCapability,
+    ProviderMembership,
+    ProviderRole,
+)
+from .routes import intake
+
+if TYPE_CHECKING:
+    from ..lab.access import LabAccess
+
+T = TypeVar("T")
+M = TypeVar("M", bound=BaseModel)
 
 log = logging.getLogger("infrx.gateway.lab")
 USER_PATH = "/auth/v1/user"
@@ -37,16 +55,18 @@ SESSION = "authenticated"             # a signed-in user's `aud` and `role` (ano
 #: A compact JWS, bounded. Anything else - an API key, a cookie blob - is not a session.
 BEARER = re.compile(r"Bearer ([A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,8192}\.[A-Za-z0-9_-]{1,4096})")
 NO_STORE = {"cache-control": "no-store"}
+MAX_BODY_BYTES = 16_384                  # a Lab form: ids, refs and a few numbers
 #: (error kind, status, reason), most specific first; anything else is 503 `unavailable`.
 REFUSALS = ((errors.InvalidApiKey, 401, "unauthenticated"), (errors.NotFound, 404, "not_found"),
             (errors.Forbidden, 403, "denied"), (errors.InvalidRequest, 422, "invalid"),
-            (errors.Conflict, 409, "conflict"))
+            (errors.Conflict, 409, "conflict"), (errors.Gone, 410, "gone"))
 
 
 class Sessions(Protocol):
     async def user_id(self, token: str) -> str:
         """The verified user's id; `InvalidApiKey` for anything but a live signed-in session,
         `DependencyUnavailable` when the verifier cannot answer."""
+        ...
 
 
 class GoTrueSessions:
@@ -75,7 +95,16 @@ class GoTrueSessions:
         return user["id"]
 
 
-async def authenticate(request, sessions: Sessions) -> str:
+class Actor(BaseModel):
+    """Always the session's current membership, never a request value."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    provider_org_id: str
+    user_id: str
+    role: ProviderRole
+
+
+async def authenticate(request: Request, sessions: Sessions) -> str:
     """The verified user id behind the forwarded session token."""
     match = BEARER.fullmatch(request.headers.get("authorization") or "")
     if match is None:
@@ -83,7 +112,7 @@ async def authenticate(request, sessions: Sessions) -> str:
     return await sessions.user_id(match.group(1))
 
 
-async def member(access, user_id: str, provider_org_id: str,
+async def member(access: LabAccess, user_id: str, provider_org_id: str,
                  capability: ProviderCapability) -> ProviderMembership:
     """The user's current membership of `provider_org_id`, holding `capability`."""
     workspaces = await access.workspaces(user_id)
@@ -98,22 +127,68 @@ async def member(access, user_id: str, provider_org_id: str,
     return membership
 
 
-def ok(content, status_code: int = 200) -> JSONResponse:
+async def lab_actor(request: Request, sessions: Sessions, access: LabAccess,
+                    capability: ProviderCapability) -> Actor:
+    """The session's user and current membership of the named provider."""
+    user_id = await authenticate(request, sessions)
+    membership = await member(
+        access, user_id, request.query_params.get("provider_org_id", ""), capability)
+    return Actor(provider_org_id=membership.provider_org_id, user_id=user_id,
+                 role=membership.role)
+
+
+def require(who: Actor, capability: ProviderCapability) -> None:
+    """The role's capability, for a write addressed to a record: checked once the record is
+    found, so a 404 is the same whatever the role (the Lab fakes' order, B4-J02/R4)."""
+    if capability not in ROLE_CAPABILITIES[who.role]:
+        raise errors.Forbidden(f"this provider role does not hold {capability}")
+
+
+async def held(answer: Awaitable[T]) -> T:
+    """A ref in a form that the provider does not hold is a wrong form (422), not a missing
+    page (B4-J02/J03)."""
+    try:
+        return await answer
+    except errors.NotFound:
+        raise errors.InvalidRequest("the form names what the provider does not hold") from None
+
+
+async def lab_body(request: Request, rt: Any, model: type[M],
+                   max_bytes: int = MAX_BODY_BYTES) -> M:
+    """A JSON object body, bounded, validated by `model` (422 otherwise)."""
+    intake.check_content_type(request)
+    raw = await intake.read_body(request, max_bytes=max_bytes,
+                                 timeout_s=rt.settings.pilot.intake_timeout_s, clock=rt.clock)
+    try:
+        return model.model_validate(intake.parse_object(intake.decode_utf8(raw)))
+    except ValidationError:
+        raise errors.InvalidRequest("invalid body") from None
+
+
+def ok(content: Any, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content, status_code=status_code, headers=NO_STORE)
 
 
+def status_of(exc: Exception) -> tuple[int, str]:
+    """The (status, reason) every Lab family answers `exc` with."""
+    return next(((status, reason) for kind, status, reason in REFUSALS
+                 if isinstance(exc, kind)), (503, "unavailable"))
+
+
 def refusal(exc: Exception) -> JSONResponse:
-    status, reason = next(((status, reason) for kind, status, reason in REFUSALS
-                           if isinstance(exc, kind)), (503, "unavailable"))
+    status, reason = status_of(exc)
     if not isinstance(exc, errors.DomainError):   # a bug: its type only - a message or
         log.error("lab route failed: %s", type(exc).__name__)   # traceback may echo the token
     return JSONResponse({"refusal": reason}, status_code=status, headers=NO_STORE)
 
 
-def guarded(handler):
+Handler = Callable[[Request], Awaitable[Response]]
+
+
+def guarded(handler: Handler) -> Handler:
     """Nothing but a record or a fixed refusal leaves a Lab handler. Not `functools.wraps`:
     FastAPI would read the handler's own signature through `__wrapped__`."""
-    async def wrapped(request: Request):
+    async def wrapped(request: Request) -> Response:
         try:
             return await handler(request)
         except Exception as exc:                 # noqa: BLE001 - rendered, never re-raised

@@ -27,24 +27,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence, TypeVar
 
-from fastapi import Request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from fastapi import FastAPI, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from ...contracts import errors
 from ...contracts.v2.records import ProviderCapability as Cap
-from ...contracts.v2.records import ProviderRole
 from .. import lab_auth
-from . import intake
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 CONTROL_PREFIX = "/lab/v1/control"
-MAX_BODY_BYTES = 16_384
 DIGEST = r"^sha256:[0-9a-f]{64}$"
 
 
 class Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+R = TypeVar("R", bound=Record)
 
 
 class Registration(Record):
@@ -96,12 +99,7 @@ class Proposal(Record):
     decided_at: datetime | None
 
 
-class Actor(Record):
-    """Always the session's current membership, never a request value."""
-
-    provider_org_id: str
-    user_id: str
-    role: ProviderRole
+Actor = lab_auth.Actor                           # L3 (`infrx/lab/control`) imports it from here
 
 
 class ControlOperations(Protocol):
@@ -114,53 +112,44 @@ class ControlOperations(Protocol):
     async def proposals(self, actor: Actor) -> Sequence[Proposal]: ...
     async def register(self, actor: Actor, registration: Registration) -> Deployment:
         """A model revision and its private dev deployment revision."""
+        ...
     async def smoke(self, actor: Actor, deployment_revision_id: str) -> Deployment: ...
     async def propose(self, actor: Actor, kind: str,
                       deployment_revision_id: str) -> Proposal: ...
-    async def operator(self, user_id: str):
+    async def operator(self, user_id: str) -> Any:
         """The user's operator session (`Forbidden` for anyone else)."""
+        ...
     async def reject(self, operator, proposal_id: str, reason: str) -> Proposal: ...
 
 
 @dataclass(frozen=True)
 class LabControl:
     sessions: lab_auth.Sessions
-    access: object                               # infrx.lab.access.LabAccess
+    access: LabAccess
     operations: ControlOperations | None = None  # None until L3 is wired: 503
 
 
-def _dump(records) -> list:
+def _dump(records: Sequence[BaseModel]) -> list[dict[str, Any]]:
     return [record.model_dump(mode="json") for record in records]
 
 
-def register(app, rt, control: LabControl | None = None):
+def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabControl | None:
     """Mount the control routes over `control` (default `rt.lab_control`); without one
     nothing is mounted and `None` is returned."""
     control = control if control is not None else getattr(rt, "lab_control", None)
     if control is None:
         return None
-    limits = rt.settings.pilot
 
     async def actor(request: Request, capability: Cap) -> Actor:
-        user_id = await lab_auth.authenticate(request, control.sessions)
-        membership = await lab_auth.member(
-            control.access, user_id, request.query_params.get("provider_org_id", ""), capability)
-        return Actor(provider_org_id=membership.provider_org_id, user_id=user_id,
-                     role=membership.role)
+        return await lab_auth.lab_actor(request, control.sessions, control.access, capability)
 
     def operations() -> ControlOperations:
         if control.operations is None:      # expected before L3 merges: a 503, not a bug
             raise errors.DependencyUnavailable("L3's control operations are not wired")
         return control.operations
 
-    async def body(request: Request, model: type[Record]) -> Record:
-        intake.check_content_type(request)
-        raw = await intake.read_body(request, max_bytes=MAX_BODY_BYTES,
-                                     timeout_s=limits.intake_timeout_s, clock=rt.clock)
-        try:
-            return model.model_validate(intake.parse_object(intake.decode_utf8(raw)))
-        except ValidationError:
-            raise errors.InvalidRequest("invalid body") from None
+    async def body(request: Request, model: type[R]) -> R:
+        return await lab_auth.lab_body(request, rt, model)
 
     def listing(name: str):
         @lab_auth.guarded

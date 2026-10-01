@@ -42,23 +42,24 @@ only when the composition put a `LabEvaluations` on `rt.lab_evaluations` (LAB_EV
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
 
-from fastapi import Request
-from pydantic import Field, ValidationError
+from fastapi import FastAPI, Request
+from pydantic import Field
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
-from ...contracts.v2.records import ROLE_CAPABILITIES
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...evaluation import checkpoints, runner
 from ...evaluation.reports import Protocol as ComparisonProtocol
+from ...lab.time import iso_z
 from .. import lab_auth
-from . import intake
-from .lab_control import Actor
+from ..lab_auth import Actor, held, lab_actor, lab_body, require
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 EVALS_PREFIX = "/lab/v1/evaluations"
-MAX_BODY_BYTES = 16_384
 LIVE = ("queued", "running")
 ARMS = ("baseline", "candidate")
 PRIVATE = ("evaluator", "owner_user_id")         # B3's, never the Lab's
@@ -107,9 +108,11 @@ class ExperimentStore(Protocol):
     async def put(self, provider_org_id: str, experiment: dict[str, Any]) -> dict[str, Any]:
         """Write once per `experiment_id`: the stored row. The same `launch` again is a replay
         (the stored row, its first `created_at`); another launch `IdempotencyConflict`."""
+        ...
 
     async def experiments(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
         """`{experiment_id, created_at, launch, report}` rows (report: B2's, or None)."""
+        ...
 
 
 class Catalog(Protocol):
@@ -117,62 +120,27 @@ class Catalog(Protocol):
 
     async def catalog(self, provider_org_id: str) -> dict[str, Any]:
         """`{datasets, harnesses, servings, evaluators}` of the provider's own records."""
+        ...
 
     async def evaluator(self, provider_org_id: str, evaluator_ref: str) -> dict[str, Any]:
         """The spec the ref's digest names; `NotFound` for any other."""
+        ...
 
 
 @dataclass(frozen=True)
 class LabEvaluations:
     sessions: lab_auth.Sessions
-    access: object                          # infrx.lab.access.LabAccess
+    access: LabAccess
     store: object | None = None             # D7: infrx.state.lab_data.PgLabDataStore
     experiments: ExperimentStore | None = None
     ledger: object | None = None            # B3's CheckpointLedger + `listing(provider)`
     catalog: Catalog | None = None
 
-    def port(self, name: str):
+    def port(self, name: str) -> Any:
         value = getattr(self, name)
         if value is None:                   # expected until its table merges: a 503
             raise errors.DependencyUnavailable(f"{name} is not wired")
         return value
-
-
-# --- shared by the Lab routes of this lane ---------------------------------------------------
-async def lab_actor(request: Request, sessions, access, capability: Cap) -> Actor:
-    """The session's user and current membership of the named provider (`lab_auth`)."""
-    user_id = await lab_auth.authenticate(request, sessions)
-    membership = await lab_auth.member(
-        access, user_id, request.query_params.get("provider_org_id", ""), capability)
-    return Actor(provider_org_id=membership.provider_org_id, user_id=user_id,
-                 role=membership.role)
-
-
-def require(who: Actor, capability: Cap) -> None:
-    """The role's capability, for a write addressed to a record: checked once the record is
-    found, so a 404 is the same whatever the role (the Lab fakes' order, B4-J02/R4)."""
-    if capability not in ROLE_CAPABILITIES[who.role]:
-        raise errors.Forbidden(f"this provider role does not hold {capability}")
-
-
-async def held(answer):
-    """A ref in a form that the provider does not hold is a wrong form (422), not a missing
-    page (B4-J02/J03)."""
-    try:
-        return await answer
-    except errors.NotFound:
-        raise errors.InvalidRequest("the form names what the provider does not hold") from None
-
-
-async def lab_body(request: Request, rt, model, max_bytes: int = MAX_BODY_BYTES):
-    """A JSON object body, bounded, validated by `model` (422 otherwise)."""
-    intake.check_content_type(request)
-    raw = await intake.read_body(request, max_bytes=max_bytes,
-                                 timeout_s=rt.settings.pilot.intake_timeout_s, clock=rt.clock)
-    try:
-        return model.model_validate(intake.parse_object(intake.decode_utf8(raw)))
-    except ValidationError:
-        raise errors.InvalidRequest("invalid body") from None
 
 
 # --- the operations -------------------------------------------------------------------------
@@ -214,7 +182,7 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in row.items() if k not in PRIVATE}
 
 
-async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any]:
+async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any] | None:
     catalog = x.port("catalog")
     offered = await catalog.catalog(who.provider_org_id)
     if any(getattr(wanted, field) not in {o["ref"] for o in offered[kind]}
@@ -224,7 +192,7 @@ async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any
     store = x.port("store")
     now = await x.access.store.db_now()
     row = await x.port("experiments").put(who.provider_org_id, {
-        "experiment_id": wanted.experiment_id, "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "experiment_id": wanted.experiment_id, "created_at": iso_z(now),
         "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None})
     for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's (422)
         await held(runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,
@@ -266,7 +234,8 @@ async def subscriptions(x: LabEvaluations, who: Actor) -> list[dict[str, Any]]:
     return [_public(row) for row in await x.port("ledger").listing(who.provider_org_id)]
 
 
-async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest) -> dict:
+async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest
+                    ) -> dict[str, Any]:
     spec = await held(x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref))
     ledger = x.port("ledger")
     asked = {**wanted.model_dump(mode="json"), "provider_org_id": who.provider_org_id,
@@ -280,7 +249,8 @@ async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest) 
 
 
 # --- the routes -----------------------------------------------------------------------------
-def register(app, rt, evaluations: LabEvaluations | None = None):
+def register(app: FastAPI, rt: Any, evaluations: LabEvaluations | None = None
+             ) -> LabEvaluations | None:
     """Mount the evaluation routes over `evaluations` (default `rt.lab_evaluations`); without
     one nothing is mounted and `None` is returned."""
     x = evaluations if evaluations is not None else getattr(rt, "lab_evaluations", None)

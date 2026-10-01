@@ -55,6 +55,7 @@ from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.money_units import Credit
 from ...lab.access import LabAccess
+from ...lab.time import iso_z
 from .. import runner
 
 EVENT_SCHEMA = "infrx.checkpoint_event.1"
@@ -356,7 +357,7 @@ class Evaluations:
                 frozen = await runner.resume(self.store, run_id, evaluator=sub.evaluator,
                                              provider_org_id=provider_org_id)
             except errors.NotFound:
-                now = (await self.access.store.db_now()).strftime("%Y-%m-%dT%H:%M:%SZ")
+                now = iso_z(await self.access.store.db_now())
                 event = CheckpointEvent.model_construct(checkpoint_id=checkpoint_id,
                                                         issued_at=now)
                 payload = {**_run_payload(sub, event, serving), "run_id": run_id,

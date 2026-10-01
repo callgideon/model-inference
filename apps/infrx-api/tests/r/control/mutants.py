@@ -174,7 +174,7 @@ MUTANTS: tuple[Mutant, ...] = (
     m("r2_decision_kind", "an approval records an expansion",
       '"expand" if to == "approved" else "rollback"', '"rollback"', APPROVE),
     m("r2_decided_at", "the decision is dated now",
-      'now.strftime("%Y-%m-%dT%H:%M:%SZ")', '"2026-09-27T10:00:00Z"', APPROVE),
+      'iso_z(now)', '"2026-09-27T10:00:00Z"', APPROVE),
     m("r2_conflict_swallowed", "a decision lost to another transition is raised",
       "            if (await self._store.release(policy_ref)).state != to:\n",
       "            if False:\n", LOST),

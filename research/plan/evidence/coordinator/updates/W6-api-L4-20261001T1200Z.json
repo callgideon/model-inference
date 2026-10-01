@@ -1,0 +1,111 @@
+{
+  "task": "W6-api-L4",
+  "lane": "api-L4",
+  "slice": "A6 (iso_z), A7 (one Lab refusal table), A8 (shared Lab route helpers in lab_auth), A13 (Lab route typing)",
+  "activity": "fix-round",
+  "at": "2026-10-01T12:00:00Z",
+  "head": "f6cd2d20",
+  "base": "08983639",
+  "worktree": ".claude/worktrees/codex-w6-api-L4",
+  "branch": "codex/w6-api-L4",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/time.py",
+    "apps/infrx-api/infrx/gateway/lab_auth.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_*.py",
+    "apps/infrx-api/tests/g/lab_*/",
+    "apps/infrx-api/tests/i/lab_control/",
+    "research/plan/evidence/w6/api-L4-f6cd2d2.md",
+    "research/plan/evidence/coordinator/updates/W6-api-L4-20261001T1200Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_releases -k utc_to_the_second (before iso_z)",
+      "exit": 2,
+      "summary": "A6 seam RED: infrx.lab.time absent"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_auth -k refusals (before Gone entry)",
+      "exit": 1,
+      "summary": "A7 seam RED: Gone answered 503 unavailable"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_auth -k one_actor (before the move)",
+      "exit": 1,
+      "summary": "A8 seam RED: lab_auth has no Actor (fake + pg)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_* tests/i/lab_control",
+      "exit": 0,
+      "summary": "215 passed, 11 skipped (base: 212 passed, 11 skipped)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g tests/l",
+      "exit": 0,
+      "summary": "1095 passed, 17 skipped"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/g/lab_{auth,control,evaluations,pipelines,releases,datasets,checkpoints,traces}/test_mutants.py",
+      "exit": 0,
+      "summary": "31/30/51/74/70/28/13/28 passed, 0 survivors"
+    },
+    {
+      "cmd": "INFRX_LAB_API_PG=1 INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest tests/i/lab_control/test_mutants.py",
+      "exit": 0,
+      "summary": "24 passed (PG matrix incl. releases on both logins)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py",
+      "exit": 0,
+      "summary": "117 passed"
+    },
+    {
+      "cmd": "uvx pyright lab_auth.py routes/lab_*.py (no config)",
+      "exit": 1,
+      "summary": "51 -> 37 errors (29 RefOf InvalidTypeForm for api-L5's config; rest listed by owner)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 pytest tests/g/lab_auth tests/i/lab_control",
+      "exit": 0,
+      "summary": "41 passed (fix round)"
+    },
+    {
+      "cmd": "INFRX_LAB_API_PG=1 INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest tests/i/lab_control/test_mutants.py",
+      "exit": 0,
+      "summary": "24 passed (fix round)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py",
+      "exit": 0,
+      "summary": "117 passed (fix round)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "high",
+    "basis": "fix round done with no code change. Remaining: review, the wiring requests, and a rerun on the merged tip",
+    "at": "2026-10-01T12:00:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-L4-1 api-L1 pilot.py: `_z` -> `from ..lab.time import iso_z as _z`; re-point tests/g/mutants.py:1161 to lab/time.py",
+    "WR-L4-2 api-L1 infrx/lab/workers/__main__.py:762: decided_at = iso_z(now)",
+    "WR-L4-3 infrx/rollouts/control/__init__.py:227: decided_at = iso_z(now); re-point tests/r/control/mutants.py:177",
+    "WR-L4-4 infrx/evaluation/checkpoints/__init__.py:359: now = iso_z(await self.access.store.db_now())",
+    "WR-L4-6 infrx/pipelines/annotations Members protocol: annotate membership/db_now returns",
+    "WR-L4-7 owner of tests/d/pgharness.py: no silent d1 default; refuse when INFRX_D_TASK is unset and INFRX_MUTANTS is set (oracle: env -u INFRX_D_TASK INFRX_MUTANTS=all pytest tests/l/control -m pg skips without any docker call)"
+  ],
+  "incidents": [
+    "1-L4-RV-1: one tests/l/control mutant rerun ran without INFRX_D_TASK=l4 and aimed at d1 (55432). infrx-d1-postgres is labelled for checkout codex-w5-lab-rollout-4 (created 2026-09-29), so pgharness.ensure() raised ForeignContainer before recreate()/DROP. infrx_d1_l3tpl/l3case were most probably not dropped. Coordinator: tell the d1 holder a refused attempt was made. Lane process: INFRX_D_TASK=l4 exported for every PG run. Rerun on l4: 117/117",
+    "fix round: concurrent use of the l4 key by codex-w5-merge-75 caused HarnessBusy refusals (nothing altered). Those runs were discarded and rerun after it stopped"
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/api-L4-f6cd2d2.md"
+  ]
+}

@@ -11,6 +11,7 @@ providers A and B, developers of each, A's viewer, BOTH in both products, CONSUM
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 
 import httpx
@@ -144,15 +145,52 @@ def test_lab_auth__a_revocation_takes_effect_on_the_next_call(world):
         run(lab_auth.member(w.access, w.BOTH, w.A, Cap.read_aggregate_health))
 
 
+class Call(Headers):
+    """A Lab call naming its provider (`?provider_org_id=`)."""
+
+    def __init__(self, provider: str, **headers) -> None:
+        super().__init__(**headers)
+        self.query_params = {"provider_org_id": provider}
+
+
+async def missing():
+    raise errors.NotFound("no such dataset")
+
+
+def test_lab_auth__every_lab_family_shares_one_actor(world):
+    """A8: the actor (the session's user and current membership), the role check of a write
+    addressed to a record, the 422 for a ref the provider does not hold and the bounded body
+    are lab_auth's, and the session families use them - none keeps its own copy. Oracle: a
+    family's copy, the actor's role or provider taken from anything but the membership,
+    `require` ignoring the role, or `held` letting a 404 through, goes red."""
+    from infrx.gateway.routes import lab_control, lab_evaluations, lab_pipelines, lab_releases
+    shared = ("Actor", "lab_actor", "require", "held", "lab_body")
+    for family in (lab_control, lab_evaluations, lab_pipelines, lab_releases):
+        assert all(getattr(family, name, getattr(lab_auth, name)) is getattr(lab_auth, name)
+                   for name in shared), family.__name__
+        assert "intake.check_content_type" not in inspect.getsource(family), family.__name__
+    w = world
+    who = run(lab_auth.lab_actor(Call(w.A, authorization=f"Bearer {JWT}"),
+                                 Sessions({JWT: w.VIEWER_A}), w.access, Cap.read_aggregate_health))
+    assert who == lab_auth.Actor(provider_org_id=w.A, user_id=w.VIEWER_A, role="viewer")
+    lab_auth.require(who, Cap.read_aggregate_health)
+    with pytest.raises(errors.Forbidden):
+        lab_auth.require(who, Cap.run_evaluation)
+    with pytest.raises(errors.InvalidRequest):
+        run(lab_auth.held(missing()))
+
+
 # --- the refusal: fixed reasons, statuses the Lab adapter maps -------------------------------
 def test_lab_auth__refusals_are_the_lab_ports_reasons():
-    """Oracle: 401 unauthenticated, 404 not_found, 403 denied, 422 invalid, 409 conflict, and
-    anything else - an outage or a bug - 503 unavailable; the body is the reason only."""
+    """Oracle: 401 unauthenticated, 404 not_found, 403 denied, 422 invalid, 409 conflict, 410
+    gone (A7: one table for every family), and anything else - an outage or a bug - 503
+    unavailable; the body is the reason only."""
     cases = ((errors.InvalidApiKey(), 401, "unauthenticated"),
              (errors.NotFound(), 404, "not_found"), (errors.Forbidden(), 403, "denied"),
              (errors.OrgSuspended(), 403, "denied"), (errors.InvalidRequest(), 422, "invalid"),
              (errors.RequestTooLarge(), 422, "invalid"), (errors.StateConflict(), 409, "conflict"),
-             (errors.IdempotencyConflict(), 409, "conflict"),
+             (errors.IdempotencyConflict(), 409, "conflict"), (errors.Gone(), 410, "gone"),
+             (errors.ResultExpired(), 410, "gone"),
              (errors.DependencyUnavailable(), 503, "unavailable"),
              (RuntimeError("bug"), 503, "unavailable"))
     for exc, status, reason in cases:

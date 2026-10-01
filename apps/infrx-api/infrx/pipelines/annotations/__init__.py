@@ -50,7 +50,7 @@ from ...contracts import errors
 from ...contracts.ids import UUID_RE
 from ...contracts.lab import records as lab
 from ...contracts.lab import states
-from ...contracts.v2.records import ProviderCapability
+from ...contracts.v2.records import ProviderCapability, ProviderMembership
 from ...datasets.lineage import permitted
 from ...datasets.imports import sample_key, write_once
 from ...datasets.versions import MAX_EXPORT_TTL_S
@@ -77,9 +77,9 @@ class LabelLog(Protocol):
 class Members(Protocol):
     """The L2 `AccessStore` subset a review reads (`PgAccessStore` / `FakeAccessStore`)."""
 
-    async def membership(self, provider_org_id: str, user_id: str): ...
+    async def membership(self, provider_org_id: str, user_id: str) -> ProviderMembership | None: ...
 
-    async def db_now(self): ...
+    async def db_now(self) -> datetime: ...
 
 
 @dataclass(frozen=True)
