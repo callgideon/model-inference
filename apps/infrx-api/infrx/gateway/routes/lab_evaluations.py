@@ -45,21 +45,18 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol, Sequence
 
 from fastapi import Request
-from pydantic import Field, ValidationError
+from pydantic import Field
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
-from ...contracts.v2.records import ROLE_CAPABILITIES
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...evaluation import checkpoints, runner
 from ...evaluation.reports import Protocol as ComparisonProtocol
 from ...lab.time import iso_z
 from .. import lab_auth
-from . import intake
-from .lab_control import Actor
+from ..lab_auth import Actor, held, lab_actor, lab_body, require
 
 EVALS_PREFIX = "/lab/v1/evaluations"
-MAX_BODY_BYTES = 16_384
 LIVE = ("queued", "running")
 ARMS = ("baseline", "candidate")
 PRIVATE = ("evaluator", "owner_user_id")         # B3's, never the Lab's
@@ -137,43 +134,6 @@ class LabEvaluations:
         if value is None:                   # expected until its table merges: a 503
             raise errors.DependencyUnavailable(f"{name} is not wired")
         return value
-
-
-# --- shared by the Lab routes of this lane ---------------------------------------------------
-async def lab_actor(request: Request, sessions, access, capability: Cap) -> Actor:
-    """The session's user and current membership of the named provider (`lab_auth`)."""
-    user_id = await lab_auth.authenticate(request, sessions)
-    membership = await lab_auth.member(
-        access, user_id, request.query_params.get("provider_org_id", ""), capability)
-    return Actor(provider_org_id=membership.provider_org_id, user_id=user_id,
-                 role=membership.role)
-
-
-def require(who: Actor, capability: Cap) -> None:
-    """The role's capability, for a write addressed to a record: checked once the record is
-    found, so a 404 is the same whatever the role (the Lab fakes' order, B4-J02/R4)."""
-    if capability not in ROLE_CAPABILITIES[who.role]:
-        raise errors.Forbidden(f"this provider role does not hold {capability}")
-
-
-async def held(answer):
-    """A ref in a form that the provider does not hold is a wrong form (422), not a missing
-    page (B4-J02/J03)."""
-    try:
-        return await answer
-    except errors.NotFound:
-        raise errors.InvalidRequest("the form names what the provider does not hold") from None
-
-
-async def lab_body(request: Request, rt, model, max_bytes: int = MAX_BODY_BYTES):
-    """A JSON object body, bounded, validated by `model` (422 otherwise)."""
-    intake.check_content_type(request)
-    raw = await intake.read_body(request, max_bytes=max_bytes,
-                                 timeout_s=rt.settings.pilot.intake_timeout_s, clock=rt.clock)
-    try:
-        return model.model_validate(intake.parse_object(intake.decode_utf8(raw)))
-    except ValidationError:
-        raise errors.InvalidRequest("invalid body") from None
 
 
 # --- the operations -------------------------------------------------------------------------

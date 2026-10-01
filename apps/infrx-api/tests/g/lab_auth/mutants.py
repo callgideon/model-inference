@@ -94,6 +94,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "    workspaces = await access.workspaces(user_id)\n",
        "    workspaces = member.__dict__.setdefault(user_id, await access.workspaces(user_id))\n",
        A + "a_revocation_takes_effect_on_the_next_call"),
+    # --- A8: the session families' one actor, role check and form refusal --------------------
+    _m("actor_role_not_the_memberships", "the actor's role is the current membership's",
+       "                 role=membership.role)", "                 role=ProviderRole.administrator)",
+       A + "every_lab_family_shares_one_actor"),
+    _m("require_ignores_the_role", "a write addressed to a record needs the role's capability",
+       "    if capability not in ROLE_CAPABILITIES[who.role]:\n", "    if False:\n",
+       A + "every_lab_family_shares_one_actor"),
+    _m("not_held_is_a_page", "a ref the provider does not hold is the form's 422, not a 404",
+       "    except errors.NotFound:\n        raise errors.InvalidRequest(",
+       "    except errors.Conflict:\n        raise errors.InvalidRequest(",
+       A + "every_lab_family_shares_one_actor"),
     # --- the refusal ------------------------------------------------------------------------
     _m("unauthenticated_is_denied", "no session is a 401, not a 403",
        '(errors.InvalidApiKey, 401, "unauthenticated")', '(errors.InvalidApiKey, 403, "denied")',

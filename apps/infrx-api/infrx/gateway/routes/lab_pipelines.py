@@ -61,7 +61,7 @@ from ...pipelines import annotations as p1
 from ...pipelines import teachers as p2
 from ...pipelines import training as p3
 from .. import lab_auth
-from .lab_evaluations import held, lab_actor, lab_body, require
+from ..lab_auth import held, lab_actor, lab_body, require
 
 PIPELINES_PREFIX = "/lab/v1/pipelines"
 MAX_BODY_BYTES = 4 * 2**20                  # a label import's rows (the Lab caps them at 1 MB)

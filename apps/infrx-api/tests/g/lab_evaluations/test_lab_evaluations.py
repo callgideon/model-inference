@@ -491,7 +491,8 @@ def test_lab_evaluations__a_body_is_json_bounded_and_valid_before_the_backends()
     w = World()
     c = w.client()
     text = json.dumps(w.launch())
-    for raw, content_type in ((text, "text/plain"), (text + " " * le.MAX_BODY_BYTES, None)):
+    for raw, content_type in ((text, "text/plain"),
+                              (text + " " * le.lab_auth.MAX_BODY_BYTES, None)):
         answer = call(c, DEV, "POST", "experiments", raw=raw,
                       headers={"content-type": content_type} if content_type else None)
         assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})

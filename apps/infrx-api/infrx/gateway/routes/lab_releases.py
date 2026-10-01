@@ -38,7 +38,7 @@ from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...lab.time import iso_z
 from .. import lab_auth
-from .lab_evaluations import lab_actor, lab_body, require
+from ..lab_auth import lab_actor, lab_body, require
 
 RELEASES_PATH, OPTIMIZATIONS_PATH = "/lab/v1/releases", "/lab/v1/optimizations"
 
