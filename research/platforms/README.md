@@ -18,6 +18,7 @@ The company operates model inference infrastructure. Two products serve differen
 5. [API/model contracts](07-api-contracts.md).
 6. [Decisions and sources](08-decisions-and-sources.md).
 7. [Implementation index](../plan/README.md), [launch review](../plan/26-launch-readiness-review-2026-10-01.md) and [carried work](../plan/consumer-v1/10-carried-work-register.md).
+8. [App / Lab UX design package](../design/v1/README.md): chosen visual direction, actual-screen audit, detailed interaction states and implementation lanes. Proposed UI work; backend requirements and launch gates remain authoritative.
 
 ## Shared boundaries
 

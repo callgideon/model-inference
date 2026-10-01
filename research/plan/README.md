@@ -13,6 +13,7 @@ Start with [current state](../../STATUS.md), then the [launch review and product
 | Carried omissions and enablement blockers | [Carried register](consumer-v1/10-carried-work-register.md) — its testing column describes the narrow Lab checklist |
 | Latest operating events | [Operational log](consumer-v1/09-path-to-internal-testing.md), [session record](evidence/coordinator/2026-09-24-session-03.md) |
 | Current product requirements | [App / Lab architecture and specs](../platforms/README.md) |
+| App and Lab UI/UX implementation | [Design package](../design/v1/README.md), [parallel lanes](../design/v1/06-implementation.md), [fresh-session prompt](../design/v1/07-handoff.md) — proposed, not implemented |
 | Binding runtime contracts | [Contracts](01-contracts.md), [v2 mapping](01a-contracts-v2-map.md), [rulings](08-contracts-v1-encoding.md), [durable protocols](02-durable-protocols.md) |
 | Worktree ownership and coordination | [Execution protocol](03-execution-protocol.md), [coordinator workflow](COORDINATOR.md) |
 | Test/acceptance criteria | [Verification](04-verification.md), [evidence format](evidence/README.md), [consumer briefs](consumer-v1/README.md) |

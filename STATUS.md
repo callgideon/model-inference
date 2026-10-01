@@ -59,6 +59,8 @@ All 16 W6 cleanup lanes are merged according to the implementation record. The t
 
 ## Source of truth and maintenance
 
+**UI audit addendum, 2026-10-01 21:17 UTC:** the [App/Lab UX audit](research/design/v1/01-audit.md) inspected the live interfaces with the provisioned test account. Lab has unstyled forms and unavailable request/evaluation listings. Consumer mobile navigation keeps offscreen links focusable and does not dismiss on Escape. Live Docs incorrectly claims physical deletion “within 0 hours”: the public catalog returns a null bound, which the formatter coerces to zero. These are newly recorded UX/copy defects, not fixes or changes to the operating-window verdicts above. The [design and implementation package](research/design/v1/README.md) is proposed work; no product UI was modified by the design task.
+
 1. This page: dated current state and unresolved release decisions.
 2. [Launch review](research/plan/26-launch-readiness-review-2026-10-01.md): findings and closure sequence.
 3. [Task manifest](research/plan/tasks.json), [carried register](research/plan/consumer-v1/10-carried-work-register.md), [implementation index](research/plan/README.md): task routing and requirements.

@@ -19,6 +19,8 @@ Current focus: qualify the deployed Marlin API and consumer App for an invited p
 
 Binding contracts: [contract encoding/rulings](research/plan/08-contracts-v1-encoding.md), [durable protocols](research/plan/02-durable-protocols.md), [product specs](research/platforms/README.md) and [verification](research/plan/04-verification.md).
 
+For App/Lab interface work, read the [UX design package](research/design/v1/README.md), including its live audit, screen/state specifications, service gaps and path-owned implementation lanes. The visual reference is illustrative, not a source of production data or permission to enable incomplete services.
+
 ## Worktrees and integration
 
 Start from a recorded committed integration SHA, normally current main after reconciliation. Use isolated `codex/<task>` branches/worktrees and task-local ports, databases, object prefixes and temporary paths. Preserve unrelated local changes and other sessions' worktrees. No historical `claude/*` branch is a mandatory integration destination; the coordinator records the actual target for the current work.
