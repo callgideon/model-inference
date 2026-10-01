@@ -576,9 +576,10 @@ def reconcile_problems(rows: list[dict], usage, holds, before, after) -> list[st
             if hold.request_id in jobs and str(hold.state) == "held"]
     if held:
         problems.append(f"holds still held after every item is terminal: {held}")
-    hold_count = {job: sum(1 for hold in holds if hold.request_id == job) for job in jobs}
-    if any(count != 1 for count in hold_count.values()):
-        problems.append(f"jobs without exactly one hold: {hold_count}")
+    # A released hold leaves the tenant's view (`infrx.active_holds` lists held/unknown only,
+    # 0009), so a settled job shows no hold row: its hold is proven by its one usage record,
+    # the ledger's fall and the reserved total, never by counting hold rows (E4C run 1,
+    # 2026-10-01: every settled job counted 0 and the cell failed on the oracle).
     charged = sum((Decimal(entry.charged_amount) for entry in records), Decimal(0))
     fell = Decimal(str(before.ledger_total)) - Decimal(str(after.ledger_total))
     if charged != fell:

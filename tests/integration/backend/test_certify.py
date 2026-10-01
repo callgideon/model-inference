@@ -499,8 +499,9 @@ def test_e4b_the_ledger_reconciles_item_by_item_with_no_duplicate_accepted_item(
     held = [Hold("job-i1", state="held"), *HOLDS[1:]]
     assert certify.reconcile_problems(ROWS, USAGE, held, BEFORE, AFTER) == [
         "holds still held after every item is terminal: ['job-i1']"]
-    assert "exactly one hold" in first(certify.reconcile_problems(ROWS, USAGE, HOLDS[1:], BEFORE,
-                                                                  AFTER))
+    # a settled job's released hold is not in the tenant's view (active_holds): no problem
+    assert certify.reconcile_problems(ROWS, USAGE, HOLDS[1:], BEFORE, AFTER) == []
+    assert certify.reconcile_problems(ROWS, USAGE, [], BEFORE, AFTER) == []
     assert certify.reconcile_problems(ROWS, USAGE, HOLDS, BEFORE,
                                       Balance(Decimal("9997"), Decimal("0"))) == [
         "Σ charged 2.50000000 != ledger fall 3"]
