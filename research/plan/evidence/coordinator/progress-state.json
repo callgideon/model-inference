@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 365,
- "updated": "2026-10-01T04:03:37Z",
+ "revision": 367,
+ "updated": "2026-10-01T04:28:56Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -11825,25 +11825,27 @@
  "inputs": [
   {
    "id": "P-01",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Approved CREDIT rate card (unit, rounding, failed-execution disclosure)",
    "owner": "coordinator (publish-card)",
    "blocks": [
     "E4C"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): rc_marlin2b_20260925_launch card: 400/1200 CREDIT per 1M in/out tokens; enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-02",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion",
    "owner": "coordinator (read-only dry-run)",
    "blocks": [
     "E4C"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): no conversion, no write-off; legacy USD stays on its labelled statement; enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-05",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3",
    "owner": "operator-held (confirm 2nd user, verified-count read); then coordinator (grant/issue-key); A2/I2A public onboarding",
    "blocks": [
@@ -11851,7 +11853,8 @@
     "E4C",
     "I2A",
     "E4"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): backend part decided; public signup stays closed; a second verified individual is provisioned as a logged operation for the E4C two-tenant cells (TENANT2_USER); enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-06",
@@ -11864,12 +11867,13 @@
   },
   {
    "id": "P-17",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab)",
    "owner": "coordinator at E4C handback",
    "blocks": [
     "E4C"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): acceptance is mechanical: the ten checks of §P-17; enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-18",
@@ -11900,21 +11904,23 @@
   },
   {
    "id": "P-24",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run [2026-09-26: profile + CREDIT cap enacted; left: the operator's +40,000 adjust (H5) and the two key revocations (H3)]",
    "owner": "E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust)",
    "blocks": [
     "E4C"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): base profile models/marlin2b/profiles/E4C-box.base.json (caps, allowlist, stop rules); enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-25",
-   "status": "open",
+   "status": "resolved",
    "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle [2026-09-26: known-good schema_proof reaches 0025 for both targets (KNOWN-GOOD-PROOF-2); extend at 0026] [2026-09-26 09:00Z: SNS topic arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts created (no subscription yet; the box role's sns:Publish grant is user-run — classifier)] [2026-09-26 18:20Z: known-good proof through 0026; alert subscription PendingConfirmation (user); role grant done; SSM parameters ×3 created; left: PITR token, verified dump, backup rehearsal, image mirror / replacement-instance restore]",
    "owner": "M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read)",
    "blocks": [
     "E4C"
-   ]
+   ],
+   "note": "DECIDED 2026-09-25 (15-pending-inputs.md §Decisions, coordinator under the operator's authorization): published TTLs unchanged; retention grace 3,600 s; enacted in the E4C certify window (certify-window.sh) on the live release"
   },
   {
    "id": "P-26",

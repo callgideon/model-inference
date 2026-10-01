@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 14 planned; 108 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 13 planned; 109 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -43,7 +43,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | E3B | implemented / E | [Backend-only durability, security and protocol integration gate](18-marlin-backend-first.md) | E2R, F2P | D1R, D5, G1R, G2, G3, G4U, G6B, M3, Q3, W3, I0, S2M |
 | I2B | implemented / I | [Reproducible Marlin endpoint deployment independent of frontends](18-marlin-backend-first.md) | I1, F2P | E3B, I0, W3, G6B |
 | I3B | implemented / I | [Backend recovery, observability, restore and rollback proof](18-marlin-backend-first.md) | I2B, F2P | E3B |
-| E1B | planned / E | [Measure the end-to-end Marlin baseline and operating envelope](18-marlin-backend-first.md) | E1, S2M, F2P | E3B, I2B, W3 |
+| E1B | implemented / E | [Measure the end-to-end Marlin baseline and operating envelope](18-marlin-backend-first.md) | E1, S2M, F2P | E3B, I2B, W3 |
 | M4 | implemented / M | [Optimize bounded video retrieval, decoding and preparation](18-marlin-backend-first.md) | M2, M3, F2P | E1B, W2 |
 | W4 | implemented / W | [Tune Marlin GPU serving and scheduler admission from measured evidence](18-marlin-backend-first.md) | W3, F2P | E1B, M4, Q3 |
 | E4B | implemented / E | [Certify the robust and measured Marlin endpoint release candidate](18-marlin-backend-first.md) | E3B, F2P | I3B, E1B, M4, W4 |
