@@ -1337,28 +1337,12 @@ class ContentRefs:
         self.connect = connect
 
 
-def content_refs(monkeypatch, module=True) -> None:
-    """C2's content refs in the build (a module), or not yet (None: the import fails)."""
+def content_refs(monkeypatch) -> None:
+    """C2's content refs (0041), stood in for by `ContentRefs`."""
     import types
-    fake = None
-    if module:
-        fake = types.ModuleType("infrx.state.lab_content")
-        fake.PgContentRefs = ContentRefs
+    fake = types.ModuleType("infrx.state.lab_content")
+    fake.PgContentRefs = ContentRefs
     monkeypatch.setitem(sys.modules, "infrx.state.lab_content", fake)
-
-
-def test_worker_main__trace_pumps_refuse_without_c2s_content_refs(tmp_path, monkeypatch):
-    """WR-C2-2: the sweep deletes content only when no live ref holds it; without C2's refs
-    (0041) in the build the pumps refuse to start by name rather than sweep unheld."""
-    from infrx.traces import ship
-
-    class Shipper:
-        retention = type("Retention", (), {"feedback": None})()
-    monkeypatch.setattr(ship, "build_shipper", lambda *a, **kw: Shipper())
-    content_refs(monkeypatch, module=False)
-    with pytest.raises(Exception) as refused:
-        composed(environment(tmp_path, TRACE_SPOOL_DIR=str(tmp_path / "spool"), **TRACE_ENV))
-    assert type(refused.value) is RuntimeMisconfigured and "0041" in str(refused.value)
 
 
 def test_worker_main__the_lab_eval_worker_refuses_to_start_without_its_sources(tmp_path):

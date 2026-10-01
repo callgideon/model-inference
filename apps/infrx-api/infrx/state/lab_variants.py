@@ -6,7 +6,7 @@ null until stored; `0058_lab_variant_identities.sql`, WR-LW7-3a). Another provid
 variants never appear (R227); none is `[]`, never a 503. The Lab reads base and variant as
 required keys that may be null: null is a legacy row ("identity not recorded"); an omitted key
 is unavailable (R267, supersedes R252 (b)). The launched composition serves it through
-`pilot.ReleaseRecords.variants` (WR-LW7-1)."""
+`infrx.lab.compose.ReleaseRecords.variants` (WR-LW7-1)."""
 from __future__ import annotations
 
 from typing import Any

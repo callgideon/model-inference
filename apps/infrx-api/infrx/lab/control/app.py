@@ -4,15 +4,16 @@ on 127.0.0.1:8003 (`infra/lab/app/lab.json` `control`).
 A thin FastAPI factory, separate from the consumer gateway: `/readyz` (200 while its database
 answers `infrx.now()`, else 503) and ONLY the Lab routers, so the gateway keeps LAB_CONTROL off
 while this unit serves them (WR-I2L-2b). Composed from its own `INFRX_LAB_*` settings - never
-the runtime's `DATABASE_URL` or service-role key - the way `pilot._lab` composes the gateway's:
+the runtime's `DATABASE_URL` or service-role key - the way `compose.lab_surfaces` composes the
+gateway's:
 `lab_control` over L3 (`Operations`), and `lab_traces` only when `CLICKHOUSE_URL` and
-`S3_TRACE_BUCKET` are set (one without the other is refused by `pilot._lab_traces`).
+`S3_TRACE_BUCKET` are set (one without the other is refused by `compose.lab_traces`).
 A missing `INFRX_LAB_*` setting refuses startup by name (`RuntimeMisconfigured`).
 
 WR-LDP-2 (R237: the box serves the Lab only from its own units): every other Lab family -
 datasets, evaluations, pipelines (teacher batches included), releases/optimizations and,
-given `LAB_CHECKPOINT_KEYS`, the checkpoint receiver - is `pilot._lab`'s composition on this
-login. No `LAB_*` switch but `LAB_TEACHERS` (P-10 teacher egress, default off) is read for
+given `LAB_CHECKPOINT_KEYS`, the checkpoint receiver - is `compose.lab_surfaces`' composition on
+this login. No `LAB_*` switch but `LAB_TEACHERS` (P-10 teacher egress, default off) is read for
 them: this unit is the switch, so the App gateway keeps every Lab switch OFF. Its connections never `set role` (LDP-F7: the Lab login is a member of
 no role). The Lab objects are the Lab workers' (`LAB_S3_BUCKET`); without it, `NoObjects`.
 """
@@ -66,35 +67,35 @@ def _store():
 
 
 def _compose(lab: dict[str, str], store):
-    """`pilot._lab`'s composition on the Lab's own login: L3's operations are the gateway's
+    """`compose.lab_surfaces`' composition on the Lab's own login: L3's operations are the gateway's
     one `lab_operations` (WR-LAB-API-2c); `store` serves `/readyz` only."""
     import httpx
 
     from ...config import from_env
     from ...gateway.lab_auth import GoTrueSessions
-    from ...gateway.pilot import _lab_traces, lab_operations
     from ...gateway.routes.lab_control import LabControl as Routes
     from ...state.jobstore import connector
     from ...state.lab_access import PgAccessStore
     from ..access import LabAccess
+    from ..compose import lab_operations, lab_traces
     settings, connect = from_env(), connector(lab[DATABASE_URL], set_role=False)
-    # ponytail: process-lifetime client, as in `pilot._lab`.
+    # ponytail: process-lifetime client, as in `compose.lab_surfaces`.
     sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
                                                 timeout=httpx.Timeout(5, connect=2)),
                               lab[SUPABASE_KEY])
     access = LabAccess(PgAccessStore(connect))
     control = Routes(sessions, access, lab_operations(connect, access))
     pilot = settings.pilot
-    traces = _lab_traces(settings, connect, sessions, access) \
+    traces = lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
     return SimpleNamespace(settings=settings, clock=time.time,
                            **_families(settings, lab, connect)), control, traces
 
 
 def _families(settings, lab: dict[str, str], connect) -> dict:
-    """WR-LDP-2: `pilot._lab`'s families (control and traces are composed above) with the
+    """WR-LDP-2: `compose.lab_surfaces`' families (control and traces are composed above) with the
     Lab's own session verifier, every family on - the unit is the switch (R237)."""
-    from ...gateway.pilot import _lab, _lab_checkpoints
+    from ..compose import lab_checkpoints, lab_surfaces
     from ..workers.__main__ import lab_objects
     deployment = dataclasses.replace(
         settings.deployment, lab_control=False, lab_traces=False, lab_datasets=True,
@@ -105,7 +106,7 @@ def _families(settings, lab: dict[str, str], connect) -> dict:
                                supabase_key=lab[SUPABASE_KEY])
     objects = lab_objects(MODE, os.environ) if os.environ.get("LAB_S3_BUCKET", "").strip() \
         else NoObjects()
-    return {**_lab(unit, connect, objects), **_lab_checkpoints(unit, connect)}
+    return {**lab_surfaces(unit, connect, objects), **lab_checkpoints(unit, connect)}
 
 
 def create_app() -> FastAPI:

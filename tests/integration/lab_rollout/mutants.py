@@ -203,6 +203,7 @@ D45 = "../app/supabase/migrations/0045_lab_serving_ref_identity.sql"
 D48 = "../app/supabase/migrations/0048_lab_release_listing.sql"
 L3S = "infrx/state/lab_control.py"
 LW = "infrx/lab/workers/__main__.py"
+LC = "infrx/lab/compose.py"          # A1: the Lab compositions (pilot/CLI helpers moved here)
 WM = "infrx/worker/__main__.py"
 
 K01 = "test_k01_routing_off_serves_todays_request_over_a_live_release"
@@ -285,7 +286,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "            if (await self._store.release(policy_ref)).state != to:",
        "            if True:", K04_ONCE, K09_PROCESS),
     _m("st_process_reads_nothing", "the real emergency-rollback process reads the alias through "
-       "the real PgControlStore (pilot.control_serving, WR-E8L-7)", G,
+       "the real PgControlStore (pilot.control_serving, WR-E8L-7)", LC,
        "                   PgControlStore(connect),\n", "                   PgControlStore(None),\n",
        K09_PROCESS),
     # WR-C5-K09: the bare rollout role (WR-R2-3) converges a rollback killed before the CAS
@@ -294,7 +295,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        'releases.releases_in(("running", "rolled_back"),', 'releases.releases_in(("running",),',
        K09_PASS),
     _m("st_pass_reads_another_plan", "the plan is the one stored beside the release "
-       "(lab/<p>/releases/<policy_id>/plan.json, D9's digest)", LW,
+       "(lab/<p>/releases/<policy_id>/plan.json, D9's digest)", LC,
        'return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"',
        'return f"lab/{provider_org_id}/releases/{policy_id}/plan"', K09_PASS),
     _m("st_pass_rolled_back_needs_live", "a rolled-back release only converges: it needs no "
@@ -313,7 +314,7 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
        "", K09_PASS),
     # WR-LIVE-K09: the pass evaluates a running release on D9's Live (0054, R244)
     _m("st_pass_never_reads_live", "the pass reads the running release's Live from D9 (0054): "
-       "a failed terminal job assigned to its candidate is a breach rolled back once", LW,
+       "a failed terminal job assigned to its candidate is a breach rolled back once", LC,
        "    current = await releases.live(listing.policy_ref)\n", "    current = None\n",
        K09_PASS),
     _m("st_converge_by_full_ref", "R2 recognises a promoted candidate by serving identity "
@@ -387,10 +388,10 @@ STACK_MUTANTS: tuple[Mutant, ...] = (
     # WR-C6-K10: k10's port half over pilot.lab_releases and `rollout launch|decide` (R240/R241)
     _m("st_propose_any_role", "only an administrator proposes", LR,
        "    require(who, Cap.propose_publication)\n", "", K10_PORT),
-    _m("st_records_verdict_dropped", "the page's verdict is D9's latest decision", G,
+    _m("st_records_verdict_dropped", "the page's verdict is D9's latest decision", LC,
        '        if d is not None:\n            return {"action": d.decision,',
        '        if False:\n            return {"action": d.decision,', K10_PORT),
-    _m("st_records_decisions_dropped", "the page lists 0053's decisions", G,
+    _m("st_records_decisions_dropped", "the page lists 0053's decisions", LC,
        "for d in await self.d9.decisions(provider_org_id=provider_org_id)]", "for d in []]",
        K10_PORT),
     _m("st_launch_without_the_plan", "the launcher stores the plan before D9 starts the release "

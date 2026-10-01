@@ -168,8 +168,8 @@ async def store(data, variant: dict[str, Any], comparison: dict[str, Any],
     another report is refused before anything is written. Every variant R3 creates carries
     both revision identities (base, variant), stored as it is created through `variants`
     (`PgLabVariants.put_identities`, 0058, WR-LW7-3a; WR-LW9-4: required, composed by
-    `pilot.lab_optimizations`); none, no port, or identities other than the registered ones
-    are refused before anything is written."""
+    `infrx.lab.compose.lab_optimizations`); none, no port, or identities other than the
+    registered ones are refused before anything is written."""
     if comparison["variant_ref"] != lab.ref_of(variant) or \
             comparison["report_digest"] != report.get("report_digest"):
         raise errors.InvalidRequest("the comparison is not of this variant and report")

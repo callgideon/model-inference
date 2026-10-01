@@ -439,12 +439,16 @@ def _batch_key(provider: str, batch_id: str, name: str = "batch.json") -> str:
     return f"lab/{provider}/teacher-batches/{batch_id}/{name}"
 
 
-def _teacher(stored: dict[str, Any], provider: str, user_id: str) -> p2.TeacherBatch:
+def teacher(stored: dict[str, Any], provider: str, user_id: str) -> p2.TeacherBatch:
+    """A stored `batch.json` as P2's batch (the Lab workers' `collect_teachers` reads it too)."""
     return p2.TeacherBatch(
         batch_id=stored["batch_id"], provider_org_id=provider, requested_by=user_id,
         dataset_ref=stored["dataset_ref"], rubric_ref=stored["rubric_ref"],
         teacher_model=stored["teacher_model"], prompt_version=stored["prompt_version"],
         payer_ref=stored["payer_ref"], chunk_size=stored["chunk_size"])
+
+
+_teacher = teacher
 
 
 def _usd(amount) -> str | None:

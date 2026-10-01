@@ -75,7 +75,7 @@ from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
 from ..media.retention import RetentionCollector
 from ..observe.metrics import Registry
-from ..state.jobstore import PgJobStore, PreparedWork, connector
+from ..state.jobstore import PgJobStore, PreparedWork, connector, dedicated_login
 from ..state.journal import PgStreamStore
 from ..state.lab_data import PgLabDataStore
 from ..state.lifecycle import PgLifecycle
@@ -213,7 +213,7 @@ def reconciliation_reader(deployment):
         return None
     # ponytail: one connection per tick (every 10 s), bounded by the login's own
     # statement_timeout; put `connect_timeout` in the DSN if a hung connect ever matters.
-    return PgReconciliation(connector(dsn, set_role=not pilot.dedicated_login(dsn)))
+    return PgReconciliation(connector(dsn, set_role=not dedicated_login(dsn)))
 # --- end W5-F5 ----------------------------------------------------------------------------
 
 
@@ -293,14 +293,9 @@ def trace_pumps(settings, mode, connect) -> dict:
 
 def content_holds(mode, connect):
     """WR-C2-2: T3's sweep keeps an object a live C2 content ref still holds - C2's
-    `ContentAccess.holds` over 0041's refs (lab-sql-lw3) on this pool. Without them in the
-    build the pumps refuse by name. ponytail: drop the refusal once #16 is on every base."""
+    `ContentAccess.holds` over 0041's refs (lab-sql-lw3) on this pool."""
     from ..content import ContentAccess
-    try:
-        from ..state.lab_content import PgContentRefs
-    except ImportError:
-        raise RuntimeMisconfigured(mode, detail="TRACE_PUMPS needs C2's content refs "
-                                                "(0041)") from None
+    from ..state.lab_content import PgContentRefs
     return ContentAccess(PgContentRefs(connect), None).holds       # `holds` reads refs only
 
 
