@@ -16,6 +16,7 @@ const RUNS = "app/(provider)/evaluations/runs.tsx";
 const HTTP = "lib/services/evaluation/http.ts";
 const TRANSPORT = "lib/services/http.ts"; // LAB-04: the one transport every family adapter calls
 const SERVER = "lib/services/evaluation/server.ts";
+const SESSION = "lib/auth/session.ts"; // LAB-05: the one read-only session client
 
 const C = {
   v01: "B4-V01 everyone in the workspace reads evaluations; only developer and administrator run or cancel them",
@@ -194,9 +195,10 @@ const MUTANTS = [
   // the swap (WR-B4-1): the configured adapter, the session's token, the row check
   m("B4-X125", "the configured adapter is ignored", PORT, "return labEvaluation(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
   m("B4-X126", "another server env names the backend", SERVER, "env.LAB_EVALS_API_URL", "env.LAB_TRACES_API_URL", [C.w01]),
-  m("B4-X127", "the publishable key is sent as the credential", SERVER, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
-  m("B4-X128", "the session is read from another cookie", SERVER, "      cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
-  m("B4-X129", "the session cookies are not the request's", SERVER, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+  m("B4-X127", "the publishable key is sent as the credential", SESSION, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
+  m("B4-X128", "the session is read from another cookie", SESSION, "    cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
+  m("B4-X129", "the session cookies are not the request's", SESSION, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+  m("B4-X155", "the evaluation adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
   m("B4-X130", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
   m("B4-X131", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
   m("B4-X132", "a run in an unknown state is read", HTTP, 'state: oneOf("queued", "running", "succeeded", "failed", "cancelled"),', "state: str,", [C.h03]),
