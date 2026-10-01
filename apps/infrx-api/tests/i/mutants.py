@@ -1829,6 +1829,7 @@ LR = "../../infra/lab/rollout/lab-release.sh"
 LR_SHIM = "../../infra/lab/rollout/launch-v1.sh"
 LR_STRICT = "test_lab_release__strict_bash_with_no_window_left"
 LR_BOX = "test_lab_release__box_runs_the_launched_order_through_ssm_by_name"
+LR_DEFAULT = "test_lab_release__box_defaults_release_to_the_claude_consumer_v1_tip"
 LR_TOKEN = "test_lab_release__web_validates_a_pasted_token_before_storing_it"
 LR_WEB = "test_lab_release__web_deploys_infrx_lab_in_the_callgideon_scope"
 LR_MEMBERS = "test_lab_release__members_reads_the_dsn_by_name_and_binds_every_value"
@@ -1843,6 +1844,8 @@ MUTANTS += (
        '|| { echo "not the re-proven 0059" >&2; exit 2; }\n', LR_STRICT, LR_BOX),
     _m("lab_release_window_offered", "window/all are not actions any more",
        LR, "preflight) preflight ;; box) box ;;", "preflight) preflight ;; window|all) box ;; box) box ;;", LR_STRICT),
+    _m("lab_release_release_default_head", "RELEASE defaults to the tip of claude/consumer-v1, not HEAD",
+       LR, "RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}", "RELEASE=${RELEASE:-$(git rev-parse HEAD)}", LR_DEFAULT),
     _m("lab_release_l0_dropped", "box makes the box's checkout RELEASE first (L0)",
        LR, '  infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE="$RELEASE"\n', "", LR_BOX),
     _m("lab_release_box_without_supabase_url", "box refuses before any call without SUPABASE_URL",
@@ -1859,6 +1862,8 @@ MUTANTS += (
        LR, "t=$(umask 077; mktemp)", 't=$HOME/.vt; (umask 077; : > "$t")', LR_TOKEN),
     _m("lab_release_token_world_readable", "the staged token is owner-only",
        LR, "t=$(umask 077; mktemp)", 't=$(mktemp); chmod 0644 "$t"', LR_TOKEN),
+    _m("lab_release_token_trap_dropped", "an invalid paste leaves no staged token behind (the EXIT trap)",
+       LR, """; trap 'shred -u "$t" 2>/dev/null || rm -f "$t"' EXIT""", "", LR_TOKEN),
     _m("lab_release_token_kept", "the staged token is removed after the SSM write",
        LR, '    shred -u "$t" 2>/dev/null || rm -f "$t"; trap - EXIT', "    trap - EXIT", LR_TOKEN),
     _m("lab_release_scope_unset", "infrx-lab lives in the App's team callgideon by default",
@@ -1883,7 +1888,7 @@ MUTANTS += (
     _m("lab_release_members_without_emails", "members refuses before any call without TESTER_EMAILS",
        LR, "  need TESTER_EMAILS\n", "", LR_MEMBERS),
     _m("lab_release_members_operator_default", "the operator defaults to git user.name",
-       LR, "OP=${OPERATOR_NAME:-$(git config user.name)}", "OP=${OPERATOR_NAME:-operator}", LR_MEMBERS),
+       LR, "OP=${OPERATOR_NAME:-$(git config user.name || true)}", "OP=${OPERATOR_NAME:-operator}", LR_MEMBERS),
     _m("lab_release_members_org_id_column", "the org key is provider_org_id (0007), not id",
        LR, "select p.provider_org_id, u.id", "select p.id, u.id", LR_MEMBERS),
     _m("lab_release_main_pushes_the_tip", "main pushes RELEASE:main, never claude/consumer-v1",

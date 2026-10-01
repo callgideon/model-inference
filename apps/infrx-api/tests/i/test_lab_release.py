@@ -132,7 +132,7 @@ class Checkout:
                    PYTHONPATH=str(self.pypath), STUB_PSYCOPG_LOG=str(self.root / "psycopg.log"),
                    RELEASE=self.release)
         env.update(extra)
-        return env
+        return {k: v for k, v in env.items() if v is not None}   # extra NAME=None unsets NAME
 
     def run(self, *args: str, script: str = "lab-release.sh", **extra: str):
         done = subprocess.run(["bash", f"infra/lab/rollout/{script}", *args], cwd=self.repo,
@@ -226,6 +226,16 @@ def test_lab_release__box_runs_the_launched_order_through_ssm_by_name(tmp_path):
     assert code == 2 and "40-hex" in out, out
 
 
+def test_lab_release__box_defaults_release_to_the_claude_consumer_v1_tip(tmp_path):
+    """LRT-RV-2: with RELEASE unset, box releases the tip of claude/consumer-v1 (not HEAD): the L0
+    line carries that sha."""
+    c = Checkout(tmp_path)
+    assert c.commit("past the release") != c.release   # HEAD moves on; claude/consumer-v1 stays
+    code, out, _ = c.run("box", SUPABASE_URL="https://ref.supabase.co", RELEASE=None)
+    assert code == 0, out
+    assert c.ssm()[0] == f"ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE={c.git('rev-parse', 'claude/consumer-v1')}"
+
+
 def test_lab_release__web_validates_a_pasted_token_before_storing_it(tmp_path):
     """INFRA-08: a pasted token is staged under mktemp (TMPDIR, mode 0600, never a fixed HOME
     path), proven by `vercel whoami` BEFORE it overwrites the stored one, and removed after; an
@@ -235,6 +245,7 @@ def test_lab_release__web_validates_a_pasted_token_before_storing_it(tmp_path):
     assert code == 2 and "not valid" in out, out
     assert not [x for x in calls if x[0] == "aws" and "put-parameter" in x]
     assert json.loads(c.params.read_text())["/callgideon/prod/VERCEL_TOKEN"] == "stored-bad-token"
+    assert not list(c.tmp.iterdir())   # LRT-RV-1: the EXIT trap removed the staged bad paste
     c.log.unlink()
     code, out, calls = c.run_tty("web", typed=b"good-token", SUPABASE_URL="https://ref.supabase.co")
     assert code == 0, out

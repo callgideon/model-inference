@@ -13,8 +13,8 @@ How to read the table:
 
 | # | Item | Source | What it needs | Owner | Blocks testing |
 |---|---|---|---|---|---|
-| 1 | `members`: create provider org `infrx-internal` and the tester memberships on hosted | audit:51, audit:300, audit:387; `infra/lab/rollout/launch-v1.sh:190-199` | INFRA-01 first: the owner DSN comes from SSM by name and goes through psycopg (W6 `lab-release-tool`). Then the operator runs `lab-release.sh members` | operator (after `lab-release-tool`) | **yes**: 08 §8 step 1 needs a granted workspace |
-| 2 | `main`: fast-forward origin/main from 41693d5d to the post-W6 tip (447 commits at audit time) | audit:52, audit:301; INT-08 / DT-01 | Runs after the wave-6 merges (audit §7 decision 8). Until it runs, every hotfix targets `claude/consumer-v1`, never main. Afterwards, set the overlay `main` field | operator | no |
+| 1 | `members`: create provider org `infrx-internal` and the tester memberships on hosted | audit:51, audit:300, audit:387; `infra/lab/rollout/launch-v1.sh:190-199` | INFRA-01 first: the owner DSN comes from SSM by name and goes through psycopg (W6 `lab-release-tool`). Then the operator runs `TESTER_EMAILS=... infra/lab/rollout/lab-release.sh members` | operator (after `lab-release-tool`) | **yes**: 08 §8 step 1 needs a granted workspace |
+| 2 | `main`: fast-forward origin/main from 41693d5d to the post-W6 tip (447 commits at audit time) | audit:52, audit:301; INT-08 / DT-01 | `lab-release.sh main`, after the wave-6 merges (audit §7 decision 8). Until it runs, every hotfix targets `claude/consumer-v1`, never main. Afterwards, set the overlay `main` field | operator | no |
 | 3 | E4C certify window on the box at the served release, then the BACKEND-READY and APP-PILOT decisions. The E1B, E4, E3A and I3 cells are window-bound on the same run. Readiness findings RV-04, RV-08, RV-09 and RV-10 (open since dff31efc): closed by P-17 check 8 in the E4C window | audit:53, audit:302, audit:388; INFRA-02; overlay `findings` (`evidence/coordinator/2026-09-24-S3-reconciliation.md`) | `certify-window.sh` takes RELEASE as an input, not the d3a99e01 literal (W6 `certify-release`). Then the operator's window: `e4c-certify.sh`, certify-window.sh | operator + coordinator | no (it gates the consumer backend decision, not the Lab checklist) |
 | 4 | Input P-01: launch rate card. Decided, enactment pending | audit:53; `15-pending-inputs.md:160` | Enacted and verified in the E4C window (P-17 check) | coordinator at E4C | no |
 | 5 | Input P-02: legacy USD balance transition. Decided, enactment pending | audit:53; `15-pending-inputs.md:161` | Enacted in the E4C window | coordinator at E4C | no |
@@ -99,6 +99,8 @@ These rows record where each pending item of the api, lab-app, infra and docs-te
 | 72 | INT-01, INT-02, INT-03, INT-04, INT-06, INT-07, INT-10, INT-11: overlay, manifest and register hygiene | audit:67 | `plan-ledger` (this lane) | no |
 | 73 | INT-05: dated state banners in the runbooks and READMEs | audit:67 (INT-01..INT-07 range) | `docs-state` | no |
 | 74 | INT-09: `codex/longclip` (item 46) | audit:67 | `plan-ledger` (register row) | no |
+| 75 | launch-v1.sh shim removal (W7): the deprecation shim forwarding to `lab-release.sh` goes | merge #71 (WR-W6-LRT-3); `infra/lab/rollout/launch-v1.sh` | W7 | no |
+| 76 | LAB-03 deploy half: switch the env list to `LAB_API_URL` after lab-B merges; the coordinator sets the Vercel var; `vercel env rm` the six names | merge #71 (WR-W6-LRT-3); `evidence/w6/lab-release-tool-5c6c9e6.md` §7 | `lab-release-tool` follow-up after `lab-B` + coordinator | no |
 
 ## 4. RESUME-NOW:6 cross-check
 
@@ -108,3 +110,4 @@ These rows record where each pending item of the api, lab-app, infra and docs-te
 
 - 2026-10-01: Created by W6 plan-ledger at the base 08983639 (INT-07). It has 74 rows: every bullet of the audit's five pending lists, cited as `audit:N`, and every RESUME-NOW:6 item. The coverage oracle `research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py` (item INT-07) checks every WR, input, finding id and pending line against this file.
 - 2026-10-01: Row 3 (E4C) gains readiness findings RV-04/08/09/10, closed by P-17 check 8 in the E4C window; blocks testing: no (merge #70, plan-ledger lens PL-3).
+- 2026-10-01: Rows 1 and 2 name the tool (`TESTER_EMAILS=... infra/lab/rollout/lab-release.sh members`, `lab-release.sh main`); rows 75 (launch-v1.sh shim removal, W7) and 76 (LAB-03 deploy half after lab-B) added (merge #71, lab-release-tool WR-W6-LRT-3).

@@ -114,6 +114,27 @@ Anchors retired: `launch_v1_0059_hosted_at_0051` and `launch_v1_pushes_the_tip`.
 - optimistic 0.5 h / likely 1 h / pessimistic 2.5 h; confidence medium.
 - Basis: the code and tests are done. What remains is the LAB-03 env switch after lab-B merges (~0.5 h incl. the mutant re-run of the web case), the shim removal next wave, and any review round.
 
+## 11. Coordinator rulings
+
+- **R269** (08-contracts §10, appended after R268): a hosted window carries no patch file and no between-window strict xfail; it is one reviewed commit on the integration tip editing hosted-migrate.sh's three window lines together with the `hosted_migrate_*` mutant anchors, run through lab-migrate.sh from that tip; between a migration landing and its window, the commit adding NNNN carries that edit or a strict xfail with an owner and an expiry; R264's launch/window-<THROUGH> branch rule otherwise stands. Supersedes R264's patch-file and xfail clauses and KGR4-RV-1. This is §9's proposal extended with the between-states sentence (lens LRT-RV-3).
+
+## 12. Merge
+
+- Merged at lane head `f4cdfb13` onto `87637f37` as merge #71 on `codex/w5-merge-71` (verdict ACCEPT; lenses ACCEPT / ACCEPT_WITH_FIXES, minors only).
+- **Conflict** `infra/lab/rollout/launch-v1.sh`: the tip's merge-#69 comment edit ("packages/shared, a link: dependency", R268) vs the lane's 3-line shim. The lane's shim was taken, and the comment edit is carried into `lab-release.sh` `vercel_lab()` (the lane's copy still said "a file: dependency").
+- **LRT-RV fixes applied** (wirings commit):
+  - LRT-RV-1: the bad-paste run now asserts the scratch TMPDIR is empty, plus mutant `lab_release_token_trap_dropped` (the EXIT trap removed), named by the token case.
+  - LRT-RV-2: new case `test_lab_release__box_defaults_release_to_the_claude_consumer_v1_tip` (RELEASE unset, HEAD moved past the branch; the L0 line carries the claude/consumer-v1 sha), plus mutant `lab_release_release_default_head`.
+  - LRT-RV-3: 08 §2 step 2 names test_lab_rollout_steps.py's literal `--hosted-at` until WR-W6-LRT-1 lands. R269 carries the between-states sentence.
+  - LRT-RV-4: `OP=${OPERATOR_NAME:-$(git config user.name || true)}; need OP`. Without a git user.name, set -e no longer exits silently; it exits 2 with "set OP". The `lab_release_members_operator_default` anchor follows.
+- **The members `p.id` → `provider_org_id` fix is a real bug fix**, not a refactor. The base statement could never have run on 0001–0059 (UndefinedColumn, §4). `members` had never been run, so nothing hosted was affected.
+- **WR-W6-LRT-3 applied**: register rows 1 and 2 name `TESTER_EMAILS=... infra/lab/rollout/lab-release.sh members` and `lab-release.sh main`. New rows: 75 (launch-v1.sh shim removal, W7) and 76 (LAB-03 deploy half after lab-B: the coordinator sets the Vercel var and runs `vercel env rm` on the six names). A log line was added.
+- **Carried:**
+  - WR-W6-LRT-1 goes to the infra-libs merge (owner of `test_lab_rollout_steps.py`).
+  - WR-W6-LRT-2 goes to the docs-state merge (owner of CLAUDE.md and the READMEs).
+  - For the infra-libs merge (lens LRT-RV-1, first lens): `tests/i/mutants.py` will conflict with infra-libs' INFRA-05/06 blocks. Resolve it there by keeping both lanes' anchors.
+
 ## Verification log
 
 - 2026-10-01T03:15Z: written by the lab-release-tool lane at code head 5c6c9e60.
+- 2026-10-01: §11 Coordinator rulings (R269) and §12 Merge appended at merge #71 on codex/w5-merge-71.
