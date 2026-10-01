@@ -1,0 +1,7 @@
+applied E4C-20261001T0300Z.json: E4C queued → queued
+overlay revision 347 → 348
+rendered research/plan/evidence/coordinator/progress.html and PROGRESS.md: 133 tasks, 0 error(s), 8 warning(s)
+  E3C (BACKEND-LOCAL): accepted 2026-09-26T04:07:41Z
+  E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-17, P-24, P-25
+  E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-17, P-24, P-25
+  E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-17, P-24, P-25

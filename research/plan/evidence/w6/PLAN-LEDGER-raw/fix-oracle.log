@@ -1,0 +1,80 @@
+ok   INT-01 main = 41693d5d
+ok   INT-01 integration_head = the wave base
+ok   INT-01 deployed: runtime 41693d5d CREDIT
+ok   INT-01 deployed: hosted 0001-0059 + digests, Lab 7ecbab0e, lab.callbill.ai, lab-control edge
+ok   INT-01 E4C next_action = the four remaining steps
+ok   INT-03 seven gate records
+ok   INT-03 E3L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E5L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E6L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E7L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E8L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E4-ON: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 COMPLETE-LOCAL: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 APP-LOCAL decision as recorded (note cites session-03)
+ok   INT-03 APP-PILOT decision as recorded (note cites session-03)
+ok   INT-04 E5L closure_note
+ok   INT-04 E6L closure_note
+ok   INT-04 E8L closure_note
+ok   INT-04 I2A closure_note
+ok   INT-04 E3A closure_note
+ok   INT-04 no manifest status changed
+ok   INT-02 every update file is ingested
+ok   INT-07 register names every pending item
+ok   INT-06 migrations README: LOCAL-ONLY convention + state of record
+ok   INT-06 no migration changed
+ok   INT-10 COMPOSITION-7:119 carries the 0058 tally sentence
+ok   INT-10 COMPOSITION-7 log line
+ok   INT-11 X1/X3/X5 not activated
+ok   INT-11 inputs P-08 resolved, P-11 open, P-21 resolved
+ok   P-08 ENACTED row in the decisions table
+ok   tracker check 0 errors
+ok   tracker: no overlapping-writer warning naming this lane, no unapplied-update warning
+ok   1-PL-1 HEAD merges cleanly into the tip
+ok   1-PL-1 lane ids unique
+ok   1-PL-1 every tip lane kept
+ok   1-PL-1 W6-PLAN-LEDGER is the lane's record (own paths, not the LAB-R3 copy)
+ok   1-PL-1 revision above the tip's
+remaining warnings:
+  WARNING: stale estimate: lane I2A estimated at 2026-09-26T00:33:19Z (older than 6 h)
+  WARNING: stale estimate: lane E3A estimated at 2026-09-26T22:00:00Z (older than 6 h)
+  WARNING: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
+  WARNING: stale estimate: lane W6-DOCS-STATE estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-INFRA-LIBS estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-LAB-RELEASE-TOOL estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-API-L2 estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-API-L3 estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-API-L4 estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-LAB-A estimated at an unknown time (older than 6 h)
+  WARNING: stale estimate: lane W6-MERGE-69 estimated at an unknown time (older than 6 h)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-INFRA-LIBS (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-LAB-RELEASE-TOOL (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-DOCS-STATE (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-LAB-RELEASE-TOOL (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-INFRA-LIBS (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L2 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-LAB-RELEASE-TOOL (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-API-L2 (running) and W6-API-L3 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L2 (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L2 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L2 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-API-L3 (running) and W6-API-L4 (running) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L3 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L3 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-API-L4 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
+  WARNING: overlapping writers: W6-API-L4 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+  WARNING: overlapping writers: W6-LAB-A (review) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
+ok   validate_plan PASS
+ok   PROGRESS.md shows the launch (lab.callbill.ai)
+PASS: 0 failing item(s)

@@ -1,0 +1,39 @@
+ok   INT-01 main = 41693d5d
+ok   INT-01 integration_head = the wave base
+ok   INT-01 deployed: runtime 41693d5d CREDIT
+ok   INT-01 deployed: hosted 0001-0059 + digests, Lab 7ecbab0e, lab.callbill.ai, lab-control edge
+ok   INT-01 E4C next_action = the four remaining steps
+ok   INT-03 seven gate records
+ok   INT-03 E3L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E5L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E6L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E7L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E8L: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 E4-ON: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 COMPLETE-LOCAL: candidate, decision, cells, classes+reruns, evidence exist
+ok   INT-03 APP-LOCAL decision as recorded (note cites session-03)
+ok   INT-03 APP-PILOT decision as recorded (note cites session-03)
+ok   INT-04 E5L closure_note
+ok   INT-04 E6L closure_note
+ok   INT-04 E8L closure_note
+ok   INT-04 I2A closure_note
+ok   INT-04 E3A closure_note
+ok   INT-04 no manifest status changed
+ok   INT-02 every update file is ingested
+ok   INT-07 register names every pending item
+ok   INT-06 migrations README: LOCAL-ONLY convention + state of record
+ok   INT-06 no migration changed
+ok   INT-10 COMPOSITION-7:119 carries the 0058 tally sentence
+ok   INT-10 COMPOSITION-7 log line
+ok   INT-11 X1/X3/X5 not activated
+ok   INT-11 inputs P-08 resolved, P-11 open, P-21 resolved
+ok   P-08 ENACTED row in the decisions table
+ok   tracker check 0 errors
+ok   tracker: no overlapping-writer / unapplied-update warning
+remaining warnings:
+  WARNING: stale estimate: lane I2A estimated at 2026-09-26T00:33:19Z (older than 6 h)
+  WARNING: stale estimate: lane E3A estimated at 2026-09-26T22:00:00Z (older than 6 h)
+  WARNING: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
+ok   validate_plan PASS
+ok   PROGRESS.md shows the launch (lab.callbill.ai)
+PASS: 0 failing item(s)

@@ -1,0 +1,10 @@
+{
+  "task": "E4C",
+  "lane": "E4C",
+  "activity": "queued",
+  "at": "2026-10-01T03:00:09Z",
+  "blockers": ["the operator's certify window on the box at the launched release 41693d5d (certify-window.sh stops pinning d3a99e01 in W6 lane certify-release, INFRA-02)"],
+  "next_action": "State 2026-10-01 (W6 plan-ledger, INT-01): hosted 0001-0059 and the box runtime 41693d5d (CREDIT) are live; the Lab control unit is ON at 7ecbab0e and lab.callbill.ai serves the Lab app. The four remaining steps, in order: (1) members - provider org infrx-internal + tester memberships on hosted (launch-v1.sh members; lab-release.sh members after W6); (2) main - fast-forward origin/main 41693d5d to the post-W6 tip (operator); (3) E4C certify on the box at the served release (certify-window.sh with RELEASE as an input, e4c-certify.sh; then the BACKEND-READY and APP-PILOT decisions; E1B/E4/E3A/I3 cells are window-bound on the same run); (4) one tester's internal-testing checklist (08-lab-internal-testing-rollout.md §8) recorded as INTERNAL-TESTING accepted. Register: research/plan/consumer-v1/10-carried-work-register.md",
+  "evidence": ["research/plan/evidence/coordinator/2026-10-01-v1-audit.md", "research/plan/consumer-v1/09-path-to-internal-testing.md"],
+  "source": "W6 plan-ledger (coordinator bookkeeping on the lane's behalf; audit INT-01)"
+}
