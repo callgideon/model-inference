@@ -5,6 +5,7 @@ import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/p/${f}.test.ts`);
 const PORT = "lib/services/pipelines/port.ts";
+const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/pipelines/fake.ts";
 const VIEW = "lib/services/pipelines/view.ts";
 const ACTIONS = "lib/services/pipelines/actions.ts";
@@ -63,8 +64,8 @@ const C = {
 
 const MUTANTS = [
   // port
-  m("P4-X01", "a viewer may run pipelines", PORT, "viewer: [],", 'viewer: ["run_evaluation"],', [C.v01, C.a02, C.j05]),
-  m("P4-X02", "a developer may assign reviewers", PORT, 'developer: ["run_evaluation"],', 'developer: ["run_evaluation", "manage_members"],', [C.v01, C.a02, C.j05]),
+  m("P4-X01", "a viewer may run pipelines", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "run_evaluation"],', [C.v01, C.a02, C.j05]),
+  m("P4-X02", "a developer may assign reviewers", ACCESS, '"manage_dev_deployment", "run_evaluation"],\n  administrator', '"manage_dev_deployment", "run_evaluation", "manage_members"],\n  administrator', [C.v01, C.a02, C.j05]),
   m("P4-X03", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v14]),
   m("P4-X04", "the default port is the stand-in, not unavailable", PORT, "labPipelines(env) ?? UNAVAILABLE", "labPipelines(env) ?? (preview ??= new FakePipelines())", [C.v14, C.w02]),
   m("P4-X05", "any preview flag value turns the stand-in on", PORT, 'env.LAB_PIPELINES_PREVIEW === "1"', "env.LAB_PIPELINES_PREVIEW !== undefined", [C.v14]),

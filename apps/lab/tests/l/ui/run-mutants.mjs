@@ -5,6 +5,7 @@ import { m, runMutants } from "../shell/harness.mjs";
 
 const SUITE = ["view", "journey", "actions", "pages", "http"].map((f) => `tests/l/ui/${f}.test.ts`);
 const PORT = "lib/services/control/port.ts";
+const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/control/fake.ts";
 const VIEW = "lib/services/control/view.ts";
 const ACTIONS = "lib/services/control/actions.ts";
@@ -41,8 +42,8 @@ const C = {
 };
 
 const MUTANTS = [
-  m("L4-X01", "a viewer may manage dev deployments", PORT, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a02]),
-  m("L4-X02", "a developer may propose publication", PORT, 'developer: ["read_aggregate_health", "manage_dev_deployment"],', 'developer: ["read_aggregate_health", "manage_dev_deployment", "propose_publication"],', [C.v01, C.a02, C.j02]),
+  m("L4-X01", "a viewer may manage dev deployments", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a02]),
+  m("L4-X02", "a developer may propose publication", ACCESS, 'developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],', 'developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation", "propose_publication"],', [C.v01, C.a02, C.j02]),
   m("L4-X03", "the row shows the wrong runtime identity", VIEW, "runtime: d.runtime,", "runtime: d.modelId,", [C.v02]),
   m("L4-X04", "an unpriced revision shows a rate card", VIEW, 'd.rateCardVersion ?? "unpriced"', 'd.rateCardVersion ?? "rc-0"', [C.v02]),
   m("L4-X05", "dev and prod are not told apart", VIEW, "where: `${d.environment} · ${d.visibility}`", "where: d.visibility", [C.v02]),

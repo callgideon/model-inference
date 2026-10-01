@@ -19,6 +19,7 @@ const NEXT = "next.config.ts";
 const SIGNIN = "lib/auth/sign-in.ts";
 const ROUTES = "lib/auth/routes.ts";
 const FORM = "lib/auth/sign-in-form.tsx";
+const PORTS = ["control", "evaluation", "pipelines"].map((f) => `lib/services/${f}/port.ts`); // LAB-07: they re-export access.ts's holds
 
 const C = {
   a01: "L1-A01 a signed-in user with no provider membership (consumer-only) is denied",
@@ -30,6 +31,8 @@ const C = {
   a07: "L1-A07 the selection action accepts only one of the user's own workspaces",
   a08: "L1-A08 the denial copy keeps consumer onboarding in the App: no signup, credits or onboarding offer",
   a09: "L1-A09 a page needs a selected workspace; the selection action needs a provider session",
+  a10: "L1-A10 holds() grants exactly the contracts/v2 ROLE_CAPABILITIES, for every role and capability",
+  a11: "L1-A11 every family port answers capabilities from that one table, not a table of its own",
   m01: "L1-M01 the membership read is the named RPC over the user's own session, with no identity argument",
   m02: "L1-M02 an RPC error or a thrown transport is unavailable",
   m03: "L1-M03 a malformed, unknown-role or duplicate row fails the whole read closed",
@@ -162,6 +165,14 @@ const MUTANTS = [
   m("L1-X67", "a consumer-only user cannot sign out", LAYOUT, '      {access.kind === "denied" && <SignOut />}\n', "", [C.b05]),
   m("L1-X68", "the form shows the action's raw error", FORM, "SIGN_IN_COPY[state.error]", "String(state.error)", [C.b05]),
   m("L1-X69", "the sign-in notice repeats the auth server", ACCESS, '"That email and password did not sign you in.', '"Invalid login credentials. That email and password did not sign you in.', [C.s02]),
+  // LAB-07: the one role table (each family runner kills its own role mutants on it too)
+  m("L1-X95", "an administrator loses manage_members", ACCESS, '"propose_publication", "manage_members"]', '"propose_publication"]', [C.a10]),
+  m("L1-X96", "a role holds customer content", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "read_customer_content"],', [C.a10]),
+  m("L1-X97", "holds ignores the role", ACCESS, "ROLE_CAPABILITIES[role].includes(capability)", "CAPABILITIES.includes(capability)", [C.a10]),
+  m("L1-X98", "a developer holds manage_members", ACCESS, '"manage_dev_deployment", "run_evaluation"],\n  administrator', '"manage_dev_deployment", "run_evaluation", "manage_members"],\n  administrator', [C.a10]),
+  ...PORTS.map((port, i) => m(`L1-X${99 + i}`, `${port} answers from a table of its own`, port,
+    'export { holds, type Actor, type Capability } from "../../auth/access.ts";',
+    'export { type Actor, type Capability } from "../../auth/access.ts";\nexport const holds = (role: string, capability: string): boolean => role !== "viewer" || capability === "read_aggregate_health";', [C.a11])),
   m("L1-X40", "the Lab imports the App's code", ACCESS, "export const ROLES", 'import type {} from "../../../app/lib/types.ts";\nexport const ROLES', [C.b04]),
 ];
 

@@ -3,20 +3,12 @@
 // is the HTTP adapter (server.ts); unset it is "unavailable" (fails closed), or, only outside production
 // and only when asked for, the labelled preview fake. The route derives the user from the forwarded session (LAB-AUTH) and
 // re-checks every call; the Lab only ever names the session's workspace.
-import type { Role } from "../../auth/access.ts";
+import type { Actor } from "../../auth/access.ts";
 import { FakePipelines } from "./fake.ts";
 import { labPipelines } from "./server.ts";
 
-/** contracts/v2 ROLE_CAPABILITIES: P1/P3 need run_evaluation; assigning a reviewer, manage_members. */
-export type Capability = "run_evaluation" | "manage_members";
-const CAPABILITIES: Record<Role, readonly Capability[]> = {
-  viewer: [],
-  developer: ["run_evaluation"],
-  administrator: ["run_evaluation", "manage_members"],
-};
-export const holds = (role: Role, capability: Capability): boolean => CAPABILITIES[role].includes(capability);
-
-export type Actor = { providerId: string; role: Role };
+/** The one role table and actor (lib/auth/access.ts, contracts/v2 ROLE_CAPABILITIES): P1/P3 need run_evaluation; assigning a reviewer, manage_members. */
+export { holds, type Actor, type Capability } from "../../auth/access.ts";
 
 /** P1: an imported pipeline row is `imported` (human) or `synthetic` (model); only a review is `human`. */
 export type Method = "imported" | "synthetic" | "human";

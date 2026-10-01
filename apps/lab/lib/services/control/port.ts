@@ -1,21 +1,12 @@
 // L4: the Lab's view of L3's control service (`/lab/v1/control`, WR-L4-1). With LAB_API_URL (else LAB_CONTROL_URL) set the
 // port is the HTTP adapter (server.ts, WR-E3L-J); unset it is "unavailable" (fails closed), or, only
 // outside production and only when asked for, the labelled preview fake.
-import type { Role } from "../../auth/access.ts";
+import type { Actor } from "../../auth/access.ts";
 import { FakeControl } from "./fake.ts";
 import { labControl } from "./server.ts";
 
-/** The capabilities L4 uses, as contracts/v2 ROLE_CAPABILITIES grants them. L3 re-checks every call. */
-export type Capability = "read_aggregate_health" | "manage_dev_deployment" | "propose_publication";
-const CAPABILITIES: Record<Role, readonly Capability[]> = {
-  viewer: ["read_aggregate_health"],
-  developer: ["read_aggregate_health", "manage_dev_deployment"],
-  administrator: ["read_aggregate_health", "manage_dev_deployment", "propose_publication"],
-};
-export const holds = (role: Role, capability: Capability): boolean => CAPABILITIES[role].includes(capability);
-
-/** Always the session's workspace (lib/auth/guard.ts), never a form value. */
-export type Actor = { providerId: string; role: Role };
+/** The one role table and actor (lib/auth/access.ts, contracts/v2 ROLE_CAPABILITIES). L3 re-checks every call. */
+export { holds, type Actor, type Capability } from "../../auth/access.ts";
 export type Registration = { name: string; artifactDigest: string; schemaVersion: string; runtime: string };
 export type Model = { modelId: string; revisionLabel: string; artifactDigest: string; schemaVersion: string; runtime: string; registeredAt: string };
 export type Deployment = {

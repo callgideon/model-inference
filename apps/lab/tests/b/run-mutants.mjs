@@ -5,6 +5,7 @@ import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "real", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/b/${f}.test.ts`);
 const PORT = "lib/services/evaluation/port.ts";
+const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/evaluation/fake.ts";
 const VIEW = "lib/services/evaluation/view.ts";
 const ACTIONS = "lib/services/evaluation/actions.ts";
@@ -100,8 +101,8 @@ const MUTANTS = [
   m("B4-X38", "subscription limits lose their unit", VIEW, "`${s.run_limit.value} ${s.run_limit.unit} per run", "`${s.run_limit.value} per run", [C.v07]),
   m("B4-X39", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v08]),
   // port: roles and the fail-closed seam
-  m("B4-X40", "a viewer may run evaluations", PORT, 'role !== "viewer"', 'role !== "nobody"', [C.v01, C.a02, C.j02]),
-  m("B4-X41", "a developer may not run evaluations", PORT, 'capability === "read_aggregate_health" || role !== "viewer"', 'capability === "read_aggregate_health" || role === "administrator"', [C.v01, C.a01, C.j01]),
+  m("B4-X40", "a viewer may run evaluations", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "run_evaluation"],', [C.v01, C.a02, C.j02]),
+  m("B4-X41", "a developer may not run evaluations", ACCESS, 'developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],', 'developer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a01, C.j01]),
   m("B4-X42", "a viewer may not read", PORT, 'capability === "read_aggregate_health" || ', "", [C.v01]),
   m("B4-X43", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v09]),
   m("B4-X44", "the default port is the stand-in, not unavailable", PORT, "labEvaluation(env) ?? UNAVAILABLE", "labEvaluation(env) ?? (preview ??= new FakeEvaluation())", [C.v09, C.w02]),
