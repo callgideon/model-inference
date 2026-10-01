@@ -16,7 +16,7 @@ The current E4C window cannot, by itself, close the existing BACKEND-READY defin
 - Ran fresh local checks and unauthenticated production HTTP probes. [Verification record](evidence/coordinator/2026-10-01-launch-review/verification.md) and [public responses](evidence/coordinator/2026-10-01-launch-review/public-probes.json) preserve the results.
 - Did not submit paid inference, provision accounts/resources, change flags, migrate a database, deploy, inject a production fault or interrupt E4C. Existing operating evidence remains attributed to the implementation session.
 - Docker is installed on this review Mac but its daemon is unavailable. Real PostgreSQL/PostgREST/Valkey/object-store/browser integration gates were not rerun here. Successful unit checks are not substitutes.
-- Historical [state 25](25-state-2026-10-01.md) and evidence documents are snapshots. Use the dated addendum in [handoff 25](25-planning-handoff.md) for later events; do not rewrite the snapshots to imply earlier knowledge.
+- Historical [state 25](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/25-state-2026-10-01.md) and evidence documents are snapshots. Use the dated addendum in [handoff 25](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/25-planning-handoff.md) for later events; do not rewrite the snapshots to imply earlier knowledge.
 
 ## 2. What is actually available
 
@@ -41,7 +41,7 @@ The references below refine the existing tasks/register; they do not create a se
 
 ### LR-01 — P1 for accepting the consumer release: certification has explicit missing checks
 
-Evidence: [handoff 25, status addendum](25-planning-handoff.md), [certify-window.sh](../../infra/rollout/certify-window.sh) lines 22–23, 131, 346 and 418; [P-17](15-pending-inputs.md), register row 3. The window records skipped alert/canary work and outage drills; the SSE/two-tenant work also has recorded prerequisites. The wrapper ends by retaining BACKEND-READY PENDING.
+Evidence: [handoff 25, status addendum](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/25-planning-handoff.md), [certify-window.sh](../../infra/rollout/certify-window.sh) lines 22–23, 131, 346 and 418; [P-17](15-pending-inputs.md), register row 3. The window records skipped alert/canary work and outage drills; the SSE/two-tenant work also has recorded prerequisites. The wrapper ends by retaining BACKEND-READY PENDING.
 
 Action: when the active run ends, ingest its actual report and enumerate every PASS/FAIL/SKIP/PENDING against P-17's ten checks. Close missing cells in a declared follow-up window without discarding valid measured results. Preserve the runtime/image/profile/card/schema pins. An internal-test exception, if chosen, must name its limits and outstanding checks; it is not APP-PILOT acceptance.
 
@@ -148,12 +148,12 @@ No date/ETA is inferred from the task count. The four-hour soak, real email deli
 1. **Real SOP-use-case loop:** agree on a small owned robotics dataset, episode/segment IDs, time alignment, event schema, SOP rubric and human labels. Run a resumable bounded batch, inspect failures and measure event/step accuracy and useful video-hours processed. Synthetic/parity clips establish serving behavior; they do not establish SOP verification accuracy. P-07 remains the quality-claim boundary.
 2. **Measured inference improvements:** profile video fetch/decode/preparation, queue, prefill and decode independently. Qualify each engine/precision/batching/cache change as a new serving version against the same workload, task quality and accounting invariants. Report latency percentiles, fresh successful video-hours/second, refusals and full cost basis; CREDIT price is not infrastructure cost.
 3. **Hosting milestones:** real model qualification and engine smoke → second compatible worker and drain/recovery proof → measured scaling policy and cold-start/scale-down → broader hardware/engine matrix → matched Modal comparison. Preserve [roadmap 23](23-inference-hosting-roadmap.md); one pinned model on vLLM is already serving, while a general hosting platform is still future work.
-4. **Lab completion:** choose one complete observe/evaluate/improve workflow, close the carried compositions and accounting blockers, then enable only its qualified roles. Do not dispatch all 84 carried rows as equal launch blockers.
+4. **Lab completion:** choose one complete observe/evaluate/improve workflow, close the carried compositions and accounting blockers, then enable only its qualified roles. Do not dispatch every carried row as an equal launch blocker.
 
 ## 6. Planning and tracker hygiene
 
 - Keep `tasks.json` and the carried register as the existing task sources. Map LR-01–LR-06 to their named tasks/rows when dispatching; these labels are review references, not a replacement backlog.
-- Reconcile the progress overlay after evidence lands: the validator currently reports 14 warnings, including stale estimates and writer-overlap entries for already-merged W6 lanes, plus 16 unapplied update files. These do not demonstrate actual concurrent writers; they do make the displayed ETA/status unreliable.
+- At review time the overlay reported 14 warnings and 16 unapplied files. The subsequent documentation cleanup reconciled it at revision 395 with zero warnings: merged W6 lanes complete; old estimates retired; malformed historical updates explicitly rejected. Release gates remain unchanged and E4C is awaiting its recorded outcome.
 - Separate statuses in the published tracker: implemented, locally integrated, deployed, production-tested and accepted. Show consumer/public/Lab gate scope explicitly.
-- Update handoff 25's operational instructions when the current window finishes: its dated addendum correctly pins E4C to installed `41693d5d`; an older instruction in §3 still says the wrapper uses `origin/main`. New sessions must not pick the wrong release from that stale sentence.
+- Update [STATUS.md](../../STATUS.md) and the owning operational log when the current window finishes. Its installed release is `41693d5d`; do not substitute `origin/main`. The documentation cleanup retired handoff 25, including its obsolete wrapper instruction.
 - Leave the original dirty development checkout untouched. This review was prepared in `/Users/rey/Documents/GitHub/model-inference-v1-review` on `codex/v1-launch-review-20261001` after fast-forwarding its main to the latest remote.

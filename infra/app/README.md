@@ -1,6 +1,6 @@
 # App release runbook — `apps/app` on Vercel (I2A)
 
-**State 2026-10-01: this runbook has run.** The App is live since 2026-09-27 (first known-good release d3a99e01) and production builds from `main` = 41693d5d since the 2026-09-29 window (session-03 record lines 455, 525; research/plan/25-state-2026-10-01.md). The I2A-PREP lane wrote this runbook and the code it relies on (`apps/app/lib/deploy/`, `instrumentation.ts`, `next.config.ts`, `app/api/version/route.ts`, tests `apps/app/tests/i2a/`). Every item marked **[OP]** is held by the operator.
+**Deployment procedure, not release acceptance.** The App is deployed from main; consult [STATUS.md](../../STATUS.md) and `/api/version` for its actual identity. Public signup, hosted onboarding and APP-PILOT acceptance remain open at the recorded cutoff. The code this runbook uses lives in `apps/app/lib/deploy/`, `instrumentation.ts`, `next.config.ts`, `app/api/version/route.ts` and `tests/i2a/`. Existing [OP] steps identify the hosted configuration/operating role; follow current authorization and environment ownership.
 
 Operations after a release (combined checks, auth/credit cutover, error monitoring, alerts, App rollback): [operations.md](operations.md) (I3).
 
@@ -10,16 +10,20 @@ browser journey; it never deploys or restarts runtime infrastructure.
 
 ## 1. Order relative to the backend window
 
+The App is already deployed; the original acceptance sequence below remains a release checklist,
+not evidence that BACKEND-READY or APP-PILOT was accepted. Reconcile the installed App/backend
+identities with STATUS.md before the next change.
+
 1. The backend release is accepted (**BACKEND-READY**: E4C accepted; the edge's public origin
    answers `GET /v1/models`). The App release never shares the backend's window.
 2. The App's hosted inputs (§3, §4) are set **before** the App release is deployed: from this
    release on, a server whose environment is incomplete refuses to serve (every request 500,
    log line `App environment refused (<env>): <variable names>`), by design.
 3. The App release is deployed (§5), smoke-checked (§6) and recorded as the known-good App release.
-4. **Gate APP-MERGE.** The production branch is `main` (§3 Git), so merging `claude/consumer-v1`
-   (which carries `instrumentation.ts`) into `main` **is** the production App deploy. It is a named
-   tracker gate, opened only after items 1-2 above and the §7 item 2 inputs are confirmed; it is
-   never a routine integration merge.
+4. **Gate APP-MERGE.** The production branch is `main` (§3 Git); a change to main can trigger
+   a production App deployment. Check items 1–2 above and the §7 item 2 inputs for each release,
+   and record its actual identity and acceptance separately. The historical consumer integration
+   branch is already merged; it is not a pending launch step.
 
 ## 2. Environments and domains
 
@@ -29,9 +33,9 @@ browser journey; it never deploys or restarts runtime infrastructure.
 | preview | `preview` | `https://infrx-app-<hash\|git-branch>-<scope>.vercel.app` | a **non-production (staging) project** [OP] | refused at startup if pointed at the production project |
 | development | `development` (or unset under `next dev`) | `http://localhost:3000` | staging or local Supabase | `next start` outside Vercel must set `INFRX_APP_ENVIRONMENT` |
 
-`<scope>` is `PREVIEW_SCOPE` in `apps/app/lib/deploy/env.ts` (`humanbit`, from
-`apps/app/supabase/README.md`). ⚠️ TO BE VERIFIED [OP]: HANDOFF.md places the project in a
-personal Vercel scope; confirm the slug from a real preview URL and correct the constant if it differs.
+`<scope>` uses the configured `PREVIEW_SCOPE` in `apps/app/lib/deploy/env.ts` (`humanbit`).
+Verify the actual Vercel project/team and a real preview URL before changing this constant;
+historical personal/team ownership notes are not current inventory.
 
 ## 3. Hosting settings (names only; values live in Vercel, never in the repo)
 
@@ -102,7 +106,7 @@ is the check that the entries cover `/auth/callback?next=...`.
 Deploy:
 
 1. **[OP]** Log purpose, expected effect and rollback target (the current known-good App
-   deployment id) in the session record; hold the deployment lock ([infra/README.md §1](../README.md)).
+   deployment id) in the session record; hold the deployment lock ([environment ownership](../README.md#window-ownership)).
 2. Gates at `RELEASE`, locally: `git rev-parse HEAD` = `RELEASE`, clean tree; `make console-test
    console-lint console-typecheck`; `cd apps/app && pnpm build && node --test tests/i2a/*.test.ts`
    (the `I2A-BUILT-*` cases then run instead of skipping: no server-only name in `.next/static`,

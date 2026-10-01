@@ -1,55 +1,37 @@
-# Implementation handoffs — consumer App and provider Lab
+# Implementation index
 
-**State 2026-10-01:** the consumer v1 is live, hosted is at 0001–0059 and the Lab is deployed for internal testing. Start at the [state of record 25](25-state-2026-10-01.md), then [the path to internal testing 09](consumer-v1/09-path-to-internal-testing.md) and the [v1 audit](evidence/coordinator/2026-10-01-v1-audit.md); the [manifest](tasks.json) holds task status.
+Start with [current state](../../STATUS.md), then the [launch review and production workflow](26-launch-readiness-review-2026-10-01.md). The consumer App/API are deployed; production acceptance and public onboarding remain open. The Lab is only partially operational. Current priority is consumer launch closure, not repeating completed foundation waves.
 
-**Historical dispatches (preserved, not current):** [program 22](22-consumer-v1-implementation.md) and [prompt 24](24-consumer-v1-session-handoff.md) (2026-09-24, E3C/E4C then App), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20 §14](20-platform-handoff-2026-09-24.md) with its [operational tail](handoffs/operational/HANDOFF-20260924T2115Z.md), the [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md), [pending inputs](15-pending-inputs.md), [session prompt 16](16-fresh-session-handoff.md) and the [GPU hosting roadmap 23](23-inference-hosting-roadmap.md). The sequence below describes the original program.
+## What to use
 
-## Start here
+| Need | Document |
+|---|---|
+| Actual deployment, gates and immediate gaps | [STATUS.md](../../STATUS.md) |
+| Findings, priorities and production acceptance workflow | [Review 26](26-launch-readiness-review-2026-10-01.md) |
+| Task IDs, dependencies and implementation status | [tasks.json](tasks.json), [generated ledger](17-task-ledger.md) |
+| Reconciled task activity and release gates | [HTML tracker](evidence/coordinator/progress.html), [Markdown tracker](evidence/coordinator/PROGRESS.md); ETA remains unknown while operating evidence is incomplete |
+| Carried omissions and enablement blockers | [Carried register](consumer-v1/10-carried-work-register.md) — its testing column describes the narrow Lab checklist |
+| Latest operating events | [Operational log](consumer-v1/09-path-to-internal-testing.md), [session record](evidence/coordinator/2026-09-24-session-03.md) |
+| Current product requirements | [App / Lab architecture and specs](../platforms/README.md) |
+| Binding runtime contracts | [Contracts](01-contracts.md), [v2 mapping](01a-contracts-v2-map.md), [rulings](08-contracts-v1-encoding.md), [durable protocols](02-durable-protocols.md) |
+| Worktree ownership and coordination | [Execution protocol](03-execution-protocol.md), [coordinator workflow](COORDINATOR.md) |
+| Test/acceptance criteria | [Verification](04-verification.md), [evidence format](evidence/README.md), [consumer briefs](consumer-v1/README.md) |
+| Decisions and unresolved external inputs | [Input/decision record](15-pending-inputs.md) — later dated decisions supersede earlier rows |
+| Future hosting and optimization | [Roadmap 23](23-inference-hosting-roadmap.md) |
 
-Read the current start documents above before the [complete build plan](12-complete-build-plan.md), [revision briefs](11-wave3-revision-handoffs.md), [product architecture](../platforms/README.md), [implementation impact](08-platform-split.md) and [amendment briefs](09-amendment-workstreams.md), then [accepted decisions](00-decisions-and-scope.md), [contracts](01-contracts.md) and [durable protocols](02-durable-protocols.md). Reconcile current work before selecting one active task from [manifest v4](tasks.json). Follow [worktree rules](03-execution-protocol.md); attach [verification evidence](04-verification.md). Six old mixed tasks are superseded; their IDs remain for mapping prior work. The sequence below describes the program, not a claim that its earlier stages are still unimplemented.
+## Dispatch now
 
-| Track | Handoff | Owns | Earliest useful work |
-|---|---|---|---|
-| F | [Foundation](handoffs/F-foundation.md) | Extraction, shared contracts, test discovery | Immediately |
-| D | [Durable state](handoffs/D-durable-state.md) | PostgreSQL migrations, jobs, holds, journal, coordination | F2 |
-| M | [Media](handoffs/M-media.md) | Secure ingestion, preprocessing, uploads | F2 |
-| Q | [Scheduling](handoffs/Q-scheduling.md) | Queue indices, fairness, rebuilding | F2 |
-| W | [Worker](handoffs/W-worker.md) | Engine lifecycle, execution fencing, cancellation | F2 |
-| G | [Gateway](handoffs/G-gateway.md) | Authentication, public routes, SSE relay | F2 |
-| T | [Traces](handoffs/T-traces.md) | Bounded capture, spool, projections, retention | F2 |
-| J | [Judge](handoffs/J-judge.md) | Evaluation workflow, calibration, provider adapter | F2 |
-| C | [Console services](handoffs/C-console-services.md) | Tenant-safe repositories and server actions | F2 |
-| U | [Administration UI](handoffs/U-administration-ui.md) | Usage, balances, keys, settings, operator pages | F2 |
-| V | [Trace UI](handoffs/V-trace-ui.md) | Provider trace/detail/review/judge UI in apps/lab | Amended F2; integrate Lab access/shell |
-| I | [Infrastructure](handoffs/I-infrastructure.md) | Pilot deployment, observability, later fleet | Inventory immediately |
-| E | [Verification](handoffs/E-verification.md) | Corpus, harness, adversarial integration, release evidence | Corpus immediately |
-| S | [Reconciliation](09-amendment-workstreams.md) | Remote state, amended contracts, shared wiring | Immediately |
-| A | [Consumer additions](09-amendment-workstreams.md) | Signup/onboarding, catalog/rates/docs; grant transaction D-owned | Amended F2; D1 for A1 |
-| L | [Lab foundation](09-amendment-workstreams.md) | Provider shell/roles, model and endpoint workflows | Amended F2 |
+1. Preserve the active E4C operating window; ingest its finished results before scheduling another production workload.
+2. Close the missing certification/operating cells and final combined verification. Use existing implementations and valid evidence.
+3. Finish CAPTCHA/onboarding requirements and run the bounded real two-user App → Marlin → ledger journey.
+4. Record invited-pilot and public-signup decisions independently of Lab enablement.
 
-F/S establish the revised common contracts. Independent tracks then develop against committed fixtures; tasks sharing owned paths remain serialized within their track. Development readiness does not imply merge or deployment readiness. Start dependencies require committed/reviewed code and fixtures; real integration dependencies require actual adapter evidence. New F2R/F2P/D1R gates must pass before their consumers start. Mock tests alone cannot satisfy integration dependencies.
+The [review](26-launch-readiness-review-2026-10-01.md) maps these to existing tasks and carried rows. No implementation status is promoted by documentation cleanup. Record owner, paths, base, integration target, environment and verifiable exit before assigning work.
 
-## Delivery sequence
+## Retained requirements versus current state
 
-1. Review/commit S1 audit; retain F1/F2/D1 and all wave-2 history. F2R closes carryovers while I0, E2R and S2M can work independently.
-2. F2P encodes the revised contract; D1R adds migrations after 0005. D/A1 and G6B supply shared headless identities/keys/rates/accounting; C0 browser reporting follows backend acceptance.
-3. Parallel runtime D/M/Q/W/G tasks use revised fixtures; integrate real durable/runtime prerequisites before G2 mounts anything. I0 is mandatory. E3B proves the endpoint independently of App/Lab.
-4. I2B/I3B/E1B → M4/W4 → E4B proves backend deployment, recovery and measured optimization. App follows using E3A/I2A/I3/E4 as frontend delta gates; later L1–L4/E3L/I2L and V/T/J/C prove provider operation/observation.
-5. After the App candidate is accepted, activate Lab milestones: F3/D7/N/H/B/I5/E6L for evaluation, D8/N3/P/I6/E7L for improvement, D9/R/I7/E8L for rollout. [Detailed briefs](13-lab-improvement-handoffs.md) and [conditional expansion gates](14-expansion-gates.md) replace the earlier undecomposed roadmap. Speech remains deferred. No old wave-3 linear sequence overrides the manifest.
+Programs 12/18/22, amendment/revision briefs 09/11, improvement briefs 13 and the module files under `handoffs/` remain task-linked requirements and acceptance references. They are **not current session handoffs or deployment inventories**. Their original delivery bands describe the implementation history; consult the current manifest/evidence before selecting any task.
 
-See [risks and review dispositions](05-risk-register.md) for the changes made after review. No elapsed-time promise substitutes for a passed gate.
+[Expansion gates](14-expansion-gates.md) and the hosting roadmap remain conditional. Consumer pilot acceptance does not depend on complete Lab evaluation/training, autoscaling, a second engine, payments or general custom-model hosting.
 
-The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocabulary, configuration names, dependency set and test discovery that F2 implements. The [database map](06-database-map.md) defines persistence keys and role boundaries. The [requirement coverage map](07-requirement-coverage.md) connects the source specs to implementation tasks and explicitly deferred work.
-
-## Verification log
-
-- 2026-09-20: Derived from repository review and explicit user decisions. Created documentation-only implementation package; planned tests and live gates are not reported as passed.
-- 2026-09-20: Implementation coordination started ([session 01](evidence/coordinator/2026-09-20-session-01.md)); added the contracts v1 encoding refinement for F2. No task is marked integrated by this entry.
-- 2026-09-21: Status line updated; F1, F2, E1 and I1 are integrated on `claude/infrx-impl` (gate G0), nothing is deployed or live-verified.
-- 2026-09-21: Wave 2 complete — all eleven module tasks (D1, M1, Q1, W1, G1, T1, J1, C1, U1, V1, E2) reviewed and merged on `claude/infrx-impl`; stage review S2 `pass`; D1 `integrated` (real PostgreSQL, both images), the other ten `implemented` behind fakes or a local real service. Nothing deployed, mounted or applied to a Supabase project. Next: F2.2 then wave 3 per the handoff.
-
-- 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
-
-- 2026-09-21: Imported `271add9`, audited wave 2 and reconciled product-v2 revisions in manifest v4; see `10-wave2-platform-audit.md`. Earlier remote-unverified statements are superseded for committed repository work only.
-
-- 2026-10-01 (W6 docs-state): the 2026-09-24 start/review/status banners replaced by one dated state line pointing at `25-state-2026-10-01.md`, 09 and the v1 audit; the older dispatches are kept, linked, as history.
+Historical root/session/resume handoffs have been removed, rather than kept as competing entry points. [Documentation policy and history](DOCUMENTATION.md) explains the retained proof and historical links.

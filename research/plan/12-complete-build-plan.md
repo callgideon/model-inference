@@ -1,14 +1,10 @@
-# Complete implementation plan — Marlin backend, then App, then Lab
+# Complete platform requirements and original delivery bands
 
-**2026-09-24 superseding dispatch:** [Program 22](22-consumer-v1-implementation.md), [handoff/prompt 24](24-consumer-v1-session-handoff.md) and the current [manifest](tasks.json) replace older next-task lists in this document. Existing implementation is preserved; S3 reconciles it, F2C freezes corrections, E3C/E4C close backend readiness, then App. Use this document for unchanged baseline contracts/ownership and historical context, not to restart completed waves.
+Current implementation and priorities are in [STATUS.md](../../STATUS.md), [review 26](26-launch-readiness-review-2026-10-01.md) and [the planning index](README.md). The backend repairs and consumer App are implemented/deployed with acceptance still pending; the Lab has separate incomplete services. This document retains task-linked requirements and the original delivery bands, not a new-session dispatch or claim that all listed work is unimplemented. Use the manifest and evidence before selecting work.
 
-Updated 2026-09-22: **complete the robust, measured and optimized Marlin2B inference backend first; launch the consumer App next, then provider Lab.** SOP verification over large robotics datasets remains the lead application. [Backend-first handoffs](18-marlin-backend-first.md) define the current execution gate. This package covers the complete agreed two-platform roadmap without making the whole roadmap a launch dependency.
+## Completion levels
 
-## Current objective and what “complete” means
-
-The next implementation session completes the headless Marlin endpoint: scoped API keys/tenant controls, immutable model/rate resolution, secure finite-video preparation, sync/SSE and explicit async, durable execution/accounting, recovery/restore, operational telemetry and measured media/GPU optimization. E3B proves local backend integration; E4B certifies the final real-GPU endpoint envelope. App signup/onboarding/catalog/credits/usage pages follow this backend candidate. Individual credits and existing financial invariants are retained through shared backend functions; no temporary unmetered runtime is introduced.
-
-The Lab roadmap remains concrete and ready for later sessions: provider operations → observations/review → imported datasets and comparisons → annotation/external training → controlled release/optimization evidence. Activate App feature work after the backend candidate is accepted, then Lab after the App candidate. Missing GPU/staging infrastructure is not a reason to silently switch to frontend or Lab scope.
+The complete platform roadmap remains broader than the next launch. Qualify the consumer pilot/public onboarding first; provider workflows and hosting/optimization have independent gates. Preserve durable execution, exact accounting and data-use permissions throughout.
 
 | Completion level | Evidence required | What it does not establish |
 |---|---|---|
@@ -22,7 +18,7 @@ A missing service is **pending**, never a skipped pass. Synthetic test endpoints
 
 ## Authoritative reading and baseline
 
-1. [Fresh-session handoff and prompt](16-fresh-session-handoff.md).
+1. [Current state](../../STATUS.md) and [implementation index](README.md).
 2. [Backend-first scope and eight new briefs](18-marlin-backend-first.md), this full roadmap and [pending inputs/carryovers](15-pending-inputs.md).
 3. [Product architecture](../platforms/README.md), [App spec](../platforms/03-app-spec.md), [credit policy](../platforms/02-credits.md); read Lab spec when assigned that phase.
 4. [Manifest v4](tasks.json), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), [execution protocol](03-execution-protocol.md), and the selected task's brief.

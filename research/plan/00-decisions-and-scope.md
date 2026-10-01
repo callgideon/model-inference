@@ -1,8 +1,6 @@
 # Accepted scope and decisions
 
-**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
-
-**Current scope/sequence:** [complete implementation plan](12-complete-build-plan.md). Marlin2B SOP verification over large robotics datasets is the lead workload; complete the endpoint backend first, then launch the consumer App. This file’s initial scope is the App/early-Lab release. Later Lab M2–M4 now have executable packages; conditional/deferred work remains explicit.
+**Requirements reference.** Current deployment, acceptance and dispatch priorities are in [STATUS.md](../../STATUS.md), [review 26](26-launch-readiness-review-2026-10-01.md) and the [implementation index](README.md). The original backend-first sequence below is implementation history; it is not an instruction to repeat completed waves.
 
 ## Product outcome
 

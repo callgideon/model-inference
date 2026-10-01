@@ -1,12 +1,10 @@
 # Implementation amendment — App and Provider Lab
 
-**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
-
-**Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
+**Requirements reference.** Current deployment, acceptance and dispatch priorities are in [STATUS.md](../../STATUS.md), [review 26](26-launch-readiness-review-2026-10-01.md) and the [implementation index](README.md). The original backend-first sequence below is implementation history; it is not an instruction to repeat completed waves.
 
 Revision 2026-09-21. Read [product architecture](../platforms/README.md) first. This amendment supersedes conflicting routing, credit-unit, signup and release-dependency instructions in the original module briefs. Unchanged durable protocols remain binding.
 
-## Current State Summary
+## Historical baseline at the September 21 amendment
 
 Wave 2 of the original 45-task plan is now imported at `271add9`. [The audit](10-wave2-platform-audit.md) records actual completion evidence, local corrections and the new revision tasks. The table below preserves the original conceptual mapping; **F2 changes now occur in F2R/F2P, D1 changes in additive D1R, C1 database integration in C0 and the implemented V1 move in V1M**. Do not reset those original tasks or rewrite 0001–0005.
 
@@ -122,7 +120,7 @@ App release depends on E3A + I2A/I3 + E4. Lab operations release depends on E3L 
 
 ## Cross-system reconciliation procedure
 
-The remote coordinator reads [the handoff](PLATFORM-SPLIT-HANDOFF.md), inventories branches/worktrees and maps commits to old/new task IDs. Record each slice as not started, in progress, implemented against old contract, contract-updated, or integrated with evidence. Maintain append-only handback records; do not infer completion from this plan's `planned` labels.
+The remote coordinator reads [the handoff](https://github.com/callgideon/model-inference/blob/252f3ea8fda0d144fe03151840bb232fb1c76633/research/plan/PLATFORM-SPLIT-HANDOFF.md), inventories branches/worktrees and maps commits to old/new task IDs. Record each slice as not started, in progress, implemented against old contract, contract-updated, or integrated with evidence. Maintain append-only handback records; do not infer completion from this plan's `planned` labels.
 
 For changes not yet implemented, use new destinations immediately. For active overlapping files, let the current owner finish a coherent commit and assign one amendment owner. For integrated provider pages, migrate only after Lab shell/shared imports exist. Update fixtures first, migrate database forward, update adapters, then UI. New sessions branch from the coordinator's committed amended base; existing sessions cherry-pick/rebase only under that coordinator's reconciliation plan.
 

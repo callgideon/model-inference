@@ -1,157 +1,44 @@
-# Consumer inference App (`apps/app`)
+# Consumer inference App
 
-**State 2026-10-01:** live since 2026-09-27 (Vercel, production from `main` = 41693d5d) on the
-CREDIT regime: runtime flags `credit_admission=true`, `legacy_usd_admission=false`,
-`signup_grant=true` (session-03 record line 525). What runs where and what is pending:
-[state of record 25](../../research/plan/25-state-2026-10-01.md); the App's operator runbook is
-[`infra/app/README.md`](../../infra/app/README.md) with [operations](../../infra/app/operations.md).
+Next.js consumer product: account onboarding, API keys, model catalog/docs, CREDIT balance, usage/request history, owned results and operator controls. It is deployed at `https://app.callbill.ai`; **public signup and production acceptance remain pending**. See [current state](../../STATUS.md) and [launch gaps](../../research/plan/26-launch-readiness-review-2026-10-01.md).
 
-The customer console: sign in, browse models, copy a working request, manage API
-keys, see usage and balance, read the docs. Next.js (App Router) on Vercel,
-Supabase for auth and Postgres. Current [requirements](../../research/platforms/03-app-spec.md)
-and [roadmap](../../research/platforms/04-app-roadmap.md) supersede the historical
-single-console spec. Provider models/endpoints/traces/evaluation belong in
-[`apps/lab`](../lab/README.md).
+## Implemented behavior
 
-Onboarding is verified signup (`/signup` → `/verify-email` → `/welcome`) with **10,000 CREDIT once
-per individual user**, only a free plan. Public signup is **closed** on the hosted project: P-05 keeps `disable_signup true` (`research/plan/15-pending-inputs.md`, I1B-inventory-2026-09-22.md:34), the session-03 record logs no run of operations X7 ("Open public signup"), and internal users are created by script (session-03 record line 455). Opening it is
-the operator's reversible Auth setting ([operations](../../infra/app/operations.md) X7). The
-invite-only section below is the pre-v1 baseline and still the operator path for creating users.
+- Email/password signup, verification, sign-in, resend and password recovery; protected console routes.
+- A verified individual receives one 10,000 CREDIT entitlement, including safe callback/relogin retries. No monthly refill or paid plan.
+- Consumer keys are revealed once and stored as hashes; grants and adjustments are audited. New admissions reject revoked keys; existing reads/cancels follow the documented identity-cache policy.
+- Catalog and documentation read the API's published capabilities and rates. CREDIT, holds and legacy USD are distinct; unavailable reads are not replaced with fixture balances.
+- Usage/request detail includes owned result retrieval and expiry. Consumer access does not imply provider access.
 
-Historical (2026-09-22, before C0 and A1–A3 landed; not re-verified): Usage/Balance/Traces had development-only fixture previews, enabled by
-`INFRX_CONSOLE_PREVIEW=1` under `next dev`; production always shows an unavailable
-state until C0 supplies real account reporting. Sidebar amounts remain exact legacy
-USD, including holds — or fixed "Balance unavailable" copy when the wallet summary
-cannot be read, never a substituted number. No public signup or CREDIT grant
-implementation was claimed then.
+The approved CAPTCHA requirement is **not implemented** in signup/recovery yet. Hosted confirmation/recovery delivery, abuse/rate limits and a two-user production journey need verification before public signup opens. Local browser tests use controlled auth/engine components and do not establish these hosted outcomes.
 
-The preview gate is decided when the bundle is built, not from the environment the
-server is started with, because Next inlines only the textual `process.env.NODE_ENV`.
-After `pnpm build`, the production chunk must contain no fixture path at all:
+## Develop
 
-```bash
-pnpm build
-grep -rl "INFRX_CONSOLE_PREVIEW" .next --include="*.js"; echo "exit=$?"   # exit=1, no file
-grep -rl "createFakeConsoleServices" .next --include="*.js"; echo "exit=$?" # exit=1, no file
-grep -rho 'consoleContext",0,function.\{0,40\}' .next/server --include="*.js" | sort -u
-# consoleContext",0,function(a=process.env){return null}
+From this directory, install with `pnpm install --frozen-lockfile`, configure `.env.local` from `.env.example` using a development project, then run `pnpm dev` (port 3000). From the repository root:
+
+```sh
+make console-test console-lint console-typecheck
+make console-built
 ```
 
-## Run locally
+Additional conformance, real database and browser checks: [test guide](../../tests/integration/README.md). A missing stack is NOT RUN, not acceptance.
 
-```bash
-pnpm install
-cp .env.example .env.local     # fill in the Supabase keys
-pnpm dev                       # http://localhost:3000
-```
+## Configuration and database
 
-`pnpm lint` and `pnpm build` must pass before pushing. `pnpm format` runs Prettier.
+The authoritative environment matrix is [lib/deploy/env.ts](lib/deploy/env.ts); production validation runs at startup. Public configuration uses `NEXT_PUBLIC_*`; privileged keys and `CONSOLE_CURSOR_SECRET` remain server-only. `INFRX_API_BASE_URL` identifies the API origin. Preview deployments must not inherit production write credentials. Development fixture views are explicitly labeled and ignored in production.
 
-## Environment
+[Supabase configuration](supabase/README.md) and [migration conventions](supabase/migrations/README.md) govern the shared database. Applied migrations are immutable. Signup entitlement is once per individual, not per organization or browser callback. Price publication and credit changes use the audited operations, never direct balance edits or catalog reseeding.
 
-| variable                        | where            | what                                                         |
-| ------------------------------- | ---------------- | ------------------------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`      | browser + server | `https://fcbnscgsymzdykendbrc.supabase.co`                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | browser + server | publishable key; RLS is what protects the data               |
-| `SUPABASE_SERVICE_ROLE_KEY`     | server only      | used by `/admin` ledger writes; never send it to the browser |
-| `NEXT_PUBLIC_APP_URL`           | browser          | origin used to build the auth callback URL                   |
+## Deploy and verify
 
-Never commit real values: `.env*` is gitignored except this repo's `.env.example`.
+Vercel project `infrx-app`, root `apps/app`, production builds from main. Follow the [App runbook](../../infra/app/README.md) and [operations checklist](../../infra/app/operations.md). `GET /api/version` reports the actual build identity; check it rather than copying a SHA from an old README.
 
-## Database
+A deployed build is not APP-PILOT acceptance. The [launch review §4](../../research/plan/26-launch-readiness-review-2026-10-01.md#4-shortest-verifiable-path-to-usable-production) defines the real account → key → inference → result → ledger workflow.
 
-Migrations live in [`supabase/migrations`](supabase/migrations) and are applied
-with the Supabase CLI against project `fcbnscgsymzdykendbrc`:
+## Source map
 
-```bash
-supabase link --project-ref fcbnscgsymzdykendbrc
-supabase db push
-```
-
-The console reads with the user's JWT and relies on RLS; it calls three SQL
-functions: `org_usage_summary(p_org, p_from, p_to, p_key)`,
-`org_usage_daily(...)` and `org_balance(p_org)`.
-
-## Deploy on Vercel
-
-- Project `infrx-app`, Git-linked to `callgideon/model-inference`,
-  **root directory `apps/app`**, production branch `main`.
-- Framework preset Next.js; build and install commands are the defaults.
-- Environment variables: the four above, with `NEXT_PUBLIC_APP_URL` set to
-  `https://app.callbill.ai` in production. Preview deployments can leave it
-  unset — the reset email's callback is built from `window.location.origin`.
-- Domain `app.callbill.ai` via a Route 53 CNAME to `cname.vercel-dns.com`.
-
-## Supabase auth settings (pre-v1 baseline: invite only)
-
-Sign-in is **email + password, invite only**. Public sign-up is disabled, so
-there is no sign-up page: an operator creates the account, the user sets their
-own password from "Forgot password". Google OAuth is gone.
-
-In Authentication → Providers: **Email** enabled, "Allow new users to sign up"
-**off**, minimum password length **10**.
-
-In Authentication → URL Configuration:
-
-- **Site URL**: `https://app.callbill.ai`
-- **Redirect URLs**: `https://app.callbill.ai/**` and
-  `http://localhost:3000/auth/callback`.
-
-### Creating a user
-
-Either in Authentication → Users → **Add user** (dashboard; set a throwaway
-password and leave "Auto Confirm User" on), or with the admin API:
-
-```bash
-curl -X POST "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/admin/users" \
-  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"someone@example.com","password":"'"$(openssl rand -base64 18)"'","email_confirm":true}'
-```
-
-Then tell the user to go to `/forgot-password` and enter that address: the
-email links to `/auth/callback?token_hash=…&type=recovery&next=/update-password`,
-which verifies the link, signs them in and drops them on `/update-password` to
-choose their first password. The `auth.users` trigger creates their profile,
-organization and membership on first sign-in.
-
-### The routes
-
-- `/login` — `signInWithPassword`, then `router.push(?next=…)` (same-site paths only).
-- `/forgot-password` — `resetPasswordForEmail`; always answers "if that address
-  has an account, a reset link is on its way" (no account enumeration).
-- `/update-password` — `updateUser({ password })`; needs a session, reached from
-  the recovery link or from "Change password" in the sidebar user menu.
-- `/auth/callback` — exchanges `?code=` (PKCE) or verifies `?token_hash=&type=`,
-  forwards to `?next=`, and sends failures to `/login?error=…`.
-
-## Structure
-
-```
-app/(auth)/…            login, signup, verify-email, welcome, forgot-password, update-password
-app/auth/callback       code exchange / recovery-link verification
-app/(console)/…         models, usage, api-keys, billing, teams, dedicated, docs, admin
-components/             sidebar, snippet (Copy & Run), tiles, shadcn/ui in components/ui
-lib/supabase/           client (browser), server (cookies), middleware (session), admin (service role)
-lib/keys.ts             key generation + SHA-256
-middleware.ts           session refresh + console route guard
-```
-
-API keys are `sk-infrx-` + 40 base62 characters from the CSPRNG. Only the
-SHA-256 hex and the `sk-infrx-` + 8-character prefix are stored; the secret is
-shown once, in the create dialog.
-
-## Deployment (live)
-
-Vercel project `infrx-app` (`prj_W8JNBx71exKW6iEPBaALx1R9IxKn`, account
-gideon@callgideon.com), Git-linked to `callgideon/model-inference`, root
-directory `apps/app`, production branch `main`, domain
-`https://app.callbill.ai`. Environment variables are set in the project
-(Supabase URL, publishable key, secret key as a sensitive var, app URL);
-the same values live in AWS SSM under `/INFRX-SUPABASE-PROD/*`.
-
-## Verification log
-
-- 2026-10-01 (W6 docs-state): the 2026-09-22 sequence banners replaced by a dated state line (live since 2026-09-27, CREDIT flags per session-03 line 525); onboarding paragraph states the implemented signup routes; the invite-only section labelled as the pre-v1 baseline; nothing re-probed live.
-- 2026-10-01 (merge #76, DS-2): one statement on public signup, matching research/platforms/README.md: closed (P-05 `disable_signup true`; no X7 run in the session-03 record; internal users by script, line 455).
+- `app/(auth)`, `app/auth/callback`: onboarding and recovery.
+- `app/(console)`: catalog, docs, keys, billing, usage/results, settings and operator UI.
+- `lib/services`, `lib/session.ts`: authenticated server adapters and personal account selection.
+- `lib/contracts`: shared contracts and fixtures; fixtures are not production data.
+- `tests`: UI/service/conformance/integration checks.

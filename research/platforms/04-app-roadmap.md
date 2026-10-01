@@ -1,5 +1,7 @@
 # Platform 1 — roadmap and release gates
 
+This roadmap describes milestones, not measured deployment completion. [STATUS.md](../../STATUS.md) and [review 26](../plan/26-launch-readiness-review-2026-10-01.md) record what is currently built, deployed and still unverified.
+
 **Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
 
 Milestones are sequenced by evidence, not promised dates. Wave 2 has been imported/audited; staffing, newer remote work and live state must be revalidated. Current priority is the Marlin inference backend; App launch is next. The [manifest](../plan/tasks.json) supplies module dependencies; the new A/S task briefs are in [amendment workstreams](../plan/09-amendment-workstreams.md).

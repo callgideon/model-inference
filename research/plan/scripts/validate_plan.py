@@ -100,10 +100,10 @@ def ledger(manifest, tasks):
     lines = ['# Complete task ledger', '',
              'Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.', '',
              f"**{len(tasks)} records; {len(tasks)-retired} active; {retired} retired; {counts['planned']} planned; {counts['implemented']} implemented; {counts['integrated']} integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).", '',
-             '**Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).', '']
+             '**Current scope:** qualify the deployed consumer App and Marlin API, close production/onboarding evidence, then enable later provider/hosting workflows under their own gates. Implemented statuses are not release acceptance. See [current state](../../STATUS.md), [launch review 26](26-launch-readiness-review-2026-10-01.md), [planning index](README.md) and [carried work](consumer-v1/10-carried-work-register.md).', '']
     groups = [
-        ('Backend endpoint gate closure — current scope', lambda t: t['id'] in backend),
-        ('App launch additions — after backend acceptance', lambda t: t['id'] in app and t['id'] not in backend),
+        ('Backend endpoint requirements and acceptance', lambda t: t['id'] in backend),
+        ('Consumer App requirements and acceptance', lambda t: t['id'] in app and t['id'] not in backend),
         ('Later core platform work and preserved module baselines', lambda t: t['id'] not in app and t.get('execution_class') == 'core'),
         ('Conditional work — activation required', lambda t: t.get('execution_class') == 'conditional'),
         ('Retired mixed tasks — never dispatch', lambda t: t['status'].startswith('superseded')),
@@ -221,7 +221,10 @@ def main():
         errors.append('Task ledger is stale; run --write-ledger')
     # Verify local Markdown destinations, including historical evidence; headings are left to Markdown renderers.
     files = list(PLAN.rglob('*.md')) + list((ROOT/'research/platforms').glob('*.md'))
-    files += [ROOT/p for p in ['README.md','HANDOFF.md','CLAUDE.md','apps/app/README.md','apps/lab/README.md','apps/infrx-api/README.md']]
+    files += [ROOT/p for p in ['README.md','STATUS.md','CLAUDE.md','apps/README.md',
+                              'apps/app/README.md','apps/app/supabase/README.md',
+                              'apps/lab/README.md','apps/infrx-api/README.md',
+                              'models/marlin2b/README.md','infra/README.md']]
     links = 0
     for f in files:
         for dest in markdown_destinations(f.read_text()):
