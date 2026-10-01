@@ -67,8 +67,19 @@ Vercel project `infrx-lab` with **Root Directory `apps/lab`**, deployed from the
 Customer content requires explicit access grants; a provider's model ownership alone is
 insufficient, and consumer owner status is never provider authorization.
 
+## Conventions (LAB-07/08/09/13; pinned by tests/l/shell L1-A10/A11, L1-B06, L1-B07)
+- Roles: `holds(role, capability)`, `ROLE_CAPABILITIES` and `Actor` come only from lib/auth/access.ts (a copy of the
+  App's contracts/v2 table, drift-pinned). Pages and actions pass the session's `workspace` to a port directly.
+- Server actions: `redirect(await land(page, w, capability, valid, call))` with the `text`/`field`/`oneOf` readers
+  (lib/services/common.ts); a view's `refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY)`; a port is
+  `previewPort(flag, fake, real, UNAVAILABLE)`; a page labels the preview with `<PreviewNote records service />`
+  under `isPreview()`; a page names the first failed read with `firstFailure(...)`.
+- Pages type props with Next's `PageProps<"/route">` and export `metadata = { title: "<Page> · infrx Lab" }`;
+  app/ code imports lib/ and components/ by `@/…` (co-located app files relatively).
+
 ## Verification log
 
 - 2026-09-27 (LW0, R154): the package and lockfile only; `app/` followed with L1.
 - 2026-10-01 (W6 docs-state): rewritten as the built, deployed product (pages, families, env, checks, deploy from the repository root; lab.callbill.ai per the session-03 record line 595 and 09's log); the 2026-09-22 sequence banners retired.
 - 2026-10-01 (merge #76): `LAB_API_URL` first with the six old names deprecated (lab-B, merge #74); the deploy tool is `lab-release.sh` (lab-release-tool, merged).
+- 2026-10-01 (merge #80, lab-D WR-4): the Conventions section (roles from access.ts, the common.ts action/preview helpers, page typing/metadata/imports) added.

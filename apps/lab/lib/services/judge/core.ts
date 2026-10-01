@@ -4,7 +4,7 @@
 // external_judging grant on infrx.now()); this layer never sends an identity, takes the provider only
 // from the guarded workspace, refuses a lower role and malformed ids before any call, bounds every
 // page, and fails closed.
-import type { Membership, Role } from "../../auth/access.ts";
+import { holds, type Membership } from "../../auth/access.ts";
 import { authCookieOptions, labConfig } from "../../auth/config.ts";
 import { USD_RE as USD, UUID, UUID_RE as ID } from "../shapes.ts";
 
@@ -23,7 +23,6 @@ export const MAX_SAMPLES = 200; // J1's candidate scan bound
 // packages/shared REF_RE for kind `payer` (node --test cannot strip types under node_modules).
 const PAYER = new RegExp(`^lab:payer:(${UUID}):${UUID}@sha256:[0-9a-f]{64}$`);
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
-const RANK: Record<Role, number> = { viewer: 0, developer: 1, administrator: 2 };
 // What the RPCs raise for a caller they refuse (insufficient_privilege, no_data_found).
 const DENIED = new Set(["42501", "P0002"]);
 
@@ -73,7 +72,7 @@ async function call(rpc: Rpc, name: string, args: Record<string, unknown>): Prom
 }
 
 export async function configure(rpc: Rpc, w: Membership, input: Input): Promise<Outcome> {
-  if (RANK[w.role] < RANK.developer) return REFUSED;
+  if (!holds(w.role, "run_evaluation")) return REFUSED;
   const grantor = id(input.grantor_org_id);
   const model = id(input.model_id);
   const judge = typeof input.judge_model === "string" && MODEL.test(input.judge_model) ? input.judge_model : null;
@@ -87,7 +86,7 @@ export async function configure(rpc: Rpc, w: Membership, input: Input): Promise<
 }
 
 export async function setBudget(rpc: Rpc, w: Membership, input: Input): Promise<Outcome> {
-  if (RANK[w.role] < RANK.administrator) return REFUSED;
+  if (!holds(w.role, "manage_members")) return REFUSED;
   const payer = payerOf(input.payer_ref, w);
   const limit = typeof input.limit_usd === "string" && USD.test(input.limit_usd) ? input.limit_usd : null;
   if (!payer || !limit) return INVALID;
@@ -97,7 +96,7 @@ export async function setBudget(rpc: Rpc, w: Membership, input: Input): Promise<
 /** `run_id` is minted when the form renders, so a double click repeats it and the RPC answers
  * the same run; the action never mints one. */
 export async function requestRun(rpc: Rpc, w: Membership, input: Input): Promise<Outcome> {
-  if (RANK[w.role] < RANK.developer) return REFUSED;
+  if (!holds(w.role, "run_evaluation")) return REFUSED;
   const run = id(input.run_id);
   const config = id(input.config_id);
   const payer = payerOf(input.payer_ref, w);
@@ -107,7 +106,7 @@ export async function requestRun(rpc: Rpc, w: Membership, input: Input): Promise
 
 /** One bounded page (keyset on `label_id`); a server page longer than asked is not rendered. */
 export async function listCalibration(rpc: Rpc, w: Membership, input: Input): Promise<Outcome> {
-  if (RANK[w.role] < RANK.developer) return REFUSED;
+  if (!holds(w.role, "run_evaluation")) return REFUSED;
   const cursor = input.after ?? "";
   const after = cursor === "" ? null : id(cursor);
   const limit = input.limit === undefined || input.limit === "" ? PAGE_MAX : count(input.limit, 999_999);

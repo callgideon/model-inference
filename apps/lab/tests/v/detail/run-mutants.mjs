@@ -47,7 +47,7 @@ const MUTANTS = [
   m("V2-X11", "an always-unavailable content port comes back", PORT, "return { traces: labTraces() };", 'return { traces: labTraces(), content: { read: async () => ({ ok: false, reason: "unavailable" }) } } as never;', [C.d07]),
   m("V2-X28", "the trace read is not scoped to the provider", FAKE, "r.detail.request_id === requestId && r.providerId === actor.providerId", "r.detail.request_id === requestId", [C.j02]),
   m("V2-X29", "a viewer reads individual requests", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j02]),
-  m("V2-X35", "the page reads as a provider from the URL", PAGE, "const actor = { providerId: workspace.providerId, role: workspace.role };", "const actor = { providerId: id, role: workspace.role };", [C.p01]),
+  m("V2-X35", "the page reads as a provider from the URL", PAGE, "traces.detail(workspace, id)", "traces.detail({ ...workspace, providerId: id }, id)", [C.p01]),
   m("V2-X36", "feedback waits on the projection", PAGE, "\n      <FeedbackPanel result={feedback} />\n", "\n      {trace.ok && <FeedbackPanel result={feedback} />}\n", [C.p01]),
   m("V2-X37", "a trace refusal is shown raw", PAGE, "{TRACE_COPY[trace.reason]}", "{trace.reason}", [C.p01]),
   m("V2-X12", "the page reads ?content= again", PAGE, "RequestDetail({ params }: PageProps", "RequestDetail({ params, searchParams }: PageProps", [C.p02]),

@@ -3,11 +3,11 @@
 // provider's own serving versions only, T3 tombstones applied, metadata only without a current
 // provider_sharing grant. Content reads through C2 (WR-V2-2) are not wired: there is no content port, and
 // the page states each record's content state instead (W6 LAB-06; the item stays in the carried-work register).
-import type { Role } from "../../../lib/auth/access.ts";
+import type { Actor } from "../../../lib/auth/access.ts";
 import { labTraces } from "../../../lib/services/traces/server.ts";
 
-/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value. */
-export type Actor = { providerId: string; role: Role };
+/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value: lib/auth/access.ts's one Actor (LAB-08). */
+export type { Actor };
 type Metadata = {
   request_id: string;
   started_at: string;

@@ -23,6 +23,6 @@ test("V3-P01 the judge panel is read only, shows refusals as fixed copy and link
 
 test("V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request", () => {
   const page = read(PAGE);
-  assert.match(page, /judgePort\(\)\.runs\(actor, id\)\]\);/);
+  assert.match(page, /judgePort\(\)\.runs\(workspace, id\)\]\);/); // LAB-08: the workspace itself is the actor
   assert.match(page, /\n      \{trace\.ok && <JudgePanel result=\{judge\} \/>\}\n/);
 });

@@ -14,8 +14,9 @@ const PANELS = "components/traces/detail/panels.tsx";
 test("V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says", () => {
   const page = read(PAGE);
   assert.match(page, /const workspace = await requireProviderWorkspace\(\);/);
-  assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/);
-  assert.match(page, /Promise\.all\(\[traces\.detail\(actor, id\), reviewRequestFeedback\(id\), /);
+  assert.match(page, /traces\.detail\(workspace, id\)/); // LAB-08: the workspace itself is the actor
+  assert.doesNotMatch(page, /providerId:/);
+  assert.match(page, /Promise\.all\(\[traces\.detail\(workspace, id\), reviewRequestFeedback\(id\), judgePort\(\)\.runs\(workspace, id\)\]\)/);
   assert.match(page, /\n      <FeedbackPanel result=\{feedback\} \/>\n/, "the feedback panel is not inside a trace branch");
   assert.match(page, /\{!trace\.ok && <p role="alert">\{TRACE_COPY\[trace\.reason\]\}<\/p>\}/);
   assert.doesNotMatch(page, /providerId:\s*(id|params|searchParams)|formData/);

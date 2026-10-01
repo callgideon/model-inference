@@ -90,3 +90,10 @@ test("R4-A05 a consumer-only user gets a 404 and the releases service is never a
   assert.equal(await landing(proposeRelease(form(OK))), "404:true");
   assert.equal(fake.calls.length, before);
 });
+
+test("R4-A06 a viewer's malformed input is refused as denied: role before shape (LD-RV-1)", async () => {
+  as("viewer");
+  const before = fake.calls.length;
+  assert.equal(await landing(proposeRelease(form({ ...OK, kind: "launch", fence: "-1" }))), "/releases?refused=denied");
+  assert.equal(fake.calls.length, before);
+});
