@@ -1,6 +1,6 @@
 # Consumer v1 briefs
 
-Detailed briefs for [program 22](../22-consumer-v1-implementation.md); [tasks.json](../tasks.json) remains the only task graph.
+Detailed briefs for [program 22](../22-consumer-v1-implementation.md); [tasks.json](../tasks.json) remains the only task graph. Current state: [state of record 2026-10-01](../25-state-2026-10-01.md).
 
 1. [Contracts and durable data](01-contracts-and-data.md)
 2. [Runtime repairs: M5, M6, W5, G7, G8](02-runtime.md)
@@ -17,5 +17,6 @@ Detailed briefs for [program 22](../22-consumer-v1-implementation.md); [tasks.js
 
 - 2026-09-28: Index created with the post-launch wave map (07); briefs 01–06 unchanged.
 - 2026-09-29: 08 added (LAB-DEPLOY-PREP): the Lab internal-testing rollout runbook; preparation only, nothing hosted run.
-- [Path to v1 internal testing](09-path-to-internal-testing.md) — the completion plan: COMPLETE-LOCAL, then the internal-testing deployment (2026-09-29)
+- 2026-09-29: 09 added (the path to v1 internal testing; listed as index entry 9).
 - 2026-10-01: 10 added (W6 plan-ledger, INT-07): the carried-work register.
+- 2026-10-01 (merge #76, WR-W6DS-5): the 09 bullet folded into index entry 9 (no duplicate); link to the state of record 25.

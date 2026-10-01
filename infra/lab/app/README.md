@@ -1,11 +1,15 @@
 # Lab release runbook — `apps/lab` and the Lab control service (I2L)
 
-**Disabled by default. Operator-run, preparation only.** The lab-operate lane wrote this runbook,
-the unit and site it installs (`apps/infrx-api/deploy/lab/app/`) and the names manifest
-([`lab.json`](lab.json)). It changed nothing on Vercel, hosted Supabase, DNS, AWS or the pilot
-box. Nothing here is a live-state claim. **Hosted staging needs P-08** (the hosted Lab origin and
-operator identity, 15-pending-inputs.md); until P-08 is supplied every step marked **[OP]** stays
-unrun and `lab.json` keeps `"enabled": false`.
+**State 2026-10-01: enabled on the pilot box.** The operator ran this release through
+`infra/lab/rollout/launch-v1.sh box` at 7ecbab0e (2026-10-01T01:26Z): the control image
+`sha256:870aa2ea…`, `infrx-lab-control` ON (readyz 200), the `lab-control.callbill.ai` site on the
+App edge; the Lab web is live at `https://lab.callbill.ai` (Vercel `infrx-lab`, 2026-10-01T02:21Z).
+Sources: session-03 record lines 594–595, [09](../../../research/plan/consumer-v1/09-path-to-internal-testing.md)'s log;
+the procedure of record is runbook [08](../../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md),
+whose box steps (`infra/lab/rollout/steps/`) script the manual blocks below. `lab.json`'s
+`"enabled": false` is the repository default that `tests/i/lab/test_lab_packaging.py` pins; no
+deploy step reads it — the box's switch is the marker `/etc/infrx-lab/enabled` (`enable_marker`),
+which step 40 (`STATE=on`) creates. Every value stays in the operator's stores (names below).
 
 Proven locally (evidence `research/plan/evidence/i/I2L-*.md`): the packaging cases
 `apps/infrx-api/tests/i/lab/` (the unit's isolation and drain, names only, origins, the pinned
@@ -42,7 +46,7 @@ Lab web (Vercel project `infrx-lab`, per environment; `apps/lab/.env.example`) [
 | `LAB_RELEASES_API_URL` | server | server-only lab-api base URL for the release and optimization pages (WR-R4-1, `apps/lab/lib/services/rollouts/server.ts`, `/lab/v1/releases` + `/lab/v1/optimizations` behind `LAB_RELEASES`); unset = those pages answer "unavailable" |
 | `LAB_CONTROL_URL` | server | server-only base URL of the Lab control service (the control origin, R186's factory) for the overview, models and deployments pages (WR-E3L-J, `apps/lab/lib/services/control/server.ts`, `/lab/v1/control`); unset = those pages answer "unavailable" |
 
-Lab control (`/etc/infrx-lab-control.env`, mode 0600, root-owned) [OP]:
+Lab control (`/etc/infrx-lab-control.env`, mode 0600, owned by `ubuntu` — the unit runs docker as `User=ubuntu`, which reads `--env-file`; root-owned it fails "permission denied", the 2026-10-01 box defect) [OP]:
 
 | Name | Exposure | Value |
 |---|---|---|
@@ -95,10 +99,11 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 
 ## 3. Origins and the auth allowlist (P-05 settings, per project) [OP]
 
-- Lab web: `https://lab.callbill.ai`; control: `https://lab-control.callbill.ai`. ⚠️ TO BE VERIFIED
-  (P-08 decides both; DNS A record of the control origin → the backend box).
+- Lab web: `https://lab.callbill.ai`; control: `https://lab-control.callbill.ai` (the P-08 record of
+  2026-09-30; both answer since 2026-10-01, session-03 lines 594–595; DNS A record of the control
+  origin → the backend box).
 - **Site URL stays the App's.** The Lab only adds its own callbacks to **Redirect URLs**:
-  staging project `https://infrx-lab-*-humanbit.vercel.app/auth/callback**` and
+  staging project `https://infrx-lab-*-callgideon.vercel.app/auth/callback**` (the `infrx-lab` project is in team `callgideon`) and
   `http://localhost:3100/auth/callback**`; production `https://lab.callbill.ai/auth/callback**`.
 - The production entry is an App-side change first: `REDIRECT_ALLOWLIST.production` in
   `apps/app/lib/deploy/env.ts` says "only" the App's callback today (I2A-AUTH-03/04). Add the Lab
@@ -109,7 +114,7 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
 
 ```bash
 # 1. the Lab's env file (values from the operator's store; names above)
-sudo install -m 0600 -o root -g root /dev/stdin /etc/infrx-lab-control.env < lab-control.env
+sudo install -m 0600 -o ubuntu -g ubuntu /dev/stdin /etc/infrx-lab-control.env < lab-control.env
 # 2. the unit, then the switch it is conditioned on
 sudo install -m 0644 apps/infrx-api/deploy/lab/app/infrx-lab-control.service /etc/systemd/system/
 sudo install -d -m 0755 /etc/infrx-lab && sudo touch /etc/infrx-lab/enabled
@@ -170,3 +175,5 @@ The Lab web is taken down in its own Vercel project (pause or remove the product
 - 2026-09-27: written by the lab-operate lane (I2L); preparation only, nothing hosted run.
 - 2026-09-29 (lab-c7-gaps, C7-RV-5): `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` declared for the rollout role (R249: the plan location the page reads); nothing hosted run.
 - 2026-09-29 (lab-c7-gaps merge, 1-C7G-RV-B): WR-C7G-PREFLIGHT applied: the rollout unit's env file names `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` equal to the gateway's (R249, R256); nothing hosted run.
+- 2026-10-01 (W6 docs-state): head replaced by the dated enabled state (session-03 lines 594–595, 09 log); `lab.json` `enabled` documented as the repository default (the box switch is the marker); the control env file's owner is `ubuntu` in §2 and §4 (40-lab-control.sh, 7ecbab0e); §3 origins cite the P-08 record.
+- 2026-10-01 (merge #76, WR-W6DS-4/DS-RV-7): §3 and `lab.json`'s staging callback name the `callgideon` team (`https://infrx-lab-*-callgideon.vercel.app/auth/callback**`; the project is in callgideon, session-03 line 595); `lab.json`'s comment says `enabled` is the repository default and the box switch is `enable_marker`; the control env owner lines (ubuntu:ubuntu, §2/§4) confirmed (WR-IL-4).

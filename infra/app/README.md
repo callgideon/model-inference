@@ -1,9 +1,6 @@
 # App release runbook — `apps/app` on Vercel (I2A)
 
-**Operator-run, preparation only.** The I2A-PREP lane wrote this runbook and the code it relies on
-(`apps/app/lib/deploy/`, `instrumentation.ts`, `next.config.ts`, `app/api/version/route.ts`, tests
-`apps/app/tests/i2a/`). It changed nothing on Vercel, hosted Supabase, DNS, AWS or the pilot box.
-Every item marked **[OP]** is held by the operator; nothing here is a live-state claim.
+**State 2026-10-01: this runbook has run.** The App is live since 2026-09-27 (first known-good release d3a99e01) and production builds from `main` = 41693d5d since the 2026-09-29 window (session-03 record lines 455, 525; research/plan/25-state-2026-10-01.md). The I2A-PREP lane wrote this runbook and the code it relies on (`apps/app/lib/deploy/`, `instrumentation.ts`, `next.config.ts`, `app/api/version/route.ts`, tests `apps/app/tests/i2a/`). Every item marked **[OP]** is held by the operator.
 
 Operations after a release (combined checks, auth/credit cutover, error monitoring, alerts, App rollback): [operations.md](operations.md) (I3).
 
@@ -155,3 +152,4 @@ Never "fix forward" on production without a new release identity. The backend is
   = the host's SHA, `INFRX_RELEASE_SHA` off-Vercel only, disagreement → `unknown` (§5). Local only.
 - 2026-09-26 (G8-FLAG, GAP-I3-1/I3R-7): the `signup_grant` row names the audited `flag` verb
   (R144). Local only.
+- 2026-10-01 (W6 docs-state WR-W6DS-1, merge #76): head replaced by the dated state (it has run; live since 2026-09-27, main = 41693d5d); the procedure below is unchanged.

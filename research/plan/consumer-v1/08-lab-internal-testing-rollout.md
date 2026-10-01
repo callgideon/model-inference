@@ -1,11 +1,26 @@
 # Lab internal-testing rollout — the pilot box and a Vercel project for `apps/lab` (LAB-DEPLOY-PREP)
 
-**Operator-run. Preparation only.** The LAB-DEPLOY-PREP lane wrote this runbook, the box steps
-it calls (`infra/lab/rollout/`) and the E4-ON gate (`make lab-local`). It ran **nothing** against
-the pilot box (`i-0e8449a4ffca29bab`), AWS, SSM, S3, Vercel or hosted Supabase; nothing here is a
-live-state claim. Every value lives in the operator's stores: this page names **parameters and
-settings by NAME only**. Every step names its proof; a step without its proof recorded did not
-happen.
+**Operator-run; run through 2026-10-01 (state below).** The LAB-DEPLOY-PREP lane wrote this runbook,
+the box steps it calls (`infra/lab/rollout/`) and the E4-ON gate (`make lab-local`); the operator ran
+it with `infra/lab/rollout/launch-v1.sh` (now `lab-release.sh`, lab-release-tool merged; `launch-v1.sh` is its deprecated shim). Every value lives in
+the operator's stores: this page names **parameters and settings by NAME only**. Every step names its
+proof; a step without its proof recorded did not happen. The step tables below are the procedure as
+written; where the run differed, the state block says so.
+
+## State 2026-10-01
+
+Sources: the [session-03 record](../evidence/coordinator/2026-09-24-session-03.md) lines 591–595 and
+[09](09-path-to-internal-testing.md)'s log; nothing here was re-probed.
+
+| Part | State |
+|---|---|
+| §2 hosted migrations | **done**: 0052–0056 (2026-09-30T07:43Z, digest `88f9d412…`, release a58eb0d6) and 0057–0059 (08:02Z, digest `9566fa25…`, release fdd10264), each through `launch-v1.sh window` (the per-window patches `infra/lab/rollout/hosted-migrate-0052-0056.patch` and `hosted-migrate-0057-0059.patch`, spent; moved to `research/plan/evidence/i/` by lab-release-tool). Hosted is 0001–0059; the next window (0060+) needs a KNOWN-GOOD re-proof through it, a reviewed `EXPECTED_PENDING` edit and R151's approval |
+| §3 SSM | `/model-inference/lab/control_database_url` and `supabase_anon_key` created by the operator; the `infrx_lab_control` login's password set from SSM over the owner DSN (0043 created it LOGIN without one) |
+| §4 the box | **done** at 7ecbab0e (`launch-v1.sh box`, 01:26Z): L0 `lab-checkout.sh` (fetch + `40-checkout`, refuses when `serve.sh` or its pin differ), L1, L3 image `sha256:870aa2ea…`, L4 units inert, L5 control ON (readyz 200; the env file owned by `ubuntu`, the user the unit runs docker as), L5s/L6s smoke PASS, L6 `lab-control.callbill.ai` on the edge (`/lab/v1/releases` 401 unauthenticated). L5d `steps/70-lab-status.sh` (read-only unit/journal/readiness, value-bearing lines dropped) was added on the way. **L7 skipped**: no per-role Lab logins yet (WR-LDP-7), so the eval/judge/datasets roles stay OFF. The consumer runtime install stays at 41693d5d beside the Lab checkout |
+| §6 the Lab web | **live at `https://lab.callbill.ai`** (02:21Z): project `infrx-lab` in team `callgideon`, Root Directory `apps/lab`, deployed **from the repository root** through `npx vercel` (an `apps/lab`-only upload lacks `packages/shared`), domain attached and verified |
+| §7 memberships | **pending** (`launch-v1.sh members`) |
+| `main` | **pending**: `origin/main` stays 41693d5d until the operator fast-forwards it after wave 6 |
+| E4C, §8 checklist | **pending**: E4C certify on the box; one tester's checklist = INTERNAL-TESTING accepted |
 
 Scope: stand the Lab (provider product) up **beside** the launched App on the pilot box for
 **internal testing** by named operators, with the App untouched. The App's own rollout is
@@ -414,3 +429,5 @@ reversal of Lab tables is never part of this runbook.
 - 2026-10-01 (W6 lab-release-tool, INFRA-01/03/09, DT-13/18): §2 "Next window (0060+)" — the spent window tooling retired (patches to evidence/i, `launch-v1.sh window` gone), the next window is a re-proof plus one reviewed three-line edit, BOX_RELEASE after a fetch; §7 steps 2–4 — `lab-release.sh members` (owner DSN by SSM name, psycopg bound parameters, `p.provider_org_id`; the base statement's `p.id` failed on 0001–0059: UndefinedColumn, i6 task-local run).
 - 2026-10-01 (merge #71, codex/w5-merge-71, LRT-RV-3): §2 "Next window" step 2 names test_lab_rollout_steps.py's literal `--hosted-at` as part of the reviewed edit until WR-W6-LRT-1 lands; R269 (08-contracts §10) is the window rule.
 - 2026-10-01 (merge #72, codex/w5-merge-72, WR-W6-LRT-1): §2 "Next window" step 2 — the "until WR-W6-LRT-1 lands" sentence removed: test_lab_rollout_steps.py now reads `--hosted-at` from hosted-migrate.sh's HOSTED_APPLIED anchor. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
+- 2026-10-01 (W6 docs-state): the head says the runbook has run; a dated 'State 2026-10-01' block records both hosted windows (07:43Z/08:02Z, digests), the box at 7ecbab0e (L0 lab-checkout.sh, L5d 70-lab-status.sh, L7 skipped per WR-LDP-7, env owner ubuntu), the Lab web from the repository root, and what is pending (members, main, E4C, §8); sources session-03 lines 591–595 and 09's log. The step tables are unchanged.
+- 2026-10-01 (merge #76, docs-state DS-RV-4): the head and the State block's §2 row say `lab-release.sh` (lab-release-tool merged; `launch-v1.sh` its deprecated shim) and that the spent window patches are in `research/plan/evidence/i/`. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.

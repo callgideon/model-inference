@@ -48,7 +48,7 @@ One shared durable inference runtime serves headless clients and the later App. 
 | [Tracker/parallel coordination brief](consumer-v1/06-progress-tracker.md) | Extend existing HTML tracker; assignments, gate evidence, resource-aware ETA and safe concurrent dispatch |
 | [Review 21](21-v1-consumer-readiness-review-2026-09-24.md) | Evidence and RV-01…RV-12; do not rely on summary alone |
 | [As-built handoff 20](20-platform-handoff-2026-09-24.md) | §14 reported live state and original wave evidence |
-| [Operational tail](../../HANDOFF-20260924T2115Z.md) | Historical latest at baseline; read the current RESUME-NOW target too |
+| [Operational tail](handoffs/operational/HANDOFF-20260924T2115Z.md) | Historical latest at baseline; read the current RESUME-NOW target too |
 | [Pending inputs](15-pending-inputs.md) | Rates, workload/quality/budgets, auth and deployment boundaries |
 | [Verification](04-verification.md) / [coverage](07-requirement-coverage.md) | Test IDs, repair and product requirement mapping |
 | [Hosting roadmap 23](23-inference-hosting-roadmap.md) | Later GPU scaling/custom hosting/Modal discussion and comparison protocol |
