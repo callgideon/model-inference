@@ -1,22 +1,16 @@
 #!/usr/bin/env node
-// N4's mutant runner (R32; LANE-RULES addendum), L1's pattern (tests/l/shell/run-mutants.mjs): every N4
+// N4's mutant runner (R32; LANE-RULES addendum) on the shared harness (tests/l/shell/harness.mjs): every N4
 // decision is one edit that a case it names must fail by assertion. The suite includes L1's boundary
 // test, which kills an unguarded datasets page, route or action; every N4 case is named.
 // Usage: node tests/n/run-mutants.mjs [--only ID,ID]
-import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { m, runMutants } from "../l/shell/harness.mjs";
 
-const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const args = process.argv.slice(2);
-const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const SUITE = ["tests/n/port.test.ts", "tests/n/views.test.ts", "tests/n/flows.test.ts", "tests/l/shell/boundary.test.ts"];
+const SUITE = ["tests/n/port.test.ts", "tests/n/views.test.ts", "tests/n/flows.test.ts", "tests/n/wiring.test.ts", "tests/l/shell/boundary.test.ts"];
 
 const PORT = "lib/services/datasets/port.ts";
 const VIEWS = "lib/services/datasets/views.ts";
 const FLOWS = "lib/services/datasets/flows.ts";
+const SERVER = "lib/services/datasets/server.ts";
 const D = "app/(provider)/datasets";
 
 const C = {
@@ -25,6 +19,7 @@ const C = {
   p03: "N4-P03 a success the Lab does not understand is unavailable, never success",
   p04: "N4-P04 an unreachable or unconfigured service is unavailable for every call",
   p05: "N4-P05 a download route answers a failure with its status, never 200",
+  w01: "N4-W01 the datasets port reads its backend as the session's own access token; no token, no backend URL or no Lab config sends nothing",
   v01: "N4-V01 only a published import with its dataset reads as success; the rest say how to resume",
   v02: "N4-V02 the rejected-rows download is line, reason and detail only",
   v03: "N4-V03 the split summary counts samples and restrictions per split",
@@ -42,7 +37,6 @@ const C = {
   b01: "L1-B01 every page, route, provider layout and server action calls the provider guard",
 };
 
-const m = (id, what, file, find, replace, cases) => ({ id, what, file, find, replace, cases });
 const MUTANTS = [
   m("N4-X01", "the backend gets a credential other than the user's session", PORT, "authorization: `Bearer ${token}`", "authorization: `Bearer service-role`", [C.p01]),
   m("N4-X02", "a provider id can rewrite the backend path", PORT, "/providers/${encodeURIComponent(provider)}/datasets", "/providers/${provider}/datasets", [C.p01]),
@@ -62,6 +56,10 @@ const MUTANTS = [
   m("N4-X16", "a published job without a dataset reads as imported", VIEWS, 'if (job.state === "published" && report?.datasetRef)', 'if (job.state === "published")', [C.v01]),
   m("N4-X17", "a running import is not followed", VIEWS, "this page refreshes until it ends.\", poll: true, again: false }", "this page refreshes until it ends.\", poll: false, again: false }", [C.v01]),
   m("N4-X40", "'Import again' is offered for a rejected import (its same rows reject again)", VIEWS, "start a new import (a new import id).`, poll: false, again: false };", "start a new import (a new import id).`, poll: false, again: true };", [C.v06]),
+  m("N4-X41", "the datasets port reads another family's old name", SERVER, "labApiUrl(process.env, \"datasets\")", "labApiUrl(process.env, \"traces\")", [C.w01]),
+  m("N4-X42", "an unset backend URL still builds the adapter", SERVER, "if (!baseUrl || config === null) return offlineDatasets();", "if (config === null) return offlineDatasets();", [C.w01]),
+  m("N4-X43", "the publishable key is sent as the credential", SERVER, "const token = await sessionToken(config)();", "const token = config.anonKey;", [C.w01]),
+  m("N4-X44", "a tokenless session still sends", SERVER, "return token ? httpDatasets({ baseUrl, token }) : offlineDatasets(\"the session has no token\");", "return httpDatasets({ baseUrl, token: token ?? \"\" });", [C.w01]),
   m("N4-X18", "the rejected-rows download carries the row", VIEWS, "JSON.stringify({ line: r.line, reason: r.reason, detail: r.detail })", "JSON.stringify(r)", [C.v02]),
   m("N4-X19", "restricted samples are not counted", VIEWS, "restricted: inSplit.filter((s) => s.restricted !== null).length", "restricted: 0", [C.v03]),
   m("N4-X20", "an unknown restriction reads as readable", VIEWS, "return RESTRICTED_COPY[reason] ?? `", 'return RESTRICTED_COPY[reason] ?? "readable" ?? `', [C.v04]),
@@ -85,74 +83,8 @@ const MUTANTS = [
     'export async function exportAction(_: ActionState<ExportRecord>, form: FormData): Promise<ActionState<ExportRecord>> {\n  const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
   m("N4-X38", "an export part is served without the guard", `${D}/exports/[id]/[part]/route.ts`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "" };', [C.b01]),
   m("N4-X39", "the version page renders without the guard", `${D}/[ref]/page.tsx`, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "", providerName: "", role: "developer" as const };', [C.b01]),
-  // N4-X41..X44 are reserved for WR-W6-LABB-2 (carried to the lab-E merge).
   m("N4-X45", "the derivation imports the read-back strictness (any version, either case)", FLOWS, "import { UUID_RE as UUID }", "import { UUID_ANY_RE as UUID }", [C.f08]),
 ];
 
-function copy() {
-  const root = mkdtempSync(join(tmpdir(), "n4-mutants-"));
-  cpSync(lab, root, { recursive: true, filter: (s) => !/(node_modules|\.next)(\/|$)/.test(s.slice(lab.length)) });
-  symlinkSync(join(lab, "node_modules"), join(root, "node_modules"), "dir");
-  return root;
-}
-
-function run(cwd) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", ...SUITE], { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (c) => (out += c));
-    child.stderr.on("data", (c) => (out += c));
-    child.on("close", (code) => done({ code, out }));
-  });
-}
-
-function failed(out) {
-  const cases = [];
-  const re = /^ *not ok \d+ - (.*)$/gm;
-  for (let hit = re.exec(out); hit !== null; hit = re.exec(out)) {
-    const rest = out.slice(hit.index + hit[0].length);
-    const end = rest.search(/^ *\.\.\.$/m);
-    cases.push({ name: hit[1].trim(), assertion: /code: 'ERR_ASSERTION'/.test(end === -1 ? rest : rest.slice(0, end)) });
-  }
-  return cases;
-}
-
-async function judge(mutant) {
-  const pristine = readFileSync(join(lab, mutant.file), "utf8");
-  const hits = pristine.split(mutant.find).length - 1;
-  if (hits !== 1) return `STALE (find matches ${hits} times)`;
-  const root = copy();
-  try {
-    writeFileSync(join(root, mutant.file), pristine.replace(mutant.find, mutant.replace));
-    const { code, out } = await run(root);
-    if (code === 0) return "SURVIVED (suite passed)";
-    const fails = failed(out);
-    if (fails.some((f) => /\.test\.ts$/.test(f.name))) return "RUNNER-ERROR (a test file did not load)";
-    const hit = fails.find((f) => f.assertion && mutant.cases.includes(f.name));
-    return hit ? `killed by "${hit.name}"` : `SURVIVED (failed only: ${fails.map((f) => f.name).join("; ")})`;
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-// Every case in the suite is named by at least one mutant, and every named case exists.
-const declared = new Set(MUTANTS.flatMap((x) => x.cases));
-const baseline = await run(lab);
-const cases = [...baseline.out.matchAll(/^ *ok \d+ - ((?:N4|L1)-\S+ .*)$/gm)].map((x) => x[1].trim());
-const problems = [
-  ...(baseline.code === 0 ? [] : ["the unmutated suite does not pass"]),
-  ...cases.filter((name) => name.startsWith("N4-") && !declared.has(name)).map((name) => `no mutant names "${name}"`),
-  ...[...declared].filter((name) => !cases.includes(name)).map((name) => `a mutant names a missing case "${name}"`),
-];
-const selected = only === null ? MUTANTS : MUTANTS.filter((x) => only.includes(x.id));
-if (selected.length === 0) problems.push("--only matched no mutant");
-for (const problem of problems) console.log(`FAIL ${problem}`);
-const bad = problems.length;
-let survivors = 0;
-for (const mutant of selected) {
-  const verdict = await judge(mutant);
-  if (!verdict.startsWith("killed")) survivors += 1;
-  console.log(`${verdict.startsWith("killed") ? "killed " : "NOT KILLED"} ${mutant.id} ${mutant.what} — ${verdict}`);
-}
-console.log(`\n${cases.length} cases, all named: ${bad === 0}; ${selected.length} mutants, ${selected.length - survivors} killed, ${survivors} not killed`);
-process.exit(bad === 0 && survivors === 0 ? 0 : 1);
+// N4 and L1 cases are counted; only N4's must each be named (L1's are its own runner's).
+process.exit(await runMutants({ suite: SUITE, prefix: "(?:N4|L1)", named: "N4", mutants: MUTANTS }));

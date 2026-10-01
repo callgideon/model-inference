@@ -6,12 +6,9 @@
 //    webpack: its node_modules is a link) over its l4 backend; a named case must fail by assertion.
 // Usage: node tests/e2e/run-mutants.mjs [--only ID,ID]
 //        LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs [--only ID,ID]
-import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { failed, m, mutate, runMutants } from "../l/shell/harness.mjs";
+import { judge, m, runMutants, tap } from "../l/shell/harness.mjs";
 
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 process.env.INFRX_API_DIR ??= resolve(lab, "../infrx-api"); // the copies are apps/lab only
@@ -46,7 +43,7 @@ const HARNESS_MUTANTS = [
 const S = {
   O: "E2E-O o10 the Lab review panel renders the provider trace route's answer",
   o01: "E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else",
-  o02: "E2E-O02 the review page shows the record, then each panel's own answer: content on request, the feedback door, the judge door",
+  o02: "E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door",
   o03: "E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request",
   o04: "E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer",
   r01: "E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success",
@@ -74,7 +71,7 @@ const stackMutant = (suite, ...args) => ({ suite, ...m(...args) });
 const STACK_MUTANTS = [
   stackMutant("observe", "E2E-S01", "a lost capture loses its reason in the list", LIST, "content: state === \"lost\" ? `${CONTENT_LABEL.lost}: ${reason}` : CONTENT_LABEL[state],", "content: CONTENT_LABEL[state],", [S.o01]),
   stackMutant("observe", "E2E-S02", "an ungranted request reads as expired content", DETAIL, 'if (d.access === "metadata") return "metadata_only";', 'if (d.access === "metadata") return "expired";', [S.o01, S.o04]),
-  stackMutant("observe", "E2E-S03", "content is loaded without being asked for", "app/(provider)/requests/[id]/page.tsx", 'const wanted = (await searchParams).content === "1";', "const wanted = true;", [S.o02]),
+  stackMutant("observe", "E2E-S03", "the content panel ignores the record's state", "components/traces/detail/panels.tsx", "{CONTENT_COPY[contentState(detail)]}", "{CONTENT_COPY.not_captured}", [S.o02]),
   stackMutant("observe", "E2E-S04", "a refused list reads as not found, whatever the reason", LIST, 'message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason]', "message: LIST_COPY.not_found", [S.o03]),
   stackMutant("observe", "E2E-S05", "a consumer-only account gets a workspace chooser", ACCESS, '  if (workspaces.length === 0) return { kind: "denied" };\n', "", [S.o03]),
   stackMutant("observe", "E2E-S06", "a metadata-only record shows an organization", DETAIL, 'if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', 'rows.push(["Organization", "—"]);\n  if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', [S.o04]),
@@ -98,35 +95,8 @@ const STACK_MUTANTS = [
   stackMutant("improve", "E2E-S24", "a refused label read shows an empty page instead of its refusal", "app/(provider)/annotations/page.tsx", "const failed = [imports, exports, labels, disputes].find((r) => r !== null && !r.ok);", "const failed = [imports, exports, labels, disputes].find(() => false);", [S.i06]),
 ];
 
-function suiteRun(cwd, suite) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", `tests/e2e/${suite}/stack.test.ts`], {
-      cwd, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, LAB_E2E_REAL: "1", INFRX_D_TASK: "l4", LAB_E2E_BUILT: "", LAB_E2E_OUT: "" },
-    });
-    let out = "";
-    child.stdout.on("data", (c) => (out += c));
-    child.stderr.on("data", (c) => (out += c));
-    child.on("close", (code) => done({ code, out }));
-  });
-}
-
-async function judge(mutant) {
-  const pristine = readFileSync(join(lab, mutant.file), "utf8");
-  const hits = pristine.split(mutant.find).length - 1;
-  if (hits !== 1) return `STALE (find matches ${hits} times)`;
-  const root = mkdtempSync(join(tmpdir(), "lab-e2e-mutants-"));
-  try {
-    cpSync(lab, root, { recursive: true, filter: (s) => !/(node_modules|\.next)(\/|$)/.test(s.slice(lab.length)) });
-    symlinkSync(join(lab, "node_modules"), join(root, "node_modules"), "dir");
-    writeFileSync(join(root, mutant.file), mutate(pristine, mutant.find, mutant.replace));
-    const { code, out } = await suiteRun(root, mutant.suite);
-    if (code === 0) return "SURVIVED (suite passed)";
-    const hit = failed(out).find((f) => f.assertion && mutant.cases.includes(f.name));
-    return hit ? `killed by "${hit.name}"` : `SURVIVED (failed only: ${failed(out).map((f) => f.name).join("; ") || out.slice(-400)})`;
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
+const suiteRun = (cwd, suite) =>
+  tap(cwd, [`tests/e2e/${suite}/stack.test.ts`], { ...process.env, LAB_E2E_REAL: "1", INFRX_D_TASK: "l4", LAB_E2E_BUILT: "", LAB_E2E_OUT: "" });
 
 async function stackList(only) {
   const declared = new Set(STACK_MUTANTS.flatMap((x) => x.cases));
@@ -143,7 +113,7 @@ async function stackList(only) {
   for (const problem of problems) console.log(`FAIL ${problem}`);
   let survivors = 0;
   for (const mutant of selected) {
-    const verdict = await judge(mutant);
+    const verdict = await judge(mutant, (root) => suiteRun(root, mutant.suite));
     if (!verdict.startsWith("killed")) survivors += 1;
     console.log(`${verdict.startsWith("killed") ? "killed " : "NOT KILLED"} ${mutant.id} ${mutant.what} — ${verdict}`);
   }

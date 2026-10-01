@@ -72,7 +72,7 @@ const MUTANTS = [
   m("V1M-X33", "the request's cookies are not read", SESSION, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
   m("V1M-X72", "the trace adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
   m("V1M-X73", "the trace adapter reads another family's old name", SERVER, "labApiUrl(env, \"traces\")", "labApiUrl(env, \"control\")", [C.w01]),
-  m("V1M-X34", "the detail page is not wired to the adapter", WIRE, "  return { traces: labTraces(), content: UNAVAILABLE.content };\n}", "  return UNAVAILABLE;\n}", [C.w01]),
+  m("V1M-X34", "the detail page is not wired to the adapter", WIRE, "  return { traces: labTraces() };\n}", '  return { traces: { detail: async () => ({ ok: false, reason: "unavailable" }) } } as never;\n}', [C.w01]),
   // URL state
   m("V1M-X35", "the cursor is reported as ignored", QUERY, '.filter((name) => name !== "cursor")', ".filter(() => true)", [C.q01]),
   m("V1M-X36", "ignored names are unsorted", QUERY, '.filter((name) => name !== "cursor").sort();', '.filter((name) => name !== "cursor");', [C.q01]),

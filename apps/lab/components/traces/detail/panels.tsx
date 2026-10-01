@@ -1,8 +1,8 @@
 // V2 panels: plain semantic elements (the Lab has no UI kit) that stack on a phone and work from the
-// keyboard with native links only. Content is rendered as text, never as HTML.
+// keyboard with native links only. Text is rendered as text, never as HTML.
 import type { ReviewResult } from "../../../lib/services/review/index.ts";
 import type { TraceDetail } from "./port.ts";
-import { feedbackView, metadataRows, type ContentView } from "./view.ts";
+import { CONTENT_COPY, contentState, feedbackView, metadataRows } from "./view.ts";
 
 const WRAP = { whiteSpace: "pre-wrap", overflowWrap: "anywhere" } as const;
 
@@ -22,18 +22,11 @@ export function MetadataPanel({ detail }: { detail: TraceDetail }) {
   );
 }
 
-export function ContentPanel({ view, href }: { view: ContentView; href: string }) {
+export function ContentPanel({ detail }: { detail: TraceDetail }) {
   return (
     <section aria-labelledby="request-content">
       <h2 id="request-content">Content</h2>
-      {view.copy && <p role={view.text === null && !view.offer ? "status" : undefined}>{view.copy}</p>}
-      {view.offer && <a href={href}>Show content</a>}
-      {view.text !== null && (
-        <>
-          <pre style={WRAP}>{view.text}</pre>
-          <p>Shown through a content reference valid until {view.expiresAt}; reload to ask again.</p>
-        </>
-      )}
+      <p role="status">{CONTENT_COPY[contentState(detail)]}</p>
     </section>
   );
 }
