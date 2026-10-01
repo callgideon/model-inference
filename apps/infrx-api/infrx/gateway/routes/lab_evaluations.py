@@ -42,9 +42,9 @@ only when the composition put a `LabEvaluations` on `rt.lab_evaluations` (LAB_EV
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from pydantic import Field
 
 from ...contracts import errors
@@ -55,6 +55,9 @@ from ...evaluation.reports import Protocol as ComparisonProtocol
 from ...lab.time import iso_z
 from .. import lab_auth
 from ..lab_auth import Actor, held, lab_actor, lab_body, require
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 EVALS_PREFIX = "/lab/v1/evaluations"
 LIVE = ("queued", "running")
@@ -105,9 +108,11 @@ class ExperimentStore(Protocol):
     async def put(self, provider_org_id: str, experiment: dict[str, Any]) -> dict[str, Any]:
         """Write once per `experiment_id`: the stored row. The same `launch` again is a replay
         (the stored row, its first `created_at`); another launch `IdempotencyConflict`."""
+        ...
 
     async def experiments(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
         """`{experiment_id, created_at, launch, report}` rows (report: B2's, or None)."""
+        ...
 
 
 class Catalog(Protocol):
@@ -115,21 +120,23 @@ class Catalog(Protocol):
 
     async def catalog(self, provider_org_id: str) -> dict[str, Any]:
         """`{datasets, harnesses, servings, evaluators}` of the provider's own records."""
+        ...
 
     async def evaluator(self, provider_org_id: str, evaluator_ref: str) -> dict[str, Any]:
         """The spec the ref's digest names; `NotFound` for any other."""
+        ...
 
 
 @dataclass(frozen=True)
 class LabEvaluations:
     sessions: lab_auth.Sessions
-    access: object                          # infrx.lab.access.LabAccess
+    access: LabAccess
     store: object | None = None             # D7: infrx.state.lab_data.PgLabDataStore
     experiments: ExperimentStore | None = None
     ledger: object | None = None            # B3's CheckpointLedger + `listing(provider)`
     catalog: Catalog | None = None
 
-    def port(self, name: str):
+    def port(self, name: str) -> Any:
         value = getattr(self, name)
         if value is None:                   # expected until its table merges: a 503
             raise errors.DependencyUnavailable(f"{name} is not wired")
@@ -175,7 +182,7 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in row.items() if k not in PRIVATE}
 
 
-async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any]:
+async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any] | None:
     catalog = x.port("catalog")
     offered = await catalog.catalog(who.provider_org_id)
     if any(getattr(wanted, field) not in {o["ref"] for o in offered[kind]}
@@ -227,7 +234,8 @@ async def subscriptions(x: LabEvaluations, who: Actor) -> list[dict[str, Any]]:
     return [_public(row) for row in await x.port("ledger").listing(who.provider_org_id)]
 
 
-async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest) -> dict:
+async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest
+                    ) -> dict[str, Any]:
     spec = await held(x.port("catalog").evaluator(who.provider_org_id, wanted.evaluator_ref))
     ledger = x.port("ledger")
     asked = {**wanted.model_dump(mode="json"), "provider_org_id": who.provider_org_id,
@@ -241,7 +249,8 @@ async def subscribe(x: LabEvaluations, who: Actor, wanted: SubscriptionRequest) 
 
 
 # --- the routes -----------------------------------------------------------------------------
-def register(app, rt, evaluations: LabEvaluations | None = None):
+def register(app: FastAPI, rt: Any, evaluations: LabEvaluations | None = None
+             ) -> LabEvaluations | None:
     """Mount the evaluation routes over `evaluations` (default `rt.lab_evaluations`); without
     one nothing is mounted and `None` is returned."""
     x = evaluations if evaluations is not None else getattr(rt, "lab_evaluations", None)

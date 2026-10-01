@@ -22,15 +22,20 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, AsyncIterator, cast
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.routing import APIRoute
 
 from ...contracts import errors
 from ...datasets import acting_provider, imports, lineage, versions
 from ...lab.time import iso_z
 from .. import lab_auth
 from . import intake
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 PREFIX = "/lab/v1/providers/{provider}/datasets"
 #: One import is one bounded request. ponytail: a streamed bundle upload when datasets
@@ -44,7 +49,7 @@ STATUS = ((errors.RequestTooLarge, 413), (errors.InvalidRequest, 400),)
 @dataclass(frozen=True)
 class LabDatasets:
     sessions: lab_auth.Sessions
-    access: object                          # infrx.lab.access.LabAccess
+    access: LabAccess
     store: object                           # D7: PgLabDataStore
     objects: object                         # the Lab objects (the media store, lab/<p>/)
     jobs: object = None                     # 0051's import-job queue: PgLabImportJobs
@@ -61,7 +66,7 @@ def refusal(error: Exception) -> JSONResponse:
     return JSONResponse(body, status_code=status)
 
 
-async def pieces(text: str):
+async def pieces(text: str) -> AsyncIterator[bytes]:
     data = text.encode()
     for start in range(0, len(data), 4096):
         yield data[start:start + 4096]
@@ -217,7 +222,8 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
     return api
 
 
-def register(app, rt, datasets: LabDatasets | None = None):
+def register(app: FastAPI, rt: Any, datasets: LabDatasets | None = None
+             ) -> LabDatasets | None:
     """Mount the datasets routes over `datasets` (default `rt.lab_datasets`); without one
     nothing is mounted and `None` is returned."""
     x = datasets if datasets is not None else getattr(rt, "lab_datasets", None)
@@ -235,6 +241,6 @@ def register(app, rt, datasets: LabDatasets | None = None):
 
     api = router(access=x.access, store=x.store, objects=x.objects, read=read, jobs=x.jobs,
                  user_of=lambda request: lab_auth.authenticate(request, x.sessions))
-    for route in api.routes:              # on the app's own table, as every other router
-        app.add_api_route(route.path, route.endpoint, methods=list(route.methods))
+    for route in cast("list[APIRoute]", api.routes):   # on the app's table, as every router
+        app.add_api_route(route.path, route.endpoint, methods=route.methods)
     return x

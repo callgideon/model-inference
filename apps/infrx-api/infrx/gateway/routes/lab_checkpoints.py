@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 
 from ...contracts import errors
 from ...contracts.ids import UUID_RE
@@ -35,7 +35,7 @@ MAX_BODY_BYTES = 16_384                 # one event: ids, a URI and a digest
 @dataclass(frozen=True)
 class LabCheckpoints:
     keys: Callable[[str], tuple[str, bytes] | None]   # key id -> (provider, secret)
-    ledger: object                                    # D8: PgCheckpointLedger (0042)
+    ledger: checkpoints.CheckpointLedger              # D8: PgCheckpointLedger (0042)
     store: object                                     # D7: PgLabDataStore
 
 
@@ -54,7 +54,8 @@ def key_directory(text: str) -> Callable[[str], tuple[str, bytes] | None]:
     return found.get
 
 
-def register(app, rt, lab_checkpoints: LabCheckpoints | None = None):
+def register(app: FastAPI, rt: Any, lab_checkpoints: LabCheckpoints | None = None
+             ) -> LabCheckpoints | None:
     """Mount the receiver over `lab_checkpoints` (default `rt.lab_checkpoints`); without one
     nothing is mounted and `None` is returned."""
     x = lab_checkpoints if lab_checkpoints is not None \

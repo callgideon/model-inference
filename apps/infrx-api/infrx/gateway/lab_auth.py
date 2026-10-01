@@ -27,17 +27,20 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Awaitable, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol, TypeVar
 
 import httpx
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..contracts import errors
-from ..contracts.v2.records import (ROLE_CAPABILITIES, ProviderCapability, ProviderMembership,
-                                    ProviderRole)
+from ..contracts.v2.records import ROLE_CAPABILITIES, ProviderCapability, ProviderMembership
+from ..contracts.v2.records import ProviderRole
 from .routes import intake
+
+if TYPE_CHECKING:
+    from ..lab.access import LabAccess
 
 T = TypeVar("T")
 M = TypeVar("M", bound=BaseModel)
@@ -59,6 +62,7 @@ class Sessions(Protocol):
     async def user_id(self, token: str) -> str:
         """The verified user's id; `InvalidApiKey` for anything but a live signed-in session,
         `DependencyUnavailable` when the verifier cannot answer."""
+        ...
 
 
 class GoTrueSessions:
@@ -96,7 +100,7 @@ class Actor(BaseModel):
     role: ProviderRole
 
 
-async def authenticate(request, sessions: Sessions) -> str:
+async def authenticate(request: Request, sessions: Sessions) -> str:
     """The verified user id behind the forwarded session token."""
     match = BEARER.fullmatch(request.headers.get("authorization") or "")
     if match is None:
@@ -104,7 +108,7 @@ async def authenticate(request, sessions: Sessions) -> str:
     return await sessions.user_id(match.group(1))
 
 
-async def member(access, user_id: str, provider_org_id: str,
+async def member(access: LabAccess, user_id: str, provider_org_id: str,
                  capability: ProviderCapability) -> ProviderMembership:
     """The user's current membership of `provider_org_id`, holding `capability`."""
     workspaces = await access.workspaces(user_id)
@@ -119,7 +123,7 @@ async def member(access, user_id: str, provider_org_id: str,
     return membership
 
 
-async def lab_actor(request, sessions: Sessions, access,
+async def lab_actor(request: Request, sessions: Sessions, access: LabAccess,
                     capability: ProviderCapability) -> Actor:
     """The session's user and current membership of the named provider."""
     user_id = await authenticate(request, sessions)
@@ -157,7 +161,7 @@ async def lab_body(request: Request, rt: Any, model: type[M],
         raise errors.InvalidRequest("invalid body") from None
 
 
-def ok(content, status_code: int = 200) -> JSONResponse:
+def ok(content: Any, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content, status_code=status_code, headers=NO_STORE)
 
 
@@ -174,10 +178,13 @@ def refusal(exc: Exception) -> JSONResponse:
     return JSONResponse({"refusal": reason}, status_code=status, headers=NO_STORE)
 
 
-def guarded(handler):
+Handler = Callable[[Request], Awaitable[Response]]
+
+
+def guarded(handler: Handler) -> Handler:
     """Nothing but a record or a fixed refusal leaves a Lab handler. Not `functools.wraps`:
     FastAPI would read the handler's own signature through `__wrapped__`."""
-    async def wrapped(request: Request):
+    async def wrapped(request: Request) -> Response:
         try:
             return await handler(request)
         except Exception as exc:                 # noqa: BLE001 - rendered, never re-raised

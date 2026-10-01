@@ -27,14 +27,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence, TypeVar
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...contracts import errors
 from ...contracts.v2.records import ProviderCapability as Cap
 from .. import lab_auth
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 CONTROL_PREFIX = "/lab/v1/control"
 DIGEST = r"^sha256:[0-9a-f]{64}$"
@@ -109,26 +112,28 @@ class ControlOperations(Protocol):
     async def proposals(self, actor: Actor) -> Sequence[Proposal]: ...
     async def register(self, actor: Actor, registration: Registration) -> Deployment:
         """A model revision and its private dev deployment revision."""
+        ...
     async def smoke(self, actor: Actor, deployment_revision_id: str) -> Deployment: ...
     async def propose(self, actor: Actor, kind: str,
                       deployment_revision_id: str) -> Proposal: ...
-    async def operator(self, user_id: str):
+    async def operator(self, user_id: str) -> Any:
         """The user's operator session (`Forbidden` for anyone else)."""
+        ...
     async def reject(self, operator, proposal_id: str, reason: str) -> Proposal: ...
 
 
 @dataclass(frozen=True)
 class LabControl:
     sessions: lab_auth.Sessions
-    access: object                               # infrx.lab.access.LabAccess
+    access: LabAccess
     operations: ControlOperations | None = None  # None until L3 is wired: 503
 
 
-def _dump(records) -> list:
+def _dump(records: Sequence[BaseModel]) -> list[dict[str, Any]]:
     return [record.model_dump(mode="json") for record in records]
 
 
-def register(app, rt, control: LabControl | None = None):
+def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabControl | None:
     """Mount the control routes over `control` (default `rt.lab_control`); without one
     nothing is mounted and `None` is returned."""
     control = control if control is not None else getattr(rt, "lab_control", None)
