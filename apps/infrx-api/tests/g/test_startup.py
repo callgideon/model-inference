@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import (chat, feedback, health, ingress, jobs, lab_checkpoints,
+from infrx.gateway.routes import (feedback, health, ingress, jobs, lab_checkpoints,
                                   lab_control, lab_datasets, lab_evaluations, lab_pipelines,
                                   lab_releases, lab_traces, models, trace_export, uploads)
 from infrx.observe import host
@@ -110,6 +110,44 @@ def test_f_base__public_health_is_generic():
     response = TestClient(app).get(support.HEALTH_PATH)
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+ENGINE_ANSWERS = (("up", 200, 200, {"ok": True}), ("down", 503, 503, {"ok": False}))
+
+
+@pytest.mark.parametrize("name,engine,status,body", ENGINE_ANSWERS,
+                         ids=[a[0] for a in ENGINE_ANSWERS])
+def test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing(
+        name, engine, status, body):
+    """The gateway's own `/health` (deploy/Caddyfile proxies the public `/health` to it and
+    answers its own generic body): up or down by the engine's `/health`, with no in-flight
+    counter (W6 A4: the legacy chat route that fed it is retired, so it only ever said 0)
+    and, on an engine that cannot be reached, a 503 that is not up."""
+    import httpx
+    from fastapi import FastAPI
+
+    rt = support.runtime(support.settings("dev"))
+    seen = []
+
+    def engine_health(request):
+        seen.append(request.url.path)
+        return httpx.Response(engine)
+
+    rt.client = httpx.AsyncClient(base_url="http://vllm.local",
+                                  transport=httpx.MockTransport(engine_health))
+    app = FastAPI()
+    health.register(app, rt)
+    response = TestClient(app).get("/health")
+    assert (response.status_code, response.json()) == (status, body)
+    assert seen == ["/health"]
+
+    def unreachable(request):
+        raise httpx.ConnectError("vllm.local unreachable")
+
+    rt.client = httpx.AsyncClient(base_url="http://vllm.local",
+                                  transport=httpx.MockTransport(unreachable))
+    response = TestClient(app, raise_server_exceptions=False).get("/health")
+    assert response.status_code == 503 and response.json()["ok"] is False
 
 
 def test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500():
@@ -926,27 +964,29 @@ def test_f_base__the_route_table_is_asserted_after_every_router_mounted():
     the router loop, so a router list that puts another chat handler first - the legacy one,
     in a mode `validate_runtime`'s module check does not guard - refuses to start."""
     with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
-        pilot_app(support.settings("dev"), routers=(chat,) + composition.ROUTERS)
+        pilot_app(support.settings("dev"), routers=(support.LEGACY_CHAT,) + composition.ROUTERS)
 
 
 def test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route():
-    """E3B dr17: in `pilot`, `create_app` refuses while `app.ROUTERS` composes the legacy
-    chat route (no durable admission, no hold) - naming the router list, never a value.
-    The cutover composition validates; one that mounts both still refuses (the legacy
-    route would keep the path), and so does one with no metered ingress at all, which is
-    I0's installer predicate. `dev` and the unset legacy mode are unaffected."""
+    """E3B dr17: in `pilot`, `create_app` refuses while `app.ROUTERS` composes no metered
+    ingress (I0's installer predicate) - naming the router list, never a value - and one
+    that mounts a legacy-style chat route beside the ingress still refuses (the route
+    table's one-handler rule; the F1 route itself is retired, W6 A4). The cutover
+    composition validates; `dev` and the unset legacy mode are unaffected."""
     from unittest import mock
 
     config = support.settings()                     # a complete pilot configuration
     assert validate_runtime(config) == "pilot"      # the composition root is the cutover's
     assert pilot_app(config).state.runtime.mode == "pilot"
-    for routers in ((health, models, chat), (health, models, chat, ingress), (health, models)):
+    for routers in ((health, models, support.LEGACY_CHAT), (health, models)):
         with mock.patch.object(composition, "ROUTERS", routers):
             with pytest.raises(RuntimeMisconfigured) as raised:
                 validate_runtime(config)
             message = str(raised.value)
             assert "legacy route" in message
             assert "service-role" not in message and "infrx_g1" not in message
+    with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
+        pilot_app(config, routers=(health, models, support.LEGACY_CHAT, ingress))
     assert validate_runtime(support.settings("dev")) == "dev"
 
 
@@ -958,7 +998,7 @@ def test_f_base__an_unset_mode_refuses_to_start():
         validate_runtime(Settings())
     assert raised.value.missing == ("INFRX_MODE",)
     with pytest.raises(RuntimeMisconfigured, match="INFRX_MODE"):
-        pilot_app(Settings(usage_log=support.USAGE_LOG))
+        pilot_app(Settings())
 
 
 # --- what FastAPI would answer by itself (review r1 item 7) ------------------------

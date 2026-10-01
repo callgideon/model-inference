@@ -877,17 +877,13 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- G1R item 4: pilot never serves chat through the legacy route (E3B dr17) -----
     # `config.validate_runtime` is the coordinator's hook; G1R's brief places this refusal
     # there, so these three edit it in the temporary copy.
-    _m("pilot_serves_the_legacy_route", "pilot refuses while the legacy chat route is composed",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if False:",
-       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
-    _m("legacy_route_beside_the_ingress", "the legacy route beside the ingress still refuses",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if ingress not in composition.ROUTERS:",
-       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    # W6 A4: the legacy route is retired, so `legacy_route_beside_the_ingress` (the module
+    # check) is retired with it; the route table's one-handler rule refuses that composition.
     _m("no_metered_ingress_accepted", "a pilot with no metered ingress refuses (I0's predicate)",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if chat in composition.ROUTERS:",
+       "config.py", "        if ingress not in composition.ROUTERS:", "        if False:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("pilot_route_table_unchecked", "a legacy-style chat route beside the ingress refuses",
+       "gateway/app.py", "    ingress.assert_route_table(app)\n", "",
        "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
     # --- G1R item 5: the headless client's declared surface is served -------------
     _m("https_video_refused", "an https video reference is served",
@@ -901,7 +897,8 @@ MUTANTS: tuple[Mutant, ...] = (
     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
        "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "from .routes import chat as _chat\n"
+       "import types as _types\n"
+       "_chat = _types.SimpleNamespace(register=lambda app, rt: app.post('/v1/chat/completions')(lambda: {}))\n"
        "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
@@ -1704,6 +1701,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "                                          cause=TerminalCause.client_cancelled)\n"
        "        except errors.AlreadyTerminal:",
        "test_api_modes__a_cancel_refusal_is_never_relabelled"),
+    # === W6 A4: the gateway's /health says up or down and counts nothing ==================
+    _m("health_counts_inflight", "the gateway /health carries no in-flight counter (W6 A4)",
+       "gateway/routes/health.py", '            return JSONResponse({"ok": r.status_code == 200},',
+       '            return JSONResponse({"ok": r.status_code == 200, "inflight": 0},',
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
+    _m("health_up_when_engine_down", "an engine that is down is a 503",
+       "gateway/routes/health.py", "                                status_code=200 if r.status_code == 200 else 503)",
+       "                                status_code=200)",
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
+    _m("health_unreachable_raises", "an unreachable engine is a 503, not a 500",
+       "gateway/routes/health.py", "        except Exception as e:", "        except KeyError as e:",
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
     # === G2 item 5: composition, readiness and the route table ===========================
     _m("pilot_built_without_catalog", "no pilot without a CatalogDirectory (D5)",
        P, "        if value is None:", '        if value is None and name != "catalog":',

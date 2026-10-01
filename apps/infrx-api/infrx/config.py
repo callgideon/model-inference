@@ -48,8 +48,6 @@ class Settings:
     max_redirects: int = 3
     allowed_video_mime: set = field(default_factory=lambda: _mimes(DEFAULT_ALLOWED_VIDEO_MIME))
     ext_mime: dict = field(default_factory=lambda: dict(EXT_MIME))
-    usage_log: str = "/opt/dlami/nvme/logs/usage.jsonl"
-    usage_failed_log: str = None        # None (not "") is "unset": derived from usage_log below
     supabase_url: str = ""
     supabase_key: str = ""
     fps: float = 2.0
@@ -63,7 +61,6 @@ class Settings:
     # negatives are attacker-suppliable: own, smaller cap
     key_cache_max: int = 10_000
     miss_cache_max: int = 1_000
-    retry_delays: tuple = (1, 3, 9, 0)  # usage_events insert backoff; 0 = give up and spill to disk
     # r1 R44: the contracts-v1 settings travel with the gateway's own, so
     # `create_app(settings=...)` can be handed a whole runtime configuration and
     # `validate_runtime` needs no second argument and no environment read of its own.
@@ -76,9 +73,6 @@ class Settings:
     def __post_init__(self):
         if self.deployment is None:
             self.deployment = DEPLOYMENT_DEFAULTS
-        # only unset derives; USAGE_FAILED_LOG="" stayed "" in the old gateway
-        if self.usage_failed_log is None:
-            self.usage_failed_log = os.path.join(os.path.dirname(self.usage_log), "usage_failed.jsonl")
 
 
 def from_env(env=None):
@@ -95,8 +89,6 @@ def from_env(env=None):
         fetch_timeout_s=float(e.get("FETCH_TIMEOUT_S", "30")),
         max_redirects=int(e.get("MAX_REDIRECTS", "3")),
         allowed_video_mime=_mimes(e.get("ALLOWED_VIDEO_MIME", DEFAULT_ALLOWED_VIDEO_MIME)),
-        usage_log=e.get("USAGE_LOG", "/opt/dlami/nvme/logs/usage.jsonl"),
-        usage_failed_log=e.get("USAGE_FAILED_LOG"),
         supabase_url=e.get("SUPABASE_URL", "").rstrip("/"),
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         pilot=pilot_from_env(e),
@@ -271,15 +263,15 @@ def validate_runtime(settings):
                      if name in PILOT_FORBIDDEN_SETTINGS and _configured(value)]
         if missing or forbidden:
             raise RuntimeMisconfigured(mode, missing, forbidden=forbidden)
-        # G1R / E3B dr17: the legacy chat route has no durable admission and no hold, so a
-        # pilot must not start while it is mounted - or while the metered ingress is not.
-        # What serves the path is the composition root's router list; G2's cutover swaps
-        # `chat` for `ingress` there. deploy/preflight.py's installer gate (I0) refuses
-        # the same composition. Imported here, not at module load: `gateway.app` imports
-        # this module.
+        # G1R / E3B dr17: a pilot must not start while the metered ingress is not composed.
+        # What serves the path is the composition root's router list; deploy/preflight.py's
+        # installer gate (I0) refuses the same composition. The legacy chat route this also
+        # refused is retired (W6 A4); a second handler on the path, of any router, is
+        # `ingress.assert_route_table`'s refusal once the routers are mounted. Imported
+        # here, not at module load: `gateway.app` imports this module.
         from .gateway import app as composition
-        from .gateway.routes import chat, ingress
-        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:
+        from .gateway.routes import ingress
+        if ingress not in composition.ROUTERS:
             # Worded apart from preflight's own gate message, so each refusal stays
             # observable (and killable) on its own.
             raise RuntimeMisconfigured(mode, detail="chat would be served by the legacy "

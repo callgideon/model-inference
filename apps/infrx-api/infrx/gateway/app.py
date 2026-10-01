@@ -1,8 +1,14 @@
 """Composition root: create_app() builds one independent gateway.
 
-Everything mutable lives on the Runtime — clients, settings, the in-flight
-counter, the key caches, the usage queue — so two apps in one process share
-nothing and nothing is created at import time.
+Everything mutable lives on the Runtime — settings, the engine client (`/health`), the
+Supabase client and the key caches (auth/keys.py), and the pilot composition
+(`pilot.build_ingress_deps`) — so two apps in one process share nothing and nothing is
+created at import time.
+
+W6 A4 retired the legacy F1 chat route (routes/chat.py), the usage/spill queue it fed
+(infrx/usage.py, deploy/replay_usage.py, USAGE_LOG/USAGE_FAILED_LOG) and the in-flight
+counter only it moved (`Runtime.inflight/usage/media`); `/v1/chat/completions` is the
+metered ingress's alone (`ingress.assert_route_table`).
 """
 import time
 
@@ -11,8 +17,6 @@ from fastapi import FastAPI
 
 from ..auth.keys import Auth
 from ..config import from_env, validate_runtime
-from ..media.video import Media
-from ..usage import Usage
 from . import pilot
 from ..observe import route as metrics
 from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
@@ -59,10 +63,7 @@ class Runtime:
         self.mode = "legacy"            # r1 R44; create_app replaces it with the validated mode
         self.client = upstream_client(settings) if client is None else client
         self.sb = supabase_client(settings) if sb is None else sb
-        self.inflight = 0
         self.auth = Auth(self)
-        self.usage = Usage(self)
-        self.media = Media(self)
         self.app = None
 
 
