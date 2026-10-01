@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 03:22Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 353, updated 2026-10-01 03:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 03:22Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 354, updated 2026-10-01 03:22Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -32,7 +32,7 @@ Remaining, in order:
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
 - Agent slots: 16 total, 10 active lanes, 2 reserved.
-- Validation: 0 error(s), 40 warning(s).
+- Validation: 0 error(s), 39 warning(s).
 
 ### Actionable blockers
 
@@ -382,7 +382,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-67 | support merge batch #67 (Opus): lab-observe-5 76d9e7ad (+the 09 log append kept both lines, LO5-RV1 partial-scrub oracle + st_job_scrub_partial, LO5-RV2 NOT RUN[ENV], LO5-RV3 pins.base, Makefile GATE_ARGS, R265); workflow wf_dfa796c8-f6b; integrated at f2ef6b2e (R265) | complete | codex/w5-merge-67 | 2bfbcc53 → 70a981e2 | ports none (layer-1 only), prefix -, db - | 2026-09-30 02:28Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W5-MERGE-68 | support merge batch #68 (Opus): lab-r3-identities aba93c87 (+WR-R3I-1 the E8L k07 patch rerun on e8l, R3I-RV-2/3, WR-R3I-OPEN, R266–R267); workflow: see RESUME-NOW; integrated at e13b1ce7 (R266–R267; k07 PASS on e8l) | complete | codex/w5-merge-68 | 004f521d → 9f3789d2 | ports none (layer-1 only), prefix -, db - | 2026-09-30 02:57Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W6-DOCS-STATE | support wave 6 clean-up lane docs-state (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_95946792-a5a | running | codex/w6-docs-state | 08983639 → — | ports -, prefix -, db - | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
-| W6-PLAN-LEDGER | support W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row | review | codex/w6-plan-ledger | 08983639 → 77739a36 | none | 2026-10-01 03:11Z | handback to the coordinator | 0.3–2 h remaining (likely 1 h), confidence medium, estimated 2026-10-01 03:11Z; basis: brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h |
+| W6-PLAN-LEDGER | support W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row | review | codex/w6-plan-ledger | 08983639 → ef222800 | none | 2026-10-01 03:22Z | handback to the coordinator | 0.1–1 h remaining (likely 0.3 h), confidence medium, estimated 2026-10-01 03:22Z; basis: fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h) |
 | W6-INFRA-LIBS | support wave 6 clean-up lane infra-libs (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_2be41693-24b | running | codex/w6-infra-libs | 08983639 → — | ports i5, prefix infrx-i5, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W6-LAB-RELEASE-TOOL | support wave 6 clean-up lane lab-release-tool (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_c5926c7c-285 | running | codex/w6-lab-release-tool | 08983639 → — | ports i6, prefix infrx-i6, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
 | W6-API-L2 | support wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0 | running | codex/w6-api-L2 | 08983639 → — | ports g7, prefix infrx-g7, db task-local | 2026-10-01 02:50Z | handback → merge | 2–8 h remaining (likely 4 h), confidence unknown, estimated — — STALE |
@@ -441,7 +441,6 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: W6-API-L4 (running) and W6-LAB-A (review) both own apps/infrx-api/infrx/rollouts/optimization/ / apps/infrx-api/infrx/rollouts/optimization/ (+5 more)
 - warning: overlapping writers: W6-API-L4 (running) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
 - warning: overlapping writers: W6-LAB-A (review) and W6-MERGE-69 (running) both own apps/infrx-api/infrx/gateway/pilot.py / apps/infrx-api/infrx/gateway/pilot.py
-- warning: 1 update file(s) not applied yet: W6-PLAN-LEDGER-20261001T0321Z.json (run apply-updates)
 
 ## Pending inputs
 
@@ -758,6 +757,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 
 ## Activity log (newest first)
 
+- 2026-10-01 03:22Z UTC, W6-PLAN-LEDGER: review → review; head ef222800; estimate likely 1 → 0.3 h (fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h))
 - 2026-10-01 03:11Z UTC, W6-PLAN-LEDGER: running → review; head 77739a36; estimate likely 5 → 1 h (brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h)
 - 2026-10-01 03:06Z UTC, W6-PLAN-LEDGER: INT-11: W5-EVAL-RUNNER next_action restated from the B1/B2 closure_notes (the update file was corrected before commit)
 - 2026-10-01 03:06Z UTC, W5-EVAL-RUNNER: review → complete

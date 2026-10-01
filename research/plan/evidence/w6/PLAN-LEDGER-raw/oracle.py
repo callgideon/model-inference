@@ -104,7 +104,21 @@ check("P-08 ENACTED row in the decisions table", re.search(r"^\| P-08 \| \*\*ENA
 rc, out = run(sys.executable, "research/plan/scripts/progress.py", "check")
 warn = [x for x in out.split("\n") if x.startswith("WARNING")]
 check("tracker check 0 errors", rc == 0, out[-300:])
-check("tracker: no overlapping-writer / unapplied-update warning", not [w for w in warn if "overlapping" in w or "not applied" in w], warn)
+check("tracker: no overlapping-writer warning naming this lane, no unapplied-update warning",
+      not [w for w in warn if ("overlapping" in w and "W6-PLAN-LEDGER" in w) or "not applied" in w], warn)  # the W6 stubs' copied LAB-R3 paths are the coordinator's (1-PL-1)
+
+# fix round 1-PL-1: the overlay merges into the tip with one W6-PLAN-LEDGER record and every coordinator W6 lane
+TIP = "origin/claude/consumer-v1"
+rc_m, out_m = run("git", "merge-tree", "--write-tree", TIP, "HEAD")
+check("1-PL-1 HEAD merges cleanly into the tip", rc_m == 0, out_m[-300:])
+tip = json.loads(run("git", "show", f"{TIP}:research/plan/evidence/coordinator/progress-state.json")[1])
+lane_ids = [x["id"] for x in s["lanes"]]
+check("1-PL-1 lane ids unique", len(lane_ids) == len(set(lane_ids)), [i for i in set(lane_ids) if lane_ids.count(i) > 1])
+check("1-PL-1 every tip lane kept", not {x["id"] for x in tip["lanes"]} - set(lane_ids))
+pl = next(x for x in s["lanes"] if x["id"] == "W6-PLAN-LEDGER")
+check("1-PL-1 W6-PLAN-LEDGER is the lane's record (own paths, not the LAB-R3 copy)",
+      "research/plan/consumer-v1/10-carried-work-register.md" in pl.get("owned_paths", []) and not any("rollouts" in p for p in pl.get("owned_paths", [])))
+check("1-PL-1 revision above the tip's", s["revision"] > tip["revision"], (s["revision"], tip["revision"]))
 print("remaining warnings:", *warn, sep="\n  ")
 check("validate_plan PASS", run(sys.executable, "research/plan/scripts/validate_plan.py")[0] == 0)
 check("PROGRESS.md shows the launch (lab.callbill.ai)", "lab.callbill.ai" in (EVID / "PROGRESS.md").read_text())

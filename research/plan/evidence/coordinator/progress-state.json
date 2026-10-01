@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 353,
- "updated": "2026-10-01T03:11:38Z",
+ "revision": 354,
+ "updated": "2026-10-01T03:22:20Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10389,7 +10389,7 @@
    "branch": "codex/w6-plan-ledger",
    "worktree": ".claude/worktrees/codex-w6-plan-ledger",
    "base": "08983639",
-   "head": "77739a36",
+   "head": "ef222800",
    "owned_paths": [
     "research/plan/tasks.json",
     "research/plan/evidence/coordinator/progress-state.json",
@@ -10408,59 +10408,57 @@
    },
    "activity": "review",
    "started": "2026-10-01T02:55:00Z",
-   "updated": "2026-10-01T03:11:37Z",
+   "updated": "2026-10-01T03:22:20Z",
    "blocker": null,
    "next_action": "handback to the coordinator",
    "evidence": [
     "research/plan/evidence/w6/PLAN-LEDGER-77739a3.md",
     "research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
-    "research/plan/consumer-v1/10-carried-work-register.md"
+    "research/plan/consumer-v1/10-carried-work-register.md",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/fix-red-merge-tree-271ec1a0.log",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/fix-oracle.log",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/overlay_merge.py"
    ],
    "commands": [
     {
+     "cmd": "git merge-tree --write-tree origin/claude/consumer-v1 271ec1a0",
+     "exit": 1,
+     "summary": "red: CONFLICT in progress-state.json, PROGRESS.md, progress.html (1-PL-1)"
+    },
+    {
+     "cmd": "git merge origin/claude/consumer-v1 (44a41acb, then 50d2b232) + overlay resolution (PLAN-LEDGER-raw/overlay_merge.py)",
+     "exit": 0,
+     "summary": "lane's W6-PLAN-LEDGER record replaces the stub; the other W6 lanes and lab-A accept kept as on the tip; one lane id each; rev 353 -> 354 via apply-updates"
+    },
+    {
      "cmd": "python3 research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
      "exit": 0,
-     "summary": "red at 08983639: 30 failing items; green at a7f5d917: 0"
+     "summary": "0 failing items, incl. 5 new 1-PL-1 checks (clean merge-tree into the tip, unique lane ids, every tip lane kept, own record, revision above tip)"
     },
     {
      "cmd": "python3 research/plan/scripts/progress.py check",
      "exit": 0,
-     "summary": "0 errors; warnings 9 -> 3 (stale estimates on the window-bound I2A/E3A/I3)"
+     "summary": "0 errors, 31 warnings: 3 stale (I2A/E3A/I3) + 28 overlapping writers among the coordinator's W6 stubs (copied LAB-R3 owned_paths); none names W6-PLAN-LEDGER"
     },
     {
-     "cmd": "python3 research/plan/scripts/progress.py apply-updates",
+     "cmd": "python3 research/plan/scripts/validate_plan.py",
      "exit": 0,
-     "summary": "113 legacy updates reconciled as applied-by-hand (62 lanes, 59 merges); the lane's own 6 update files applied"
-    },
-    {
-     "cmd": "python3 research/plan/scripts/validate_plan.py --write-ledger",
-     "exit": 0,
-     "summary": "PASS; ledger current"
-    },
-    {
-     "cmd": "cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan test_mutants",
-     "exit": 1,
-     "summary": "53 tests; 1 pre-existing error (test_app_cannot_dispatch_early KeyError, same at the base)"
-    },
-    {
-     "cmd": "make console-test console-lint console-typecheck",
-     "exit": 0,
-     "summary": "591 pass / 0 fail / 59 skipped; lint 0 errors 2 pre-existing warnings; typecheck clean"
+     "summary": "PASS"
     }
    ],
    "wiring_requests": [
     "WR-PL-1 (coordinator): apply research/plan/evidence/w6/PLAN-LEDGER-raw/WR-PL-1-progress-gate-records.patch - progress.py validates and renders overlay gate_records (+2 GateRecords cases)",
     "WR-PL-2 (coordinator): consumer-v1/README.md index line + log line for 10-carried-work-register.md",
     "WR-PL-3 (infra-libs + coordinator): comment/docstring fixes at tests/i/lab/test_lab_rollout_steps.py:416 and infra/rollout/hosted-migrate.sh:35 (hosted at 0059; next window 0060+)",
-    "WR-PL-4 (coordinator): RESUME-NOW points at the register; create overlay support lanes for the other W6 lanes before applying their update files"
+    "WR-PL-5 (coordinator): correct the 7 W6 stubs' owned_paths (copied from LAB-R3: apps/infrx-api/infrx/rollouts/optimization/, pilot.py, ...) to each lane's own paths; they cause the 28 overlapping-writer warnings"
    ],
    "estimate": {
-    "optimistic_h": 0.3,
-    "likely_h": 1,
-    "pessimistic_h": 2,
+    "optimistic_h": 0.1,
+    "likely_h": 0.3,
+    "pessimistic_h": 1,
     "confidence": "medium",
-    "at": "2026-10-01T03:11:37Z",
-    "basis": "brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h"
+    "at": "2026-10-01T03:22:20Z",
+    "basis": "fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h)"
    }
   },
   {
@@ -10730,7 +10728,7 @@
    "since": "2026-10-01T03:11:37Z",
    "lane": "W6-PLAN-LEDGER",
    "task": "W6-PLAN-LEDGER",
-   "head": "77739a36"
+   "head": "ef222800"
   }
  ],
  "integration_queue": [],
@@ -14087,6 +14085,12 @@
    "by": "W6-PLAN-LEDGER",
    "what": "running → review; head 77739a36; estimate likely 5 → 1 h (brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h)",
    "source": "updates/W6-PLAN-LEDGER-20261001T0311Z.json"
+  },
+  {
+   "at": "2026-10-01T03:22:20Z",
+   "by": "W6-PLAN-LEDGER",
+   "what": "review → review; head ef222800; estimate likely 1 → 0.3 h (fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h))",
+   "source": "updates/W6-PLAN-LEDGER-20261001T0321Z.json"
   }
  ],
  "history": {
@@ -16046,10 +16050,14 @@
   "W6-PLAN-LEDGER-20261001T0311Z.json": {
    "status": "applied",
    "at": "2026-10-01T03:11:37Z"
+  },
+  "W6-PLAN-LEDGER-20261001T0321Z.json": {
+   "status": "applied",
+   "at": "2026-10-01T03:22:20Z"
   }
  },
  "eta": {
-  "computed_at": "2026-10-01T03:11:38Z",
+  "computed_at": "2026-10-01T03:22:20Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
