@@ -29,8 +29,8 @@
     ],
     "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
   },
-  "revision": 346,
-  "updated": "2026-10-01T03:01:43Z",
+  "revision": 348,
+  "updated": "2026-10-01T03:02:46Z",
   "agent_slots": {
     "total": 16,
     "active": 5,
@@ -1236,9 +1236,9 @@
       },
       "activity": "queued",
       "started": null,
-      "updated": "2026-09-26T18:20:00Z",
-      "blocker": "after E3C; needs an allocated GPU window",
-      "next_action": "prerequisites: P-06 enacted (2026-09-26), known-good proof through 0026, SNS topic + role grant (subscription pending the user), SSM parameters created, hosted confirmed at 0018 with 0019–0026 pending; left: G2 green at RELEASE (G2-FIX), the operator items B-03..B-11, the window itself",
+      "updated": "2026-10-01T03:00:09Z",
+      "blocker": "the operator's certify window on the box at the launched release 41693d5d (certify-window.sh stops pinning d3a99e01 in W6 lane certify-release, INFRA-02)",
+      "next_action": "State 2026-10-01 (W6 plan-ledger, INT-01): hosted 0001-0059 and the box runtime 41693d5d (CREDIT) are live; the Lab control unit is ON at 7ecbab0e and lab.callbill.ai serves the Lab app. The four remaining steps, in order: (1) members - provider org infrx-internal + tester memberships on hosted (launch-v1.sh members; lab-release.sh members after W6); (2) main - fast-forward origin/main 41693d5d to the post-W6 tip (operator); (3) E4C certify on the box at the served release (certify-window.sh with RELEASE as an input, e4c-certify.sh; then the BACKEND-READY and APP-PILOT decisions; E1B/E4/E3A/I3 cells are window-bound on the same run); (4) one tester's internal-testing checklist (08-lab-internal-testing-rollout.md §8) recorded as INTERNAL-TESTING accepted. Register: research/plan/consumer-v1/10-carried-work-register.md",
       "estimate": {
         "optimistic_h": null,
         "likely_h": null,
@@ -1247,7 +1247,10 @@
         "basis": "not estimated at baseline (lane has not inspected its slice yet)",
         "at": null
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/2026-10-01-v1-audit.md",
+        "research/plan/consumer-v1/09-path-to-internal-testing.md"
+      ],
       "commands": []
     },
     {
@@ -4954,7 +4957,8 @@
       },
       "evidence": [
         "research/plan/evidence/r/R1-8d2e636.md",
-        "research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch"
+        "research/plan/evidence/r/R1-8d2e636-wiring-on-f4bceeba.patch",
+        "research/plan/evidence/r/R1-8d2e636-wiring.patch"
       ],
       "commands": [],
       "owned_paths": [
@@ -5884,7 +5888,10 @@
       "evidence": [
         "research/plan/evidence/d/C2-dd08e1e.md",
         "research/plan/evidence/d/D8-1079c32.md",
-        "research/plan/evidence/d/D8-1079c32-wiring.patch"
+        "research/plan/evidence/d/D8-1079c32-wiring.patch",
+        "research/plan/evidence/d/D8-1079c32-merged-swap.patch",
+        "research/plan/evidence/d/D8-27fcb67-wiring-i2l4b.patch",
+        "research/plan/evidence/d/D8-08b1716-wiring-lsq3-5.patch"
       ],
       "commands": [],
       "owned_paths": [
@@ -6036,7 +6043,10 @@
         "research/plan/evidence/v/V1M-82db4a9.md",
         "research/plan/evidence/v/WR-V1M-3-82db4a9.patch",
         "research/plan/evidence/v/WR-V1M-4-82db4a9.patch",
-        "research/plan/evidence/v/WR-LAB-API-6-82db4a9.patch"
+        "research/plan/evidence/v/WR-LAB-API-6-82db4a9.patch",
+        "research/plan/evidence/v/WR-LAB-API-5-82db4a9.md",
+        "research/plan/evidence/v/WR-V2-1-82db4a9.md",
+        "research/plan/evidence/v/WR-V2-5-82db4a9.md"
       ],
       "commands": [],
       "owned_paths": [
@@ -6532,7 +6542,10 @@
       },
       "evidence": [
         "research/plan/evidence/e/E7L-7018550.md",
-        "research/plan/evidence/e/E7L-raw-7018550/"
+        "research/plan/evidence/e/E7L-raw-7018550/",
+        "research/plan/evidence/e/E7L-raw-6de86a8/",
+        "research/plan/evidence/e/E7L-64696c0.md",
+        "research/plan/evidence/e/E7L-raw-64696c0/"
       ],
       "commands": [],
       "owned_paths": [
@@ -6577,7 +6590,8 @@
         "at": "2026-09-28T19:41:40Z"
       },
       "evidence": [
-        "research/plan/evidence/e/E8L-2334e6a.md"
+        "research/plan/evidence/e/E8L-2334e6a.md",
+        "research/plan/evidence/e/E8L-raw-2334e6a/"
       ],
       "commands": [],
       "owned_paths": [
@@ -6683,7 +6697,8 @@
       },
       "evidence": [
         "research/plan/evidence/e/E3L-BIND-bab9b18.md",
-        "research/plan/evidence/e/E3L-raw-bab9b180/"
+        "research/plan/evidence/e/E3L-raw-bab9b180/",
+        "research/plan/evidence/e/E3L-raw-3d68a1fb/"
       ],
       "commands": [],
       "owned_paths": [
@@ -7054,7 +7069,9 @@
       "evidence": [
         "research/plan/evidence/e/E7L-a609f36.md",
         "research/plan/evidence/e/E7L-raw-a609f36/",
-        "research/plan/evidence/e/E7L-raw-1fbc48a/WR-PL-1.patch"
+        "research/plan/evidence/e/E7L-raw-1fbc48a/WR-PL-1.patch",
+        "research/plan/evidence/e/E7L-raw-861cc7d/",
+        "research/plan/evidence/e/E7L-raw-1fbc48a/"
       ],
       "commands": [],
       "owned_paths": [
@@ -7254,7 +7271,8 @@
         "at": "2026-09-29T02:06:28Z"
       },
       "evidence": [
-        "research/plan/evidence/g/E3L-F1-99c3285.md"
+        "research/plan/evidence/g/E3L-F1-99c3285.md",
+        "research/plan/evidence/g/E3L-F1-c728ba9.md"
       ],
       "commands": [],
       "owned_paths": [
@@ -7674,7 +7692,8 @@
       },
       "evidence": [
         "research/plan/evidence/r/ROLLOUT-IDENTITY-6d36750.md",
-        "research/plan/evidence/e/E8L-raw-rollout-identity-6d36750/"
+        "research/plan/evidence/e/E8L-raw-rollout-identity-6d36750/",
+        "research/plan/evidence/e/E8L-raw-rollout-identity-7a5161a/"
       ],
       "commands": [],
       "owned_paths": [
@@ -7976,7 +7995,8 @@
         "at": "2026-09-29T07:46:58Z"
       },
       "evidence": [
-        "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md"
+        "research/plan/evidence/l/LAB-APP-CONTROL-e2d6eb5.md",
+        "research/plan/evidence/l/LAB-APP-CONTROL-raw-e2d6eb5/"
       ],
       "commands": [],
       "owned_paths": [
@@ -8019,7 +8039,8 @@
       },
       "evidence": [
         "research/plan/evidence/coordinator/COMPOSITION-5-bd5a273.md",
-        "research/plan/evidence/e/E6L-raw-da7e770/"
+        "research/plan/evidence/e/E6L-raw-da7e770/",
+        "research/plan/evidence/e/E6L-raw-da7e770/run/verdict.json"
       ],
       "commands": [],
       "owned_paths": [
@@ -8070,7 +8091,8 @@
       },
       "evidence": [
         "research/plan/evidence/e/E5L-1d62678.md",
-        "research/plan/evidence/e/E5L-raw-bd13f72/"
+        "research/plan/evidence/e/E5L-raw-bd13f72/",
+        "research/plan/evidence/e/E5L-raw-lo2/"
       ],
       "commands": [],
       "owned_paths": [
@@ -8109,7 +8131,13 @@
         "confidence": "low",
         "basis": "a new gate script + a runbook + step scripts with tests"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/i/LAB-DEPLOY-PREP-24512389.md",
+        "research/plan/evidence/e/E4ON-raw-24512389/",
+        "research/plan/consumer-v1/08-lab-internal-testing-rollout.md",
+        "research/plan/evidence/e/E4ON-raw-28c9c2cc/",
+        "research/plan/evidence/e/E4ON-raw-950a570b/"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab-local.sh",
@@ -8389,7 +8417,13 @@
         "confidence": "low",
         "basis": "four suites over the real stores + four runner binds"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/LAB-E2E-2299b82.md",
+        "research/plan/evidence/e/LAB-E2E-raw-2299b82",
+        "research/plan/evidence/e/LAB-E2E-raw-9e485b3",
+        "research/plan/evidence/e/LAB-E2E-raw-c2b88a2",
+        "research/plan/evidence/e/LAB-E2E-raw-d4c4d31"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/lab/tests/e2e/**",
@@ -8456,7 +8490,9 @@
         "basis": "single-lane batch with the Lab suites",
         "at": "2026-09-29T10:46:04Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md"
+      ],
       "commands": [],
       "owned_paths": [
         "infra/rollout/known-good.json",
@@ -8493,7 +8529,13 @@
         "basis": "single-lane batch with the Lab suites",
         "at": "2026-09-29T10:46:04Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E6L-24a7a06.md",
+        "research/plan/evidence/e/E6L-raw-24a7a065/verdict.json",
+        "research/plan/evidence/e/E6L-raw-24a7a065/mutants-all-final.log",
+        "research/plan/evidence/e/E6L-raw-bccfd363/verdict.json",
+        "research/plan/evidence/e/E6L-raw-8949ffb/run-0-base/verdict.json"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_evaluate/",
@@ -8528,7 +8570,13 @@
         "basis": "single-lane batch with the Lab suites",
         "at": "2026-09-29T10:46:04Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E8L-d869ee40.md",
+        "research/plan/evidence/e/E8L-raw-d869ee40/verdict.json",
+        "research/plan/evidence/e/E8L-raw-d869ee40/mutants/test_mutants.log",
+        "research/plan/evidence/e/E8L-raw-b7a11c8/only-k09/verdict.json",
+        "research/plan/evidence/e/E8L-raw-b7a11c8/only-k09-red-stub/verdict.json"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_rollout/",
@@ -8563,7 +8611,9 @@
         "basis": "single-lane batch with the Lab suites",
         "at": "2026-09-29T10:46:04Z"
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/COMPOSITION-6-a6cbba5.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/lab/",
@@ -8675,7 +8725,10 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E6L-J11-9938ad6.md",
+        "research/plan/evidence/e/E6L-J11-raw-9938ad6/"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/evaluation/runner/",
@@ -8778,7 +8831,9 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/l/LAB-CONTROL-ROUTES-79537d3.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/lab/control/",
@@ -8914,7 +8969,11 @@
         "likely_h": 2,
         "pessimistic_h": 4
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E5L-35e2f11.md",
+        "research/plan/evidence/e/E5L-raw-df837faf",
+        "research/plan/evidence/e/E5L-raw-df837faf/fix-round"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_observe/",
@@ -8946,7 +9005,13 @@
         "likely_h": 12,
         "pessimistic_h": 24
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/t/LAB-CAPTURE-5f6a056.md",
+        "research/plan/evidence/t/LAB-CAPTURE-5f6a056-o01.diff",
+        "research/plan/evidence/t/LAB-CAPTURE-WR-LC-LOCAL.diff",
+        "research/plan/evidence/t/LAB-CAPTURE-WR-LC-PILOT.diff",
+        "research/plan/evidence/t/LAB-CAPTURE-WR-LC-W.diff"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/gateway/",
@@ -8979,7 +9044,9 @@
         "likely_h": 8,
         "pessimistic_h": 16
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/r/LAB-LIVE-1f68d35.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/app/supabase/migrations/0054_*",
@@ -9015,7 +9082,14 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E8L-c581c59.md",
+        "research/plan/evidence/e/E8L-raw-93f41299/verdict.json",
+        "research/plan/evidence/e/E8L-raw-c581c59a/verdict.json",
+        "research/plan/evidence/e/E8L-raw-9b7802b/",
+        "research/plan/evidence/e/E8L-raw-8b8ef4ae/verdict.json",
+        "research/plan/evidence/e/E8L-raw-fix-round/"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_rollout/",
@@ -9048,7 +9122,10 @@
         "likely_h": 6,
         "pessimistic_h": 12
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/l/LAB-SQL-LW7-21ca788.md",
+        "research/plan/evidence/l/LAB-SQL-LW7-wiring-variants.patch"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/app/supabase/migrations/0055_*",
@@ -9120,7 +9197,9 @@
         "likely_h": 3,
         "pessimistic_h": 6
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/l/LAB-SQL-LW8-6f28a64.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/app/supabase/migrations/0056_*",
@@ -9222,7 +9301,11 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E8L-4d394ef.md",
+        "research/plan/evidence/e/E8L-raw-4d394efa/verdict.json",
+        "research/plan/evidence/e/E8L-raw-lr6/"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_rollout/",
@@ -9255,7 +9338,9 @@
         "likely_h": 6,
         "pessimistic_h": 12
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/COMPOSITION-7-252b65e.md"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/lab/workers/",
@@ -9405,7 +9490,11 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/t/LAB-CAPTURE-2-4f87f54.md",
+        "research/plan/evidence/t/LAB-CAPTURE-2-WR-RUNTIME.diff",
+        "research/plan/evidence/coordinator/updates/T2-LAB-CAPTURE-2-20260929T2316Z.json"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/gateway/capture.py",
@@ -9473,7 +9562,11 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E4ON-fd0aba04.md",
+        "research/plan/evidence/e/E4ON-raw-fd0aba04/",
+        "research/plan/evidence/e/E4ON-raw-1a5be321/"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_local/",
@@ -9507,7 +9600,13 @@
         "likely_h": 2,
         "pessimistic_h": 4
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E5L-c25405c.md",
+        "research/plan/evidence/e/E5L-raw-c25405cc/",
+        "research/plan/evidence/e/E5L-raw-lo4/",
+        "research/plan/evidence/e/E5L-raw-a183f1fd/",
+        "research/plan/evidence/e/E5L-raw-lo4/fix/"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_observe/",
@@ -9539,7 +9638,9 @@
         "likely_h": 2,
         "pessimistic_h": 4
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-8f0e3c9.md"
+      ],
       "commands": [],
       "owned_paths": [
         "infra/rollout/known-good.json",
@@ -9573,7 +9674,11 @@
         "likely_h": 6,
         "pessimistic_h": 12
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E8L-e65bbec.md",
+        "research/plan/evidence/e/E8L-raw-lr7/",
+        "research/plan/evidence/e/E8L-raw-e65bbecf/"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/gateway/pilot.py",
@@ -9608,7 +9713,10 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/LAB-C7-GAPS-ed21f2a.md",
+        "research/plan/evidence/coordinator/LAB-C7-GAPS-WR-C7G-PREFLIGHT.patch"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/lab/workers/__main__.py",
@@ -9643,7 +9751,10 @@
         "likely_h": 6,
         "pessimistic_h": 12
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/l/LAB-SQL-LW9-751ff6a.md",
+        "research/plan/evidence/l/LAB-SQL-LW9-wiring-upgrade.patch"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/app/supabase/migrations/0058_*",
@@ -9820,7 +9931,12 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E4ON-b94fd337.md",
+        "research/plan/evidence/e/E4ON-raw-b94fd337/verdict.json",
+        "research/plan/evidence/e/E4ON-raw-b94fd337/mutants.log",
+        "research/plan/evidence/e/E4ON-raw-aa386cf3-r1/keyed.json"
+      ],
       "commands": [],
       "owned_paths": [
         "tests/integration/lab_local/",
@@ -10003,7 +10119,9 @@
         "likely_h": 2,
         "pessimistic_h": 4
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md"
+      ],
       "commands": [],
       "owned_paths": [
         "infra/rollout/known-good.json",
@@ -10038,7 +10156,10 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/r/LAB-R3-IDENTITIES-cf9d30f.md",
+        "research/plan/evidence/r/LAB-R3-IDENTITIES-wiring-e8l-k07.patch"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/rollouts/optimization/",
@@ -10074,7 +10195,12 @@
         "likely_h": 4,
         "pessimistic_h": 8
       },
-      "evidence": [],
+      "evidence": [
+        "research/plan/evidence/e/E5L-290d70e.md",
+        "research/plan/evidence/e/E5L-raw-290d70e9/verdict.json",
+        "research/plan/evidence/e/E5L-raw-lo5/stack-mutants.log",
+        "research/plan/evidence/e/E5L-raw-lo5/teardown.log"
+      ],
       "commands": [],
       "owned_paths": [
         "apps/infrx-api/infrx/rollouts/optimization/",
@@ -13484,6 +13610,18 @@
       "by": "W6-PLAN-LEDGER",
       "what": "INT-03: gate_records holds only the seven records; its explanation moves to gate_records_note",
       "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
+    },
+    {
+      "at": "2026-10-01T03:02:36Z",
+      "by": "W6-PLAN-LEDGER",
+      "what": "INT-02: 113 lane update files reconciled by hand: each maps to exactly one complete hand-merged lane (by branch) and the first-parent merge carrying its head; ingested status applied-by-hand + merge SHA; missing evidence paths appended to the lanes (apply-updates on a scratch copy would have created two phantom lanes; see evidence/w6/PLAN-LEDGER-raw/int02-dryrun-scratch-copy.log)",
+      "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
+    },
+    {
+      "at": "2026-10-01T03:00:09Z",
+      "by": "E4C",
+      "what": "queued → queued",
+      "source": "updates/E4C-20261001T0300Z.json"
     }
   ],
   "history": {
@@ -14628,10 +14766,805 @@
       "status": "rejected",
       "at": "2026-09-28T13:30:00Z",
       "reason": "future-dated: at 2026-09-28T13:30:00Z is after host UTC now 2026-09-28T12:21:20Z (+15 min skew allowed); check the clock"
+    },
+    "B1-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "B3-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "B3-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "B4-20260928T1030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T10:30:00Z",
+      "lane": "W5-LAB-API-2",
+      "merge": "2e238e36",
+      "reason": "hand-merged into lane W5-LAB-API-2 (complete) at 2e238e36 (Integrate merge lane #11 (codex/w5-merge-11 2df7b8bb): lab-a); update head 1464f50; W6 plan-ledger INT-02"
+    },
+    "B4-20260928T1620Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T16:20:00Z",
+      "lane": "W5-LAB-UI-SWAP",
+      "merge": "6f627953",
+      "reason": "hand-merged into lane W5-LAB-UI-SWAP (complete) at 6f627953 (Integrate merge lane #17 (codex/w5-merge-17 94212474): lab-u); update head a408d8ff; W6 plan-ledger INT-02"
+    },
+    "C2-20260927T2100Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-27T21:00:00Z",
+      "lane": "W5-CONTENT",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-CONTENT (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head ae7375e; W6 plan-ledger INT-02"
+    },
+    "C2-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-LW3",
+      "merge": "a9752e7f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW3 (complete) at a9752e7f (Integrate merge lane #16 (codex/w5-merge-16 5b549f54): lab-s); update head dd08e1ec; W6 plan-ledger INT-02"
+    },
+    "C2-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-2-20260928T2040Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:40:00Z",
+      "lane": "W5-COMPOSITION-2",
+      "merge": "3529168d",
+      "reason": "hand-merged into lane W5-COMPOSITION-2 (complete) at 3529168d (Integrate merge lane #22 (codex/w5-merge-22 3cdfaa61): compo); update head b790f17b; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-2-20260928T2059Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:59:00Z",
+      "lane": "W5-COMPOSITION-2",
+      "merge": "3529168d",
+      "reason": "hand-merged into lane W5-COMPOSITION-2 (complete) at 3529168d (Integrate merge lane #22 (codex/w5-merge-22 3cdfaa61): compo); update head b44f3287; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-20260927T2310Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T07:00:00Z",
+      "lane": "W5-COMPOSITION",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-COMPOSITION (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head feaf4ab; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-3-20260929T0110Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T01:49:00Z",
+      "lane": "W5-COMPOSITION-3",
+      "merge": "9698e51b",
+      "reason": "hand-merged into lane W5-COMPOSITION-3 (complete) at 9698e51b (Integrate merge lane #30 (codex/w5-merge-30 005283ea): compo); update head 1e7d827a; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-4-20260929T0540Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T05:40:00Z",
+      "lane": "W5-COMPOSITION-4",
+      "merge": "1cc8a0f0",
+      "reason": "hand-merged into lane W5-COMPOSITION-4 (complete) at 1cc8a0f0 (Integrate merge lane #36 (codex/w5-merge-36 5ed53a41): compo); update head b7db806b; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-5-20260929T2330Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:30:00Z",
+      "lane": "W5-COMPOSITION-5",
+      "merge": "a484957e",
+      "reason": "hand-merged into lane W5-COMPOSITION-5 (complete) at a484957e (Integrate merge lane #42 (codex/w5-merge-42): composition-5 ); update head bd5a2735; its at is later than the lane's updated 2026-09-29T11:35:08Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-6-20260929T1315Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:15:00Z",
+      "lane": "W5-COMPOSITION-6",
+      "merge": "993d481c",
+      "reason": "hand-merged into lane W5-COMPOSITION-6 (complete) at 993d481c (Integrate merge lane #50 (codex/w5-merge-50): composition-6 ); update head 2f64c658; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "COMPOSITION-7-20260929T1836Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T18:36:00Z",
+      "lane": "W5-COMPOSITION-7",
+      "merge": "b6b7bdae",
+      "reason": "hand-merged into lane W5-COMPOSITION-7 (complete) at b6b7bdae (Integrate lane composition-7 (codex/w5-composition-7 bd31e8a); update head 252b65e8; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "D8-20260928T1310Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T13:10:00Z",
+      "lane": "W5-LAB-SQL-LW3",
+      "merge": "a9752e7f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW3 (complete) at a9752e7f (Integrate merge lane #16 (codex/w5-merge-16 5b549f54): lab-s); update head 1079c328; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "D8-20260928T1530Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T15:30:00Z",
+      "lane": "W5-LAB-SQL-LW3",
+      "merge": "a9752e7f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW3 (complete) at a9752e7f (Integrate merge lane #16 (codex/w5-merge-16 5b549f54): lab-s); update head 08b17160; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E3L-20260928T2316Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T23:16:00Z",
+      "lane": "W5-E3L-BIND",
+      "merge": "0ab7da7c",
+      "reason": "hand-merged into lane W5-E3L-BIND (complete) at 0ab7da7c (Integrate merge lane #25 (codex/w5-merge-25 175a731e): e3l-b); update head 9b19864d; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E3L-20260929T0632Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T06:32:00Z",
+      "lane": "W5-LAB-OPERATE-2",
+      "merge": "b0504b44",
+      "reason": "hand-merged into lane W5-LAB-OPERATE-2 (complete) at b0504b44 (Integrate merge lane #37 (codex/w5-merge-37 d2063fbb): lab-o); update head 5bec250c; W6 plan-ledger INT-02"
+    },
+    "E3L-20260929T0730Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T07:30:00Z",
+      "lane": "W5-LAB-APP-CONTROL",
+      "merge": "72dc76ad",
+      "reason": "hand-merged into lane W5-LAB-APP-CONTROL (complete) at 72dc76ad (Integrate merge lane #38 (codex/w5-merge-38 82a34950): lab-a); update head e2d6eb52; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E3L-20260929T1019Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T10:19:00Z",
+      "lane": "W5-LAB-CONTROL-2",
+      "merge": "084ddc6a",
+      "reason": "hand-merged into lane W5-LAB-CONTROL-2 (complete) at 084ddc6a (Integrate merge lane #43 (codex/w5-merge-43): lab-control-2 ); update head c1aac903; W6 plan-ledger INT-02"
+    },
+    "E3L-F1-20260929T0136Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T01:36:00Z",
+      "lane": "W5-E3L-F1",
+      "merge": "c2a652b9",
+      "reason": "hand-merged into lane W5-E3L-F1 (complete) at c2a652b9 (Integrate merge lane #31 (codex/w5-merge-31 d517b194): e3l-f); update head 99c32850; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260929T1040Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T10:40:00Z",
+      "lane": "W5-LAB-OBSERVE-2",
+      "merge": "21fcb54e",
+      "reason": "hand-merged into lane W5-LAB-OBSERVE-2 (complete) at 21fcb54e (Integrate merge lane #41 (codex/w5-merge-41 007deee4): lab-o); update head 1d626781; its at is later than the lane's updated 2026-09-29T10:30:56Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260929T1214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:14:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 2299b82; 4 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260929T1308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:08:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 4f9e090; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260929T1500Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T15:00:00Z",
+      "lane": "W5-LAB-OBSERVE-3",
+      "merge": "be6b2fde",
+      "reason": "hand-merged into lane W5-LAB-OBSERVE-3 (complete) at be6b2fde (Integrate merge lane #57 (codex/w5-merge-57): lab-observe-3 ); update head 3e8d0365; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260929T2045Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T20:45:00Z",
+      "lane": "W5-LAB-OBSERVE-4",
+      "merge": "d719b2d2",
+      "reason": "hand-merged into lane W5-LAB-OBSERVE-4 (complete) at d719b2d2 (Integrate merge lane #58 (codex/w5-merge-58): lab-observe-4 ); update head a183f1fd; 5 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E5L-20260930T0155Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-30T01:55:00Z",
+      "lane": "W5-LAB-OBSERVE-5",
+      "merge": "f2ef6b2e",
+      "reason": "hand-merged into lane W5-LAB-OBSERVE-5 (complete) at f2ef6b2e (Merge batch #67 (lab-observe-5 at 76d9e7ad; codex/w5-merge-6); update head 290d70e9; 4 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E6L-20260929T1214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:14:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 2299b82; W6 plan-ledger INT-02"
+    },
+    "E6L-20260929T1217Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:17:00Z",
+      "lane": "W5-LAB-EVALUATE-2",
+      "merge": "fe3c2043",
+      "reason": "hand-merged into lane W5-LAB-EVALUATE-2 (complete) at fe3c2043 (Integrate merge lane #45 (codex/w5-merge-45): lab-evaluate-2); update head 8f1a017f; 5 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E6L-20260929T1308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:08:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 4f9e090; W6 plan-ledger INT-02"
+    },
+    "E6L-20260929T1320Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:20:00Z",
+      "lane": "W5-LAB-EVAL-MEDIA",
+      "merge": "be1ae258",
+      "reason": "hand-merged into lane W5-LAB-EVAL-MEDIA (complete) at be1ae258 (Integrate merge lane #49 (codex/w5-merge-49): lab-eval-media); update head e2e8a10c; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E6L-20260929T2330Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:30:00Z",
+      "lane": "W5-COMPOSITION-5",
+      "merge": "a484957e",
+      "reason": "hand-merged into lane W5-COMPOSITION-5 (complete) at a484957e (Integrate merge lane #42 (codex/w5-merge-42): composition-5 ); update head bd5a2735; its at is later than the lane's updated 2026-09-29T11:35:08Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "E7L-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-IMPROVE",
+      "merge": "21ee48de",
+      "reason": "hand-merged into lane W5-LAB-IMPROVE (complete) at 21ee48de (Integrate merge lane #20 (codex/w5-merge-20 1df3ec83): lab-i); update head 6de86a80; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E7L-20260928T2347Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T23:47:00Z",
+      "lane": "W5-PIPELINES-LINEAGE",
+      "merge": "8a8096d6",
+      "reason": "hand-merged into lane W5-PIPELINES-LINEAGE (complete) at 8a8096d6 (Integrate merge lane #26 (codex/w5-merge-26): pipelines-line); update head a609f368; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T0000Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T00:00:00Z",
+      "lane": "W5-PIPELINES-LINEAGE",
+      "merge": "8a8096d6",
+      "reason": "hand-merged into lane W5-PIPELINES-LINEAGE (complete) at 8a8096d6 (Integrate merge lane #26 (codex/w5-merge-26): pipelines-line); update head a609f368; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T0540Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T05:40:00Z",
+      "lane": "W5-COMPOSITION-4",
+      "merge": "1cc8a0f0",
+      "reason": "hand-merged into lane W5-COMPOSITION-4 (complete) at 1cc8a0f0 (Integrate merge lane #36 (codex/w5-merge-36 5ed53a41): compo); update head b7db806b; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T1214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:14:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 2299b82; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T1308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:08:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 4f9e090; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T1500Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T15:00:00Z",
+      "lane": "W5-LAB-IMPROVE-2",
+      "merge": "d9392541",
+      "reason": "hand-merged into lane W5-LAB-IMPROVE-2 (complete) at d9392541 (Integrate merge lane #32 (codex/w5-merge-32 f53ed6d1): lab-i); update head 8609d0a2; its at is later than the lane's updated 2026-09-29T02:35:23Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T1730Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T17:30:00Z",
+      "lane": "W5-LAB-IMPROVE-2",
+      "merge": "d9392541",
+      "reason": "hand-merged into lane W5-LAB-IMPROVE-2 (complete) at d9392541 (Integrate merge lane #32 (codex/w5-merge-32 f53ed6d1): lab-i); update head f4f74e04; its at is later than the lane's updated 2026-09-29T02:35:23Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "E7L-20260929T2000Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T20:00:00Z",
+      "lane": "W5-LAB-IMPROVE-2",
+      "merge": "d9392541",
+      "reason": "hand-merged into lane W5-LAB-IMPROVE-2 (complete) at d9392541 (Integrate merge lane #32 (codex/w5-merge-32 f53ed6d1): lab-i); update head 9474cfc5; its at is later than the lane's updated 2026-09-29T02:35:23Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "E8L-20260928T1907Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T19:07:00Z",
+      "lane": "W5-LAB-ROLLOUT",
+      "merge": "ef37d72a",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT (complete) at ef37d72a (Integrate merge lane #18 (codex/w5-merge-18 3073954e): lab-r); update head 2334e6af; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260928T2000Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:00:00Z",
+      "lane": "W5-LAB-ROLLOUT",
+      "merge": "ef37d72a",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT (complete) at ef37d72a (Integrate merge lane #18 (codex/w5-merge-18 3073954e): lab-r); update head 205f639d; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T0230Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T02:30:00Z",
+      "lane": "W5-LAB-ROLLOUT-2",
+      "merge": "5b14c55f",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-2 (complete) at 5b14c55f (Integrate merge lane #33 (codex/w5-merge-33 e310c5ea): lab-r); update head d68a1ddf; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T0440Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T04:40:00Z",
+      "lane": "W5-ROLLOUT-IDENTITY",
+      "merge": "57a779af",
+      "reason": "hand-merged into lane W5-ROLLOUT-IDENTITY (complete) at 57a779af (Integrate merge lane #35 (codex/w5-merge-35 1d0dbc08): rollo); update head 7a5161ad; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T0852Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T08:52:00Z",
+      "lane": "W5-LAB-ROLLOUT-3",
+      "merge": "512f02a7",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-3 (complete) at 512f02a7 (Integrate merge lane #39 (codex/w5-merge-39 b7610278): lab-r); update head 8fcd9d36; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:14:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 2299b82; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1215Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:15:00Z",
+      "lane": "W5-LAB-ROLLOUT-4",
+      "merge": "187f95d4",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-4 (complete) at 187f95d4 (Integrate merge lane #44 (codex/w5-merge-44): lab-rollout-4 ); update head 10aa5481; 5 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:08:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 4f9e090; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1625Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T16:25:00Z",
+      "lane": "W5-LAB-ROLLOUT-5",
+      "merge": "0716abb4",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-5 (complete) at 0716abb4 (Integrate merge lane #53 (codex/w5-merge-53): lab-rollout-5 ); update head d4b4f297; 4 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1715Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T17:15:00Z",
+      "lane": "W5-LAB-ROLLOUT-5",
+      "merge": "0716abb4",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-5 (complete) at 0716abb4 (Integrate merge lane #53 (codex/w5-merge-53): lab-rollout-5 ); update head 8b8ef4ae; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T1900Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T19:00:00Z",
+      "lane": "W5-LAB-ROLLOUT-6",
+      "merge": "f7f98016",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-6 (complete) at f7f98016 (Integrate lane lab-rollout-6 (codex/w5-lab-rollout-6 8796a8c); update head 4d394efa; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T2330Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:30:00Z",
+      "lane": "W5-COMPOSITION-5",
+      "merge": "a484957e",
+      "reason": "hand-merged into lane W5-COMPOSITION-5 (complete) at a484957e (Integrate merge lane #42 (codex/w5-merge-42): composition-5 ); update head bd5a2735; its at is later than the lane's updated 2026-09-29T11:35:08Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "E8L-20260929T2355Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:55:00Z",
+      "lane": "W5-LAB-ROLLOUT-7",
+      "merge": "3c1b1d34",
+      "reason": "hand-merged into lane W5-LAB-ROLLOUT-7 (complete) at 3c1b1d34 (Integrate merge lane #62 (codex/w5-merge-62): lab-rollout-7 ); update head 32e52c7f; its at is later than the lane's updated 2026-09-29T23:21:53Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "G4T-20260927T2100Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T00:00:00Z",
+      "lane": "W5-CONTENT",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-CONTENT (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head b59e47d3; W6 plan-ledger INT-02"
+    },
+    "I2L-20260929T0950Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T09:50:00Z",
+      "lane": "W5-LAB-DEPLOY-PREP",
+      "merge": "536d0063",
+      "reason": "hand-merged into lane W5-LAB-DEPLOY-PREP (complete) at 536d0063 (Integrate merge lane #47 (codex/w5-merge-47): lab-deploy-pre); update head 24512389; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I2L-20260929T1304Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:04:00Z",
+      "lane": "W5-LAB-DEPLOY-PREP",
+      "merge": "536d0063",
+      "reason": "hand-merged into lane W5-LAB-DEPLOY-PREP (complete) at 536d0063 (Integrate merge lane #47 (codex/w5-merge-47): lab-deploy-pre); update head 4aed97ac; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I2L-20260929T1500Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T15:00:00Z",
+      "lane": "W5-LAB-CONTROL-ROUTES",
+      "merge": "828d877d",
+      "reason": "hand-merged into lane W5-LAB-CONTROL-ROUTES (complete) at 828d877d (Integrate merge lane #51 (codex/w5-merge-51): lab-control-ro); update head 79537d3e; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I2L-20260929T2215Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T22:15:00Z",
+      "lane": "W5-LAB-LOCAL-2",
+      "merge": "16d7b789",
+      "reason": "hand-merged into lane W5-LAB-LOCAL-2 (complete) at 16d7b789 (Integrate merge lane #61 (codex/w5-merge-61): lab-local-2 44); update head 04a48a2c; its at is later than the lane's updated 2026-09-29T21:57:57Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I2L-20260929T2308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:40:00Z",
+      "lane": "W5-LAB-LOCAL-3",
+      "merge": "27feb079",
+      "reason": "hand-merged into lane W5-LAB-LOCAL-3 (complete) at 27feb079 (Merge batch #64 (lab-local-3 at 31d61031; codex/w5-merge-64 ); update head 8c3d7fea; 4 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I5-20260928T2040Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:40:00Z",
+      "lane": "W5-COMPOSITION-2",
+      "merge": "3529168d",
+      "reason": "hand-merged into lane W5-COMPOSITION-2 (complete) at 3529168d (Integrate merge lane #22 (codex/w5-merge-22 3cdfaa61): compo); update head b790f17b; W6 plan-ledger INT-02"
+    },
+    "I6-20260928T2040Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:40:00Z",
+      "lane": "W5-COMPOSITION-2",
+      "merge": "3529168d",
+      "reason": "hand-merged into lane W5-COMPOSITION-2 (complete) at 3529168d (Integrate merge lane #22 (codex/w5-merge-22 3cdfaa61): compo); update head b790f17b; W6 plan-ledger INT-02"
+    },
+    "I7-20260928T2040Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:40:00Z",
+      "lane": "W5-COMPOSITION-2",
+      "merge": "3529168d",
+      "reason": "hand-merged into lane W5-COMPOSITION-2 (complete) at 3529168d (Integrate merge lane #22 (codex/w5-merge-22 3cdfaa61): compo); update head b790f17b; W6 plan-ledger INT-02"
+    },
+    "I7-LAB-C7-GAPS-20260929T2108Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T21:08:00Z",
+      "lane": "W5-LAB-C7-GAPS",
+      "merge": "65bdfd7c",
+      "reason": "hand-merged into lane W5-LAB-C7-GAPS (complete) at 65bdfd7c (Integrate merge lane #60 (codex/w5-merge-60): lab-c7-gaps ae); update head ed21f2ad; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "I7-LAB-C7-GAPS-20260929T2135Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T21:35:00Z",
+      "lane": "W5-LAB-C7-GAPS",
+      "merge": "65bdfd7c",
+      "reason": "hand-merged into lane W5-LAB-C7-GAPS (complete) at 65bdfd7c (Integrate merge lane #60 (codex/w5-merge-60): lab-c7-gaps ae); update head 2e5f93a8; W6 plan-ledger INT-02"
+    },
+    "I8-20260928T2337Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T23:37:00Z",
+      "lane": "W5-I-HARNESS-KEY",
+      "merge": "1ca0dd83",
+      "reason": "hand-merged into lane W5-I-HARNESS-KEY (complete) at 1ca0dd83 (Integrate merge lane #29 (codex/w5-merge-29 ba658af4): i-har); update head cc594dd3; W6 plan-ledger INT-02"
+    },
+    "I8-20260929T0917Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T09:17:00Z",
+      "lane": "W5-KNOWN-GOOD-REPROOF",
+      "merge": "ef838acb",
+      "reason": "hand-merged into lane W5-KNOWN-GOOD-REPROOF (complete) at ef838acb (Integrate merge lane #40 (codex/w5-merge-40 547f2f5a): known); update head fca3ea3; W6 plan-ledger INT-02"
+    },
+    "I8-20260929T1245Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:45:00Z",
+      "lane": "W5-KNOWN-GOOD-REPROOF-2",
+      "merge": "a3912b07",
+      "reason": "hand-merged into lane W5-KNOWN-GOOD-REPROOF-2 (complete) at a3912b07 (Integrate merge lane #46 (codex/w5-merge-46): known-good-rep); update head a71f0029; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "J2-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T12:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "J3-20260928T0831Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T08:31:00Z",
+      "lane": "W5-JUDGE-LW4",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-JUDGE-LW4 (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head e4836faf; W6 plan-ledger INT-02"
+    },
+    "J3-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "J3-20260929T0110Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T01:49:00Z",
+      "lane": "W5-COMPOSITION-3",
+      "merge": "9698e51b",
+      "reason": "hand-merged into lane W5-COMPOSITION-3 (complete) at 9698e51b (Integrate merge lane #30 (codex/w5-merge-30 005283ea): compo); update head 1e7d827a; W6 plan-ledger INT-02"
+    },
+    "KNOWN-GOOD-REPROOF-3-20260929T2118Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T21:18:00Z",
+      "lane": "W5-KNOWN-GOOD-REPROOF-3",
+      "merge": "cae94fe0",
+      "reason": "hand-merged into lane W5-KNOWN-GOOD-REPROOF-3 (complete) at cae94fe0 (Integrate merge lane #59 (codex/w5-merge-59): known-good-rep); update head 3fc5b06c; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "KNOWN-GOOD-REPROOF-4-20260930T0122Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-30T01:22:00Z",
+      "lane": "W5-KNOWN-GOOD-REPROOF-4",
+      "merge": "3ec8139d",
+      "reason": "hand-merged into lane W5-KNOWN-GOOD-REPROOF-4 (complete) at 3ec8139d (Merge batch #66 (known-good-reproof-4 at 31e29621; codex/w5-); update head 7386b425; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "L3-20260928T2029Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:29:00Z",
+      "lane": "W5-LAB-SQL-LW4",
+      "merge": "aca38b30",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW4 (complete) at aca38b30 (Integrate merge lane #21 (codex/w5-merge-21 9e6c01cd): lab-s); update head 807227fb; W6 plan-ledger INT-02"
+    },
+    "L3-20260929T1019Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T10:19:00Z",
+      "lane": "W5-LAB-CONTROL-2",
+      "merge": "084ddc6a",
+      "reason": "hand-merged into lane W5-LAB-CONTROL-2 (complete) at 084ddc6a (Integrate merge lane #43 (codex/w5-merge-43): lab-control-2 ); update head c1aac903; W6 plan-ledger INT-02"
+    },
+    "L3-20260929T1712Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T17:12:00Z",
+      "lane": "W5-LAB-SQL-LW7",
+      "merge": "7431e875",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW7 (complete) at 7431e875 (Integrate merge lane #56 (codex/w5-merge-56): lab-sql-lw7 a3); update head 25c5b06b; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "L3-20260929T1800Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T18:00:00Z",
+      "lane": "W5-LAB-SQL-LW8",
+      "merge": "c77e75ac",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW8 (complete) at c77e75ac (Integrate merge lane #55 (codex/w5-merge-55): lab-sql-lw8 d5); update head 8ae508e6; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "L3-20260929T2301Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:01:00Z",
+      "lane": "W5-LAB-SQL-LW9",
+      "merge": "6ca7879f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW9 (complete) at 6ca7879f (Integrate merge lane #65 (codex/w5-merge-65): lab-sql-lw9 96); update head 672bf2ac; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "L4-20260929T0730Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T07:30:00Z",
+      "lane": "W5-LAB-APP-CONTROL",
+      "merge": "72dc76ad",
+      "reason": "hand-merged into lane W5-LAB-APP-CONTROL (complete) at 72dc76ad (Integrate merge lane #38 (codex/w5-merge-38 82a34950): lab-a); update head e2d6eb52; W6 plan-ledger INT-02"
+    },
+    "LAB-CAPTURE-20260929T1702Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T17:02:00Z",
+      "lane": "W5-LAB-CAPTURE",
+      "merge": "7880f3c5",
+      "reason": "hand-merged into lane W5-LAB-CAPTURE (complete) at 7880f3c5 (Integrate merge lane #54 (codex/w5-merge-54): lab-capture fe); update head 5083cf43; 5 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "LAB-E2E-20260929T1214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T12:14:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 2299b82; W6 plan-ledger INT-02"
+    },
+    "LAB-E2E-20260929T1308Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T13:08:00Z",
+      "lane": "W5-LAB-E2E",
+      "merge": "c155603e",
+      "reason": "hand-merged into lane W5-LAB-E2E (complete) at c155603e (Integrate merge lane #48 (codex/w5-merge-48): lab-e2e 123f97); update head 4f9e090; W6 plan-ledger INT-02"
+    },
+    "LAB-R3-IDENTITIES-20260930T0214Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-30T02:14:00Z",
+      "lane": "W5-LAB-R3-IDENTITIES",
+      "merge": "e13b1ce7",
+      "reason": "hand-merged into lane W5-LAB-R3-IDENTITIES (complete) at e13b1ce7 (Merge batch #68 (lab-r3-identities at aba93c87; codex/w5-mer); update head cf9d30f1; 2 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "LSQ5-20260929T0030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T00:30:00Z",
+      "lane": "W5-LAB-SQL-LW5",
+      "merge": "eb561d5f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW5 (complete) at eb561d5f (Integrate merge lane #28 (codex/w5-merge-28): lab-sql-lw5 ad); update head 98998ea; W6 plan-ledger INT-02"
+    },
+    "LSQ5-20260929T0230Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T02:30:00Z",
+      "lane": "W5-LAB-SQL-LW5",
+      "merge": "eb561d5f",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW5 (complete) at eb561d5f (Integrate merge lane #28 (codex/w5-merge-28): lab-sql-lw5 ad); update head ad2aaff3; its at is later than the lane's updated 2026-09-29T01:46:16Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "LSQ6-20260929T0322Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T03:22:00Z",
+      "lane": "W5-LAB-SQL-LW6",
+      "merge": "b816f974",
+      "reason": "hand-merged into lane W5-LAB-SQL-LW6 (complete) at b816f974 (Integrate merge lane #34 (codex/w5-merge-34 af0446f2): lab-s); update head be7dfff3; W6 plan-ledger INT-02"
+    },
+    "N3-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "N3-20260928T2335Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T01:30:00Z",
+      "lane": "W5-DATASETS-LW5",
+      "merge": "1d26fd59",
+      "reason": "hand-merged into lane W5-DATASETS-LW5 (complete) at 1d26fd59 (Integrate merge lane #27 (codex/w5-merge-27 eb3de0ee): datas); update head 0d695a7b; its at is later than the lane's updated 2026-09-29T00:52:29Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "P1-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "P2-20260928T0831Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T08:31:00Z",
+      "lane": "W5-JUDGE-LW4",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-JUDGE-LW4 (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head e4836faf; W6 plan-ledger INT-02"
+    },
+    "P2-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head cc0df9c4; W6 plan-ledger INT-02"
+    },
+    "P2-20260929T0110Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T01:49:00Z",
+      "lane": "W5-COMPOSITION-3",
+      "merge": "9698e51b",
+      "reason": "hand-merged into lane W5-COMPOSITION-3 (complete) at 9698e51b (Integrate merge lane #30 (codex/w5-merge-30 005283ea): compo); update head 1e7d827a; W6 plan-ledger INT-02"
+    },
+    "P3-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "P4-20260928T1030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T10:30:00Z",
+      "lane": "W5-LAB-API-2",
+      "merge": "2e238e36",
+      "reason": "hand-merged into lane W5-LAB-API-2 (complete) at 2e238e36 (Integrate merge lane #11 (codex/w5-merge-11 2df7b8bb): lab-a); update head 1464f50; W6 plan-ledger INT-02"
+    },
+    "P4-20260928T1620Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T16:20:00Z",
+      "lane": "W5-LAB-UI-SWAP",
+      "merge": "6f627953",
+      "reason": "hand-merged into lane W5-LAB-UI-SWAP (complete) at 6f627953 (Integrate merge lane #17 (codex/w5-merge-17 94212474): lab-u); update head a408d8ff; W6 plan-ledger INT-02"
+    },
+    "P4-20260928T2100Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T21:00:00Z",
+      "lane": "W5-PIPELINE-UI-2",
+      "merge": "4bbf5e6c",
+      "reason": "hand-merged into lane W5-PIPELINE-UI-2 (complete) at 4bbf5e6c (Integrate merge lane #24 (codex/w5-merge-24 b5e84451): pipel); update head 9234fd3c; W6 plan-ledger INT-02"
+    },
+    "R1-20260927T2300Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-27T23:00:00Z",
+      "lane": "W5-ROLLOUT-ROUTING",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-ROLLOUT-ROUTING (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head 8d2e636a; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "R1-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "R1-20260928T2030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T20:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION-2",
+      "merge": "d07470b5",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION-2 (complete) at d07470b5 (Integrate merge lane #19 (codex/w5-merge-19 8bc7f3dd): lab-s); update head 368c87ab; W6 plan-ledger INT-02"
+    },
+    "R2-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "R2-LAB-C7-GAPS-20260929T2108Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T21:08:00Z",
+      "lane": "W5-LAB-C7-GAPS",
+      "merge": "65bdfd7c",
+      "reason": "hand-merged into lane W5-LAB-C7-GAPS (complete) at 65bdfd7c (Integrate merge lane #60 (codex/w5-merge-60): lab-c7-gaps ae); update head ed21f2ad; W6 plan-ledger INT-02"
+    },
+    "R2-LAB-C7-GAPS-20260929T2135Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T21:35:00Z",
+      "lane": "W5-LAB-C7-GAPS",
+      "merge": "65bdfd7c",
+      "reason": "hand-merged into lane W5-LAB-C7-GAPS (complete) at 65bdfd7c (Integrate merge lane #60 (codex/w5-merge-60): lab-c7-gaps ae); update head 2e5f93a8; W6 plan-ledger INT-02"
+    },
+    "R2-LAB-LIVE-20260929T1545Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T17:00:00Z",
+      "lane": "W5-LAB-LIVE",
+      "merge": "6ee21d2f",
+      "reason": "hand-merged into lane W5-LAB-LIVE (complete) at 6ee21d2f (Integrate merge lane #52 (codex/w5-merge-52): lab-live 6aae4); update head aa09059b; 1 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "R3-20260928T1130Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:30:00Z",
+      "lane": "W5-LAB-SQL-INTEGRATION",
+      "merge": "5b79ef5c",
+      "reason": "hand-merged into lane W5-LAB-SQL-INTEGRATION (complete) at 5b79ef5c (Integrate merge lane #14 (codex/w5-merge-14 806e8205): lab-s); update head a6b4bbb; W6 plan-ledger INT-02"
+    },
+    "R4-20260928T1030Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T10:30:00Z",
+      "lane": "W5-LAB-API-2",
+      "merge": "2e238e36",
+      "reason": "hand-merged into lane W5-LAB-API-2 (complete) at 2e238e36 (Integrate merge lane #11 (codex/w5-merge-11 2df7b8bb): lab-a); update head 1464f50; W6 plan-ledger INT-02"
+    },
+    "R4-20260928T1620Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T16:20:00Z",
+      "lane": "W5-LAB-UI-SWAP",
+      "merge": "6f627953",
+      "reason": "hand-merged into lane W5-LAB-UI-SWAP (complete) at 6f627953 (Integrate merge lane #17 (codex/w5-merge-17 94212474): lab-u); update head a408d8ff; W6 plan-ledger INT-02"
+    },
+    "T2-LAB-CAPTURE-2-20260929T2316Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-29T23:16:00Z",
+      "lane": "W5-LAB-CAPTURE-2",
+      "merge": "661978e8",
+      "reason": "hand-merged into lane W5-LAB-CAPTURE-2 (complete) at 661978e8 (Integrate merge lane #63 (codex/w5-merge-63): lab-capture-2 ); update head 8ddb75f8; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "TRACKER-WAVES-20260928T2052Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T21:10:00Z",
+      "lane": "W5-TRACKER-WAVES",
+      "merge": "2f3a4e83",
+      "reason": "hand-merged into lane W5-TRACKER-WAVES (complete) at 2f3a4e83 (Integrate merge lane #23 (codex/w5-merge-23 dab53707): track); update head 765eb5da; its at is later than the lane's updated 2026-09-28T21:09:05Z (lane-clock skew, 09 stamp correction) but the lane is complete at that merge; W6 plan-ledger INT-02"
+    },
+    "V1M-20260928T1123Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T11:23:00Z",
+      "lane": "W5-V1M",
+      "merge": "ae72957f",
+      "reason": "hand-merged into lane W5-V1M (complete) at ae72957f (Integrate merge lane #15 (codex/w5-merge-15 5b5cffb3): v1m 8); update head 007f1c2d; 3 evidence path(s) appended to the lane; W6 plan-ledger INT-02"
+    },
+    "WR-C3L-2-20260928T0831Z.json": {
+      "status": "applied-by-hand",
+      "at": "2026-09-28T08:31:00Z",
+      "lane": "W5-JUDGE-LW4",
+      "merge": "3df6f537",
+      "reason": "hand-merged into lane W5-JUDGE-LW4 (complete) at 3df6f537 (Integrate merge lane #6 (codex/w5-merge-6 8aca7ae4): composi); update head e4836faf; W6 plan-ledger INT-02"
+    },
+    "E4C-20261001T0300Z.json": {
+      "status": "applied",
+      "at": "2026-10-01T03:00:09Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-28T12:21:20Z",
+    "computed_at": "2026-10-01T03:02:46Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
