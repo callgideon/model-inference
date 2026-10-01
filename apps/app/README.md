@@ -1,8 +1,10 @@
 # Consumer inference App (`apps/app`)
 
-**2026-09-22 sequence:** [Marlin inference backend first](../../research/plan/18-marlin-backend-first.md), consumer App next, provider Lab afterward. The backend has independent headless deployment/recovery/performance gates; frontend feature work is subsequent.
-
-**Current execution:** [Marlin App-first complete plan](../../research/plan/12-complete-build-plan.md) and [fresh-session prompt](../../research/plan/16-fresh-session-handoff.md). Preserve the audited wave-2 work; actual product-v2 and runtime integration remain pending.
+**State 2026-10-01:** live since 2026-09-27 (Vercel, production from `main` = 41693d5d) on the
+CREDIT regime: runtime flags `credit_admission=true`, `legacy_usd_admission=false`,
+`signup_grant=true` (session-03 record line 525). What runs where and what is pending:
+[state of record 25](../../research/plan/25-state-2026-10-01.md); the App's operator runbook is
+[`infra/app/README.md`](../../infra/app/README.md) with [operations](../../infra/app/operations.md).
 
 The customer console: sign in, browse models, copy a working request, manage API
 keys, see usage and balance, read the docs. Next.js (App Router) on Vercel,
@@ -11,16 +13,17 @@ and [roadmap](../../research/platforms/04-app-roadmap.md) supersede the historic
 single-console spec. Provider models/endpoints/traces/evaluation belong in
 [`apps/lab`](../lab/README.md).
 
-Target onboarding is public verified signup with **10,000 credits once per
-individual user**, only a free plan initially. This README's invite-only setup
-below describes the existing baseline, not the target. The [implementation
-audit](../../research/plan/10-wave2-platform-audit.md) reconciles wave 2 at `271add9`.
-Usage/Balance/Traces currently have development-only fixture previews, enabled by
+Onboarding is verified signup (`/signup` → `/verify-email` → `/welcome`) with **10,000 CREDIT once
+per individual user**, only a free plan. Whether public signup is open on the hosted project is the
+operator's Auth setting ([operations](../../infra/app/operations.md) X7, reversible), not this file's;
+the invite-only section below is the pre-v1 baseline, kept as the operator path for creating users.
+
+Historical (2026-09-22, before C0 and A1–A3 landed; not re-verified): Usage/Balance/Traces had development-only fixture previews, enabled by
 `INFRX_CONSOLE_PREVIEW=1` under `next dev`; production always shows an unavailable
 state until C0 supplies real account reporting. Sidebar amounts remain exact legacy
 USD, including holds — or fixed "Balance unavailable" copy when the wallet summary
 cannot be read, never a substituted number. No public signup or CREDIT grant
-implementation is claimed.
+implementation was claimed then.
 
 The preview gate is decided when the bundle is built, not from the environment the
 server is started with, because Next inlines only the textual `process.env.NODE_ENV`.
@@ -79,7 +82,7 @@ functions: `org_usage_summary(p_org, p_from, p_to, p_key)`,
   unset — the reset email's callback is built from `window.location.origin`.
 - Domain `app.callbill.ai` via a Route 53 CNAME to `cname.vercel-dns.com`.
 
-## Supabase auth settings
+## Supabase auth settings (pre-v1 baseline: invite only)
 
 Sign-in is **email + password, invite only**. Public sign-up is disabled, so
 there is no sign-up page: an operator creates the account, the user sets their
@@ -126,7 +129,7 @@ organization and membership on first sign-in.
 ## Structure
 
 ```
-app/(auth)/…            login, forgot-password, update-password
+app/(auth)/…            login, signup, verify-email, welcome, forgot-password, update-password
 app/auth/callback       code exchange / recovery-link verification
 app/(console)/…         models, usage, api-keys, billing, teams, dedicated, docs, admin
 components/             sidebar, snippet (Copy & Run), tiles, shadcn/ui in components/ui
@@ -147,3 +150,7 @@ directory `apps/app`, production branch `main`, domain
 `https://app.callbill.ai`. Environment variables are set in the project
 (Supabase URL, publishable key, secret key as a sensitive var, app URL);
 the same values live in AWS SSM under `/INFRX-SUPABASE-PROD/*`.
+
+## Verification log
+
+- 2026-10-01 (W6 docs-state): the 2026-09-22 sequence banners replaced by a dated state line (live since 2026-09-27, CREDIT flags per session-03 line 525); onboarding paragraph states the implemented signup routes; the invite-only section labelled as the pre-v1 baseline; nothing re-probed live.
