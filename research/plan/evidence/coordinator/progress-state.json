@@ -29,7 +29,7 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 360,
+ "revision": 361,
  "updated": "2026-10-01T03:35:26Z",
  "agent_slots": {
   "total": 16,
@@ -10899,7 +10899,7 @@
   {
    "id": "W6-CERTIFY-RELEASE",
    "task": null,
-   "slice": "wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "slice": "wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_41fb9a88-ad1",
    "agent": "opus",
    "branch": "codex/w6-certify-release",
    "worktree": ".claude/worktrees/codex-w6-certify-release",
@@ -10936,7 +10936,7 @@
   {
    "id": "W6-PGRESTORE-TESTS",
    "task": null,
-   "slice": "wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "slice": "wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_d73a757d-83a",
    "agent": "opus",
    "branch": "codex/w6-pgrestore-tests",
    "worktree": ".claude/worktrees/codex-w6-pgrestore-tests",
@@ -10972,7 +10972,7 @@
   {
    "id": "W6-API-L5",
    "task": null,
-   "slice": "wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "slice": "wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_9771b2d5-76e",
    "agent": "opus",
    "branch": "codex/w6-api-L5",
    "worktree": ".claude/worktrees/codex-w6-api-L5",
@@ -11014,7 +11014,7 @@
   {
    "id": "W6-MAKEFILE-PINS",
    "task": null,
-   "slice": "wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow (see RESUME-ARGS)",
+   "slice": "wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54",
    "agent": "opus",
    "branch": "codex/w6-makefile-pins",
    "worktree": ".claude/worktrees/codex-w6-makefile-pins",
