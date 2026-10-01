@@ -27,9 +27,9 @@ from typing import Any
 
 from ..contracts import errors, ids
 from ..contracts.limits import DEFAULTS, PilotSettings
-from ..contracts.records import IdempotencyRef, Lease, MediaRef, NormalizedRequest
+from ..contracts.records import Admission, IdempotencyRef, Lease, MediaRef, NormalizedRequest
 from ..contracts.v2 import lifecycle as L
-from ..contracts.v2.records import AccountingRegime
+from ..contracts.v2.records import AccountingRegime, AdmissionV2
 from . import rpc
 from .jobstore import Connect, PgJobStore, admission_of, admission_v2_of, domain_error
 
@@ -162,11 +162,12 @@ class PgLifecycle:
 
     # --- ReadinessStore -----------------------------------------------------------------
     async def admit_ready(self, request: NormalizedRequest, idem: IdempotencyRef,
-                          expectation: L.AdmissionExpectation):
+                          expectation: L.AdmissionExpectation
+                          ) -> tuple[Admission | AdmissionV2, L.ExecutionReadiness | None]:
         if not isinstance(expectation, L.AdmissionExpectation):
             raise errors.InvalidRequest("an AdmissionExpectation from the runtime is required")
         regime = expectation.accounting_regime.value
-        args = PgJobStore(None, limits=self.limits)._admit_args(regime, request, idem)
+        args = PgJobStore(self._connect, limits=self.limits)._admit_args(regime, request, idem)
         doc = await self._call("admit_ready", {
             **args, "retention_s": self.retention_s,
             "expectation": expectation.model_dump(mode="json", exclude={"schema_version"})})

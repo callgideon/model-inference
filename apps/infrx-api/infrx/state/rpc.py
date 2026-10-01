@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
 from ..contracts import errors
 
 if TYPE_CHECKING:
+    from psycopg.abc import Params
+
     from .jobstore import Connect
 
 Refusal = Callable[[Exception], Exception]
@@ -31,7 +33,7 @@ async def connection(connect: Connect) -> AsyncIterator[Any]:
         await conn.close()
 
 
-async def _run(connect: Connect, sql: str, params: Any, read: Callable[[Any], Awaitable[Any]],
+async def _run(connect: Connect, sql: str, params: Params, read: Callable[[Any], Awaitable[Any]],
                error: Refusal | None, unreachable: str | None, retry_after_s: int) -> Any:
     from psycopg import Error, OperationalError
     gone = OperationalError if unreachable is not None else ()
@@ -69,12 +71,13 @@ async def call(connect: Connect, function: str, args: dict[str, Any], *,
                       error, unreachable, retry_after_s)
 
 
-async def rows(connect: Connect, sql: str, params: Any = (), *,
+async def rows(connect: Connect, sql: str, params: Params = (), *,
                error: Refusal | None = None) -> list[tuple]:
     """Every row of one statement."""
     return await _run(connect, sql, params, _rows, error, None, 5)
 
 
-async def rows_or_count(connect: Connect, sql: str, params: Any = ()) -> list[tuple] | int:
+async def rows_or_count(connect: Connect, sql: str,
+                        params: Params = ()) -> list[tuple] | int:
     """Every row of one statement, or its row count when it returns none."""
     return await _run(connect, sql, params, _rows_or_count, None, None, 5)
