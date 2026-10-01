@@ -132,3 +132,15 @@ None blocking.
 
 ## Log
 - 2026-10-01T03:24Z: written by the infra-libs implementer at fa3addbd.
+
+## Fix round (2026-10-01, impl 6945a627)
+- **0-F1 / 1-IL-1 (fixed).** 90-lab-revert.sh and 45-lab-site.sh (STATE=off) run with no at_release check, so a W6 step can meet the box's pre-W6 lib.sh (7ecbab0e, identical to 08983639), which has no `caddy_reload`. Both steps now add, right after sourcing lib.sh: `declare -F caddy_reload >/dev/null || caddy_reload() { docker exec caddy caddy reload … --address unix//config/admin.sock; }`. That restores the base behaviour on old boxes: exit 0 and one reload. W6+ boxes keep box-lib's helper.
+  - Test (red before the fix: 90 exited 127 with `caddy_reload: command not found`): `test_ldp__revert_and_site_off_reload_once_on_the_boxs_pre_w6_lib` runs both steps with REPO pointing at a sandbox that holds only the pre-W6 lib.sh. It asserts exit 0, the site file removed and exactly one `docker exec caddy … reload`. The lib is pinned verbatim at `apps/infrx-api/tests/i/lab/fixtures/lib-pre-w6.sh`, which is `git show 08983639:infra/lab/rollout/lib.sh`, because the mutant runner's copy is not a git tree.
+  - Mutants: `pre_w6_lib_no_reload_revert` and `pre_w6_lib_no_reload_site` disable the fallback. Both are killed.
+- **1-IL-2 (not a lane change).** `tests/i/mutants.py` will conflict on append with lab-release-tool. When the second of the two lanes merges, the coordinator resolves it as a union: keep both appended MUTANTS blocks, then rerun the I list's well_formed and every_case guards and both lanes' new mutants. This round does not touch `tests/i/mutants.py`.
+- Reruns at 6945a627:
+  - `pytest tests/i/lab tests/i/test_rollout.py tests/i/test_rollout_host.py tests/i/test_ops_steps.py tests/i/test_known_good_proof.py -k 'not test_mutant_is_killed and not runner_cannot'`: 99 passed, 1 skipped.
+  - `INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py`: 87 passed (83 mutants killed, 0 survivors).
+  - `bash -n` over the Lab steps: clean.
+  - The I list was not rerun: no I mutant names 45 or 90, and `tests/i/mutants.py` is unchanged.
+- Log: 2026-10-01: fix round appended by the infra-libs implementer.

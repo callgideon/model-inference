@@ -2,9 +2,9 @@
   "task": "W6-infra-libs",
   "lane": "infra-libs",
   "slice": "INFRA-05, INFRA-06 (+72 write_env bug), INFRA-11, INFRA-04(2,3), DT-04, DT-15",
-  "activity": "review",
-  "at": "2026-10-01T03:24Z",
-  "head": "fa3addbd",
+  "activity": "review (fix round done)",
+  "at": "2026-10-01T04:30Z",
+  "head": "6945a627",
   "base": "08983639",
   "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-infra-libs",
   "branch": "codex/w6-infra-libs",
@@ -58,6 +58,16 @@
       "cmd": "bash -n infra/rollout/*.sh infra/rollout/steps/*.sh infra/lab/rollout/*.sh infra/lab/rollout/steps/*.sh",
       "exit": 0,
       "summary": "54 scripts"
+    },
+    {
+      "cmd": "pytest tests/i/lab tests/i/test_rollout.py tests/i/test_rollout_host.py tests/i/test_ops_steps.py tests/i/test_known_good_proof.py -k 'not test_mutant_is_killed and not runner_cannot' (fix round)",
+      "exit": 0,
+      "summary": "99 passed, 1 skipped, 4 deselected"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py (fix round)",
+      "exit": 0,
+      "summary": "87 passed: 83 mutants killed incl. pre_w6_lib_no_reload_{revert,site}"
     }
   ],
   "estimate": {
@@ -65,8 +75,8 @@
     "likely_h": 1,
     "pessimistic_h": 2,
     "confidence": "high",
-    "basis": "code done and lists green; remaining = wiring requests WR-IL-1..5 merged by their owners and a review round",
-    "at": "2026-10-01T03:24Z"
+    "basis": "fix round done; remaining = wiring requests WR-IL-1..5 and the 1-IL-2 union merge",
+    "at": "2026-10-01T04:30Z"
   },
   "blockers": [],
   "wiring_requests": [
@@ -78,5 +88,13 @@
   ],
   "evidence": [
     "research/plan/evidence/w6/infra-libs-fa3addbd.md"
-  ]
+  ],
+  "fix_round": {
+    "findings": {
+      "0-F1": "fixed",
+      "1-IL-1": "fixed",
+      "1-IL-2": "coordinator merge note: union-resolve tests/i/mutants.py appends with lab-release-tool, rerun the I guards"
+    },
+    "impl": "6945a627"
+  }
 }
