@@ -2103,7 +2103,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; the hosted deploy itself still needs the accepted backend and operator inputs; gates unchanged"
-      }
+      },
+      "closure_note": "Status planned on purpose (W6 plan-ledger, INT-04): the live half is done - the App builds from main on Vercel and serves 41693d5d since the 2026-09-29 window, Supabase redirects set (session-03 record lines 524-525); what keeps I2A planned is its gate evidence (OPS-RECOVER, PERF-PILOT, APP-JOURNEY on the live system), which runs in the E4C certify window; the decision is deferred to E4C"
     },
     {
       "id": "I2L",
@@ -2201,7 +2202,8 @@
       "owned_paths": [
         "tests/integration/ (App journey)",
         "apps/app/tests/ (browser e2e harness; coordinator owns setup)"
-      ]
+      ],
+      "closure_note": "Status planned on purpose (W6 plan-ledger, INT-04): APP-LOCAL 17/17 PASS at RELEASE d3a99e01 (and b640c35c), accepted for GO-LIVE (session-03 record line 442) and withdrawn as a tracker decision at rev 143 (line 443) because the manifest dispatches E3A after BACKEND-READY; the decision is deferred to the E4C certify on the live system"
     },
     {
       "id": "E3L",
@@ -2271,7 +2273,8 @@
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "closure_note": "LAB-OBSERVE (local) accepted per R222 at merge #57 be6b2fde (17/0/1 at df837faf); gate of record 290d70e9 (lab-observe-5, merge #67 f2ef6b2e, R265): make lab-observe 19 PASS / 0 FAIL / 0 NOT RUN, r222 accepted with open {}, every cell PASS (TRACE-BOUNDS, TRACE-RECOVER, TRACE-TENANT, FEEDBACK-ACK, JUDGE-BUDGET, JUDGE-SCORES, LAB-ACCESS, CONSOLE-FLOWS), stack mutants 25/25; rulings R222/R234/R253/R254/R261/R265; evidence research/plan/evidence/e/E5L-290d70e.md; the release gate LAB-OBSERVE also needs I2L-OBS deployment evidence under P-08 (W6 plan-ledger, INT-04)"
     },
     {
       "id": "F2R",
@@ -3435,7 +3438,8 @@
       ],
       "acceptance": "LAB-EVALUATE-LOCAL passes without production traces, teacher API or managed training. Actual model superiority is a separate measured claim. All LAB-08/09/10/11 requirements have exercised positive and negative paths.",
       "failure_oracle": "The suite must fail if a missing candidate output is dropped, a split leaks, a checkpoint duplicates a run or a foreign dataset is accepted; do not use implementation-generated expectations.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "LAB-EVALUATE-LOCAL accepted per R222 as amended by R234 at merge #45 (make lab-evaluate at 24a7a065: j01-j09 PASS) + j11 PASS at 9938ad6c (merge #49, R239: reaches the endpoint; span/cap not enforced at the gateway, WR-LEM-SPAN); 0 FAIL; EVAL-COMPARE stays NOT RUN on j10 = product WRs WR-B4-2, WR-LAB2-2/WR-LAB2-4 and WR-B3-1 (rerun make lab-evaluate); evidence research/plan/evidence/e/E6L-24a7a06.md and E6L-J11-9938ad6.md (W6 plan-ledger, INT-04)"
     },
     {
       "id": "E7L",
@@ -3517,7 +3521,8 @@
       ],
       "acceptance": "LAB-ROLLOUT-LOCAL can pass without training integrations. A live rollout still requires staged inference/quality/latency evidence and approval for affected traffic; unsupported chip/model combinations remain unavailable.",
       "failure_oracle": "Suite detects shadow output leakage, unstable session assignment, changed queued-job revision, unmeasured hardware claims and a regression hidden by aggregate scores.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence.",
+      "closure_note": "LAB-ROLLOUT-LOCAL accepted per R222 at merge #44 (d869ee40); run of record e65bbecf (lab-rollout-7, merge #62): k01-k07, k09, k10 PASS (ROLLOUT-PIN, ROLLOUT-RECOVER PASS), OPT-PARITY NOT RUN on k08 = P-08 staging GPU target (rerun make lab-rollout); rulings R222/R234/R238/R249/R259/R260; WR-LR7 open issues carried in consumer-v1/10-carried-work-register.md; evidence research/plan/evidence/e/E8L-e65bbec.md (W6 plan-ledger, INT-04)"
     },
     {
       "id": "X1",
