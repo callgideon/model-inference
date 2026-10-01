@@ -41,9 +41,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings

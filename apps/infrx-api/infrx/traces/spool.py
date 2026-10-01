@@ -169,7 +169,7 @@ class _Settlement:
     exception with five records silently gone.
     """
 
-    def __init__(self, sink: "SpoolTraceSink", batch: "list[_Row]", now: datetime) -> None:
+    def __init__(self, sink: SpoolTraceSink, batch: list[_Row], now: datetime) -> None:
         self.sink, self.batch, self.now, self.done = sink, batch, now, False
 
     def __call__(self, future) -> None:
@@ -696,7 +696,7 @@ class SpoolTraceSink(TraceSinkBase):
             return sum(segment.records - segment.synced_records for segment in self._segments
                        if segment.fd is not None and not segment.fsync_failed)
 
-    def _write_batch(self, batch: "list[_Row]", fsync_due: bool) -> _WriteResult:
+    def _write_batch(self, batch: list[_Row], fsync_due: bool) -> _WriteResult:
         """The only code that touches a file. Runs in the writer thread.
 
         It **returns** a result for every row, whatever happens: round 2 raised a

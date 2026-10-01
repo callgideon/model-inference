@@ -58,10 +58,11 @@ import codecs
 import contextlib
 import json
 import math
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from itertools import zip_longest
 from types import SimpleNamespace
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -446,7 +447,7 @@ class VllmEngine:
         return body
 
     # --- the port -------------------------------------------------------------
-    def generate(self, lease: Lease, prepared: PreparedRequest) -> "EngineStream":
+    def generate(self, lease: Lease, prepared: PreparedRequest) -> EngineStream:
         """An async iterator of canonical events; not `async def`, per the port.
 
         The object it returns is also the report on how the stream ended - the raw text
@@ -568,7 +569,7 @@ class VllmEngine:
         """Encoded JSON bytes one copy of the text may occupy in a single event."""
         return (self.limits.journal_event_max_bytes - PAYLOAD_OVERHEAD_BYTES) // PAYLOAD_COPIES
 
-    def _delta_events(self, stream: "EngineStream", raw: str, visible: str) -> list[EngineEvent]:
+    def _delta_events(self, stream: EngineStream, raw: str, visible: str) -> list[EngineEvent]:
         """Delta events whose payloads each fit the journal.
 
         `raw` and `visible` are split **independently**: they are two texts, not two halves
@@ -587,7 +588,7 @@ class VllmEngine:
                                       payload=_delta_payload(raw_piece, visible_piece)))
         return events
 
-    def _overdue(self, stream: "EngineStream", now: datetime) -> str | None:
+    def _overdue(self, stream: EngineStream, now: datetime) -> str | None:
         """Which bound, if any, this stream has passed.
 
         The generation bound is checked first because it is a *different outcome* - the
@@ -615,7 +616,7 @@ class VllmEngine:
         """
         return max(4096, self.limits.journal_event_max_bytes)
 
-    async def _lines(self, response: httpx.Response, stream: "EngineStream",
+    async def _lines(self, response: httpx.Response, stream: EngineStream,
                      key: tuple[str, int]):
         """SSE lines, split here rather than by `httpx.aiter_lines()`.
 
@@ -676,7 +677,7 @@ class VllmEngine:
                 break
         return body[:ERROR_BODY_MAX_BYTES].decode("utf-8", "replace")
 
-    async def _run(self, stream: "EngineStream") -> AsyncIterator[EngineEvent]:
+    async def _run(self, stream: EngineStream) -> AsyncIterator[EngineEvent]:
         """The generate boundary: a refusal, an `EngineFailure`, or nothing at all."""
         inner = self._generate(stream)
         try:
@@ -694,7 +695,7 @@ class VllmEngine:
             # loop finalises an abandoned async generator.
             await inner.aclose()
 
-    async def _generate(self, stream: "EngineStream") -> AsyncIterator[EngineEvent]:
+    async def _generate(self, stream: EngineStream) -> AsyncIterator[EngineEvent]:
         lease = stream.lease
         key = (lease.job_id, lease.generation)
         if key in self.finished:
@@ -726,7 +727,7 @@ class VllmEngine:
                 # evicted.
                 self._retire(key)
 
-    async def _hold_media(self, stream: "EngineStream") -> None:
+    async def _hold_media(self, stream: EngineStream) -> None:
         """M6 wiring 2: pin every prepared file this attempt hands the engine. A file that is
         not there (a cache miss, or a pin that lost its race with an eviction) is prepared
         again once - the durable artifact is the record - and missing again is the refusal
@@ -749,7 +750,7 @@ class VllmEngine:
                     raise
                 await self.reprepare(stream.lease.job_id, videos[0].profile_version)
 
-    async def _attempt(self, stream: "EngineStream",
+    async def _attempt(self, stream: EngineStream,
                        key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
         prepared = stream.prepared
         await self._hold_media(stream)                   # released by `_generate`
@@ -816,7 +817,7 @@ class VllmEngine:
             raise EngineIncomplete("the stream ended without a completion marker",
                                    deltas=stream.deltas)
 
-    def _events(self, stream: "EngineStream", line: str, reasoning: ReasoningFilter,
+    def _events(self, stream: EngineStream, line: str, reasoning: ReasoningFilter,
                 ceiling: int, now: datetime) -> list[EngineEvent]:
         """One SSE line into canonical events, by the table in the module docstring."""
         if not line.startswith("data:"):
@@ -854,7 +855,7 @@ class VllmEngine:
             self._note_usage(stream, obj["usage"])
         return events
 
-    def _choice(self, stream: "EngineStream", choice: object, reasoning: ReasoningFilter,
+    def _choice(self, stream: EngineStream, choice: object, reasoning: ReasoningFilter,
                 ceiling: int) -> list[EngineEvent]:
         if not isinstance(choice, dict):
             raise EngineProtocolViolation("a choice is not an object", got=type(choice).__name__)
@@ -900,7 +901,7 @@ class VllmEngine:
         stream.visible_text += visible
         return self._delta_events(stream, content, visible)
 
-    def _note_usage(self, stream: "EngineStream", raw: object) -> None:
+    def _note_usage(self, stream: EngineStream, raw: object) -> None:
         """Remember a usage object; the decision is made once the stream has ended."""
         stream.usage_objects += 1
         usage = _parse_usage(raw)
@@ -911,7 +912,7 @@ class VllmEngine:
         stream.usage_candidate = usage
         stream.usage_at_deltas = stream.deltas
 
-    def _final_usage(self, stream: "EngineStream", ceiling: int) -> list[EngineEvent]:
+    def _final_usage(self, stream: EngineStream, ceiling: int) -> list[EngineEvent]:
         """r1 R58: at most one usage event, decided against the whole stream.
 
         Authoritative only when it is the last usage object, arrived after the final
@@ -999,7 +1000,7 @@ class EngineStream:
                                                             "certainty": "unknown"}
         return EngineEvent(type=ChunkEventType.usage, payload=payload, usage=usage)
 
-    def __aiter__(self) -> "EngineStream":
+    def __aiter__(self) -> EngineStream:
         return self
 
     async def __anext__(self) -> EngineEvent:
