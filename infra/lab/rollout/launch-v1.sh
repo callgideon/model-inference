@@ -154,7 +154,7 @@ box() {
   say "L5s smoke"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh
   say "L6 the control origin on the edge (DNS lab-control.callbill.ai → the box is already set)"
   infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE="$RELEASE"
-  curl -s -o /dev/null -w 'https://lab-control.callbill.ai/readyz %{http_code}\n' https://lab-control.callbill.ai/readyz || true
+  curl -s -o /dev/null -w 'https://lab-control.callbill.ai/lab/v1/releases %{http_code} (401 = the control service answers through the edge; /readyz is loopback-only)\n' https://lab-control.callbill.ai/lab/v1/releases || true
   say "L6s smoke + the App's external checks"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh; infra/rollout/verify-external.sh || true
   echo "L7 (eval/judge/datasets roles) is NOT run: no role login exists yet (WR-LDP-7); the control unit serves every Lab family (R237, 0056)."
 }
@@ -162,7 +162,7 @@ box() {
 vercel_lab() {
   command -v vercel >/dev/null || vercel() { npx --yes vercel@latest "$@"; }   # no global install (EACCES on this host)
   say "a valid Vercel token in SSM $SSM_VERCEL (the stored one is invalid): paste a new one now, or Enter to use the stored one"
-  read -rs -p "token (hidden): " T; echo
+  T=""; read -rs -p "token (hidden): " T </dev/tty 2>/dev/null || true; echo   # no terminal (the `!` runner): the stored token
   if [ -n "$T" ]; then umask 077; printf '%s' "$T" > ~/.vt; aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$HOME/.vt" >/dev/null; shred -u ~/.vt; fi
   export VERCEL_TOKEN; VERCEL_TOKEN=$(aws ssm get-parameter --name "$SSM_VERCEL" --with-decryption --query Parameter.Value --output text)
   ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
