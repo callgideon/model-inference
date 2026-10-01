@@ -8,7 +8,9 @@
 #   infra/rollout/certify-window.sh --only <step> --logdir <that LOGDIR>   # one step (e.g. h6-close)
 #   DRY_RUN=1 infra/rollout/certify-window.sh                           # the plan and stop conditions; calls nothing
 # Inputs: TENANT2_USER=<tenant-2 user uuid> (create-test-user.py --json, H4) for h4-check; VIDEO_FILE (an
-# in-cap clip on this host) for journey-legs; CORPUS_CACHE (the host corpus cache) for wc9.
+# in-cap clip on this host) for journey-legs; CORPUS_CACHE (the host corpus cache) for wc9. RELEASE=<40 hex>
+# is the release the box serves (default origin/main's commit: main = the box's installed release; 77
+# refuses a build other than RELEASE); MIGRATION_VERSION defaults to the newest numbered migration file.
 # Long cells (76, 80, E1B, WC-6/7, WC-9) run detached (setsid -f) and are polled: a resume re-attaches
 # to one still running and never starts it twice. The certify run is detached on the box; `report` polls
 # 78-e4b-report.sh with its RUN. One sequencer per LOGDIR (flock on $LOGDIR/.lock); no step starts while
@@ -20,10 +22,12 @@
 # tenant 2's key is issue-key's 0600 file, shredded after WC-9; keys reach bench/curl through the
 # environment only, never argv. LOGDIR is 0700.
 set -euo pipefail
-RELEASE=d3a99e01869b6b9c85173e25888abbbf9ed4dd29
+RELEASE=${RELEASE:-$(git rev-parse --verify -q 'origin/main^{commit}' || true)}
+[[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE '$RELEASE' is not a 40-hex commit (export RELEASE=<the served release> or git fetch origin)" >&2; exit 2; }
 CERTIFY_ORG=15e766d0-8c4d-47a8-986f-22ed32f390c3     # the certify tenant (key id 142c7d81)
 CERTIFY_KEY_PARAM=/model-inference/e4b_api_key
-MIGRATION_VERSION=0026
+m=(apps/app/supabase/migrations/[0-9][0-9][0-9][0-9]_*.sql)
+MIGRATION_VERSION=${MIGRATION_VERSION:-$(basename "${m[-1]}" | cut -c1-4)}
 EDGE=https://marlin2b.callbill.ai/v1
 BUCKET=llm-bootcamp-641134885443
 LOGDIR=${LOGDIR:-$HOME/infrx-e4c/$(date -u +%Y%m%dT%H%M%SZ)}
