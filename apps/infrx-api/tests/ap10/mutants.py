@@ -19,7 +19,7 @@ if str(API_DIR) not in sys.path:
 from tests.contracts import mutants as shared  # noqa: E402
 from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
-SUITES = ("tests/ap10/test_evaluation_ports.py",)
+SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -30,6 +30,8 @@ FLAT = "test_ap10_the_subscription_listing_is_flattened_and_the_rest_is_d8s"
 CATALOG = "test_ap10_the_catalog_listing_is_503_naming_its_request_and_the_evaluator_is_d7s"
 POOL = "test_ap10_the_ports_share_one_pool"
 ROUTES = "test_ap10_authorized_empty_reads_are_200_empty_and_a_failed_read_is_503"
+INFLIGHT = "test_ap10_row27_a_kill_with_both_attempts_in_flight_is_two_cases_each_charged_once"
+GAP = "test_ap10_row27_after_the_kill_every_key_is_debited_once_and_the_gap_is_the_kill"
 
 
 def m(name, invariant, old, new, *cases, file=P, dies_by=(), occurrences=1):
@@ -81,6 +83,14 @@ MUTANTS: tuple[Mutant, ...] = (
     m("ap10_ledger_off_the_pool", "the ledger is D8's on the composition's pool",
       "Subscriptions(PgCheckpointLedger(connect))", "Subscriptions(PgCheckpointLedger(None))",
       POOL),
+    # --- 10b: row 27 - the endpoint's settlement per key is the authoritative debit
+    m("ap10_row27_key_unscoped", "each paid call is keyed by its attempt (run, case, attempt)",
+      "key = f\"{lease['idempotency_key']}:{bill.calls}\"", "key = f\"{bill.calls}\"",
+      INFLIGHT, GAP, file="evaluation/runner/__init__.py"),
+    m("ap10_row27_worker_serial", "the worker's in-flight bound is two concurrent attempts",
+      "                                    concurrency=2)",
+      "                                    concurrency=1)", INFLIGHT, GAP,
+      file="worker/__main__.py"),
 )
 
 
