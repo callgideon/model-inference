@@ -1,13 +1,14 @@
 --- a/infra/rollout/README.md	2026-10-01 03:54:31.211608111 +0000
 +++ b/infra/rollout/README.md	2026-10-01 03:54:31.252121606 +0000
-@@ -107,7 +107,9 @@
+@@ -107,7 +107,10 @@
  logging every step to its 0700 `LOGDIR`; `--step <step> --logdir <dir>` resumes, `--only <step>` runs one step,
  `DRY_RUN=1` prints the plan and its stop conditions and calls nothing. One sequencer holds a LOGDIR (`flock` on
  `$LOGDIR/.lock`); no step starts while another detached cell of the LOGDIR is live, and no step after `report` starts
 -before `report` has seen the launched certify run's `exit N`. Its steps and helpers:
 +before `report` has seen the launched certify run's `exit N`. `RELEASE=<40 hex>` names the served release
 +(default: origin/main's commit, the box's installed release; 77 refuses any other build) and `MIGRATION_VERSION`
-+defaults to the newest numbered file in `apps/app/supabase/migrations/` (W6 INFRA-02). Its steps and helpers:
++defaults to the newest numbered file in `apps/app/supabase/migrations/`; both are fixed at a LOGDIR's first run and
++a resume with other values refuses (W6 INFRA-02). Its steps and helpers:
  
  | Script | Where | What | Stops / exits |
  |---|---|---|---|

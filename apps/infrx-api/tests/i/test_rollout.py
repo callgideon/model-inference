@@ -976,7 +976,7 @@ def test_certify_window__release_is_an_input_defaulting_to_origin_main_and_flows
     assert "d3a99e01" not in given.stdout and f"e4c-side-{RELEASE_LIVE[:8]}-" in given.stdout
     for step in ("profiles77", "two-tenant-fill"):
         assert " MIGRATION_VERSION=0026 " in next(l for l in plan(given) if l.startswith(f"plan {step}:"))
-    newer = _window(root, stub, "--only", "profiles77", DRY_RUN="1", LOGDIR=log, MIGRATION_VERSION="0059")
+    newer = _window(root, stub, "--only", "profiles77", DRY_RUN="1", LOGDIR=log + "-0059", MIGRATION_VERSION="0059")
     assert " MIGRATION_VERSION=0059 " in newer.stdout, newer.stdout
     (stub / "out" / "git").write_text(RELEASE_LIVE + "\n")
     default = _window(root, stub, DRY_RUN="1", LOGDIR=log, RELEASE="")
@@ -987,6 +987,23 @@ def test_certify_window__release_is_an_input_defaulting_to_origin_main_and_flows
         (stub / "out" / "git").write_text(bad + "\n")
         refused = _window(root, stub, DRY_RUN="1", LOGDIR=log, RELEASE=bad)
         assert refused.returncode == 2 and "RELEASE" in refused.stderr and "plan " not in refused.stdout, bad
+
+
+def test_certify_window__a_logdir_certifies_one_release_and_one_migration_version(tmp_path):
+    """0-CR-1: RELEASE and MIGRATION_VERSION are fixed at a LOGDIR's first run, like its window id;
+    a resume after a fetch or a new migration refuses rather than mixing two releases in one
+    window. Oracle: either pin dropped; the resume planning any step; the same values refused."""
+    root, stub = _window_root(tmp_path)
+    log = str(tmp_path / "log")
+    first = _window(root, stub, "--only", "profiles77", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert first.returncode == 0, first.stderr
+    again = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert again.returncode == 0 and "plan two-tenant-fill:" in again.stdout, again.stderr
+    moved = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE="1" * 40)
+    assert moved.returncode == 2 and RELEASE_LIVE in moved.stderr and "plan " not in moved.stdout, moved.stdout
+    (root / "apps" / "app" / "supabase" / "migrations" / "0027_c.sql").write_text("")
+    newer = _window(root, stub, "--only", "two-tenant-fill", DRY_RUN="1", LOGDIR=log, RELEASE=RELEASE_LIVE)
+    assert newer.returncode == 2 and "0026" in newer.stderr and "plan " not in newer.stdout, newer.stdout
 
 
 def test_certify_window__h5_funds_only_the_certify_org_and_shreds_its_key_file(tmp_path):

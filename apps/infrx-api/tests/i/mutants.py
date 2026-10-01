@@ -1812,6 +1812,17 @@ MUTANTS += (
        'MIGRATION_VERSION=$(basename "${m[-1]}" | cut -c1-4)', REL),
 )
 
+# CERTIFY-RELEASE fix round (0-CR-1): a LOGDIR certifies one release and one migration version
+PIN = "test_certify_window__a_logdir_certifies_one_release_and_one_migration_version"
+MUTANTS += (
+    _m("certify_window_release_unpinned", "a resume refuses a RELEASE other than the LOGDIR's",
+       WIN, 'pinned release "$RELEASE"; ', "", PIN),
+    _m("certify_window_migration_unpinned", "a resume refuses a MIGRATION_VERSION other than the LOGDIR's",
+       WIN, '; pinned migration-version "$MIGRATION_VERSION"', "", PIN),
+    _m("certify_window_pin_never_refuses", "a pin mismatch exits before any plan line",
+       WIN, '[ "$(once "$1" "$2")" = "$2" ] ||', 'once "$1" "$2" > /dev/null ||', PIN),
+)
+
 # CERTIFY-WINDOW fix round (1-CW-R1, 0-CW-1/1-CW-R2, 0-CW-2, 0-CW-3)
 REP2 = "test_certify_window__report_sees_certify_exit_past_ssm_24000_characters"
 GUARD = "test_certify_window__no_step_starts_on_a_live_cell_a_running_certify_or_a_second_sequencer"

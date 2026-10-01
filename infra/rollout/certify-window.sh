@@ -11,6 +11,7 @@
 # in-cap clip on this host) for journey-legs; CORPUS_CACHE (the host corpus cache) for wc9. RELEASE=<40 hex>
 # is the release the box serves (default origin/main's commit: main = the box's installed release; 77
 # refuses a build other than RELEASE); MIGRATION_VERSION defaults to the newest numbered migration file.
+# Both are fixed at a LOGDIR's first run: a resume with other values refuses (exit 2; a new release, a new LOGDIR).
 # Long cells (76, 80, E1B, WC-6/7, WC-9) run detached (setsid -f) and are polled: a resume re-attaches
 # to one still running and never starts it twice. The certify run is detached on the box; `report` polls
 # 78-e4b-report.sh with its RUN. One sequencer per LOGDIR (flock on $LOGDIR/.lock); no step starts while
@@ -111,6 +112,8 @@ tenant_keys() {  # both tenants' keys into this process's environment (bench/cur
   [ -s "$LOGDIR/tenant2.key" ] || fail KEYS "no $LOGDIR/tenant2.key (tenant2-key)"
   INFRX_API_KEY_B=$(tr -d '\n' < "$LOGDIR/tenant2.key"); export INFRX_API_KEY INFRX_API_KEY_B; unset MARLIN_API_KEY
 }
+pinned() { [ "$(once "$1" "$2")" = "$2" ] || { echo "LOGDIR $LOGDIR certifies $1 $(cat "$LOGDIR/$1"), not $2 (a new release takes a new LOGDIR)" >&2; exit 2; }; }
+pinned release "$RELEASE"; pinned migration-version "$MIGRATION_VERSION"   # a resume never mixes two releases
 MW=$(once window-id "e4c-side-${RELEASE:0:8}-$(date -u +%Y%m%dT%H%MZ)")
 say "certify-window from $STEP${ONLY:+ (only)}; LOGDIR=$LOGDIR; window $MW$([ "$DRY" != 1 ] || echo "; DRY_RUN: nothing is called")"
 

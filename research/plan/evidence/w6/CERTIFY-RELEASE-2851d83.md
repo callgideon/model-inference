@@ -63,6 +63,29 @@ _release_unanchored, _migration_any_file, _migration_override_ignored — all ki
 Remaining for this lane: 0.25/0.5/1 h (review fixes only), confidence high; basis: one script edit, one case, seven mutants,
 full tests/i list green.
 
+## Fix round (0-CR-1)
+
+Finding 0-CR-1 (major): RELEASE and MIGRATION_VERSION were re-derived on every resume of a LOGDIR. After a `git fetch` or a
+new migration file, one window could plan two-tenant-fill on another release than profiles77. Fixed in
+`infra/rollout/certify-window.sh`: `pinned()`, placed just above the window id, writes both values with the existing
+`once()` (files `$LOGDIR/release`, `$LOGDIR/migration-version`). A resume with other values exits 2 before any plan line,
+naming the LOGDIR's value and the new one. The header states the rule. The README wiring-request patch gains the same
+sentence (`git apply --check` clean at this head).
+
+- Test first: `test_certify_window__a_logdir_certifies_one_release_and_one_migration_version` (same LOGDIR: first run with
+  41693d5d; a resume with the same values plans; `RELEASE=1111…` exits 2 naming 41693d5d with no plan line; a new
+  0027 migration exits 2 naming 0026 with no plan line). It was red before the fix (1 failed) and green after.
+  `test_certify_window__release_is_an_input…` now runs its MIGRATION_VERSION=0059 override in its own LOGDIR, because
+  reusing the LOGDIR is exactly what the pin refuses.
+- Mutants (block "CERTIFY-RELEASE fix round"): certify_window_release_unpinned, _migration_unpinned,
+  _pin_never_refuses. All three are killed, as are the seven earlier ones (12 selected, 12 passed).
+- Reruns: `pytest -q tests/i/test_rollout.py` 27 passed; `pytest -q tests/i` (no lab*, no test_mutants) 211 passed,
+  9 skipped, 1 xfailed; `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py` 468 passed, 16 skipped, 0 survivors.
+  The skips are the harness's `_not_run` (I-HARNESS-KEY / i8 PG not run). None is in the CERTIFY-RELEASE blocks.
+  `bash -n` passes.
+- Nothing ran against the box, AWS or hosted (DRY_RUN with stubs only).
+
 ## Log
 
 - 2026-10-01T04:50Z: written by the certify-release lane at code head 2851d83f.
+- 2026-10-01T05:40Z: fix round (0-CR-1) appended by the certify-release lane.
