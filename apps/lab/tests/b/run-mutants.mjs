@@ -194,7 +194,7 @@ const MUTANTS = [
   m("B4-X124", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-B4-1): the configured adapter, the session's token, the row check
   m("B4-X125", "the configured adapter is ignored", PORT, "return labEvaluation(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
-  m("B4-X126", "another server env names the backend", SERVER, "env.LAB_EVALS_API_URL", "env.LAB_TRACES_API_URL", [C.w01]),
+  m("B4-X126", "another server env names the backend", SERVER, "labApiUrl(env, \"evaluation\")", "labApiUrl(env, \"traces\")", [C.w01]),
   m("B4-X127", "the publishable key is sent as the credential", SESSION, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
   m("B4-X128", "the session is read from another cookie", SESSION, "    cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
   m("B4-X129", "the session cookies are not the request's", SESSION, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),

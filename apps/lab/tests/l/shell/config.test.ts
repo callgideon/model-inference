@@ -5,6 +5,7 @@ import {
   AUTH_COOKIE,
   WORKSPACE_COOKIE,
   authCookieOptions,
+  labApiUrl,
   labConfig,
   workspaceCookieOptions,
 } from "../../../lib/auth/config.ts";
@@ -57,4 +58,23 @@ test("L1-C05 every Lab response is private and no-store, and does not advertise 
   assert.equal(nextConfig.poweredByHeader, false);
   const rules = await nextConfig.headers!();
   assert.deepEqual(rules, [{ source: "/:path*", headers: [{ key: "Cache-Control", value: "private, no-store" }] }]);
+});
+
+// LAB-03: one server-only lab-api base URL. Each family's old name is the fallback until the deploy env
+// switches, so today's deployment (the six names, one value) keeps working unchanged.
+test("L1-C06 every Lab family reads LAB_API_URL first, then only its own old name; an empty value is unset", () => {
+  const OLD = {
+    control: "LAB_CONTROL_URL", traces: "LAB_TRACES_API_URL", evaluation: "LAB_EVALS_API_URL",
+    pipelines: "LAB_PIPELINES_API_URL", releases: "LAB_RELEASES_API_URL", datasets: "LAB_DATASETS_API_URL",
+  } as const;
+  for (const [family, name] of Object.entries(OLD) as [keyof typeof OLD, string][]) {
+    assert.equal(labApiUrl({ LAB_API_URL: "https://one.example" }, family), "https://one.example", family);
+    assert.equal(labApiUrl({ [name]: "https://old.example" }, family), "https://old.example", `${family}: ${name} is the fallback`);
+    assert.equal(labApiUrl({ LAB_API_URL: "https://one.example", [name]: "https://old.example" }, family), "https://one.example", `${family}: LAB_API_URL wins`);
+    assert.equal(labApiUrl({ LAB_API_URL: "", [name]: "https://old.example" }, family), "https://old.example", `${family}: an empty LAB_API_URL is unset`);
+    assert.equal(labApiUrl({ [name]: "" }, family), null, `${family}: an empty old name is unset`);
+    assert.equal(labApiUrl({}, family), null, `${family}: nothing set`);
+    const others = Object.values(OLD).filter((n) => n !== name);
+    assert.equal(labApiUrl(Object.fromEntries(others.map((n) => [n, "https://other.example"])), family), null, `${family} never reads another family's name`);
+  }
 });

@@ -32,3 +32,16 @@ export function authCookieOptions(config: LabConfig) {
 export function workspaceCookieOptions(config: LabConfig) {
   return { httpOnly: true, path: "/", sameSite: "lax" as const, secure: config.secure, maxAge: 60 * 60 * 24 * 30 };
 }
+
+/** LAB-03: each family's old server-only base-URL name, read only when LAB_API_URL is unset. Every family
+ *  is served by the one control service (lab-control), so the deploy env collapses to LAB_API_URL; these
+ *  keep a six-name deployment working until it does (lab-release-tool), then they can go. */
+export const LEGACY_API_URL = {
+  control: "LAB_CONTROL_URL", traces: "LAB_TRACES_API_URL", evaluation: "LAB_EVALS_API_URL",
+  pipelines: "LAB_PIPELINES_API_URL", releases: "LAB_RELEASES_API_URL", datasets: "LAB_DATASETS_API_URL",
+} as const;
+
+/** The lab-api base URL for a family (server-only; never NEXT_PUBLIC_); null = unset, the family is unavailable. */
+export function labApiUrl(env: Record<string, string | undefined>, family: keyof typeof LEGACY_API_URL): string | null {
+  return env.LAB_API_URL || env[LEGACY_API_URL[family]] || null;
+}

@@ -153,7 +153,7 @@ const MUTANTS = [
   m("R4-X91", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-R4-1): the configured adapter, the session's token, the row check
   m("R4-X92", "the configured adapter is ignored", PORT, "return labReleases(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
-  m("R4-X93", "another server env names the backend", SERVER, "env.LAB_RELEASES_API_URL", "env.LAB_PIPELINES_API_URL", [C.w01]),
+  m("R4-X93", "another server env names the backend", SERVER, "labApiUrl(env, \"releases\")", "labApiUrl(env, \"pipelines\")", [C.w01]),
   m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
   m("R4-X95", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
   m("R4-X96", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
