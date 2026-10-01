@@ -1820,6 +1820,37 @@ MUTANTS += (
        WIN, "v=FAIL; [ \\$down = yes ] && [ \\$up = yes ]", "v=FAIL; [ \\$up = yes ]", DRILL),
 )
 
+# W6 infra-libs (INFRA-05): the one coordinator-host lib and the scripts that source it
+HOSTLIB, OPCLI = "../../infra/rollout/host-lib.sh", "../../infra/rollout/operator-cli.sh"
+HL_AWS = "test_rollout_host__aws_drops_the_stale_keys_and_pins_the_region"
+HL_SSM = "test_rollout_host__ssm_to_file_is_0600_and_refuses_an_empty_value"
+HL_VENV = "test_rollout_host__need_venv_refuses_outside_the_repo_root"
+HL_SAY = "test_rollout_host__say_stamps_and_appends_to_the_host_log"
+HL_ONE = "test_rollout_host__every_host_script_sources_the_one_lib"
+HL_CLI = "test_rollout_host__operator_cli_reads_its_two_secrets_by_name_into_the_environment"
+MUTANTS += (
+    _m("host_aws_keeps_the_stale_keys", "the stale AWS_* exports never reach the CLI",
+       HOSTLIB, "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN",
+       "aws() { env -u AWS_SESSION_TOKEN", HL_AWS, HL_CLI),
+    _m("host_aws_region_ignored", "every call names its region (REGION, default us-east-1)",
+       HOSTLIB, 'aws --region "${REGION:-us-east-1}" "$@"', 'aws --region us-east-1 "$@"', HL_AWS),
+    _m("host_ssm_file_world_readable", "an SSM value lands in a 0600 file",
+       HOSTLIB, "(umask 077; ssm_value", "(umask 022; ssm_value", HL_SSM),
+    _m("host_ssm_empty_accepted", "an empty SSM value is a failure, never a blank secret",
+       HOSTLIB, """&& grep -q '[^[:space:]]' "$2"; then""", "; then", HL_SSM),
+    _m("host_ssm_value_on_argv_name", "the parameter is read by NAME with decryption",
+       HOSTLIB, "aws ssm get-parameter --with-decryption --name", "aws ssm get-parameter --name", HL_SSM),
+    _m("host_venv_unchecked", "the host scripts stop outside the repo root / before make api-env",
+       HOSTLIB, "  [ -x apps/infrx-api/.venv/bin/python ] || {", "  true || {", HL_VENV),
+    _m("host_say_unlogged", "say appends to the run's log",
+       HOSTLIB, 'tee -a "${HOST_LOG:-/dev/null}"', "cat", HL_SAY),
+    _m("host_script_own_aws", "a host script keeps no aws() of its own",
+       OPCLI, "INFRX_OPERATOR_KEY=$(ssm_value /model-inference/operator_key)\n",
+       "aws() { command aws \"$@\"; }\nINFRX_OPERATOR_KEY=$(ssm_value /model-inference/operator_key)\n", HL_ONE, HL_CLI),
+    _m("operator_cli_empty_secret_runs", "an empty operator secret never starts the CLI",
+       OPCLI, '[ -n "$OPERATIONS_DATABASE_URL" ] && [ -n "$INFRX_OPERATOR_KEY" ] || {', "true || {", HL_CLI),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
