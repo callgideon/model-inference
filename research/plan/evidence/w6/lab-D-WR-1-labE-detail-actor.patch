@@ -1,0 +1,72 @@
+diff -ru a/apps/lab/components/traces/detail/port.ts b/apps/lab/components/traces/detail/port.ts
+--- a/apps/lab/components/traces/detail/port.ts	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/components/traces/detail/port.ts	2026-10-01 05:33:17.223900781 +0000
+@@ -5,11 +5,11 @@
+ // - ContentPort = C2 (codex/w5-content ae7375e7): a ref bound to grant, recipient and expiry, then the
+ //   content read through it; any refusal fails closed. Filed as WR-V2-2.
+ // Until the real adapters are wired both ports are "unavailable" (fail closed); tests drive fake.ts.
+-import type { Role } from "../../../lib/auth/access.ts";
++import type { Actor } from "../../../lib/auth/access.ts";
+ import { labTraces } from "../../../lib/services/traces/server.ts";
+ 
+-/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value. */
+-export type Actor = { providerId: string; role: Role };
++/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value: lib/auth/access.ts's one Actor (LAB-08). */
++export type { Actor };
+ type Metadata = {
+   request_id: string;
+   started_at: string;
+diff -ru a/apps/lab/app/(provider)/requests/[id]/page.tsx b/apps/lab/app/(provider)/requests/[id]/page.tsx
+--- a/apps/lab/app/(provider)/requests/[id]/page.tsx	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/app/(provider)/requests/[id]/page.tsx	2026-10-01 05:33:17.224053185 +0000
+@@ -13,12 +13,11 @@
+ // is read through C2 only when asked for (?content=1). V3: the request's judge runs and calibration.
+ export default async function RequestDetail({ params, searchParams }: PageProps<"/requests/[id]">) {
+   const workspace = await requireProviderWorkspace();
+-  const actor = { providerId: workspace.providerId, role: workspace.role };
+   const { id } = await params;
+   const wanted = (await searchParams).content === "1";
+   const { traces, content } = tracePorts();
+-  const [trace, feedback, judge] = await Promise.all([traces.detail(actor, id), reviewRequestFeedback(id), judgePort().runs(actor, id)]);
+-  const shown = trace.ok ? await contentView(content, actor, trace.value, wanted) : null;
++  const [trace, feedback, judge] = await Promise.all([traces.detail(workspace, id), reviewRequestFeedback(id), judgePort().runs(workspace, id)]);
++  const shown = trace.ok ? await contentView(content, workspace, trace.value, wanted) : null;
+   return (
+     <>
+       <h1>Request</h1>
+diff -ru a/apps/lab/tests/v/detail/page.test.ts b/apps/lab/tests/v/detail/page.test.ts
+--- a/apps/lab/tests/v/detail/page.test.ts	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/tests/v/detail/page.test.ts	2026-10-01 05:34:05.497023027 +0000
+@@ -14,8 +14,9 @@
+ test("V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says", () => {
+   const page = read(PAGE);
+   assert.match(page, /const workspace = await requireProviderWorkspace\(\);/);
+-  assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/);
+-  assert.match(page, /Promise\.all\(\[traces\.detail\(actor, id\), reviewRequestFeedback\(id\), /);
++  assert.match(page, /traces\.detail\(workspace, id\)/); // LAB-08: the workspace itself is the actor
++  assert.doesNotMatch(page, /providerId:/);
++  assert.match(page, /Promise\.all\(\[traces\.detail\(workspace, id\), reviewRequestFeedback\(id\), /);
+   assert.match(page, /\n      <FeedbackPanel result=\{feedback\} \/>\n/, "the feedback panel is not inside a trace branch");
+   assert.match(page, /\{!trace\.ok && <p role="alert">\{TRACE_COPY\[trace\.reason\]\}<\/p>\}/);
+   assert.doesNotMatch(page, /providerId:\s*(id|params|searchParams)|formData/);
+@@ -25,7 +26,7 @@
+   const page = read(PAGE);
+   const panels = read(PANELS);
+   assert.match(page, /const wanted = \(await searchParams\)\.content === "1";/);
+-  assert.match(page, /contentView\(content, actor, trace\.value, wanted\)/);
++  assert.match(page, /contentView\(content, workspace, trace\.value, wanted\)/);
+   assert.match(page, /href=\{`\/requests\/\$\{encodeURIComponent\(trace\.value\.request_id\)\}\?content=1`\}/);
+   assert.match(panels, /\{view\.offer && <a href=\{href\}>Show content<\/a>\}/);
+   assert.match(panels, /<pre style=\{WRAP\}>\{view\.text\}<\/pre>/);
+diff -ru a/apps/lab/tests/v/detail/run-mutants.mjs b/apps/lab/tests/v/detail/run-mutants.mjs
+--- a/apps/lab/tests/v/detail/run-mutants.mjs	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/tests/v/detail/run-mutants.mjs	2026-10-01 05:33:17.224277248 +0000
+@@ -61,7 +61,7 @@
+   m("V2-X32", "a revoked grant still reads content", FAKE, " || row.revoked)", ")", [C.j03]),
+   m("V2-X33", "an expired ref still reads content", FAKE, "row.refExpired || ", "", [C.j03]),
+   m("V2-X34", "content past T3 retention is read", FAKE, " || !d.content_available", "", [C.j03]),
+-  m("V2-X35", "the page reads as a provider from the URL", PAGE, "const actor = { providerId: workspace.providerId, role: workspace.role };", "const actor = { providerId: id, role: workspace.role };", [C.p01]),
++  m("V2-X35", "the page reads as a provider from the URL", PAGE, "traces.detail(workspace, id)", "traces.detail({ ...workspace, providerId: id }, id)", [C.p01]),
+   m("V2-X36", "feedback waits on the projection", PAGE, "\n      <FeedbackPanel result={feedback} />\n", "\n      {trace.ok && <FeedbackPanel result={feedback} />}\n", [C.p01]),
+   m("V2-X37", "a trace refusal is shown raw", PAGE, "{TRACE_COPY[trace.reason]}", "{trace.reason}", [C.p01]),
+   m("V2-X38", "any ?content= value reads content", PAGE, '(await searchParams).content === "1"', "(await searchParams).content !== undefined", [C.p02]),

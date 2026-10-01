@@ -1,0 +1,45 @@
+{
+  "task": "W6-lab-D",
+  "lane": "lab-D",
+  "slice": "LAB-07 (one holds()/ROLE_CAPABILITIES in lib/auth/access.ts) + LAB-08 (one Actor; workspace passed directly at 16 of 17 sites) + LAB-09 (lib/services/common.ts land/text/field/oneOf/fixedCopy/previewPort + components/preview-note.tsx) + LAB-13 (PageProps/metadata on datasets pages, @/ in the report route, firstFailure)",
+  "activity": "review",
+  "at": "2026-10-01T05:38:53Z",
+  "head": "5963892c (code); evidence commit follows",
+  "base": "70cf254f",
+  "worktree": ".claude/worktrees/codex-w6-lab-D",
+  "branch": "codex/w6-lab-D",
+  "owned_paths": [
+    "apps/lab/lib/auth/access.ts",
+    "apps/lab/lib/services/common.ts",
+    "apps/lab/components/preview-note.tsx",
+    "apps/lab/lib/services/{control,evaluation,pipelines,rollouts}/{port,actions,view}.ts",
+    "apps/lab/app/(provider)/**/page.tsx (typing/imports/actor), experiments/[id]/report/route.ts, evaluations/runs.tsx, layout.tsx",
+    "apps/lab/tests/{l/shell,l/ui,b,p,r,v/list}/ (cases and runners naming the moved lines)",
+    "research/plan/evidence/w6/LAB-{07,08,09,13}-5963892.md",
+    "research/plan/evidence/w6/lab-D-WR-*.patch"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/l/shell/access.test.ts (L1-A10/A11 before access.ts)", "exit": 1, "summary": "red first: no export CAPABILITIES; after 15/15"},
+    {"cmd": "node --test page+action suites (LAB-08 pins before the change)", "exit": 1, "summary": "red first: 10 failing; after 38/38"},
+    {"cmd": "node --test boundary (L1-B06) on the pre-LAB-09 export; page preview pins", "exit": 1, "summary": "red first: B06 + 4 page cases; green after"},
+    {"cmd": "node --test L1-B07, P4-V18, P4-P06 before LAB-13", "exit": 1, "summary": "red first; green after"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "282 tests: 268 pass, 0 fail, 14 skipped (base 276/262/0/14)"},
+    {"cmd": "make lab-lint lab-typecheck lab-build", "exit": 0, "summary": "green"},
+    {"cmd": "git archive HEAD; cd apps/lab; pnpm install --frozen-lockfile && pnpm build", "exit": 0, "summary": "upload shape builds"},
+    {"cmd": "14 Lab mutant runners, base export / head export", "exit": 0, "summary": "1004/1004 -> 1026/1026 killed, every case named, 0 stale"},
+    {"cmd": "WR-1/2/3 applied on a scratch export of the tip: v/detail, c/judge, n runners", "exit": 0, "summary": "42/42, 72/72, 41/41"}
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/LAB-07-5963892.md",
+    "research/plan/evidence/w6/LAB-08-5963892.md",
+    "research/plan/evidence/w6/LAB-09-5963892.md",
+    "research/plan/evidence/w6/LAB-13-5963892.md"
+  ],
+  "wiring_requests": [
+    "WR-1 (lab-E/coordinator after lab-E merges): research/plan/evidence/w6/lab-D-WR-1-labE-detail-actor.patch",
+    "WR-2 (judge/core.ts + lab-E c/judge runner): research/plan/evidence/w6/lab-D-WR-2-judge-holds.patch",
+    "WR-3 (datasets/flows.ts + lab-E n runner): research/plan/evidence/w6/lab-D-WR-3-datasets-holds.patch",
+    "WR-4 (docs-state): apps/lab/README.md Conventions section, text in LAB-13-5963892.md"
+  ],
+  "estimate": {"optimistic_h": 0.3, "likely_h": 0.7, "pessimistic_h": 2, "confidence": "medium", "basis": "code done and verified; remaining = review fixes; WR-1..3 are verified patches to apply after lab-E merges"}
+}

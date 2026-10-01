@@ -1,0 +1,33 @@
+diff -ru a/apps/lab/lib/services/datasets/flows.ts b/apps/lab/lib/services/datasets/flows.ts
+--- a/apps/lab/lib/services/datasets/flows.ts	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/lib/services/datasets/flows.ts	2026-10-01 05:36:21.369067375 +0000
+@@ -1,7 +1,7 @@
+ // N4: the datasets server actions' decisions, pure over a port and the selected workspace (node --test
+ // runs them; app/(provider)/datasets/actions.ts only adds the guard and the real port). The provider is
+ // always the guarded workspace's, never a form field, and a viewer is refused before any call.
+-import type { Membership } from "../../auth/access.ts";
++import { holds, type Membership } from "../../auth/access.ts";
+ import type { DatasetsPort, Derived, ExportRecord, Failure, ImportJob, ImportReport, Leak, Preview } from "./port.ts";
+ import { UUID_RE as UUID } from "../shapes.ts";
+ import { FAILURE_COPY } from "./views.ts";
+@@ -21,7 +21,7 @@
+ const failed = (f: Failure) => ({ status: "error", message: `${FAILURE_COPY[f.error]} ${f.detail}`, leaks: f.leaks, report: f.report }) as const;
+ 
+ function writer(w: Membership): boolean {
+-  return w.role === "developer" || w.role === "administrator";
++  return holds(w.role, "run_evaluation"); // datasets feed evaluations and training (LAB-07)
+ }
+ 
+ function spec(form: FormData): { ok: true; value: unknown } | { ok: false } {
+diff -ru a/apps/lab/tests/n/run-mutants.mjs b/apps/lab/tests/n/run-mutants.mjs
+--- a/apps/lab/tests/n/run-mutants.mjs	2026-10-01 05:31:10.000000000 +0000
++++ b/apps/lab/tests/n/run-mutants.mjs	2026-10-01 05:36:21.369282915 +0000
+@@ -67,7 +67,7 @@
+   m("N4-X20", "an unknown restriction reads as readable", VIEWS, "return RESTRICTED_COPY[reason] ?? `", 'return RESTRICTED_COPY[reason] ?? "readable" ?? `', [C.v04]),
+   m("N4-X21", "a leak is not shown", VIEWS, "for (const leak of result.leaks ?? [])", "for (const leak of [] as Leak[])", [C.v05]),
+   m("N4-X22", "a holdout relative is not shown", VIEWS, 'if (o.reason === "related_to_holdout")', "if (false)", [C.v05]),
+-  m("N4-X23", "a viewer reaches the backend", FLOWS, 'return w.role === "developer" || w.role === "administrator";', "return true;", [C.f01]),
++  m("N4-X23", "a viewer reaches the backend", FLOWS, 'return holds(w.role, "run_evaluation");', "return true;", [C.f01]),
+   m("N4-X24", "the provider comes from the form", FLOWS, "port.startImport(w.providerId,", 'port.startImport(String(form.get("providerId") ?? w.providerId),', [C.f02]),
+   m("N4-X25", "accepting rejects is ignored", FLOWS, 'form.get("accept_rejects") === "on"', "false", [C.f02]),
+   m("N4-X26", "an array spec is sent", FLOWS, "typeof value === \"object\" && value !== null && !Array.isArray(value)", "typeof value === \"object\" && value !== null", [C.f03]),
