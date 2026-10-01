@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 370,
- "updated": "2026-10-01T04:48:08Z",
+ "revision": 371,
+ "updated": "2026-10-01T04:49:07Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10862,17 +10862,17 @@
    "branch": "codex/w6-lab-E",
    "worktree": ".claude/worktrees/codex-w6-lab-E",
    "base": "2add8e0a",
-   "head": null,
+   "head": "adf27751",
    "isolation": {
     "ports": "-",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T04:49:07Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #75 after #74 integrates: the LAB-06 wiring patch applied inside the merge (Makefile line, page.tsx, view-model.ts, v/list runner, e2e stack test), LABB-RV-2 (the n-runner patch regenerated), the e2e stack list on l4 if free",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 3,
