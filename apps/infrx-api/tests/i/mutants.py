@@ -1266,8 +1266,8 @@ MUTANTS += (
 
 # --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
 PROOF_PY = "../../infra/runbooks/schema_proof.py"
-LAUNCH_V1 = "../../infra/lab/rollout/launch-v1.sh"
-WINDOWS = "test_ops_recover__the_two_window_patches_apply_in_order_and_launch_v1_picks_them"
+HOSTED_MIGRATE = "../../infra/rollout/hosted-migrate.sh"
+ANCHORED = "test_ops_recover__hosted_migrate_expects_exactly_the_migrations_after_its_anchor"
 LAB = "test_ops_recover__the_record_proves_both_targets_through_the_lab_migrations_0059"
 KGR_0051_HEAD = ('}, {"through": "0051", "result": "4226315: its own tests/d (26 suites, 383 '
                  'passed, 14 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0051, '
@@ -1449,12 +1449,16 @@ MUTANTS += (
        '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 383 passed',
        '"superseded": [{"through": "0056", "result": "4226315: its own tests/d (26 suites, 384 passed',
        "test_ops_recover__the_superseded_0056_proof_is_the_recorded_one_word_for_word"),
-    # KGR4-RV-1: launch-v1.sh picks the 0059 window's anchor and pushes launch/window-$THROUGH (R264)
-    _m("launch_v1_0059_hosted_at_0051", "the 0059 window's hosted level is 0056",
-       LAUNCH_V1, '0059) HOSTED_AT="0056 lab_control_grants"', '0059) HOSTED_AT="0051 lab_import_jobs"', WINDOWS),
-    _m("launch_v1_pushes_the_tip", "a window pushes launch/window-$THROUGH, never claude/consumer-v1",
-       LAUNCH_V1, 'git push origin "HEAD:refs/heads/launch/window-$THROUGH"', "git push origin claude/consumer-v1",
-       WINDOWS),
+    # INFRA-03/DT-12 (supersedes KGR4-RV-1's launch_v1_* pair): the next window is one reviewed edit of
+    # these three hosted-migrate.sh lines - and of these three anchors with it
+    _m("hosted_migrate_pending_short", "EXPECTED_PENDING is every migration after the HOSTED_APPLIED anchor",
+       HOSTED_MIGRATE, 'EXPECTED_PENDING="0057, 0058, 0059"', 'EXPECTED_PENDING="0057, 0058"', ANCHORED),
+    _m("hosted_migrate_anchor_stale", "the HOSTED_APPLIED anchor and EXPECTED_PENDING move together",
+       HOSTED_MIGRATE, 'case "$HOSTED_APPLIED" in *"0056 lab_control_grants")',
+       'case "$HOSTED_APPLIED" in *"0051 lab_import_jobs")', ANCHORED),
+    _m("hosted_migrate_post_check_stale", "the W7 post-check names the newest migration",
+       HOSTED_MIGRATE, 'case "$POST" in *"0059 lab_control_grants_2"', 'case "$POST" in *"0058 lab_variant_identities"',
+       ANCHORED),
     # KGR3-RV-1: every evidence path the record names exists (the copy carries them, _layout)
     _m("known_good_record_names_missing_evidence", "every evidence path of the record exists",
        "../../infra/rollout/known-good.json", '"models/marlin2b/results/E1B-box-bda1586/bench.jsonl"',
@@ -1820,6 +1824,88 @@ MUTANTS += (
        WIN, "v=FAIL; [ \\$down = yes ] && [ \\$up = yes ]", "v=FAIL; [ \\$up = yes ]", DRILL),
 )
 
+# --- W6 lab-release-tool: infra/lab/rollout/lab-release.sh (INFRA-01/03/08/09, DT-13/18) ------------
+LR = "../../infra/lab/rollout/lab-release.sh"
+LR_SHIM = "../../infra/lab/rollout/launch-v1.sh"
+LR_STRICT = "test_lab_release__strict_bash_with_no_window_left"
+LR_BOX = "test_lab_release__box_runs_the_launched_order_through_ssm_by_name"
+LR_DEFAULT = "test_lab_release__box_defaults_release_to_the_claude_consumer_v1_tip"
+LR_TOKEN = "test_lab_release__web_validates_a_pasted_token_before_storing_it"
+LR_WEB = "test_lab_release__web_deploys_infrx_lab_in_the_callgideon_scope"
+LR_MEMBERS = "test_lab_release__members_reads_the_dsn_by_name_and_binds_every_value"
+LR_MAIN = "test_lab_release__main_fast_forwards_main_to_the_release_only"
+LR_PRE = "test_lab_release__preflight_reads_names_only_and_refuses_a_foreign_release"
+LR_SHIM_CASE = "test_lab_release__the_launch_v1_shim_forwards_with_a_deprecation_note"
+LR_RE = '[[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE must be a 40-hex sha" >&2; exit 2; }\n'
+LR_PUT = 'aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$t" >/dev/null'
+MUTANTS += (
+    _m("lab_release_through_guard_back", "the release tool is not gated on a migration level (the spent THROUGH table)",
+       LR, LR_RE, LR_RE + '[ "$(ls apps/app/supabase/migrations | tail -1 | cut -c1-4)" = 0059 ] '
+       '|| { echo "not the re-proven 0059" >&2; exit 2; }\n', LR_STRICT, LR_BOX),
+    _m("lab_release_window_offered", "window/all are not actions any more",
+       LR, "preflight) preflight ;; box) box ;;", "preflight) preflight ;; window|all) box ;; box) box ;;", LR_STRICT),
+    _m("lab_release_release_default_head", "RELEASE defaults to the tip of claude/consumer-v1, not HEAD",
+       LR, "RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}", "RELEASE=${RELEASE:-$(git rev-parse HEAD)}", LR_DEFAULT),
+    _m("lab_release_l0_dropped", "box makes the box's checkout RELEASE first (L0)",
+       LR, '  infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE="$RELEASE"\n', "", LR_BOX),
+    _m("lab_release_box_without_supabase_url", "box refuses before any call without SUPABASE_URL",
+       LR, '  need SUPABASE_URL\n  say "L0', '  say "L0', LR_BOX),
+    _m("lab_release_control_dsn_renamed", "L5 passes the control DSN's SSM name",
+       LR, 'CONTROL_DSN_PARAM="$SSM_CONTROL_DSN"', "CONTROL_DSN_PARAM=/model-inference/lab/control_dsn", LR_BOX),
+    _m("lab_release_edge_before_control", "the edge (L6) opens only after the control service (L5) and its smoke",
+       LR, '  say "L5 control service ON', '  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on '
+       'RELEASE="$RELEASE"\n  say "L5 control service ON', LR_BOX),
+    _m("lab_release_token_stored_before_whoami", "a pasted token is proven before it overwrites the stored one",
+       LR, '    VERCEL_TOKEN=$(cat "$t") vercel whoami', "    " + LR_PUT + '; VERCEL_TOKEN=$(cat "$t") vercel whoami',
+       LR_TOKEN),
+    _m("lab_release_token_fixed_home_path", "the pasted token is staged under mktemp, never a fixed HOME path",
+       LR, "t=$(umask 077; mktemp)", 't=$HOME/.vt; (umask 077; : > "$t")', LR_TOKEN),
+    _m("lab_release_token_world_readable", "the staged token is owner-only",
+       LR, "t=$(umask 077; mktemp)", 't=$(mktemp); chmod 0644 "$t"', LR_TOKEN),
+    _m("lab_release_token_trap_dropped", "an invalid paste leaves no staged token behind (the EXIT trap)",
+       LR, """; trap 'shred -u "$t" 2>/dev/null || rm -f "$t"' EXIT""", "", LR_TOKEN),
+    _m("lab_release_token_kept", "the staged token is removed after the SSM write",
+       LR, '    shred -u "$t" 2>/dev/null || rm -f "$t"; trap - EXIT', "    trap - EXIT", LR_TOKEN),
+    _m("lab_release_scope_unset", "infrx-lab lives in the App's team callgideon by default",
+       LR, "SCOPE=${VERCEL_SCOPE:-callgideon}", "SCOPE=${VERCEL_SCOPE:-}", LR_WEB),
+    _m("lab_release_scope_ignored", "VERCEL_SCOPE picks the team",
+       LR, '--project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \\', "--project infrx-lab --scope callgideon >/dev/null 2>&1 \\",
+       LR_WEB),
+    _m("lab_release_env_name_dropped", "the deploy sets every Lab API name the Lab reads",
+       LR, '"LAB_RELEASES_API_URL=https://lab-control.callbill.ai" ', "", LR_WEB),
+    _m("lab_release_members_dsn_on_argv", "the owner DSN never travels on an argv",
+       LR, 'apps/infrx-api/.venv/bin/python - "operator:',
+       'apps/infrx-api/.venv/bin/python - "$OPERATIONS_DATABASE_URL" "operator:', LR_MEMBERS),
+    _m("lab_release_members_dsn_name_fixed", "OPS_DSN_PARAM names the owner DSN's SSM parameter",
+       LR, "OPS_DSN_PARAM=${OPS_DSN_PARAM:-/model-inference/pg_journal_url}", "OPS_DSN_PARAM=/model-inference/pg_journal_url",
+       LR_MEMBERS),
+    _m("lab_release_members_email_spliced", "an email is a bound parameter, never SQL text",
+       LR, """"where p.slug = 'infrx-internal' and u.email = %s on conflict do nothing", [by, email])""",
+       """f"where p.slug = 'infrx-internal' and u.email = '{email}' on conflict do nothing", [by])""", LR_MEMBERS),
+    _m("lab_release_members_operator_spliced", "the operator name is a bound parameter, never SQL text",
+       LR, """"values ('infrx-internal', 'infrx internal testing', %s) on conflict (slug) do nothing", [by])""",
+       """f"values ('infrx-internal', 'infrx internal testing', '{by}') on conflict (slug) do nothing")""", LR_MEMBERS),
+    _m("lab_release_members_without_emails", "members refuses before any call without TESTER_EMAILS",
+       LR, "  need TESTER_EMAILS\n", "", LR_MEMBERS),
+    _m("lab_release_members_operator_default", "the operator defaults to git user.name",
+       LR, "OP=${OPERATOR_NAME:-$(git config user.name || true)}", "OP=${OPERATOR_NAME:-operator}", LR_MEMBERS),
+    _m("lab_release_members_org_id_column", "the org key is provider_org_id (0007), not id",
+       LR, "select p.provider_org_id, u.id", "select p.id, u.id", LR_MEMBERS),
+    _m("lab_release_main_pushes_the_tip", "main pushes RELEASE:main, never claude/consumer-v1",
+       LR, 'git push origin "$RELEASE:main"', 'git push origin "$RELEASE:claude/consumer-v1"', LR_MAIN),
+    _m("lab_release_main_not_fast_forward", "main moves only forward",
+       LR, 'git merge-base --is-ancestor origin/main "$RELEASE" ||', "true ||", LR_MAIN),
+    _m("lab_release_preflight_reads_a_value", "preflight reads SSM names, never a value",
+       LR, "  aws ssm describe-parameters", '  aws ssm get-parameter --with-decryption --name "$SSM_ANON" >/dev/null\n'
+       "  aws ssm describe-parameters", LR_PRE),
+    _m("lab_release_preflight_any_release", "preflight refuses a RELEASE off claude/consumer-v1",
+       LR, 'git merge-base --is-ancestor "$RELEASE" claude/consumer-v1 ||', "true ||", LR_PRE),
+    _m("lab_release_shim_keeps_vercel", "the shim maps the old `vercel` action to `web`",
+       LR_SHIM, '"${a/#vercel/web}"', '"$a"', LR_SHIM_CASE),
+    _m("lab_release_shim_silent", "the shim names its successor",
+       LR_SHIM, 'echo "launch-v1.sh is deprecated', ': "launch-v1.sh is deprecated', LR_SHIM_CASE),
+)
+
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
@@ -1838,7 +1924,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
     for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "lab", "observe"), ("infra", "alerts"),
-                 ("infra", "lab", "rollout"),   # KGR4-RV-1: launch-v1.sh and the two window patches
+                 ("infra", "lab", "rollout"),   # W6: lab-release.sh and its launch-v1.sh shim
                  ("infra", "app"),              # I3 (WR-I3-3): AppDown's runbook section
                  ("models", "marlin2b", "profiles"),  # E1B-MUTANTS: the window cases' base profiles
                  ("apps", "app", "supabase", "migrations")):
@@ -1856,7 +1942,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
                  ("models", "marlin2b", "bench.py"), ("models", "marlin2b", "dataset.py"),
                  ("models", "marlin2b", "corpus-synth", "manifest.json"),
                  # CERTIFY-WINDOW: the validator imports runprofile and reads the corpus manifest
-                 ("models", "marlin2b", "runprofile.py"), ("models", "marlin2b", "corpus", "manifest.json")):
+                 ("models", "marlin2b", "runprofile.py"), ("models", "marlin2b", "corpus", "manifest.json"),
+                 # W6 INFRA-03: the spent window patches, moved to evidence (test_lab_release reads them)
+                 ("research", "plan", "evidence", "i", "hosted-migrate-0052-0056.patch"),
+                 ("research", "plan", "evidence", "i", "hosted-migrate-0057-0059.patch")):
         root.joinpath(*part[:-1]).mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO.joinpath(*part), root.joinpath(*part))
     # KGR3-RV-1: the evidence paths the known-good record names (its existence case reads them)
