@@ -87,3 +87,10 @@ tests/integration/ENVIRONMENT.md 181→195, 25-state 0→63. Total `git diff --s
 
 optimistic 0.5 h / likely 1 h / pessimistic 2 h, confidence medium — basis: one review round over
 14 docs (no code), plus applying WR-W6DS-3's HANDOFF.md line if the coordinator routes it back here.
+
+## Fix round (2026-10-01, head 22bf779a)
+
+- **1-DS-1 fixed.** `apps/lab/README.md:46` now says `(\`link:\` dependency; no reinstall after an edit there)`, matching lab-A's 4ccb4440 (R268) and `apps/lab/package.json` `link:../../packages/shared` on the tip; `research/plan/25-state-2026-10-01.md:18` now says "the `packages/shared` dependency is uploaded; it was `file:` at deploy time and is `link:` since R268".
+- Oracle: `grep -rn '\`file:\`' apps/lab/README.md` 1 hit before, 0 after; 25-state's only `file:` is the dated historical clause.
+- Merge note: `git merge-tree --write-tree 87637f37 22bf779a` still reports CONFLICT (content) in `apps/lab/README.md` (both sides rewrote the file). Resolve by taking this branch's version whole (`git checkout --theirs`/ours as seen from the merge); it now carries the tip's `link:` wording, so nothing from 4ccb4440 is lost.
+- Reruns: `validate_plan.py` PASS (949 links, 457 documents); `pytest -q tests/i/lab/test_lab_packaging.py tests/i/test_rollout.py` 38 passed; `INFRX_MUTANTS=all pytest -q tests/i/lab/test_mutants.py` 70 passed (0 survivors); `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k readme` 2 passed (killed). Full `tests/i/test_mutants.py` not rerun: no anchored file other than the README mutants changed.
