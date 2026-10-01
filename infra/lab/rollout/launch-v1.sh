@@ -165,6 +165,11 @@ vercel_lab() {
   T=""; read -rs -p "token (hidden): " T </dev/tty 2>/dev/null || true; echo   # no terminal (the `!` runner): the stored token
   if [ -n "$T" ]; then umask 077; printf '%s' "$T" > ~/.vt; aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$HOME/.vt" >/dev/null; shred -u ~/.vt; fi
   export VERCEL_TOKEN; VERCEL_TOKEN=$(aws ssm get-parameter --name "$SSM_VERCEL" --with-decryption --query Parameter.Value --output text)
+  if ! vercel whoami >/dev/null 2>&1; then          # the stored token is invalid: the CLI's own login (npx vercel login, device flow)
+    unset VERCEL_TOKEN
+    vercel whoami >/dev/null 2>&1 || { echo "no valid Vercel credential: run 'npx vercel@latest login' once on this host (device flow), or store a token at $SSM_VERCEL" >&2; exit 2; }
+    say "using the CLI's own login (the SSM token is invalid)"
+  fi
   ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
   need SUPABASE_URL
   say "project infrx-lab, root apps/lab"
