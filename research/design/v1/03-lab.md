@@ -20,9 +20,9 @@ No workspace: explanatory card with App link, Sign out and “Ask your provider 
 
 ### L-02 — Overview
 
-Header: workspace name + “Overview”; subtitle “Your models, deployments and next steps.” Developer primary action “Register model”; viewer sees read-only explanation. First-time content is a three-stage setup list:
+Header: workspace name + “Overview”; subtitle “Your models, deployments and next steps.” Developer primary action “Add model”; viewer sees read-only explanation. First-time content is a three-stage setup list:
 
-1. Register a model revision — artifact digest, schema and runtime identity.
+1. Add a model — create its project, import/upload and verify its artifact, then create a serving revision. This requires the [artifact API work](../../plan/api-lifecycle/contracts.md#4-artifact-and-model-project-onboarding); until available, show the actual setup prerequisite, not a form that cannot succeed.
 2. Verify a private deployment — only an actually supported operator/engine workflow can complete it.
 3. Request publication — administrator proposes, operator decides.
 
@@ -36,7 +36,7 @@ Each service section loads/fails independently. Control service unavailable must
 
 ### L-03 — Models and registration
 
-Route `/models`. Header action “Register model”. Empty list: “Add the model revision you want infrx to serve” and “Registration creates a private record. Serving setup and production publication are separate steps.”
+Route `/models`. Header action “Add model” follows the project/import/validation/setup flow in the [API lifecycle specification](../../plan/api-lifecycle/contracts.md). The existing four-field form below becomes **New revision of an imported model**, available only for a model already imported into this workspace with established limits. In an empty workspace it cannot succeed; never present it as uploading weights.
 
 List columns: model name, revision, runtime, registered date, details. Artifact/schema values live in expandable row detail rather than dominant columns. Display names may be derived from the registered name; no new editable model title is assumed. Search across the loaded list must say it searches loaded records until server search exists.
 
@@ -50,7 +50,7 @@ Registration opens an in-page form with a clear Back link (or new `/models/new` 
 | Revision | Runtime | Existing identifier grammar; this identifies a runtime record, not a hardware reservation or automatic engine selection |
 | Review | Read-only summary | Show all four values; final button “Register private revision”; no GPU price estimate or endpoint promise |
 
-Do not request unrelated model-card URL, HF token, weights upload, hardware selection or scaling policy in this flow. Those belong to a future hosting workflow and have no current registration fields. Guidance may link to the existing operator preparation runbook, without collecting credentials.
+Do not add model-card, HF token, weights upload, hardware or scaling fields to this legacy registration payload. They belong to the new typed import/deployment APIs and Add model flow. Credentials use backend secret references; no raw token in metadata or browser-persisted drafts.
 
 Server validation mirrors existing rules; client validation is convenience only. Return structured field/form failures rather than discarding input on redirect. Success renders the actual model/revision and any returned deployment record, with “View deployments.” If registration's mutation is not idempotent today, add a stable operation receipt before introducing automatic retries; otherwise say “Check models before trying again” on an uncertain response.
 
@@ -60,13 +60,13 @@ Server validation mirrors existing rules; client validation is convenience only.
 
 Route `/deployments`. Default list includes Model + revision, environment/visibility, **record state**, smoke result, next action. Existing `active` is labeled “Registered · active record”; `retired` is “Retired.” Keep `dev/private` and `prod/public` explicit. Do not rename an active record to “Healthy.”
 
-Empty state links directly to Register model. Row expansion shows deployment revision ID, serving version, runtime, schema and rate card; full values copyable. A future detail route requires CX-02's scoped read before shipping a deep link that cannot resolve independently.
+Empty state links to Add model or an imported model's New revision action, according to API prerequisites. Row expansion shows deployment revision ID, serving version, runtime, schema and rate card; full values copyable. A detail route requires CX-02's scoped read before shipping a deep link that cannot resolve independently.
 
 Detail layout: model/revision header; left region “Readiness and checks”; right region immutable configuration. Readiness stages: record registered, engine evidence available, private smoke passed on this engine/revision, publication requested, operator decision. Show only stages supported by evidence; missing stages say “Not verified here.” A recorded control smoke result is still shown as “Recorded smoke result,” with an explanation when its engine provenance is absent.
 
 Actions:
 
-- Developer/admin: “Run dev smoke” only when the existing action's preconditions permit it; show pending → recorded pass/fail and diagnostic reference. Do not call a NoEngine/dev fake run production proof.
+- Developer/admin: “Run dev smoke” only with a configured real adapter and API-confirmed eligibility; show its durable operation/receipt. Current `NoEngine` composition must show unavailable: calling it can strand a record in validating. AP-05 must fix reconciliation before enabling the action.
 - Administrator: “Request publication” with confirmation summary of exact revision, environment and current evidence. Explain operator approval. Success = “Publication requested,” never “Published.”
 - Viewer/developer without publication capability: show the required role and retain read access. Operator approval stays outside provider UI.
 - Approved proposal with no serving health proof: show both facts separately. Request history never substitutes for current readiness.

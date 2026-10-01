@@ -1,5 +1,7 @@
 # Parallel implementation plan
 
+**Backend dependency amendment:** apply [AP-00–11](../../plan/api-lifecycle/implementation.md) before closing these lanes. UX-03 first-model onboarding requires import/deployment APIs; its legacy four-field form only revises imported models. Consumer actions require durable key/grant APIs; trace/judge/review require AP-07/08. Presentation work can use committed typed clients, but direct product DB/RPC fallbacks and mocked service success cannot satisfy completion.
+
 Status of every UX lane in this document: **proposed, not started by this design task**. Existing implementation is the baseline, not work to rewrite. UX IDs are a new design-work namespace; the coordinator should register them in the existing task/tracker system without changing historical backend task verdicts.
 
 ## Coordination and merge order
@@ -54,7 +56,7 @@ Exit: reproductions in audit C9 fail before patch and pass afterward. At 390px, 
 
 Own: Lab provider layout; `lib/auth/sign-in-form.tsx` presentation; pages Overview/Models/Deployments/Settings and their lane-local components; control view models/action responses. Do not rewrite auth policy or generic HTTP infrastructure. Coordinate CX-01/02 with the backend owner.
 
-Tasks: L-01–06 except Requests; grouped sidebar, workspace selector, role context; per-section loading/errors; setup checklist from authoritative records; guided four-field registration with preserved inputs; deployment expansion and proposal review; honest smoke/readiness terminology. Deep detail route only with scoped read; existing list expansion is sufficient initially.
+Tasks: L-01–06 except Requests; grouped sidebar, workspace selector, role context; per-section loading/errors; setup checklist from API records; Add model import/deployment flow once AP-04/05 exist, with the four-field legacy registration restricted to imported models; deployment expansion and proposal review; honest smoke/readiness terminology. Deep detail route only with scoped API read; existing list expansion is sufficient initially.
 
 Exit: role fixture matrix through server actions; registration validation and uncertain response path; success remains Registered; passed generic smoke cannot enable a real-engine Ready badge; publication submission cannot claim public acceptance; missing service never becomes a zero metric. Existing shell no-App-import conformance still passes.
 

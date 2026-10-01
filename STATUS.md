@@ -1,6 +1,6 @@
 # Current project state
 
-**Evidence cutoff: 2026-10-01, 20:40 UTC. Reviewed upstream main: `6462ed06`; original broad review: `252f3ea8`.** This page consolidates the latest implementation record and independent review. Repository changes after this cutoff must be reconciled before operating production. A past report of a running process is not a fresh liveness check.
+**Evidence cutoff: 2026-10-01, 21:40 UTC. Reviewed upstream main: `1a991367` (metadata-only update after source `6462ed06`); original broad review: `252f3ea8`.** This page consolidates the latest implementation record and independent review. Repository changes after this cutoff must be reconciled before operating production. A past report of a running process is not a fresh liveness check.
 
 ## Launch decision
 
@@ -9,6 +9,8 @@
 The immediate objective is an invited, bounded consumer production pilot, followed by public self-service after onboarding and operational checks pass. The [launch review](research/plan/26-launch-readiness-review-2026-10-01.md) defines the remaining work and proposed production workflows. Completing the Lab or an autoscaler is not a dependency of that pilot.
 
 ## Deployment inventory
+
+Fresh read-only host/API audit at **21:36–21:40 UTC**: E4C container `infrx-certify:41693d5d…` was still running with no final report found for run `20261001T181109Z`. Gateway image `423e9f9a…`, Lab control image `870aa2ea…`; no trace-store configuration in those inspected containers and no Lab judge worker running. Public discovery returned Marlin available. Authorized Lab control/dataset/release reads returned empty lists; traces returned 404; evaluation and selected pipeline listings returned 503. First-model registration using real Marlin pins in the empty internal workspace returned 404 and created no model/deployment. [API/source evidence](research/plan/api-lifecycle/README.md). No competing authenticated inference, deployment or judge workload was submitted.
 
 | Component | Last known state | Evidence and limit |
 |---|---|---|
@@ -46,6 +48,7 @@ Before another production action, inspect the latest [operational log](research/
 | Verification | Final combined supported-host checks; recovery test/mutant gaps; benchmark test override restoration | Register rows 11, 79, 86; review LR-06 (row 78 documentation regression is closed) |
 | Lab enablement only | Missing evaluation/pipeline listings, trace composition, dedicated role logins and real engine smoke | Register rows 14–19, 30; review LR-05 |
 | Lab accounting only | Root-cause killed-evaluation-attempt double debit before enabling eval worker; real worker lost-ack test before enabling trace pumps | Register rows 26–27; affected workers remain off |
+| API-first lifecycle (new requirement) | Move App/Lab product logic behind FastAPI; add first-model import, durable real deployment/readiness, private-key/publication/catalog APIs and consented trace/judge flow | [AP-00–11](research/plan/api-lifecycle/implementation.md); proposed, undispatched; complete lifecycle BLOCKED |
 
 Alert delivery/canary evidence is incomplete. Known-good schema proofs through 0059 and same-host recovery work exist; replacement-host restoration remains uncovered. The older Lab checkout blocks the newer observe installer by design. Use the actual runbooks and an owned window to resolve these, not repeated blind restarts.
 

@@ -19,6 +19,7 @@ Start with [current state](../../STATUS.md), then the [launch review and product
 | Test/acceptance criteria | [Verification](04-verification.md), [evidence format](evidence/README.md), [consumer briefs](consumer-v1/README.md) |
 | Decisions and unresolved external inputs | [Input/decision record](15-pending-inputs.md) — later dated decisions supersede earlier rows |
 | Future hosting and optimization | [Roadmap 23](23-inference-hosting-roadmap.md) |
+| API-first model-to-consumer-to-judge lifecycle | [Audit, contracts, work packages and deployed probe](api-lifecycle/README.md) — latest user requirement; proposed changes, live API gaps verified |
 
 ## Dispatch now
 

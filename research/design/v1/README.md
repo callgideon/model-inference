@@ -1,5 +1,7 @@
 # App and Lab UX implementation package
 
+**API lifecycle amendment:** read [the later lifecycle audit/contracts](../../plan/api-lifecycle/README.md) before implementation. All product actions must use structured FastAPI APIs; direct frontend product DB/RPC adapters must migrate. The current Register form requires an existing imported model and cannot onboard an empty workspace. The new Add model/import/deploy flow replaces that first-time path. Previews below were captured before this amendment; their layout remains a reference, not proof of working onboarding.
+
 **2026-10-01 · Proposed design, not implemented.** Source reviewed: local `795f1e7b`, including upstream `6462ed06`. Live App and Lab were inspected with a provisioned developer/test account. Exact Lab web release remains unverified. [STATUS](../../../STATUS.md) owns deployment and launch decisions.
 
 The immediate outcome is two understandable products: a customer can obtain a key, make a valid Marlin call and inspect its result; a provider can register a model revision, understand its deployment state and inspect authorized evidence. Shipping the full improvement loop is a later phase and does not block the consumer pilot.

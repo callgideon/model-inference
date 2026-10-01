@@ -22,6 +22,8 @@ The company operates model inference infrastructure. Two products serve differen
 
 ## Shared boundaries
 
+The [API-first lifecycle specification](../plan/api-lifecycle/README.md) is the current implementation amendment for both products. Every shipped product operation must use structured FastAPI APIs; existing frontend database/RPC adapters require migration. The first-model import → deployment → consumer distribution → consented trace/judge joins are specified there and remain incomplete.
+
 One company may use both products, but consumer membership, provider membership and platform operations remain separate permissions. Model ownership does not grant access to customer content. The applications do not call each other to complete an inference request. Shared runtime and database contracts govern identity, durable execution, accounting, data-use grants and immutable versions.
 
 The [task manifest](../plan/tasks.json), [contracts](../plan/01-contracts.md), [rulings](../plan/08-contracts-v1-encoding.md) and [durable protocols](../plan/02-durable-protocols.md) govern implementation. Earlier research is supporting context, not an instruction to ship every proposed feature.

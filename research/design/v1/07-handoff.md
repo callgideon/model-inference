@@ -1,5 +1,7 @@
 # Verification and fresh-session implementation prompt
 
+**Read the later [API lifecycle handoff](../../plan/api-lifecycle/verification.md) first.** Its API ownership, first-model import/deployment prerequisites and real-service gates supersede earlier adapter assumptions here. Retain this UI acceptance matrix, but never implement direct frontend product DB/RPC adapters or offer first-model onboarding through the old revision-only Register form.
+
 Use [implementation lanes](06-implementation.md) and [service contracts](05-service-contracts.md). Verification must test what users see and what the backend persisted. Fixtures are useful for visual states; they do not certify live inference, permissions, payment or quality.
 
 ## Required fixtures
@@ -71,7 +73,12 @@ Implement the Consumer App and Provider Lab UX plan in research/design/v1.
 
 First fetch the latest main without losing any current work. Read STATUS.md,
 CLAUDE.md, research/platforms/README.md, the launch review linked from STATUS,
-and research/design/v1/README.md. Then read all seven numbered design documents
+and research/design/v1/README.md. Read research/plan/api-lifecycle/README.md and
+its contracts/implementation/verification documents: this later requirement
+supersedes earlier adapter assumptions. Both apps must be thin FastAPI clients;
+no frontend product database/RPC logic. First-model onboarding needs the new
+import/deployment APIs; the old Register form only revises an imported model.
+Coordinate with AP-00–11. Then read all seven numbered design documents
 and open research/design/v1/design-reference.html in a browser. The reference
 is a proposed visual/interaction specification with illustrative data, not
 implemented product behavior. Reconcile any changes since the reviewed source

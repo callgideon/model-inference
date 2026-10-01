@@ -16,6 +16,7 @@ Two products share the runtime:
 3. [Architecture and product requirements](research/platforms/README.md).
 4. [Implementation index](research/plan/README.md), [carried work](research/plan/consumer-v1/10-carried-work-register.md) and [contributor instructions](CLAUDE.md).
 5. [App and Lab UX designs / implementation package](research/design/v1/README.md) — live-screen audit, proposed visual reference, detailed screen states and parallel implementation handoff; not yet implemented.
+6. [API-first Marlin lifecycle](research/plan/api-lifecycle/README.md) — real API audit, thin-frontend contract, import/deployment/publication/trace/judge plans and API-only acceptance handoff.
 
 ## Repository
 

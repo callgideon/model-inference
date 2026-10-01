@@ -16,10 +16,13 @@ Current focus: qualify the deployed Marlin API and consumer App for an invited p
 - PostgreSQL owns acceptance, identity, holds/settlement, leases/fences, output journal and lifecycle eligibility. Valkey is rebuildable. Do not regenerate committed output, settle twice or infer usage from chunk counts.
 - Sync stays sync unless async was explicitly requested. Admission, media preparation, queues and retries remain bounded. Trace loss must not stop inference; trace-off does not mean zero serving retention.
 - Preserve model/image/processor/template/profile/card identity. Optimization is a newly qualified serving version, not an invisible replacement.
+- Target architecture: both web apps are thin clients of structured FastAPI APIs. Current App product-database reads/actions and Lab membership/judge/review RPCs require migration; do not copy them into new features. Read the [API-first lifecycle contracts and work packages](research/plan/api-lifecycle/README.md). Next.js retains presentation and session transport, not authoritative product logic. Preserve existing domain/SQL permissions and accounting behind the APIs.
 
 Binding contracts: [contract encoding/rulings](research/plan/08-contracts-v1-encoding.md), [durable protocols](research/plan/02-durable-protocols.md), [product specs](research/platforms/README.md) and [verification](research/plan/04-verification.md).
 
 For App/Lab interface work, read the [UX design package](research/design/v1/README.md), including its live audit, screen/state specifications, service gaps and path-owned implementation lanes. The visual reference is illustrative, not a source of production data or permission to enable incomplete services.
+
+The later [API lifecycle specification](research/plan/api-lifecycle/contracts.md) overrides earlier UX adapter assumptions. First-model onboarding requires artifact import; the current Register operation only revises an already imported model. `NoEngine` is not a functioning deployment/smoke step. Follow [API acceptance](research/plan/api-lifecycle/verification.md) and report blocked stages honestly.
 
 ## Worktrees and integration
 

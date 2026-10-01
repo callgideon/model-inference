@@ -1094,10 +1094,10 @@
         return (
           head(
             "A clear path to your first deployment",
-            "Register a model revision, verify its serving setup, then request publication.",
-            go("Register model", "register", true),
+            "Import and verify a model, qualify its private endpoint, then request publication.",
+            go("View existing-revision example", "register", true),
           ) +
-          `<div class="grid two"><section class="card"><div class="cardtitle"><h2>Set up this workspace</h2>${badge("0 of 3 verified")}</div><div class="step"><div class="number current">1</div><div><h3>Register a model revision</h3><p>Add the artifact, schema and runtime identity for the revision you want to serve.</p>${go("Register model", "register", true)}</div></div><div class="step future"><div class="number">2</div><div><h3>Verify private serving</h3><p>A registered record is the starting point. The serving engine and endpoint need their own checks.</p></div></div><div class="step future"><div class="number">3</div><div><h3>Request publication</h3><p>An administrator requests publication of the verified revision. An infrx operator approves it.</p></div></div></section><section class="card"><h2>Workspace</h2><p>Model team · Developer access</p>${details(
+          `<div class="grid two"><section class="card"><div class="cardtitle"><h2>Set up this workspace</h2>${badge("0 of 3 verified")}</div><div class="step"><div class="number current">1</div><div><h3>Add and verify your model</h3><p>First-model import needs the new artifact APIs. The current registration form only revises an already imported model. <a href="../../plan/api-lifecycle/contracts.md#4-artifact-and-model-project-onboarding">Read the Add model flow</a>.</p>${go("View existing-revision example", "register", true)}</div></div><div class="step future"><div class="number">2</div><div><h3>Verify private serving</h3><p>A registered record is the starting point. The serving engine and endpoint need their own checks.</p></div></div><div class="step future"><div class="number">3</div><div><h3>Request publication</h3><p>An administrator requests publication of the verified revision. An infrx operator approves it.</p></div></div></section><section class="card"><h2>Workspace</h2><p>Model team · Developer access</p>${details(
             [
               ["Private deployment records", "0"],
               ["Public deployment records", "0"],
@@ -1109,8 +1109,8 @@
       function register(review = false) {
         return (
           head(
-            "Register a private model revision",
-            "Identify the artifact you want to serve. Registration does not start a serving engine.",
+            "New revision of an imported model",
+            "Requires weights already imported into this workspace and existing deployment limits. This form does not upload weights or launch an engine.",
           ) +
           `<div class="grid two"><section class="card">${steps(review ? 1 : 0, ["Revision details", "Review registration"])}${
             review
@@ -1122,7 +1122,7 @@
                     ["Runtime", "Approved runtime reference"],
                   ],
                 )}<div class="note">Next: verify private serving with the operator. Registration alone does not create a working inference endpoint.</div><div class="actions"><button data-action="reg-back">Back</button><button class="primary" data-action="reg-explain">Register private revision</button></div><p id="regStatus" class="statusline" role="status"></p>`
-              : `<div class="field"><label for="modelName">Model name</label><input id="modelName" value="marlin-sop" readonly><small>Lowercase letters, numbers and hyphens. This is the model's persistent name.</small></div><div class="field"><label for="artifact">Artifact SHA-256</label><input id="artifact" placeholder="sha256:…" readonly><small>Digest of the approved model artifact. Used to identify the exact revision.</small></div><div class="fieldgrid"><div class="field"><label for="schema">Schema version</label><input id="schema" placeholder="Approved schema reference" readonly></div><div class="field"><label for="runtime">Runtime</label><input id="runtime" placeholder="Approved runtime reference" readonly></div></div><p class="small">These reference fields are illustrative. The implementation validates actual identifiers and preserves field errors.</p><div class="actions">${go("Back to overview", "overview")}<button class="primary" data-action="reg-review">Preview review step</button></div>`
+              : `<div class="field"><label for="modelName">Model name</label><input id="modelName" value="marlin-sop" readonly><small>Lowercase letters, numbers and hyphens. This is the model's persistent name.</small></div><div class="field"><label for="artifact">Artifact SHA-256</label><input id="artifact" placeholder="sha256:…" readonly><small>An existing imported weight-shard digest. This field cannot import a new artifact.</small></div><div class="fieldgrid"><div class="field"><label for="schema">Schema version</label><input id="schema" placeholder="Approved schema reference" readonly></div><div class="field"><label for="runtime">Runtime</label><input id="runtime" placeholder="Approved runtime reference" readonly></div></div><p class="small">These reference fields are illustrative. The implementation validates actual identifiers and preserves field errors.</p><div class="actions">${go("Back to overview", "overview")}<button class="primary" data-action="reg-review">Preview review step</button></div>`
           }</section><section class="card flat"><h2>What happens next</h2><div class="stage"><span class="stageicon">1</span><div><h3>Private registration</h3><p>A versioned record ties the artifact to its schema and runtime.</p></div></div><div class="stage"><span class="stageicon">2</span><div><h3>Serving qualification</h3><p>Engine readiness is verified separately for the exact revision.</p></div></div><div class="stage"><span class="stageicon">3</span><div><h3>Publication request</h3><p>Your administrator requests public access after the required checks.</p></div></div>${note("Need to host new weights or choose hardware? That requires the operator preparation workflow; it is not part of this form.")}</section></div>`
         );
       }
@@ -1133,7 +1133,7 @@
             "Deployment record details and the evidence needed before serving.",
             badge("Readiness not verified", "warn"),
           ) +
-          `<div class="intro">Illustrative populated state. The current control port does not establish engine readiness or an authorized endpoint URL.</div><div class="grid two"><section class="card"><div class="cardtitle"><h2>Readiness and checks</h2>${badge("Private · dev")}</div><div class="stage"><span class="stageicon done">✓</span><div><h3>Revision registered</h3><p>An active private deployment record exists.</p></div></div><div class="stage"><span class="stageicon">2</span><div><h3>Serving engine · not verified here</h3><p>This view has no engine identity or readiness receipt. A recorded smoke result alone is insufficient.</p></div></div><div class="stage"><span class="stageicon">3</span><div><h3>Private smoke · no result</h3><p>A developer can request the supported check for this revision.</p></div></div><div class="stage"><span class="stageicon">4</span><div><h3>Publication · not requested</h3><p>An administrator proposes publication; an operator decides.</p></div></div><div class="actions"><button data-action="smoke-explain">Run dev smoke</button><span class="small muted">Reference only</span></div><p id="smokeStatus" class="statusline" role="status"></p></section><section class="card"><h2>Revision details</h2>${details(
+          `<div class="intro">Illustrative populated state. The current control port does not establish engine readiness or an authorized endpoint URL.</div><div class="grid two"><section class="card"><div class="cardtitle"><h2>Readiness and checks</h2>${badge("Private · dev")}</div><div class="stage"><span class="stageicon done">✓</span><div><h3>Revision registered</h3><p>An active private deployment record exists.</p></div></div><div class="stage"><span class="stageicon">2</span><div><h3>Serving engine · not verified here</h3><p>This view has no engine identity or readiness receipt. A recorded smoke result alone is insufficient.</p></div></div><div class="stage"><span class="stageicon">3</span><div><h3>Private smoke · no result</h3><p>The current engine-smoke adapter is unavailable. Enable this action only after a real adapter and operation recovery are verified.</p></div></div><div class="stage"><span class="stageicon">4</span><div><h3>Publication · not requested</h3><p>An administrator proposes publication; an operator decides.</p></div></div><div class="actions"><button data-action="smoke-explain">Why smoke is unavailable</button><span class="small muted">Reference only</span></div><p id="smokeStatus" class="statusline" role="status"></p></section><section class="card"><h2>Revision details</h2>${details(
             [
               ["Model", "marlin-sop"],
               ["Revision", "Illustrative revision 1"],
@@ -1334,7 +1334,7 @@
             "Reference only: the real action must return a private revision receipt. No registration was submitted.";
         if (a === "smoke-explain")
           document.getElementById("smokeStatus").textContent =
-            "Reference only: no check runs here. The implemented action reports its actual check type and result.";
+            "The current backend uses NoEngine, so smoke is unavailable. A real adapter and durable recovery are required before enabling this action. No check runs in this reference.";
         if (a === "key-dialog") {
           document.getElementById("keyPreviewStatus").textContent = "";
           document.getElementById("keyDialog").showModal();
