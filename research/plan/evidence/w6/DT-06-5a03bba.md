@@ -71,3 +71,38 @@ mutation stage; not changed.)
 
 Remaining 0.25 / 0.5 / 1.5 h (review round; pessimistic if the coordinator wants the E2 kept-stack
 form re-run instead of the D form), confidence high.
+
+## Merge
+
+Merge #77 (coordinator lane `codex/w5-merge-77`): the lane head **d0bb2299** merged `--no-ff` onto
+c56cfce5 (merge commit 885f1d48), no conflicts. The lens findings were wired in one follow-up
+commit. Checks ran on the D form, key d3 (container `infrx-d3-postgres-supabase`, 127.0.0.1:55434,
+removed at exit), in a `git clone --shared` checked out at the merge head.
+
+- **PGR-1 (a real gap):** a dump that names both an existing `infrx_*` role and a missing one. bk00c
+  now calls `source_db()` first, so the cluster is migrated and `infrx_lab_control` exists, even on
+  a fresh D container. It also grants `select` on `public.bk00c` to `infrx_lab_control` and asserts
+  that role is in `before`. The new roles are renamed `infrx_zbk00c_lab_control` and
+  `infrx_zbk00c_runtime`, so they sort after it, and `precreate_roles` reaches the `continue`
+  skip branch before it creates them. The rerun now returns `{infrx_lab_control, *BK00C_ROLES}`.
+  Mutant **i3bm40h** (`continue` → `break`, layer 2, `-k bk00c`) is killed:
+  `infra/runbooks/pgrestore.py:95: RuntimeError`, which means pg_restore failed because the role
+  was never created.
+- **PGR-2:** `ROLE_ROWS` also selects `rolsuper, rolcreaterole, rolcreatedb, rolbypassrls,
+  rolreplication`. The case asserts that each created role has all five false, and that
+  `rolcanlogin` is false. Mutant **i3bm40i** (`'nologin'` → `'nologin bypassrls'`) is killed:
+  `test_restore.py:197: AssertionError`, the created-roles row assertion.
+- **PGR-3, pre-existing and not this lane's:** these were the same at the lane's base 2add8e0a and
+  at its head. Register row 79 in `consumer-v1/10-carried-work-register.md` records them.
+  - `i3bm114` SURVIVES on the D form: rc10b's 2 cases still pass with `wait_http`'s sleep
+    removed.
+  - `i3bm117` and `i3bm33` have no case on the D form, because rc08b and rc06 need E2's compose
+    stack.
+  - `i3bm54` is baseline-red: rb05 is red in the mutant copy.
+  - `test_runbooks.py::test_e4c_rb09…` is red: rollout.md's §W6/§W7 migration range is stale
+    against 0059. This is register row 78.
+  - `tests/integration/test_run.py::test_every_mutant_anchor_occurs_as_declared_on_the_checkout`
+    is red on the stale `e3bm62` anchor in E's list. It was carried to api-L2 at merge #73.
+- No ruling is numbered at this merge.
+
+The checks at the wiring head are recorded in the coordinator's merge #77 result.

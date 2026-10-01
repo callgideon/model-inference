@@ -298,6 +298,16 @@ MUTANTS += (
            '            conn.execute("do $$ begin if not exists (select 1 from pg_roles where '
            "rolname = %(n)s) then execute format('create role %%I nologin', %(n)s); end if; "
            'end $$", {"n": name})\n', RESTORE, "bk00c", layer=2),
+    # merge #77 lens PGR-1/PGR-2
+    Mutant("i3bm40h", "PGR-1: an existing role is skipped, not the end of the pre-creation",
+           PGRESTORE,
+           '            if conn.execute("select 1 from pg_roles where rolname = %s", '
+           "(name,)).fetchone():\n                continue\n",
+           '            if conn.execute("select 1 from pg_roles where rolname = %s", '
+           "(name,)).fetchone():\n                break\n", RESTORE, "bk00c", layer=2),
+    Mutant("i3bm40i", "PGR-2: the pre-created roles carry no extra privilege (bypassrls)",
+           PGRESTORE, 'sql.SQL("create role {} nologin")', 'sql.SQL("create role {} nologin bypassrls")',
+           RESTORE, "bk00c", layer=2),
     Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", PGRESTORE,
            '        for definition in meta["auth_triggers"]:\n',
            "        for definition in []:\n", RESTORE, "bk01_a", layer=2),

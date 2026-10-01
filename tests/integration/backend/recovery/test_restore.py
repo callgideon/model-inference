@@ -143,11 +143,16 @@ def test_i3b_bk00b_the_dumps_migration_roles_are_created_before_the_project_rest
 
 
 # bk00c: two `infrx_*` roles no cluster role carries. The migrated source's own
-# `infrx_lab_control` cannot be used: roles are cluster-level and the source database (E2's,
-# or the D harness's task database) shares the target's cluster, so it always exists there -
+# `infrx_lab_control` cannot be the missing one: roles are cluster-level and the source database
+# (E2's, or the D harness's task database) shares the target's cluster, so it always exists there -
 # which is why bk01 never exercised the pre-creation. These names take the same code path.
-BK00C_ROLES = ("infrx_bk00c_lab_control", "infrx_bk00c_runtime")
-ROLE_ROWS = "select oid, rolname, rolcanlogin from pg_roles order by rolname"
+# PGR-1: the dump ALSO names the existing `infrx_lab_control`, which sorts before `infrx_zbk00c_*`,
+# so the skip branch runs before the creations (a `break` there would skip them).
+BK00C_EXISTING = "infrx_lab_control"
+BK00C_ROLES = ("infrx_zbk00c_lab_control", "infrx_zbk00c_runtime")
+# PGR-2: the privileges a pre-created role must NOT carry, beside rolcanlogin.
+ROLE_ROWS = ("select oid, rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, "
+             "rolbypassrls, rolreplication from pg_roles order by rolname")
 
 
 def test_i3b_bk00c_a_dump_naming_missing_migration_roles_restores_into_a_fresh_target(tmp_path):
@@ -159,6 +164,7 @@ def test_i3b_bk00c_a_dump_naming_missing_migration_roles_restores_into_a_fresh_t
     leaves every other role (anon, service_role, ...) as it was; a rerun is a no-op (same
     oids, no DuplicateObject). Layer 2: the pinned client and a real PostgreSQL."""
     needs_pg()
+    source_db()                     # the migrated cluster: BK00C_EXISTING exists (D form: fresh)
     lab, runtime = BK00C_ROLES
     dropped = [f"drop role if exists {name}" for name in BK00C_ROLES]
     try:
@@ -169,12 +175,15 @@ def test_i3b_bk00c_a_dump_naming_missing_migration_roles_restores_into_a_fresh_t
                 conn.execute(f"create policy bk00c_read on public.bk00c for select to {lab} "
                              "using (true)")
                 conn.execute(f"grant select on public.bk00c to {runtime}")
+                conn.execute(f"grant select on public.bk00c to {BK00C_EXISTING}")
             backup = tmp_path / "backup"
             pg.dump(conninfo(source), backup)
             _admin(f"drop database {source} with (force)", *dropped)
             with connect(target) as conn:
                 before = conn.execute(ROLE_ROWS).fetchall()
-            assert not {name for _, name, _ in before} & set(BK00C_ROLES), before
+            names = {row[1] for row in before}
+            assert not names & set(BK00C_ROLES), before
+            assert BK00C_EXISTING in names, before
 
             pg.restore(conninfo(target), backup)
             with connect(target) as conn:
@@ -184,11 +193,12 @@ def test_i3b_bk00c_a_dump_naming_missing_migration_roles_restores_into_a_fresh_t
                 assert conn.execute("select has_table_privilege(%s, 'public.bk00c', 'select')",
                                     (runtime,)).fetchone()[0]
             created = sorted(set(after) - set(before), key=lambda row: row[1])
-            assert [(name, login) for _, name, login in created] == \
-                [(lab, False), (runtime, False)], created
+            # NOLOGIN, and none of super/createrole/createdb/bypassrls/replication (PGR-2)
+            assert [row[1:] for row in created] == \
+                [(lab, *[False] * 6), (runtime, *[False] * 6)], created
             assert set(before) <= set(after), "a role that existed was changed"
 
-            assert pg.precreate_roles(conninfo(target), backup) == set(BK00C_ROLES)
+            assert pg.precreate_roles(conninfo(target), backup) == {BK00C_EXISTING, *BK00C_ROLES}
             with connect(target) as conn:
                 assert conn.execute(ROLE_ROWS).fetchall() == after
     finally:
