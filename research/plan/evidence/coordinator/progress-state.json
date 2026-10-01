@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 372,
- "updated": "2026-10-01T04:51:59Z",
+ "revision": 373,
+ "updated": "2026-10-01T04:52:39Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10352,17 +10352,17 @@
    "branch": "codex/w6-docs-state",
    "worktree": ".claude/worktrees/codex-w6-docs-state",
    "base": "08983639",
-   "head": null,
+   "head": "94d1b9cd",
    "isolation": {
     "ports": "-",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T02:50:14Z",
-   "updated": "2026-10-01T02:50:14Z",
+   "updated": "2026-10-01T04:52:39Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge after #74 (lab-B): union on apps/lab/README.md, infra/lab/app/README.md, runbook 08 log, consumer-v1/README.md index; WR-W6DS-1..7 + the carried CLAUDE.md pointers (lab-release.sh, api-lint/typecheck, wall-clocks)",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 4,
