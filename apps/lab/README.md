@@ -43,7 +43,7 @@ runbook 08 §0 and the state file's carried-work table.
 
 Standalone install like `apps/app` (own `pnpm-lock.yaml`, no root workspace, which would re-root
 the App's lockfile and Vercel build); Lab-only shared TypeScript comes from `packages/shared`
-(`file:` dependency), never from `apps/app`. Dev port 3100 (the App keeps 3000).
+(`link:` dependency; no reinstall after an edit there), never from `apps/app`. Dev port 3100 (the App keeps 3000).
 
 ```bash
 cd apps/lab && pnpm install --frozen-lockfile && pnpm dev
