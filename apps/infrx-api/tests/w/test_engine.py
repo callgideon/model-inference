@@ -1590,3 +1590,19 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
     never = engine.generate(lease(box), text_prepared(box))
     asyncio.run(never.aclose())
     assert upstream.requests == [] and engine.cancelled == {}
+
+
+# A12: the pure request/JSON helpers are one module, re-exported by the adapter.
+WIRE_HELPERS = ("prepared_request", "cache_salt", "media_uuid", "check_storage_ref",
+                "_inside_tenant_root", "local_media_url", "_encodable", "_json_cost",
+                "_split_encoded", "_delta_payload", "_parse_usage", "STORAGE_REF_PATTERN",
+                "LOCAL_MEDIA_SCHEME", "LOCAL_MEDIA_FILE")
+
+
+def test_api_stream__the_wire_helpers_live_in_one_module_the_adapter_reexports():
+    """A12 (W6): `engine_wire` holds the pure translation/JSON helpers and `engine` re-exports
+    each one, so every importer of `infrx.worker.engine` keeps the same objects. Fails when a
+    helper is copied instead of moved, or dropped from the re-export."""
+    from infrx.worker import engine, engine_wire
+    for name in WIRE_HELPERS:
+        assert getattr(engine, name, None) is getattr(engine_wire, name), name

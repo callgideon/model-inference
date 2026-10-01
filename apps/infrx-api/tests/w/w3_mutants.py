@@ -190,6 +190,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 RUNNER = Runner(name="w3", targets=("tests/w/test_service.py",), layout=_layout)
 
 E = "worker/engine.py"
+EW = "worker/engine_wire.py"   # A12: the pure helpers moved here
 L = "worker/loop.py"
 A = "worker/attempt.py"
 V = "worker/service.py"
@@ -219,7 +220,7 @@ _GUARD = ("        except Exception as failure:              # the store is down
 PY_MUTANTS: tuple[Mutant, ...] = (
     # --- (2) one media root -----------------------------------------------------------
     _m("unset_root_is_guessed", "no PROCESSING_CACHE_DIR: dependency_unavailable, no path",
-       E, "    if not root:\n        raise errors.DependencyUnavailable(",
+       EW, "    if not root:\n        raise errors.DependencyUnavailable(",
        "    if False:\n        raise errors.DependencyUnavailable(", ROOT),
     _m("root_is_not_the_setting", "the adapter's root is PROCESSING_CACHE_DIR",
        E, "self.local_media_root = limits.processing_cache_dir if local_media_root is None",

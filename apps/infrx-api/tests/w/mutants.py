@@ -39,6 +39,7 @@ SUITE = ("tests/w/test_engine.py", "tests/w/test_reasoning.py")
 KILL_ERRORS = ASSERTION_DEATHS
 
 E = "worker/engine.py"
+EW = "worker/engine_wire.py"   # A12: the pure helpers moved here
 R = "worker/reasoning.py"
 
 
@@ -90,6 +91,7 @@ LEADING = "test_api_stream__only_a_leading_block_is_a_delimiter"
 UNCLOSED = "test_api_stream__an_unclosed_block_never_becomes_visible"
 PARTIAL = "test_api_stream__a_partial_delimiter_at_the_end_is_released"
 STRADDLE = "test_api_stream__the_close_delimiter_may_straddle_any_boundary"
+REEXPORT = "test_api_stream__the_wire_helpers_live_in_one_module_the_adapter_reexports"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- the wire body --------------------------------------------------------
@@ -134,7 +136,7 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "            if not ref.mime.startswith(VIDEO_MIME_PREFIX):", "            if False:",
        MEDIA),
     _m("refs_org_not_checked", "the refs a worker executes are the request's own (R10)",
-       E, "        if ref.org_id != request.org_id:", "        if False:", TENANT),
+       EW, "        if ref.org_id != request.org_id:", "        if False:", TENANT),
     _m("mixed_org_media_accepted", "one request, one tenant (R10)",
        E, "        if len({ref.org_id for ref in prepared.media}) > 1:", "        if False:",
        TENANT),
@@ -147,25 +149,25 @@ MUTANTS: tuple[Mutant, ...] = (
        BUDGET),
     # --- tenant namespacing ---------------------------------------------------
     _m("salt_ignores_the_tenant", "the cache salt is per tenant",
-       E, "    parts = [tenant, prepared.profile_version, prepared.model_revision,",
+       EW, "    parts = [tenant, prepared.profile_version, prepared.model_revision,",
        "    parts = [prepared.profile_version, prepared.model_revision,", SALT),
     _m("salt_shared_when_the_tenant_is_unknown", "an unknown tenant shares with nobody",
-       E, '        tenant = "|".join(orgs) if orgs else prepared.request_id',
+       EW, '        tenant = "|".join(orgs) if orgs else prepared.request_id',
        '        tenant = "|".join(orgs) if orgs else "shared"', SALT),
     _m("salt_ignores_the_profile_version", "the profile version namespaces the cache",
-       E, "    parts = [tenant, prepared.profile_version, prepared.model_revision,",
+       EW, "    parts = [tenant, prepared.profile_version, prepared.model_revision,",
        "    parts = [tenant, prepared.model_revision,", SALT),
     _m("salt_ignores_the_media_digest", "the tenant's source digest namespaces the cache",
-       E, '             *sorted(f"{ref.digest}@{ref.profile_version}" for ref in prepared.media)]',
+       EW, '             *sorted(f"{ref.digest}@{ref.profile_version}" for ref in prepared.media)]',
        "             ]", SALT),
     _m("customer_salt_honoured", "a client cannot name another tenant's namespace",
-       E, '    parameters["tenant_salt"] = request.org_id',
+       EW, '    parameters["tenant_salt"] = request.org_id',
        '    parameters.setdefault("tenant_salt", request.org_id)', SALT),
     _m("media_uuid_unsalted", "multimodal uuids share the prefix cache's namespace",
-       E, '    return hashlib.sha256(f"{salt}\\x1f{ref.digest}".encode()).hexdigest()[:32]',
+       EW, '    return hashlib.sha256(f"{salt}\\x1f{ref.digest}".encode()).hexdigest()[:32]',
        "    return hashlib.sha256(ref.digest.encode()).hexdigest()[:32]", SALT),
     _m("media_uuid_ignores_the_digest", "two objects in one tenant are two cache entries",
-       E, '    return hashlib.sha256(f"{salt}\\x1f{ref.digest}".encode()).hexdigest()[:32]',
+       EW, '    return hashlib.sha256(f"{salt}\\x1f{ref.digest}".encode()).hexdigest()[:32]',
        '    return hashlib.sha256(f"{salt}\\x1f{ref.profile_version}".encode()).hexdigest()[:32]',
        SALT),
     # --- refused options ------------------------------------------------------
@@ -219,17 +221,17 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "PAYLOAD_COPIES = 2               # `visible` and `raw`",
        "PAYLOAD_COPIES = 1", JOURNAL),
     _m("json_escape_cost_ignored", "a control character costs six bytes in JSON",
-       E, "    if code < 0x20:\n        return 2 if char in _SHORT_ESCAPES else 6",
+       EW, "    if code < 0x20:\n        return 2 if char in _SHORT_ESCAPES else 6",
        "    if code < 0x20:\n        return 1", JOURNAL, COST),
     _m("short_escapes_cost_six", "a newline is two bytes, not six",
-       E, "        return 2 if char in _SHORT_ESCAPES else 6", "        return 6", COST),
+       EW, "        return 2 if char in _SHORT_ESCAPES else 6", "        return 6", COST),
     _m("quote_escape_ignored", "an escaped quote costs two bytes",
-       E, "    if char in '\"\\\\':\n        return 2", "    if False:\n        return 2", COST),
+       EW, "    if char in '\"\\\\':\n        return 2", "    if False:\n        return 2", COST),
     _m("astral_cost_three", "an astral code point costs four bytes in UTF-8",
-       E, "    if code < 0x10000:\n        return 3\n    return 4",
+       EW, "    if code < 0x10000:\n        return 3\n    return 4",
        "    return 3", COST, JOURNAL),
     _m("cost_ignores_utf8_width", "a code point costs its UTF-8 length",
-       E, "    if code < 0x800:\n        return 2", "    if code < 0x800:\n        return 1",
+       EW, "    if code < 0x800:\n        return 2", "    if code < 0x800:\n        return 1",
        COST),
     _m("event_overhead_ignored", "the payload's own braces and keys count too",
        E, "PAYLOAD_OVERHEAD_BYTES = 64", "PAYLOAD_OVERHEAD_BYTES = 0", JOURNAL),
@@ -334,10 +336,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("output_bytes_unbounded", "the accumulated output is bounded (R58)",
        E, "        if len(stream.raw_text) + len(content) > budget:", "        if False:", BOUNDS),
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",
-       E, '    return {"visible": visible, "raw": raw}',
+       EW, '    return {"visible": visible, "raw": raw}',
        '    return {"visible": raw, "raw": raw}', TEXTS, ADAPTER_SPLITS),
     _m("content_alias_reintroduced", "a delta payload is exactly {visible, raw} (R80)",
-       E, '    return {"visible": visible, "raw": raw}',
+       EW, '    return {"visible": visible, "raw": raw}',
        '    return {"visible": visible, "raw": raw, "content": raw}',
        "test_f_contract__the_real_adapter_passes_the_exported_engine_suite"),
     _m("held_tail_never_emitted", "the filter's final tail reaches the events (R58)",
@@ -377,16 +379,16 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        if stream.malformed_usage or stream.usage_candidate is None:",
        "        if stream.usage_candidate is None:", USAGE),
     _m("usage_booleans_trusted", "True is not a token count",
-       E, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
+       EW, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
        "        if not isinstance(value, int) or value < 0:", USAGE),
     _m("usage_nonints_trusted", "a count that is not a nonnegative integer is not a count",
-       E, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
+       EW, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
        "        if value is None:", USAGE, dies_by=("EngineFailure",)),
     _m("usage_nondict_trusted", "a usage object is an object",
-       E, "    if not isinstance(raw, dict):\n        return None",
+       EW, "    if not isinstance(raw, dict):\n        return None",
        "    if False:\n        return None", USAGE, dies_by=("EngineFailure",)),
     _m("usage_totals_not_checked", "a usage object that does not add up is unknown",
-       E, "    if total is not None and (isinstance(total, bool) or not isinstance(total, int)\n"
+       EW, "    if total is not None and (isinstance(total, bool) or not isinstance(total, int)\n"
           "                             or total != prompt + completion):",
        "    if total is not None and (isinstance(total, bool) or not isinstance(total, int)):",
        USAGE),
@@ -594,16 +596,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("second_choice_merged", "n=1 is forced, so index 1 cannot exist",
        E, "        if index != 0:", "        if False:", SECOND),
     _m("storage_ref_shape_trusted", "a prepared reference has the store's shape",
-       E, "    if matched is None or matched.group(\"org\") != ref.org_id:",
+       EW, "    if matched is None or matched.group(\"org\") != ref.org_id:",
        "    if False:", REF),
     _m("storage_ref_tenant_trusted", "a prepared reference sits under its own tenant",
-       E, "    if matched is None or matched.group(\"org\") != ref.org_id:",
+       EW, "    if matched is None or matched.group(\"org\") != ref.org_id:",
        "    if matched is None:", REF),
     _m("ref_segment_allows_leading_dot", "a key segment cannot start with a dot",
-       E, 'STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"',
+       EW, 'STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"',
        'STORAGE_REF_SEGMENT = r"[A-Za-z0-9._-]+"', REF),
     _m("storage_ref_matches_a_prefix", "the whole reference must match, not a prefix",
-       E, "    matched = STORAGE_REF_PATTERN.fullmatch(ref.storage_ref or \"\")",
+       EW, "    matched = STORAGE_REF_PATTERN.fullmatch(ref.storage_ref or \"\")",
        "    matched = STORAGE_REF_PATTERN.match(ref.storage_ref or \"\")", REF),
     _m("salt_tenant_not_linked", "the salt's tenant is the ref's tenant",
        E, "            if salt_tenant and ref.org_id != salt_tenant:", "            if False:",
@@ -612,7 +614,7 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        for ref in prepared.media:\n            check_storage_ref(ref)",
        "        for ref in ():\n            check_storage_ref(ref)", REF),
     _m("prompt_tokens_unbounded", "a prompt count nothing measured is refused",
-       E, "    if not 0 <= prompt_tokens <= limits.max_context_tokens:", "    if False:",
+       EW, "    if not 0 <= prompt_tokens <= limits.max_context_tokens:", "    if False:",
        MEASURED),
     # Declared kill mode: without the guard the adapter *crashes* on a missing duration
     # (`budget_kwargs(None)`), which is the defect - `or 0.0` silently asked for a four-frame
@@ -669,6 +671,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("delimiter_case_insensitive", "`<THINK>` is text, as F1's regex had it",
        R, "        if stripped.startswith(OPEN):", "        if stripped.lower().startswith(OPEN):",
        LEADING, SPLITS),
+    # --- A12 (W6): the split keeps one object per helper ----------------------
+    _m("wire_helper_dropped_from_the_reexport", "engine re-exports every engine_wire helper",
+       E, "_parse_usage, _split_encoded, cache_salt,", "_split_encoded, cache_salt,", REEXPORT),
 )
 
 
