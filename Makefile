@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -11,6 +11,23 @@ api-env:
 
 api-test:
 	cd $(API) && uv run --frozen pytest -q
+
+# W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config. Until it lands
+# each reports "not run" rather than a pass, as bench-test does. pyright runs one package
+# per process: a whole-tree run OOMs node here (exit 250, audit A13).
+api-lint:
+	@if [ -f $(API)/ruff.toml ] || grep -q '^\[tool\.ruff' $(API)/pyproject.toml; then \
+		cd $(API) && uv run --frozen ruff check infrx deploy tests; \
+	else \
+		echo "api-lint: not run - no ruff config in $(API) yet (api-L5 owns it)"; \
+	fi
+
+api-typecheck:
+	@if [ -f $(API)/pyrightconfig.json ] || grep -q '^\[tool\.pyright' $(API)/pyproject.toml; then \
+		cd $(API) && rc=0; for pkg in infrx/*/; do uv run --frozen pyright "$$pkg" || rc=1; done; exit $$rc; \
+	else \
+		echo "api-typecheck: not run - no pyright config in $(API) yet (api-L5 owns it)"; \
+	fi
 
 # r1 R32: every mutation list (one pytest process per mutant; measured wall-clocks per target:
 # tests/integration/README.md). The default suite runs a subset; a surviving mutant is a
@@ -161,7 +178,7 @@ lab-mutants:
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
 
-check: api-test api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
+check: api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
 
 # Real service evidence is separate from unit checks; Docker absence must fail visibly.
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"
