@@ -415,3 +415,15 @@ def test_rpc__each_adapter_keeps_its_own_refusal() -> None:
     _refused(errors.Conflict, _Db(_Rpc(_db_error("23505", "duplicate"))).rows("insert"))
     for conn in (_Rpc(connect_fails=_operational()), _Rpc(_operational())):
         assert _gone(PgLifecycle(conn).expire(limit=1)).retry_after_s == 30
+
+
+def test_rpc__a_failing_close_surfaces_raw_never_as_an_outage() -> None:
+    """Wave rule 1 (behaviour at base 08983639): only connecting and executing are typed as
+    the lifecycle store's outage; a close() that fails after the answer is the raw error."""
+    from infrx.state.lifecycle import PgLifecycle
+
+    class C(_Rpc):
+        async def close(self) -> None:
+            raise psycopg.OperationalError("close failed")
+
+    _refused(psycopg.OperationalError, PgLifecycle(C([]))._call("expire", {"limit": 1}))

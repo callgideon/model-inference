@@ -9,7 +9,7 @@ included, a retryable `DependencyUnavailable` - never an answer read as "nothing
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
 
 from ..contracts import errors
@@ -37,16 +37,20 @@ async def _run(connect: Connect, sql: str, params: Params, read: Callable[[Any],
                error: Refusal | None, unreachable: str | None, retry_after_s: int) -> Any:
     from psycopg import Error, OperationalError
     gone = OperationalError if unreachable is not None else ()
-    try:
-        async with connection(connect) as conn:
+    # The stack closes the connection outside `except gone`: an outage is typed only when
+    # connecting or executing; a failing close() surfaces raw (as at base 08983639).
+    async with AsyncExitStack() as stack:
+        try:
+            conn = await stack.enter_async_context(connection(connect))
             try:
                 return await read(await conn.execute(sql, params))
             except Error as failed:
                 if error is None or isinstance(failed, gone):
                     raise
                 raise error(failed) from None
-    except gone:
-        raise errors.DependencyUnavailable(unreachable, retry_after_s=retry_after_s) from None
+        except gone:
+            raise errors.DependencyUnavailable(unreachable, retry_after_s=retry_after_s) \
+                from None
 
 
 async def _scalar(cursor: Any) -> Any:
