@@ -283,8 +283,8 @@
       "id": "PAGE-PUBLIC-MODELS",
       "what": "the Models page reads the old public.models table",
       "file": "app/(console)/models/page.tsx",
-      "find": "const { data: keys } = await supabase",
-      "replace": "await supabase.from(\"models\").select(\"*\");\n  const { data: keys } = await supabase",
+      "find": "const catalog = await loadCatalog(apiBaseUrl(process.env));",
+      "replace": "const catalog = await loadCatalog(apiBaseUrl(process.env));\n  await (await createClient()).from(\"models\").select(\"*\");",
       "cases": [
         "the pages read only the published catalog: no public.models table, no USD columns, no stale copy"
       ]
@@ -413,7 +413,7 @@
       "id": "PAGE-D-LIVE",
       "what": "the Docs Streaming section drops 'live video input is not supported'",
       "file": "app/(console)/docs/page.tsx",
-      "find": "The input is always a finished video file; live video input is not\n            supported.",
+      "find": "The input is always a finished video file; live video input is not\n              supported.",
       "replace": "The input is always a finished video file.",
       "cases": [
         "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
