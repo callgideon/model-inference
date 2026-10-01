@@ -1,10 +1,6 @@
 # Two-platform product architecture
 
-**Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
-
-**Latest priority:** Marlin2B SOP verification over large robotics datasets is the lead application; complete the inference backend first, then launch the consumer App. [Complete implementation plan](../plan/12-complete-build-plan.md) and [fresh-session prompt](../plan/16-fresh-session-handoff.md) govern execution. Lab M2–M4 now have [detailed handoffs](../plan/13-lab-improvement-handoffs.md); this does not make them App launch dependencies.
-
-Updated 2026-09-21. **Target product architecture, reconciled with wave 2 at `271add9`; deployment is not claimed.**
+**Status 2026-10-01:** both products are deployed. The App runs the CREDIT regime (public verified signup, one-time 10,000 CREDIT per individual user) on runtime 41693d5d; the Lab is live for internal testing at `https://lab.callbill.ai` with its control service on the pilot box; hosted Supabase is at migrations 0001–0059. What runs where and what is pending: [state of record 25](../plan/25-state-2026-10-01.md). The requirements below are retained as the product specification; the 2026-09-21/22 sequence banners ("backend first, then App, then Lab") were history once the App launched (2026-09-27) and the Lab deployed (2026-10-01).
 
 The business operates inference infrastructure. Two products make that infrastructure useful to different users:
 
@@ -29,10 +25,14 @@ One company can use both products. Consumer membership, provider membership and 
 
 This directory supersedes earlier product scope where it conflicts. The amended [task manifest](../plan/tasks.json) and [implementation impact](../plan/08-platform-split.md) govern task routing and dependencies; [shared contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md) govern the runtime. Earlier module briefs remain useful subject to these amendments. Historical research is evidence to evaluate, not an instruction to implement every feature.
 
-The original package was committed as `25b9829`; wave-2 implementation has now been pulled from main at `271add9`. Read the [audit](../plan/10-wave2-platform-audit.md) and [revision handoffs](../plan/11-wave3-revision-handoffs.md). Original module completions are preserved. CREDIT/individual wallets and Lab are target behavior; the existing schema and executable contracts still implement the legacy USD pilot. Hosted state and other-system worktrees remain unverified.
+The original package was committed as `25b9829`; wave-2 implementation has now been pulled from main at `271add9`. Read the [audit](../plan/10-wave2-platform-audit.md) and [revision handoffs](../plan/11-wave3-revision-handoffs.md). Original module completions are preserved. That sentence's status (CREDIT and Lab as target behavior, a legacy USD pilot) held at `271add9`; the current state is the status line above.
 
 ## Product sequencing
 
 Deliver App's free inference journey while building Lab's provider controls independently. Marlin is the first operational workload. Establish a bounded robotics design-partner trial before committing to a general robotics service; pursue LLM migration where a customer's benchmark and workload demonstrate a benefit. Speech remains deferred. Model optimization and heterogeneous hardware are shared infrastructure investments, evaluated against workload quality and cost, rather than separate customer dashboard requirements.
 
 Longer-term Lab closes the loop: production evidence → curated dataset → evaluation → prompt/harness or model change → comparison → approved deployment → new evidence. Initial Lab integrates externally trained checkpoints and existing annotation pipelines. A complete training service is a later milestone.
+
+## Verification log
+
+- 2026-10-01 (W6 docs-state): the 2026-09-21/22 sequence banners replaced by one dated status line citing `research/plan/25-state-2026-10-01.md`; the wave-2 status sentence marked as of `271add9`; requirements unchanged.
