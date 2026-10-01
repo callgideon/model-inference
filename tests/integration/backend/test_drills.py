@@ -1214,7 +1214,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     bucket's HeadBucket) answer from this stack."""
     from infrx.config import RuntimeMisconfigured, from_env
     from infrx.gateway import app as composition
-    from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+    from infrx.gateway.routes import health, ingress, jobs, models, uploads
     from infrx.observe import route as metrics
     h = stack.pg_jobstore()
     env = stack.pilot_env(h.extra["database"], tmp_path)
@@ -1236,7 +1236,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     assert {module for (_, path), module in served.items()
             if path.startswith("/v1/uploads")} == {uploads.__name__}, served
     assert served[("GET", metrics.PATH)] == metrics.__name__, served
-    assert chat.__name__ not in served.values(), served
-    chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
+    # the legacy route is retired (W6 A4): a legacy-style chat handler, mounted behind its back
+    app.post("/v1/chat/completions")(lambda: {})
     with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
         ingress.assert_route_table(app)

@@ -1007,8 +1007,8 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("e3bm62", "E3B3 dr17: the pilot mounts G4U's uploads router beside the ingress and "
                      "G3's jobs router",
            "apps/infrx-api/infrx/gateway/app.py",
-           "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
-           "ROUTERS = (health, models, ingress, jobs, metrics)",
+           "ROUTERS = (health, models, ingress, uploads, jobs, ",
+           "ROUTERS = (health, models, ingress, jobs, ",
            "tests/integration/backend/test_drills.py", "dr17", layer=2,
            cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
                   "routers",)),
@@ -1073,11 +1073,9 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("e3bm71", "E3B3 review J1 (the reviewer's mutant M): a key conflict is 409 at the "
                      "lookup, before anything is fetched, staged or admitted",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
-           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
-           "        except errors.UnsupportedParameter as refused:",
-           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
-           "        except errors.IdempotencyConflict:\n            return None\n"
-           "        except errors.UnsupportedParameter as refused:",
+           "        found = await _dependency(self.jobs.lookup(org_id, idem))\n",
+           "        try:\n            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+           "        except errors.IdempotencyConflict:\n            return None\n",
            "tests/integration/backend/test_journey.py",
            "backend_journey and text and sync and not resume", layer=2,
            cases=("test_backend_journey[text-sync]",)),

@@ -66,7 +66,7 @@ the unit, not the unit file.
 | Process | Unit (PROPOSED unless noted) | Listens | Owner track | Working paths | Needs persistent EBS |
 |---|---|---|---|---|---|
 | vLLM engine | `marlin2b-vllm.service` (exists) | 127.0.0.1:8000 | W | weights `/opt/dlami/nvme/marlin2b`; torch/compile cache | weights **no** (re-downloadable, instance store is correct); compile cache **yes** → `/var/lib/infrx/vllm-cache` so a stop/start does not recompile |
-| Gateway | `marlin2b-gateway.service` (exists) | 127.0.0.1:8001 | G | usage spill, request logs | **yes** → `/var/lib/infrx/usage/` (today `usage.jsonl` / `usage_failed.jsonl` are on instance store and are lost on stop) |
+| Gateway | `marlin2b-gateway.service` (exists) | 127.0.0.1:8001 | G | usage spill (retired W6 A4, 2026-10-01: no longer written), request logs | **yes** → `/var/lib/infrx/usage/` (today `usage.jsonl` / `usage_failed.jsonl` are on instance store and are lost on stop) |
 | Worker (claim → engine → journal) | `infrx-worker.service` | none | W + Q | lease/journal client only | no (state is in PG) |
 | Preparation / media | `infrx-prepare@1..2.service` or a bounded pool inside the worker; 2 active preparations per host per contracts v1 | none | M | staged payloads, transcodes, media cache | **yes** → `/var/lib/infrx/media/` (immutable staged source must survive a restart until result expiry) |
 | Trace spool writer + shipper | `infrx-trace-shipper.service` | none | T | spool segments, parked files | **yes** → `/var/lib/infrx/traces/` (cap 10 GiB, refuse below 2 GiB free, no copytruncate) |

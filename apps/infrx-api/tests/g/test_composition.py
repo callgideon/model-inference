@@ -22,7 +22,7 @@ from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import ExecutionMode, IndexEvent, JobState, OutboxKind
 from infrx.gateway import pilot
-from infrx.gateway.routes import chat, ingress
+from infrx.gateway.routes import ingress
 from infrx.media.store import InMemoryObjectStore
 from infrx.scheduling.memory import MemoryScheduler
 
@@ -240,7 +240,7 @@ def test_f_base__exactly_one_chat_route_and_it_is_the_ingress():
     ingress.assert_route_table(app)
     legacy = FastAPI()
     legacy.state.runtime = rt = support.runtime(support.settings("dev"))
-    chat.register(legacy, rt)                     # the retired F1 route, then the ingress
+    support.LEGACY_CHAT.register(legacy, rt)      # a legacy-style route, then the ingress
     ingress.register(legacy, rt, support.deps())
     second, _ = support.cutover_app()
 

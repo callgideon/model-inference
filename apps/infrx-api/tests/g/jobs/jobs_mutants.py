@@ -171,11 +171,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if True:\n        return request.payload_digest", MODES_409, DIGEST),
     _m("lookup_conflict_swallowed", "R91/R94: a key conflict is 409 at the lookup, before "
        "anything is fetched, staged or admitted (review ADM-R2-B2)",
-       R, "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
-          "        except errors.UnsupportedParameter as refused:",
-       "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
-       "        except errors.IdempotencyConflict:\n            return None\n"
-       "        except errors.UnsupportedParameter as refused:", MODES_409, CHANGED),
+       R, "        found = await _dependency(self.jobs.lookup(org_id, idem))\n",
+       "        try:\n            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+       "        except errors.IdempotencyConflict:\n            return None\n", MODES_409, CHANGED),
     _m("mode_folded_for_stream", "R94: stream keeps the payload digest as its key's identity "
        "(review ADM-R2-B3)",
        N, "    if request.execution_mode is not ExecutionMode.async_:",

@@ -26,11 +26,11 @@ Valkey's and the engine is reached by the worker (`infrx/worker/`).
 | file | what |
 |---|---|
 | `infrx/gateway/` | the application factory (`uvicorn --factory infrx.gateway.app:create_app`) and routes |
-| `infrx/auth/`, `infrx/media/`, `infrx/usage.py`, `infrx/config.py` | auth cache, safe media fetch and video budget, usage shipping, settings |
+| `infrx/auth/`, `infrx/media/`, `infrx/config.py` | auth cache, safe media fetch and video budget, settings (`infrx/usage.py` retired W6 A4, 2026-10-01) |
 | `infrx/contracts/` | executable contracts v1: records, ports, fixtures, fakes and conformance suites ([README](infrx/contracts/README.md)) |
 | `deploy/install.sh` | idempotent installer, run as root on the box |
 | `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
-| `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
+| ~~`deploy/replay_usage.py`~~ | retired W6 A4 (2026-10-01) with the legacy chat route and its usage spill |
 | `infrx/gateway/routes/models.py` | `/v1/models`: the published projection of what admission enforces (G7; no static document) |
 | `tests/<track>/` | one suite per track (`make api-test`) |
 | `client_example.py` | reference client |
@@ -115,6 +115,10 @@ theoretically possible; pinning the resolved IP is the upgrade.
 `data:` URLs are unchanged: decoded, size-capped, `ffprobe`d, forwarded as-is.
 
 ## Usage ingestion
+
+> **Retired W6 A4 (2026-10-01):** this section describes the legacy chat route's usage
+> spill and replay (`infrx/usage.py`, `deploy/replay_usage.py`), both deleted. Usage is
+> recorded by the metered ingress; kept as history only.
 
 Every request writes its `usage.jsonl` line (durable, unchanged). Authenticated
 requests also queue an `usage_events` row — id = the `Inference-Id` header, so

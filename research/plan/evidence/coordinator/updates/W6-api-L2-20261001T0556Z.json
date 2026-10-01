@@ -1,0 +1,95 @@
+{
+ "task": "W6-api-L2",
+ "slice": "A2, A4, A10, A15 (relay/health/app)",
+ "activity": "fix-round",
+ "head": "cf439301",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-api-L2",
+ "branch": "codex/w6-api-L2",
+ "owned_paths": [
+  "apps/infrx-api/infrx/gateway/routes/relay.py",
+  "apps/infrx-api/infrx/gateway/routes/chat.py",
+  "apps/infrx-api/infrx/gateway/routes/health.py",
+  "apps/infrx-api/infrx/gateway/app.py",
+  "apps/infrx-api/infrx/usage.py",
+  "apps/infrx-api/deploy/replay_usage.py",
+  "apps/infrx-api/infrx/config.py (USAGE_* + timeouts; the brief's settings.py)",
+  "apps/infrx-api/tests/g/"
+ ],
+ "commands": [
+  {
+   "cmd": "INFRX_D_TASK=g7 pytest -q tests/g --ignore=tests/g/test_mutants.py",
+   "exit": 0,
+   "summary": "967 passed, 15 skipped"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=g7 pytest -q tests/g/test_mutants.py",
+   "exit": 0,
+   "summary": "504 passed; 497 mutants, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=g7 pytest -q tests/g/jobs/test_jobs_mutants.py",
+   "exit": 0,
+   "summary": "93 passed, 0 survivors"
+  },
+  {
+   "cmd": "INFRX_D_TASK=g7 pytest -q --ignore=tests/g (api-test minus tests/g)",
+   "exit": 1,
+   "summary": "45 failed (1 test_install + 43 tests/i mutant baseline cascade = WR-L2-1; 1 packaging schema, fixed in cf439301), 5946 passed"
+  },
+  {
+   "cmd": "composed WR-L2-1: pytest tests/i/test_install.py tests/i/test_mutants.py tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "125 passed"
+  },
+  {
+   "cmd": "ruff check (touched files)",
+   "exit": 0,
+   "summary": "clean"
+  },
+  {
+   "cmd": "git apply --check research/plan/evidence/w6/api-L2-WR-L2-1-2.patch",
+   "exit": 0,
+   "summary": "applies on the tip"
+  },
+  {
+   "cmd": "composed WR-L2-1/-2: INFRX_D_TASK=g7 pytest -q tests/i/test_install.py tests/i/test_packaging.py",
+   "exit": 0,
+   "summary": "66 passed"
+  },
+  {
+   "cmd": "composed: INFRX_MUTANTS=all INFRX_D_TASK=g7 pytest -q tests/i/test_mutants.py",
+   "exit": 0,
+   "summary": "470 passed, 4 skipped"
+  },
+  {
+   "cmd": "composed: pytest tests/integration/test_run.py -k every_mutant_anchor",
+   "exit": 1,
+   "summary": "stale only e3bm62 (pre-existing, not this lane's); e3bm71 anchored"
+  },
+  {
+   "cmd": "composed: pytest tests/integration/backend/test_drills.py -k 'dr16 or dr17'",
+   "exit": 0,
+   "summary": "1 passed, 1 skipped"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "fix round done; remaining = coordinator applies api-L2-WR-L2-1-2.patch at merge and reruns tests/i + api-mutants",
+  "at": "2026-10-01T07:30Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-L2-1 + WR-L2-2: git apply research/plan/evidence/w6/api-L2-WR-L2-1-2.patch in the merge commit (required for green; composed proof in the evidence Fix round)",
+  "WR-L2-3 preflight/install/service/test_envcheck retire USAGE_LOG/USAGE_FAILED_LOG with the box env file",
+  "WR-L2-4 api-L1 + traces/ship use the A10 names",
+  "WR-L2-5 observe inflight gauges",
+  "WR-L2-6 docs-state apps/infrx-api/README.md usage rows"
+ ],
+ "evidence": [
+  "research/plan/evidence/w6/api-L2-cf43930.md",
+  "research/plan/evidence/w6/api-L2-WR-L2-1-2.patch"
+ ]
+}

@@ -34,6 +34,12 @@ def refusing_host() -> httpx.MockTransport:
     return httpx.MockTransport(lambda request: httpx.Response(403))
 
 
+async def missed(org_id, idem):
+    """A lookup that has not seen the key yet: a same-key acceptance committed after it ran,
+    so admission's own replay answer is what this request gets."""
+    return None
+
+
 def payloads(world) -> list[str]:
     return [key for key in world.objects.objects if key.startswith("payloads/")]
 
@@ -93,17 +99,16 @@ def test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expir
     assert payloads(world) == staged and len(world.jobs.jobs) == 1
 
 
-@pytest.mark.parametrize("lookup", ["served", "refused_until_d5"])
+@pytest.mark.parametrize("lookup", ["served", "missed"])
 def test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked(lookup):
     """A settled job's replay answers what was committed, whatever changed since: here the
     deployment's approved card rotated after the first answer. Nothing of acceptance is
     re-run on a terminal job - through R91's lookup, and through admission's own replay
-    answer while the PostgreSQL store refuses the lookup (`param="lookup"`, until D5)."""
+    answer when the lookup missed the key (a same-key acceptance that committed between
+    this request's lookup and its admit)."""
     world = rs.World(regime=CREDIT)
-    if lookup == "refused_until_d5":
-        async def refused(org_id, idem):
-            raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
-        world.jobs.lookup = refused
+    if lookup == "missed":
+        world.jobs.lookup = missed
     world.during.append(lambda: world.clock.advance(3_600))
     first = rs.run(rs.call(world.app, rs.body(), key="k-5"))
     assert (first.status, first.json()["error"]["code"]) == (504, "deadline_exceeded")
@@ -112,6 +117,24 @@ def test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked(lo
     assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
     assert (again.status, again.json()["error"]["code"]) == (504, "deadline_exceeded")
     assert rs.state_of(again.json()["error"]) == "cancelled" and len(world.jobs.jobs) == 1
+
+
+def test_dur_admit__a_store_refusal_of_the_lookup_is_never_swallowed():
+    """W6 A2: the D5-era interim (a store that could not look up, `param="lookup"`, answered
+    by admission instead) is retired with migration 0018 - no store raises it. A store
+    refusal of the lookup is now the caller's answer like any other typed refusal: nothing
+    is admitted, prepared or charged behind it. Oracle: the interim's except-branch,
+    restored, admits the job."""
+    world = rs.World(regime=CREDIT)
+
+    async def refused(org_id, idem):
+        raise errors.UnsupportedParameter("this store cannot look up", param="lookup")
+
+    world.jobs.lookup = refused
+    world.during.append(lambda: world.clock.advance(3_600))    # a swallowed refusal ends
+    reply = rs.run(rs.call(world.app, rs.body(), key="k-a2"))
+    assert (reply.status, reply.json()["error"]["code"]) == (400, "unsupported_parameter")
+    assert world.jobs.jobs == {}
 
 
 @pytest.mark.parametrize("first,then", [(CREDIT, rs.LEGACY), (rs.LEGACY, CREDIT)])
@@ -186,21 +209,19 @@ def test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_re
 
 
 @pytest.mark.parametrize("regime", [rs.LEGACY, CREDIT])
-@pytest.mark.parametrize("lookup", ["served", "refused_until_d5"])
+@pytest.mark.parametrize("lookup", ["served", "missed"])
 def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry(lookup, regime):
     """G3's DUR-ADMIT probe (G3 request (b)2): the admission committed and the answer was
     lost before the staged refs were bound to the job. The same-key retry finds the job in
     flight and attaches the refs the first acceptance staged (review r2 money-N1), so the
     job is prepared and answered - rather than ending unbilled at its preparation deadline.
-    Through R91's lookup, and through admission's replay answer while the store refuses
-    the lookup (until D5, when the retry re-prepares before admission says "replay"); in
-    both regimes, the CREDIT one to a settled 200 (review r2 money-N5)."""
+    Through R91's lookup, and through admission's replay answer when the lookup missed the
+    key (the retry re-prepares before admission says "replay"); in both regimes, the CREDIT
+    one to a settled 200 (review r2 money-N5)."""
     world = rs.World(regime=regime)
     staged = staging(world)
-    if lookup == "refused_until_d5":
-        async def refused(org_id, idem):
-            raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
-        world.jobs.lookup = refused
+    if lookup == "missed":
+        world.jobs.lookup = missed
     world.failures.crash_after_commit("admit")
     first = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-9"))
     assert (first.status, first.json()["error"]["code"]) == (503, "dependency_unavailable")

@@ -8,11 +8,8 @@ Two app shapes, both built without importing the legacy `gateway` shim (r1 R48):
 """
 from __future__ import annotations
 
-import atexit
 import dataclasses
-import pathlib
-import shutil
-import tempfile
+import types
 
 import httpx
 from fastapi import FastAPI
@@ -47,12 +44,18 @@ RAW = {**AUTH, "content-type": "application/json"}
 PUBLIC_MODEL = "nemostation/marlin-2b"
 MODEL_REVISION = "nemostation/marlin-2b@2026-09-01"
 BODY = {"model": PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
-# Per run, and removed when the process exits: a bare `mkdtemp` left one directory
-# behind per run *and per mutant subprocess* - 345 of them before this line. The legacy
-# chat route does write this file, so the directory has to exist.
-_USAGE_DIR = tempfile.mkdtemp(prefix="infrx-g1-")
-atexit.register(shutil.rmtree, _USAGE_DIR, ignore_errors=True)
-USAGE_LOG = str(pathlib.Path(_USAGE_DIR) / "usage.jsonl")
+
+
+def _legacy_chat_register(app, rt):
+    @app.post(CHAT_PATH)
+    async def legacy_chat():
+        return {}
+
+
+# W6 A4: the legacy F1 chat route is retired; the cases proving that no second handler -
+# that one included - may serve the chat path mount this stand-in router module instead.
+LEGACY_CHAT = types.SimpleNamespace(__name__="tests.g.support.legacy_chat",
+                                    register=_legacy_chat_register)
 
 
 def supabase(rows=(ROW,), down=False, seen=None):
@@ -87,7 +90,7 @@ def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase
     pilot = {"infrx_mode": mode, "database_url": "postgresql:///infrx_g1",
              **{k: v for k, v in overrides.items() if k in PILOT_FIELDS}}
     overrides.setdefault("deployment", BUILD)
-    return Settings(usage_log=USAGE_LOG, legacy_key=legacy_key, supabase_url=supabase_url,
+    return Settings(legacy_key=legacy_key, supabase_url=supabase_url,
                     supabase_key=supabase_key, pilot=DEFAULTS.replace(**pilot),
                     **{k: v for k, v in overrides.items() if k not in PILOT_FIELDS})
 

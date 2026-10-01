@@ -1,8 +1,14 @@
 """Composition root: create_app() builds one independent gateway.
 
-Everything mutable lives on the Runtime — clients, settings, the in-flight
-counter, the key caches, the usage queue — so two apps in one process share
-nothing and nothing is created at import time.
+Everything mutable lives on the Runtime — settings, the engine client (`/health`), the
+Supabase client and the key caches (auth/keys.py), and the pilot composition
+(`pilot.build_ingress_deps`) — so two apps in one process share nothing and nothing is
+created at import time.
+
+W6 A4 retired the legacy F1 chat route (routes/chat.py), the usage/spill queue it fed
+(infrx/usage.py, deploy/replay_usage.py, USAGE_LOG/USAGE_FAILED_LOG) and the in-flight
+counter only it moved (`Runtime.inflight/usage/media`); `/v1/chat/completions` is the
+metered ingress's alone (`ingress.assert_route_table`).
 """
 import time
 
@@ -10,9 +16,8 @@ import httpx
 from fastapi import FastAPI
 
 from ..auth.keys import Auth
-from ..config import from_env, validate_runtime
-from ..media.video import Media
-from ..usage import Usage
+from ..config import (SUPABASE_CONNECT_S, SUPABASE_TIMEOUT_S, UPSTREAM_CONNECT_S,
+                      UPSTREAM_TIMEOUT_S, from_env, validate_runtime)
 from . import pilot
 from ..observe import route as metrics
 from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
@@ -38,11 +43,13 @@ ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_c
 
 
 def upstream_client(settings):
-    return httpx.AsyncClient(base_url=settings.upstream, timeout=httpx.Timeout(600, connect=10))
+    return httpx.AsyncClient(base_url=settings.upstream,
+                             timeout=httpx.Timeout(UPSTREAM_TIMEOUT_S, connect=UPSTREAM_CONNECT_S))
 
 
 def supabase_client(settings):
-    return httpx.AsyncClient(base_url=f"{settings.supabase_url}/rest/v1", timeout=httpx.Timeout(5, connect=2),
+    return httpx.AsyncClient(base_url=f"{settings.supabase_url}/rest/v1",
+                             timeout=httpx.Timeout(SUPABASE_TIMEOUT_S, connect=SUPABASE_CONNECT_S),
                              headers={"apikey": settings.supabase_key,
                                       "Authorization": f"Bearer {settings.supabase_key}",
                                       "Content-Type": "application/json"})
@@ -59,10 +66,7 @@ class Runtime:
         self.mode = "legacy"            # r1 R44; create_app replaces it with the validated mode
         self.client = upstream_client(settings) if client is None else client
         self.sb = supabase_client(settings) if sb is None else sb
-        self.inflight = 0
         self.auth = Auth(self)
-        self.usage = Usage(self)
-        self.media = Media(self)
         self.app = None
 
 
