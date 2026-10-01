@@ -29,7 +29,10 @@ class ConsumerClosureTests(unittest.TestCase):
         self.assertTrue(any('omits corrective tasks: M6' in e for e in self.errors()))
 
     def test_app_cannot_dispatch_early(self):
-        del self.tasks['A2']['dispatch_after_gate']
+        # Current model (2026-09-25): A2 carries no dispatch_after_gate; the user's recorded override lifts it.
+        self.assertFalse(any('BACKEND-READY: A2' in e for e in self.errors()))
+        self.tasks['A2'].pop('dispatch_after_gate', None)
+        del self.tasks['A2']['dispatch_override']  # neither the gate nor a user override: dispatch must wait
         self.assertTrue(any('BACKEND-READY: A2' in e for e in self.errors()))
 
     def test_absent_brief_is_rejected(self):

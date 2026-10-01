@@ -449,6 +449,31 @@ class Gates(Base):
         self.assertTrue(any("I3 dispatches only after BACKEND-READY" in x for x in self.model().errors))
 
 
+class GateRecords(Base):
+    """WR-PL-1: local gate records (R222) render in both outputs, need a class and rerun on every non-PASS cell, and never forecast."""
+    REC = {"E4-ON": {"manifest_gate": None, "candidate": {"source": "5bb93621"}, "decision": "accepted", "ruling": "R262",
+                     "cells": [{"id": "o01", "verdict": "PASS"}, {"id": "o03", "verdict": "NOT RUN", "class": "P-11", "rerun": "make lab-local"}]}}
+
+    def test_records_render_and_do_not_forecast(self):
+        before = self.model().eta  # the baseline ETA set, taken BEFORE gate_records exist
+        self.state["gate_records"] = copy.deepcopy(self.REC)
+        M = self.model()
+        self.assertEqual(M.errors, [])
+        self.assertIn("Local gate records (R222)", P.render_html(M))
+        self.assertIn("o03 NOT RUN [P-11]", P.render_md(M))
+        self.assertEqual(set(M.eta), set(before))
+        for k in before:
+            self.assertEqual(M.eta[k], before[k], k)  # per row: a record never moves a forecast
+
+    def test_a_not_run_cell_without_class_or_rerun_is_an_error(self):
+        rec = copy.deepcopy(self.REC)
+        del rec["E4-ON"]["cells"][1]["rerun"]
+        self.state["gate_records"] = rec
+        self.assertTrue(any("without its class and rerun" in x for x in self.model().errors))
+        rec["E4-ON"]["cells"][1].update(rerun="make lab-local", verdict="GREEN")
+        self.assertTrue(any("not in" in x for x in self.model().errors))
+
+
 class Eta(Base):
     def test_open_input_on_e4c_path_gives_no_finite_eta(self):
         self.estimate_everything()
@@ -689,6 +714,13 @@ class Writes(Base):
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["state.json"])  # no .tmp, no .lock
         P.write_state(self.path, {"revision": 3, "x": 2}, 3)
         self.assertEqual(json.loads(self.path.read_text()), {"revision": 4, "x": 2})
+
+    def test_committed_overlay_round_trips_byte_identical(self):
+        committed = P.STATE.read_text(encoding="utf-8")
+        rev = json.loads(committed)["revision"]
+        self.path.write_text(committed, encoding="utf-8")
+        P.write_state(self.path, json.loads(committed), rev)  # load -> write: only the revision line moves
+        self.assertEqual(self.path.read_text(encoding="utf-8"), committed.replace(f'\n "revision": {rev},\n', f'\n "revision": {rev + 1},\n', 1))
 
     def test_revision_conflict_and_second_writer_are_refused(self):
         with self.assertRaises(SystemExit):

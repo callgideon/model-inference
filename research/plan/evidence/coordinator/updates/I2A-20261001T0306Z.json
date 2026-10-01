@@ -1,0 +1,8 @@
+{
+  "task": "I2A",
+  "lane": "I2A",
+  "activity": "review",
+  "at": "2026-10-01T03:06:16Z",
+  "owned_paths": ["apps/app/next.config.ts (deployment config)", "apps/app/tests/i2a/", "infra/app/"],
+  "source": "W6 plan-ledger (audit INT-11): disjoint owned paths for the window-bound App lanes (E4C keeps tests/integration/backend/), each inside the task's manifest owned_paths; activity unchanged"
+}

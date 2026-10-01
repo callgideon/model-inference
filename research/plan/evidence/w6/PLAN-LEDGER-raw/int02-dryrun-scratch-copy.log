@@ -1,0 +1,118 @@
+scratch copy at 2026-10-01T03:02:23Z, overlay rev 346: 113 un-ingested legacy files
+Counter({'rejected': 110, 'applied': 3})
+Counter({'impossible transition queued → review': 80, 'malformed': 5, 'applied': 3, "unknown activity 'fix-round'": 2, 'stale': 2, "unknown task ID 'COMPOSITION-2'": 2, "unknown task ID 'LSQ5'": 2, "unknown task ID 'LAB-E2E'": 2, "unknown activity 'fix round'": 1, "unknown task ID 'COMPOSITION'": 1, "unknown task ID 'WR-C3L-2'": 1, 'lane lab-sql-integration belongs to R1, not R2': 1, 'lane lab-sql-integration belongs to R1, not R3': 1, 'lane lab-sql-integration belongs to R1, not J2': 1, "unknown task ID 'TRACKER-WAVES'": 1, "unknown task ID 'E3L-F1'": 1, "unknown task ID 'COMPOSITION-3'": 1, "unknown task ID 'LSQ6'": 1, "unknown task ID 'COMPOSITION-4'": 1, "unknown task ID 'COMPOSITION-6'": 1, "unknown task ID 'I2L-OBS'": 1, "unknown task ID 'COMPOSITION-7'": 1, "unknown task ID 'COMPOSITION-5'": 1})
+lanes the apply would CREATE (phantoms of hand-merged W5 lanes): [('lab-sql-integration', 'blocked'), ('lab-improve-2', 'review')]
+review_queue after: ['lab-improve-2']
+  REJECTED C2-20260927T2100Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R1-20260927T2300Z.json: unknown activity 'fix round'
+  REJECTED G4T-20260927T2100Z.json: unknown activity 'fix-round'
+  REJECTED COMPOSITION-20260927T2310Z.json: unknown task ID 'COMPOSITION'
+  REJECTED J3-20260928T0831Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P2-20260928T0831Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED WR-C3L-2-20260928T0831Z.json: unknown task ID 'WR-C3L-2'
+  REJECTED B4-20260928T1030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P4-20260928T1030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R4-20260928T1030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED V1M-20260928T1123Z.json: stale: at 2026-09-28T11:23:00Z is not newer than lane V1M state 2026-09-28T21:30:17Z
+  REJECTED B1-20260928T1130Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED B3-20260928T1130Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED C2-20260928T1130Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  applied R1-20260928T1130Z.json: lab-sql-integration queued → blocked; head a6b4bbb; estimate likely unknown → 1 h (one review round (D10-0025 1/2/5 analogue) plus the merge-time rerun; this lane's swa
+  REJECTED R2-20260928T1130Z.json: lane lab-sql-integration belongs to R1, not R2
+  REJECTED R3-20260928T1130Z.json: lane lab-sql-integration belongs to R1, not R3
+  REJECTED J2-20260928T1130Z.json: lane lab-sql-integration belongs to R1, not J2
+  REJECTED D8-20260928T1310Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED D8-20260928T1530Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED B4-20260928T1620Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P4-20260928T1620Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R4-20260928T1620Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260928T1907Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260928T2000Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED L3-20260928T2029Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED B3-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED C2-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED J3-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED N3-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P1-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P2-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P3-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R1-20260928T2030Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED COMPOSITION-2-20260928T2040Z.json: unknown task ID 'COMPOSITION-2'
+  REJECTED I5-20260928T2040Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I6-20260928T2040Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I7-20260928T2040Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED COMPOSITION-2-20260928T2059Z.json: unknown task ID 'COMPOSITION-2'
+  REJECTED P4-20260928T2100Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED TRACKER-WAVES-20260928T2052Z.json: unknown task ID 'TRACKER-WAVES'
+  REJECTED E3L-20260928T2316Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I8-20260928T2337Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260928T2347Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260929T0000Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LSQ5-20260929T0030Z.json: unknown task ID 'LSQ5'
+  REJECTED N3-20260928T2335Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E3L-F1-20260929T0136Z.json: unknown task ID 'E3L-F1'
+  REJECTED COMPOSITION-3-20260929T0110Z.json: unknown task ID 'COMPOSITION-3'
+  REJECTED J3-20260929T0110Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED P2-20260929T0110Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T0230Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LSQ5-20260929T0230Z.json: unknown task ID 'LSQ5'
+  REJECTED LSQ6-20260929T0322Z.json: unknown task ID 'LSQ6'
+  REJECTED E8L-20260929T0440Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED COMPOSITION-4-20260929T0540Z.json: unknown task ID 'COMPOSITION-4'
+  REJECTED E7L-20260929T0540Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E3L-20260929T0632Z.json: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+  REJECTED E3L-20260929T0730Z.json: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+  REJECTED L4-20260929T0730Z.json: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+  REJECTED E8L-20260929T0852Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I8-20260929T0917Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I2L-20260929T0950Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E3L-20260929T1019Z.json: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+  REJECTED L3-20260929T1019Z.json: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']
+  REJECTED E5L-20260929T1040Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E5L-20260929T1214Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E6L-20260929T1214Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260929T1214Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T1214Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LAB-E2E-20260929T1214Z.json: unknown task ID 'LAB-E2E'
+  REJECTED E8L-20260929T1215Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E6L-20260929T1217Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I8-20260929T1245Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I2L-20260929T1304Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E5L-20260929T1308Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E6L-20260929T1308Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260929T1308Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T1308Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LAB-E2E-20260929T1308Z.json: unknown task ID 'LAB-E2E'
+  REJECTED COMPOSITION-6-20260929T1315Z.json: unknown task ID 'COMPOSITION-6'
+  REJECTED E6L-20260929T1320Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E5L-20260929T1500Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  applied E7L-20260929T1500Z.json: lab-improve-2 queued → running; head 8609d0a2; estimate likely unknown → 4 h (this item took about 1h; WR-E7L-4 (rebind lab_world.py's stand-ins to D8's real PgLabelLo
+  REJECTED I2L-20260929T1500Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T1625Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R2-LAB-LIVE-20260929T1545Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LAB-CAPTURE-20260929T1702Z.json: unknown task ID 'I2L-OBS'
+  REJECTED L3-20260929T1712Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T1715Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  applied E7L-20260929T1730Z.json: lab-improve-2 running → review; head f4f74e04; estimate likely 4 → 1 h (all three brief items delivered and verified live; what remains for an accepted E7L is unchange
+  REJECTED L3-20260929T1800Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED COMPOSITION-7-20260929T1836Z.json: unknown task ID 'COMPOSITION-7'
+  REJECTED E8L-20260929T1900Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E7L-20260929T2000Z.json: unknown activity 'fix-round'
+  REJECTED E5L-20260929T2045Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I7-LAB-C7-GAPS-20260929T2108Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R2-LAB-C7-GAPS-20260929T2108Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED KNOWN-GOOD-REPROOF-3-20260929T2118Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I7-LAB-C7-GAPS-20260929T2135Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED R2-LAB-C7-GAPS-20260929T2135Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I2L-20260929T2215Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED L3-20260929T2301Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED T2-LAB-CAPTURE-2-20260929T2316Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED COMPOSITION-5-20260929T2330Z.json: unknown task ID 'COMPOSITION-5'
+  REJECTED E6L-20260929T2330Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T2330Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED I2L-20260929T2308Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E8L-20260929T2355Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED KNOWN-GOOD-REPROOF-4-20260930T0122Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED E5L-20260930T0155Z.json: impossible transition queued → review: work that never ran cannot be in review, integration or complete
+  REJECTED LAB-R3-IDENTITIES-20260930T0214Z.json: stale: at 2026-09-30T02:14:00Z is not newer than lane W5-LAB-R3-IDENTITIES state 2026-09-30T02:57:01Z

@@ -1,0 +1,9 @@
+WARNING: stale estimate: lane I2A estimated at 2026-09-26T00:33:19Z (older than 6 h)
+WARNING: stale estimate: lane E3A estimated at 2026-09-26T22:00:00Z (older than 6 h)
+WARNING: stale estimate: lane I3 estimated at 2026-09-26T02:11:40Z (older than 6 h)
+WARNING: stale estimate: lane W5-EVAL-RUNNER estimated at 2026-09-27T16:22:00Z (older than 6 h)
+WARNING: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
+WARNING: overlapping writers: E4C (queued) and I3 (queued) both own tests/integration/backend/ / tests/integration/
+WARNING: overlapping writers: I2A (review) and E3A (queued) both own apps/app/ / apps/app/tests/
+WARNING: overlapping writers: E3A (queued) and I3 (queued) both own tests/integration/ / tests/integration/
+PASS: 133 manifest tasks rendered; 230 lanes; gates BACKEND-LOCAL ACCEPTED, BACKEND-READY PENDING, APP-LOCAL PENDING, APP-PILOT PENDING; 0 error(s), 8 warning(s)

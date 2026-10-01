@@ -1,0 +1,72 @@
+{
+  "task": "W6-PLAN-LEDGER",
+  "lane": "W6-PLAN-LEDGER",
+  "slice": "W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row",
+  "activity": "review",
+  "at": "2026-10-01T03:22:20Z",
+  "head": "ef222800",
+  "base": "08983639",
+  "branch": "codex/w6-plan-ledger",
+  "worktree": ".claude/worktrees/codex-w6-plan-ledger",
+  "owned_paths": [
+    "research/plan/tasks.json",
+    "research/plan/evidence/coordinator/progress-state.json",
+    "research/plan/evidence/coordinator/PROGRESS.md",
+    "research/plan/evidence/coordinator/progress.html",
+    "research/plan/evidence/coordinator/updates/ (ingestion bookkeeping only)",
+    "research/plan/15-pending-inputs.md (P-08 row + log line)",
+    "research/plan/consumer-v1/10-carried-work-register.md",
+    "apps/app/supabase/migrations/README.md",
+    "research/plan/evidence/coordinator/COMPOSITION-7-252b65e.md (WR-LW9-5 line + log line)"
+  ],
+  "commands": [
+    {
+      "cmd": "git merge-tree --write-tree origin/claude/consumer-v1 271ec1a0",
+      "exit": 1,
+      "summary": "red: CONFLICT in progress-state.json, PROGRESS.md, progress.html (1-PL-1)"
+    },
+    {
+      "cmd": "git merge origin/claude/consumer-v1 (44a41acb, then 50d2b232) + overlay resolution (PLAN-LEDGER-raw/overlay_merge.py)",
+      "exit": 0,
+      "summary": "lane's W6-PLAN-LEDGER record replaces the stub; the other W6 lanes and lab-A accept kept as on the tip; one lane id each; rev 353 -> 354 via apply-updates"
+    },
+    {
+      "cmd": "python3 research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
+      "exit": 0,
+      "summary": "0 failing items, incl. 5 new 1-PL-1 checks (clean merge-tree into the tip, unique lane ids, every tip lane kept, own record, revision above tip)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/progress.py check",
+      "exit": 0,
+      "summary": "0 errors, 39 warnings: 3 stale (I2A/E3A/I3) + 36 overlapping writers among the coordinator's W6 stubs (copied LAB-R3 owned_paths); none names W6-PLAN-LEDGER"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.3,
+    "pessimistic_h": 1,
+    "confidence": "medium",
+    "at": "2026-10-01T03:22:20Z",
+    "basis": "fix round done; the lane now merges into the tip without conflict; remaining = coordinator merge + WR-PL-1 (~0.3 h)"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-PL-1 (coordinator): apply research/plan/evidence/w6/PLAN-LEDGER-raw/WR-PL-1-progress-gate-records.patch - progress.py validates and renders overlay gate_records (+2 GateRecords cases)",
+    "WR-PL-2 (coordinator): consumer-v1/README.md index line + log line for 10-carried-work-register.md",
+    "WR-PL-3 (infra-libs + coordinator): comment/docstring fixes at tests/i/lab/test_lab_rollout_steps.py:416 and infra/rollout/hosted-migrate.sh:35 (hosted at 0059; next window 0060+)",
+    "WR-PL-5 (coordinator): correct the 7 W6 stubs' owned_paths (copied from LAB-R3: apps/infrx-api/infrx/rollouts/optimization/, pilot.py, ...) to each lane's own paths; they cause the 36 overlapping-writer warnings"
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/PLAN-LEDGER-77739a3.md",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
+    "research/plan/consumer-v1/10-carried-work-register.md",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/fix-red-merge-tree-271ec1a0.log",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/fix-oracle.log",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/overlay_merge.py"
+  ]
+}

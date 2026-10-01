@@ -116,7 +116,7 @@ This is the E6L-J11 'Carried' diff, plus one correction.
 ## Ruling proposals (unnumbered; rulings run through R249)
 
 1. **An operator's expansion is decided on a fresh verdict, in one CAS.** `rollout decide --approve` of an `expand` proposal evaluates R2 at decide time, over the plan stored beside the release (D9's digest), D9's Live and its B2 report (R242). Only an `expand` verdict is decided, through 0043 at the proposal's fence, with R2's `lab.rollout_decision.1` `expand` carrying the verdict's evidence refs. `Controller.approve` is not called. A hold, a rollback verdict, a unit refusal, nothing assigned, or a missing plan refuses by name, and the proposal stays pending.
-2. **The release page's progress is D9's Live.** `/lab/v1/releases` `progress` is `PgReleaseStore.live(policy_ref)` for every shown release, and null only while nothing is assigned. Its spend is the candidate arm's (R246). `assignments` is empty until a per-serving tally is read, and is never invented.
+2. **The release page's progress is D9's Live.** `/lab/v1/releases` `progress` is `PgReleaseStore.live(policy_ref)` for every shown release, and null only while nothing is assigned. Its spend is the candidate arm's (R246). `assignments` is D9's per-(serving, pin) tally over terminal jobs (0058, WR-C7-TALLY), and is never invented.
 3. **A failed Lab eval attempt stores its reason as 0034's error code.** B1 passes every failed attempt's reason to D7, lower-cased to 0034's form. R239's two clip refusals are named `invalid_request:media_foreign` / `invalid_request:video_over_cap` in the run report and on the attempt row. Any other refusal keeps its bare code.
 
 ## Open issues
@@ -131,3 +131,4 @@ This is the E6L-J11 'Carried' diff, plus one correction.
 - Basis: one verify/fix round on a finished lane (47-234 min per session-03). WR-C7-K10 is lab-rollout-6's (~0.5 h plus a k10 rerun). WR-C7-TALLY is a small lab-sql slice (~2-4 h, outside this estimate).
 
 - 2026-09-29: composition-7 lane evidence (WR-LIVE-DECIDE, WR-LIVE-PAGE, WR-LR5-3, WR-LEM-R3); E4 2831/0 on p3; local only.
+- 2026-10-01: WR-LW9-5 applied by W6 plan-ledger (audit INT-10): item 2's `assignments` sentence now names D9's per-(serving, pin) tally over terminal jobs (0058, WR-C7-TALLY), as requested at evidence/l/LAB-SQL-LW9-751ff6a.md:264; nothing else changed.

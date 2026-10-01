@@ -1,0 +1,18 @@
+93dd14c5b0b2ae25d3d2a1856d41078de258bce2
+100644 3458f0383804ce068deeb59871a557a2ea086dae 1	research/plan/evidence/coordinator/PROGRESS.md
+100644 1574f98c26f7a748dc6ba21c44741a5556859287 2	research/plan/evidence/coordinator/PROGRESS.md
+100644 1bae9d16aabcbf0e033cacad2e398d7e99fbd067 3	research/plan/evidence/coordinator/PROGRESS.md
+100644 2f1bf90143e80e3e82b73e3ee045adebfe60ffb8 1	research/plan/evidence/coordinator/progress-state.json
+100644 63b662c8c5972400c4c17f7eed0a6ce605ffc48d 2	research/plan/evidence/coordinator/progress-state.json
+100644 0860c2cfca43300718047d29fb5201f5913461dc 3	research/plan/evidence/coordinator/progress-state.json
+100644 04c2a46a20a22d6b8fb0d0cd8aab777eebd99171 1	research/plan/evidence/coordinator/progress.html
+100644 3038618b676763423b218d79324b1a25ed082fd1 2	research/plan/evidence/coordinator/progress.html
+100644 121b82e1bb7df6655a1b7a3c4d70a09f1c3c8697 3	research/plan/evidence/coordinator/progress.html
+
+Auto-merging research/plan/evidence/coordinator/PROGRESS.md
+CONFLICT (content): Merge conflict in research/plan/evidence/coordinator/PROGRESS.md
+Auto-merging research/plan/evidence/coordinator/progress-state.json
+CONFLICT (content): Merge conflict in research/plan/evidence/coordinator/progress-state.json
+Auto-merging research/plan/evidence/coordinator/progress.html
+CONFLICT (content): Merge conflict in research/plan/evidence/coordinator/progress.html
+exit 1
