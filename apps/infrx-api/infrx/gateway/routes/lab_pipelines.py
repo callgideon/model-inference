@@ -57,6 +57,7 @@ from ...datasets.versions import MAX_EXPORT_TTL_S
 from ...judge.cost import JUDGE_MODE_LIVE, worst_case
 from ...judge.dryrun import MAX_CANDIDATES
 from ...judge.submit import require_own_payer
+from ...lab.time import iso_z
 from ...pipelines import annotations as p1
 from ...pipelines import teachers as p2
 from ...pipelines import training as p3
@@ -516,7 +517,7 @@ async def approve_teachers(x: LabPipelines, who, batch_id: str) -> dict[str, Any
     if wiring.settings.judge_mode != JUDGE_MODE_LIVE:
         raise errors.DependencyUnavailable("live teacher submission is off")
     await objects.put_if_absent(_batch_key(provider, batch_id, "approval.json"), lab.canonical({
-        "approved_by": who.user_id, "approved_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}),
+        "approved_by": who.user_id, "approved_at": iso_z(now)}),
         "application/json")
     await p2.run_batch(batch, wiring=wiring)
     return await _teacher_batch(x, provider, stored)

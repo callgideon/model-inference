@@ -53,6 +53,7 @@ from ...contracts.v2.records import ROLE_CAPABILITIES
 from ...contracts.v2.records import ProviderCapability as Cap
 from ...evaluation import checkpoints, runner
 from ...evaluation.reports import Protocol as ComparisonProtocol
+from ...lab.time import iso_z
 from .. import lab_auth
 from . import intake
 from .lab_control import Actor
@@ -224,7 +225,7 @@ async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any
     store = x.port("store")
     now = await x.access.store.db_now()
     row = await x.port("experiments").put(who.provider_org_id, {
-        "experiment_id": wanted.experiment_id, "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "experiment_id": wanted.experiment_id, "created_at": iso_z(now),
         "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None})
     for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's (422)
         await held(runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,

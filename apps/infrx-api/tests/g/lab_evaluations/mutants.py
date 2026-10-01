@@ -100,7 +100,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "evaluator=spec, access=x.access, user_id=who.provider_org_id,", LAUNCH),
     _m("created_at_not_the_experiments", "both runs carry the experiment's first created_at",
        "                                                     row[\"created_at\"]),",
-       "                                                     now.strftime(\"%Y-%m-%dT%H:%M:%SZ\")),",
+       "                                                     iso_z(now)),",
        RESUME),
     _m("half_launch_listed", "an experiment without both D7 runs is not listed",
        "    if None in runs:\n        return None", "    if False:\n        return None", RESUME),

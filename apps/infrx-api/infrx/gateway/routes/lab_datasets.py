@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...contracts import errors
 from ...datasets import acting_provider, imports, lineage, versions
+from ...lab.time import iso_z
 from .. import lab_auth
 from . import intake
 
@@ -187,7 +188,7 @@ def router(*, access, store, objects, user_of, read, clock=lambda: datetime.now(
             derived = await versions.derive(
                 store, objects, provider_org_id=provider, actor=user,
                 dataset_id=body["dataset_id"], version=body["version"],
-                created_at=clock().strftime("%Y-%m-%dT%H:%M:%SZ"), base=body.get("base"),
+                created_at=iso_z(clock()), base=body.get("base"),
                 add=body.get("add", []), now=clock(), policy=versions.SplitPolicy(
                     seed=policy["seed"], train_bp=policy["train_bp"],
                     validation_bp=policy["validation_bp"]))
