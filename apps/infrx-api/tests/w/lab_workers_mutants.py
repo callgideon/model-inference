@@ -500,7 +500,7 @@ MUTANTS: tuple[Mutant, ...] = (
        TEACHER, file=LC),
     _m("lw_teacher_log_off_the_pool", "P1's label log is on the role's database",
        "labels=p1.import_labels, log=PgLabelLog(connect),",
-       'labels=p1.import_labels, log=PgLabelLog(connector("")),', TEACHER, file=LC),
+       "labels=p1.import_labels, log=PgLabelLog(None),", TEACHER, file=LC),
     _m("lw_teacher_redaction_dropped", "the teacher sees content only through N2's redaction",
        "                         redact=redact)", "                         redact=str)",
        TEACHER, file=LC),
