@@ -22,7 +22,7 @@ say "Lab control OFF"
 site=$R/etc/caddy/lab/lab-control.caddy
 if [ -f "$site" ]; then
   rm -f "${site:?}"
-  docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock
+  caddy_reload
   say "Lab site removed; edge reloaded"
 fi
 say "hosted Lab migrations are not reverted (additive, R151): see the runbook's rollback notes"

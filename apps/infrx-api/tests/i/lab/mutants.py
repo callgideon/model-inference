@@ -144,6 +144,7 @@ MUTANTS: tuple[Mutant, ...] = (
 STEPS_FILE = "tests/i/lab/test_lab_rollout_steps.py"
 LR = "../../infra/lab/rollout/"
 LIB, GATE = LR + "lib.sh", LR + "lab-migrate.sh"
+BOX = "../../infra/rollout/box-lib.sh"     # W6: the generic half of lib.sh (at_release, stage_env, place, ...)
 ST = LR + "steps/"
 STRICT = "test_ldp__every_step_is_strict_bash_on_the_releases_own_helpers"
 PREFLIGHT = "test_ldp__preflight_refuses_another_checkout_and_reports_names_never_values"
@@ -169,7 +170,7 @@ SECRETS = (" LAB_DATABASE_URL LAB_EVAL_ENDPOINT_KEY LAB_ANNOTATION_TEACHER_TOKEN
 STEP_MUTANTS: tuple[Mutant, ...] = (
     _m("step_not_strict", "every step stops on its first failure", ST + "60-lab-smoke.sh",
        "\nset -euo pipefail\n", "\nset -uo pipefail\n", STRICT),
-    _m("preflight_any_checkout", "a step runs only on the RELEASE checkout", LIB,
+    _m("preflight_any_checkout", "a step runs only on the RELEASE checkout", BOX,
        '    || die 2 "the checkout $repo is not $RELEASE"', '    || true', PREFLIGHT),
     _m("preflight_prints_values", "names only, never a value", ST + "10-lab-preflight.sh",
        '"env $file: $(cut -d= -f1 "$file" | tr \'\\n\' \' \')"', '"env $file: $(cat "$file")"',
@@ -190,7 +191,7 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
        '"INFRX_LAB_DATABASE_URL:=$CONTROL_DSN_PARAM"', CONTROL_ON),
     _m("control_without_the_switch", "the control service runs only with its marker",
        ST + "40-lab-control.sh", 'touch "$MARKER"\n', "", CONTROL_ON),
-    _m("env_file_world_readable", "an env file is 0600", LIB, 'chmod 0600 "$tmp"; echo "$tmp"',
+    _m("env_file_world_readable", "an env file is 0600", BOX, 'chmod 0600 "$tmp"; echo "$tmp"',
        'chmod 0644 "$tmp"; echo "$tmp"', CONTROL_ON, ROLE),
     _m("control_off_keeps_the_marker", "off removes the switch", ST + "40-lab-control.sh",
        'rm -f "${MARKER:?}"; say', 'say', CONTROL_OFF),
@@ -291,7 +292,8 @@ def _steps_layout(root: pathlib.Path) -> pathlib.Path:
     for part in ("infra/lab/rollout", "infra/lab/workers", "apps/app/supabase/migrations"):
         shutil.copytree(REPO / part, root / part, ignore=shutil.ignore_patterns("__pycache__"))
     (root / "infra" / "rollout").mkdir()
-    shutil.copy2(REPO / "infra/rollout/hosted-migrate.sh", root / "infra/rollout/hosted-migrate.sh")
+    for name in ("hosted-migrate.sh", "box-lib.sh"):          # W6: lib.sh sources box-lib.sh
+        shutil.copy2(REPO / "infra/rollout" / name, root / "infra/rollout" / name)
     git = ["git", "-C", str(root), "-c", "user.name=m", "-c", "user.email=m@x"]
     subprocess.run([*git, "init", "-q"], check=True)
     subprocess.run([*git, "add", "-A", "infra", "apps/infrx-api/deploy", "apps/app"], check=True)

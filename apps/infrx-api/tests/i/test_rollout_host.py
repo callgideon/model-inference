@@ -40,7 +40,7 @@ sys.exit(int(os.environ.get("STUB_EXIT_" + pathlib.Path(sys.argv[0]).name, "0"))
 
 def stub(tmp_path: Path, values: dict[str, str] | None = None, *tools: str) -> Path:
     bin_ = tmp_path / "bin"
-    bin_.mkdir(exist_ok=True)
+    bin_.mkdir(parents=True, exist_ok=True)
     for tool in ("aws", *tools):
         (bin_ / tool).write_text(AWS.format(python=sys.executable))
         (bin_ / tool).chmod(0o755)
@@ -128,7 +128,7 @@ def test_rollout_host__every_host_script_sources_the_one_lib():
     """INFRA-05: one aws()/say()/SSM-read implementation. Each owned host script parses and
     sources host-lib.sh from its own directory, and defines no aws() of its own; the libs
     parse and are sourced, never run (no shebang, no `set -e` of their own)."""
-    for lib in (HOST_LIB,):
+    for lib in (HOST_LIB, BOX_LIB):
         assert subprocess.run(["bash", "-n", str(lib)]).returncode == 0, lib.name
         assert not lib.read_text().startswith("#!"), lib.name
     for name in HOST_SCRIPTS:
@@ -170,3 +170,46 @@ def test_rollout_host__operator_cli_reads_its_two_secrets_by_name_into_the_envir
     done = subprocess.run(["bash", script, "flag"], capture_output=True, text=True, cwd=tmp_path, env=env)
     assert done.returncode == 3 and "operator_key" in done.stderr
     assert not (tmp_path / "cli.json").exists()
+
+
+# --- INFRA-06: the box lib, as 72-observe-install.sh uses it -------------------------------------
+INSTALL = ('#!/usr/bin/env bash\n'
+           'if [ "$1" = -d ]; then mkdir -p "${@: -1}"; else cp "${@: -2:1}" "${@: -1}"; fi\n')
+
+
+def test_rollout_host__observe_install_refuses_an_unreadable_or_empty_secret(tmp_path):
+    """72-observe-install.sh writes its env files through box-lib's stage_env/place: an SSM
+    read that fails, or answers empty, stops the step (exit 2) naming the parameter, with no
+    env file, no staged copy and no unit enabled. Oracle: the old write_env wrote
+    `INFRX_CANARY_KEY=` and went on (a failed command substitution inside printf's argument
+    does not trip set -e), so the canary ran keyless. A checkout without the lib is BLOCKED
+    (exit 3) naming it."""
+    for case, answer, env in (("empty", "", {}), ("failed", "partial", {"STUB_EXIT_aws": "254"})):
+        bin_ = stub(tmp_path / case, {"/model-inference/canary_key": answer}, "systemctl")
+        (bin_ / "git").write_text("#!/bin/sh\necho " + "c" * 40 + "\n")
+        (bin_ / "install").write_text(INSTALL)
+        for tool in ("git", "install"):
+            (bin_ / tool).chmod(0o755)
+        root = tmp_path / case / "root"
+        (root / "etc" / "systemd" / "system").mkdir(parents=True)
+        clip = tmp_path / case / "clip.mp4"
+        clip.write_bytes(b"x")
+        done = subprocess.run(
+            ["bash", str(ROLLOUT / "steps" / "72-observe-install.sh")], capture_output=True, text=True,
+            env={"PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}", "REPO": str(support.REPO),
+                 "INFRX_ROOT": str(root), "RELEASE": "c" * 40, "CANARY_VIDEO": str(clip),
+                 "CANARY_KEY_PARAM": "/model-inference/canary_key", **env})
+        assert done.returncode == 2 and "/model-inference/canary_key" in done.stderr, (case, done.stderr)
+        assert sorted(p.name for p in (root / "etc").iterdir()) == ["systemd"], case
+        assert [c for c in calls(bin_) if c["tool"] == "systemctl"] == [], case
+        assert "partial" not in done.stdout + done.stderr, case
+    # a checkout older than the lib (an I8+ release before W6): BLOCKED by name, nothing run
+    old = tmp_path / "pre-w6"
+    (old / "infra/observe/systemd").mkdir(parents=True)
+    (old / "infra/alerts").mkdir(parents=True)
+    (old / "infra/alerts/operations.json").write_text("{}")
+    done = subprocess.run(
+        ["bash", str(ROLLOUT / "steps" / "72-observe-install.sh")], capture_output=True, text=True,
+        env={"PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}", "REPO": str(old), "INFRX_ROOT": str(root),
+             "RELEASE": "c" * 40, "CANARY_VIDEO": str(clip), "CANARY_KEY_PARAM": "/model-inference/canary_key"})
+    assert done.returncode == 3 and "BLOCKED" in done.stderr and "box-lib.sh" in done.stderr, done.stderr
