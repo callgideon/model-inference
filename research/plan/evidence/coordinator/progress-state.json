@@ -23,7 +23,7 @@
   "lab_box": "2026-10-01T01:26Z: the Lab on the box at 7ecbab0e — image sha256:870aa2ea…, every Lab unit installed (inert), the control service ON on 127.0.0.1:8003 (readyz 200; its login password set on hosted by the operator), smoke PASS on :8001/:8002/:8003, the lab-control.callbill.ai site on the edge (/lab/v1/* → 8003; a release list answers 401 without a token)",
   "lab_app": "2026-10-01T02:30Z: apps/lab on Vercel — project infrx-lab in team callgideon (Root Directory apps/lab, Next.js), production https://lab.callbill.ai (200), env NEXT_PUBLIC_LAB_URL/SUPABASE_URL/SUPABASE_ANON_KEY + LAB_*_API_URL=https://lab-control.callbill.ai; the CLI login is the operator's (the SSM token is invalid)"
  },
- "revision": 344,
+ "revision": 345,
  "updated": "2026-10-01T02:50:14Z",
  "agent_slots": {
   "total": 16,
@@ -10199,7 +10199,7 @@
   },
   {
    "id": "W6-DOCS-STATE",
-   "task": "W6-docs-state",
+   "task": null,
    "slice": "wave 6 clean-up lane docs-state (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_95946792-a5a",
    "agent": "opus",
    "branch": "codex/w6-docs-state",
@@ -10235,7 +10235,7 @@
   },
   {
    "id": "W6-PLAN-LEDGER",
-   "task": "W6-plan-ledger",
+   "task": null,
    "slice": "wave 6 clean-up lane plan-ledger (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_93584be9-555",
    "agent": "opus",
    "branch": "codex/w6-plan-ledger",
@@ -10271,7 +10271,7 @@
   },
   {
    "id": "W6-INFRA-LIBS",
-   "task": "W6-infra-libs",
+   "task": null,
    "slice": "wave 6 clean-up lane infra-libs (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_2be41693-24b",
    "agent": "opus",
    "branch": "codex/w6-infra-libs",
@@ -10307,7 +10307,7 @@
   },
   {
    "id": "W6-LAB-RELEASE-TOOL",
-   "task": "W6-lab-release-tool",
+   "task": null,
    "slice": "wave 6 clean-up lane lab-release-tool (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_c5926c7c-285",
    "agent": "opus",
    "branch": "codex/w6-lab-release-tool",
@@ -10343,7 +10343,7 @@
   },
   {
    "id": "W6-API-L2",
-   "task": "W6-api-L2",
+   "task": null,
    "slice": "wave 6 clean-up lane api-L2 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_8077d6d9-4f0",
    "agent": "opus",
    "branch": "codex/w6-api-L2",
@@ -10379,7 +10379,7 @@
   },
   {
    "id": "W6-API-L3",
-   "task": "W6-api-L3",
+   "task": null,
    "slice": "wave 6 clean-up lane api-L3 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_a1f4374c-9e4",
    "agent": "opus",
    "branch": "codex/w6-api-L3",
@@ -10415,7 +10415,7 @@
   },
   {
    "id": "W6-API-L4",
-   "task": "W6-api-L4",
+   "task": null,
    "slice": "wave 6 clean-up lane api-L4 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_b12e6bd8-f8c",
    "agent": "opus",
    "branch": "codex/w6-api-L4",
@@ -10451,7 +10451,7 @@
   },
   {
    "id": "W6-LAB-A",
-   "task": "W6-lab-A",
+   "task": null,
    "slice": "wave 6 clean-up lane lab-A (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_4621c470-b7b",
    "agent": "opus",
    "branch": "codex/w6-lab-A",
