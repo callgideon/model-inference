@@ -12,7 +12,7 @@ For the next planning session. Every fact here is cited to a record in this repo
 | The Lab on the box | Lab control unit ON from the checkout **7ecbab0e** (image `sha256:870aa2ea…`), readyz 200 on 127.0.0.1:8003; the edge lab-control.callbill.ai serves `/lab/v1/*` from it (a release list answers 401 without a token); the other Lab units installed inert; L7 roles skipped (WR-LDP-7) | 09 log 2026-10-01 01:26Z; runbook 08 §"State 2026-10-01"; `infra/rollout/README.md` §6 |
 | The Lab app | **https://lab.callbill.ai** live (Vercel project `infrx-lab`, team callgideon, Root Directory `apps/lab`, deployed from the repo root); redeployed from the wave-6 tip on **LAB_API_URL** alone (the six LAB_*_URL names removed from the project) | session record 2026-10-01 (vercel lines); `infra/lab/rollout/lab-release.sh` web |
 | Plan ledger | manifest 109/133 implemented (E1B flipped 2026-10-01); overlay `gate_records` E3L/E5L/E6L/E7L/E8L/E4-ON/COMPLETE-LOCAL; rulings through **R269** | `research/plan/tasks.json`; `research/plan/evidence/coordinator/progress-state.json`; `research/plan/08-contracts-v1-encoding.md` §10 |
-| Wave 6 (clean-up) | merges #69–#78 and #80 on the tip (lab-A/B/D/E, plan-ledger, lab-release-tool, infra-libs, makefile-pins, docs-state, certify-release, pgrestore-tests); **in flight**: api-L4 (merge #79), api-L2, api-L3, api-L5, api-L1 — state them as in flight until the session record says integrated | `research/plan/evidence/coordinator/2026-10-01-v1-audit.md` §7; `research/plan/evidence/w6/` |
+| Wave 6 (clean-up) | **all sixteen lanes integrated** — merges #69–#84 (lab-A/B/D/E, plan-ledger, lab-release-tool, infra-libs, makefile-pins, docs-state, certify-release, pgrestore-tests, api-L1/L2/L3/L4/L5); the last five API lanes landed in fast mode (the operator's 2026-10-01 instruction: the lane's own tests, focused suites and mutant lists as the gate, no lens round); real `make api-lint` / `make api-typecheck` (pyright baseline 458); the Lab composition root is `infrx/lab/compose.py` | `research/plan/evidence/coordinator/2026-10-01-v1-audit.md` §7; `research/plan/evidence/w6/` |
 
 ## 2. Reading order for a fresh planning session
 
@@ -38,7 +38,7 @@ For the next planning session. Every fact here is cited to a record in this repo
 
 **Carried product work (register rows 14–46; none blocks the checklist):** j10's WR-B4-2 / WR-LAB2-4 / WR-B3-1 (evaluations surfaces 503), WR-LL2-5 (traces 404), WR-LDP-7 (per-role Lab logins; eval/judge/datasets OFF on the box), WR-LEM-SPAN, WR-LW9-6, WR-LW9-4 / WR-R3I-OPEN (the R3 CLI caller through `pilot.lab_optimizations`), WR-LR7, CMO-4, WR-C6-B1-FLAKE, k08 / i09 (a staging GPU), P-11 (external training), WR-V2-2 (content reads; the dead offer removed), WR-C3F-2, LAB-14, the real-stack Lab suites, `codex/longclip` (shelved, P-23).
 
-**Wave-6 remainder (coordinator):** api-L4/L2/L3/L5/L1 merges; the `launch-v1.sh` shim removal (W7); the W6 evidence folded into the register; `make check` on the final tip recorded.
+**Wave-6 remainder (coordinator, W7):** the `launch-v1.sh` shim removal; the seven MinIO-gated and the lab_rollout stack mutants rerun on their stacks (api-L1 evidence 'Merge'); the ruff per-file baseline (155 findings in 98 files) worked down; PEP 695 for lab_auth's two generics; a full `make check` on the final tip recorded (the per-merge focused proofs are in the session record).
 
 ## 4. Risks that remain (from the audit)
 
@@ -104,3 +104,4 @@ DELIVERABLES:
 ## Verification log
 
 - 2026-10-01T07:12Z: written by the coordinator (the handoff lane was refused by the sandbox classifier); facts cross-checked against 25-state, the audit, the register and the session record; the tenant uuid deliberately not reproduced here (it lives in ~/e4c/tenant2.user).
+- 2026-10-01T09:35Z: wave 6 closed — merges #79, #81–#84 integrated in fast mode (tip 2d710800); the wave-6 row and the W7 remainder updated.
