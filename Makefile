@@ -12,20 +12,24 @@ api-env:
 api-test:
 	cd $(API) && uv run --frozen pytest -q
 
-# W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config. Until it lands
-# each reports "not run" rather than a pass, as bench-test does. pyright runs one package
-# per process (then the top-level infrx/*.py modules in one): a whole-tree run OOMs node here
-# (exit 250, audit A13).
+# W6 (A12/A14): ruff and pyright over apps/infrx-api, enabled by api-L5's config, pinned through
+# uvx (neither is in uv.lock). Until the config lands each reports "not run" rather than a pass.
+# pyright runs once over the config's `include` (infrx, deploy; ~0.8 GB RSS): the exit-250 OOM
+# (audit A13) was an unscoped run walking .venv. The gate is the 2026-10-01 error baseline:
+# lower it as errors are fixed, never raise it.
+API_PYRIGHT_BASELINE := 508
+
 api-lint:
 	@if [ -f $(API)/ruff.toml ] || grep -q '^\[tool\.ruff' $(API)/pyproject.toml; then \
-		cd $(API) && uv run --frozen ruff check infrx deploy tests; \
+		cd $(API) && uvx ruff@0.15.12 check infrx deploy tests; \
 	else \
 		echo "api-lint: not run - no ruff config in $(API) yet (api-L5 owns it)"; \
 	fi
 
 api-typecheck:
 	@if [ -f $(API)/pyrightconfig.json ] || grep -q '^\[tool\.pyright' $(API)/pyproject.toml; then \
-		cd $(API) && rc=0; for pkg in infrx/*/; do [ "$$pkg" = infrx/__pycache__/ ] && continue; uv run --frozen pyright "$$pkg" || rc=1; done; uv run --frozen pyright infrx/*.py || rc=1; exit $$rc; \
+		cd $(API) && n=$$(uvx pyright@1.1.414 -p pyproject.toml --outputjson | .venv/bin/python -c 'import json,sys; print(json.load(sys.stdin)["summary"]["errorCount"])') && \
+		echo "pyright: $$n errors (baseline $(API_PYRIGHT_BASELINE))" && [ "$$n" -le $(API_PYRIGHT_BASELINE) ]; \
 	else \
 		echo "api-typecheck: not run - no pyright config in $(API) yet (api-L5 owns it)"; \
 	fi

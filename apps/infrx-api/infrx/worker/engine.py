@@ -75,7 +75,8 @@ from ..media.video import Media
 from .reasoning import ReasoningFilter
 # A12: the pure helpers live in `engine_wire`; re-exported so importers are unchanged.
 from .engine_wire import (LOCAL_MEDIA_FILE, LOCAL_MEDIA_SCHEME, STORAGE_REF_PATTERN,  # noqa: F401
-                          _delta_payload, _encodable, _inside_tenant_root, _json_cost,
+                          STORAGE_REF_SEGMENT, _SHORT_ESCAPES, _delta_payload, _encodable,
+                          _inside_tenant_root, _json_cost,
                           _parse_usage, _split_encoded, cache_salt, check_storage_ref,
                           local_media_url, media_uuid, prepared_request)
 

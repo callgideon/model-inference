@@ -187,3 +187,7 @@ Alternative (uv.lock owner): ruff==0.15.12 and pyright==1.1.414 in the dev group
 
 Estimate (remaining for the lane): 0 / 0.25 / 1 h (confidence medium): applying the diff at
 merge; the baseline moves only with other lanes' merges.
+
+Correction (coordinator, merge #82, 0-L5-CORR-1): the pinned invocation is `uvx pyright@1.1.414 -p pyproject.toml` (from `apps/infrx-api`) everywhere this file says `uvx pyright@1.1.414`; without `-p` a parent directory's `pyrightconfig.json` hijacks the run. The `[tool.pyright]` comment in `apps/infrx-api/pyproject.toml` names the same form.
+
+Correction (coordinator, merge #82, 0-L5-CORR-2): the `API_PYRIGHT_BASELINE` gate is on the total error count, so it allows trades between packages (one package's new errors hidden by another's fixes); the coordinator lowers `API_PYRIGHT_BASELINE` at every merge that lowers the count.

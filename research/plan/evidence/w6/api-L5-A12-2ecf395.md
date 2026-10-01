@@ -78,3 +78,5 @@ and failed without starting, stopping or connecting to it; rerun on `w5`: 119 pa
 
 0 / 0.5 / 2 h (confidence high): only a merge-time anchor conflict if another lane edits
 the moved helpers.
+
+Correction (coordinator, merge #82, 1-L5-EV-1): at 4a31179b the re-export blocks omitted `_torn` (spool.py from `.segment`), `_SHORT_ESCAPES` and `STORAGE_REF_SEGMENT` (engine.py from `.engine_wire`); the merge #82 wirings commit adds the three, so "old modules re-export every moved name" holds from there.

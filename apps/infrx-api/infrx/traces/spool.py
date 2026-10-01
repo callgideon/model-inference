@@ -76,7 +76,7 @@ from ..contracts.records import TraceEnvelope, TraceLossReason, TraceMode, Trace
 # A12: the format, its reader and the filesystem live in `segment`; re-exported.
 from .segment import (FRAME, HEADER, LENGTHS, MAX_ENVELOPE_BYTES, SEGMENT_MAGIC,  # noqa: F401
                       SEGMENT_PREFIX, SEGMENT_SUFFIX, SEGMENT_VERSION, Scan, SpoolIO,
-                      frame_checksum, frame_size, pack_frame, recover, scan_segment,
+                      _torn, frame_checksum, frame_size, pack_frame, recover, scan_segment,
                       segment_header, segment_names)
 
 # Rotation size: the default of 08 §5.1 `TRACE_SPOOL_SEGMENT_BYTES` (F2R item 7), a

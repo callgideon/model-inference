@@ -34,8 +34,9 @@ pythonpath = ["."]
 addopts = "--import-mode=importlib"
 markers = ["pg: runs on the lane's task-local PostgreSQL"]
 
-# A13 (W6): `make api-typecheck` = `uvx pyright@1.1.414` from this directory, gated on the
-# baseline error count. `include` keeps the run off `.venv` (an unscoped run exhausts node's
+# A13 (W6): `make api-typecheck` = `uvx pyright@1.1.414 -p pyproject.toml` from this directory
+# (`-p` pins this config: a parent directory's pyrightconfig.json otherwise hijacks the run),
+# gated on the baseline error count. `include` keeps the run off `.venv` (an unscoped run exhausts node's
 # heap, exit 250); `uvx pyright@1.1.414 infrx/<pkg>` checks one package. Basic mode;
 # `RefOf(...)` call annotations are pydantic's, not a typing error.
 [tool.pyright]
