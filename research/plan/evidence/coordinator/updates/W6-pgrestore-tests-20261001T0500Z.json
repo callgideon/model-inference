@@ -1,0 +1,29 @@
+{
+  "task": "W6-pgrestore-tests",
+  "lane": "pgrestore-tests",
+  "slice": "DT-06: bk00c (layer 2) restores a dump naming infrx_* roles the cluster lacks into a fresh target - NOLOGIN, before the project restore, idempotent, plain statements; mutants i3bm40c-g",
+  "activity": "review",
+  "at": "2026-10-01T05:00:00Z",
+  "head": "5a03bbaf",
+  "base": "2add8e0a",
+  "worktree": ".claude/worktrees/codex-w6-pgrestore-tests",
+  "branch": "codex/w6-pgrestore-tests",
+  "owned_paths": ["tests/integration/backend/recovery/test_restore.py", "tests/integration/backend/recovery/mutants_i3b.py", "research/plan/evidence/w6/DT-06-5a03bba.md", "research/plan/evidence/coordinator/updates/W6-pgrestore-tests-20261001T0500Z.json"],
+  "commands": [
+    {"cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase mutants_i3b.py --layer all (base 2add8e0a)", "exit": 1, "summary": "BEFORE 106 mutants, 101 killed, control survived, 4 pre-existing problems (i3bm117, i3bm33 no-cases; i3bm114 survived; i3bm54 baseline-red)"},
+    {"cmd": "GAP: i3bm40c, i3bm40e against bk01_a only (D form)", "exit": 0, "summary": "both SURVIVED - the seam red: nothing caught LOGIN roles or a skipped pre-creation"},
+    {"cmd": "pytest test_restore.py -k bk00 (D form)", "exit": 0, "summary": "3 passed"},
+    {"cmd": "mutants_i3b.py --layer all --only i3bm40b..g (D form)", "exit": 0, "summary": "6/6 killed"},
+    {"cmd": "pytest test_mutant_list_i3b.py", "exit": 0, "summary": "1 passed"},
+    {"cmd": "pytest test_restore.py -k bk (D form)", "exit": 0, "summary": "30 passed, 1 skipped (bk03 needs E2 compose)"},
+    {"cmd": "pytest tests/integration/backend/recovery/ (no stack)", "exit": 1, "summary": "43 passed, 35 skipped, 1 failed: rb09 rollout.md W7 text (pre-existing, untouched)"},
+    {"cmd": "pytest tests/integration/test_run.py", "exit": 1, "summary": "52 passed, 1 failed: stale e3bm62 anchor (E's list, pre-existing, untouched)"},
+    {"cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase mutants_i3b.py --layer all (5a03bbaf)", "exit": 1, "summary": "AFTER 111 mutants, 106 killed (+5), control survived, the same 4 pre-existing problems, 0 new survivors"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "high", "basis": "DT-06 done and green on the D form (brief 2/3/6, spent ~1.5); remaining = review; pessimistic if the E2 kept-stack form is required as well", "at": "2026-10-01T05:00:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "open_items": ["no i3b tasklocal key exists; lane used INFRX_D_TASK=d3", "pre-existing: i3bm114 survives on the D form, i3bm117/i3bm33 no-cases on the D form, i3bm54 baseline-red (rb05 in the copy), rb09 red, e3bm62 stale anchor"],
+  "evidence": ["research/plan/evidence/w6/DT-06-5a03bba.md"]
+}
