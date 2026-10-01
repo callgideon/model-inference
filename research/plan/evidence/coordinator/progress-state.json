@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "2eeff879 (fast-forward with the tracker commit that follows)",
- "integration_head": "2eeff879",
+ "main": "cd9f517c (wave-7 base; the keystone commit)",
+ "integration_head": "cd9f517c",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,13 +40,13 @@
    }
   ]
  },
- "revision": 397,
- "updated": "2026-10-01T23:20Z",
+ "revision": 398,
+ "updated": "2026-10-01T23:39:54Z",
  "agent_slots": {
   "total": 16,
-  "active": 0,
+  "active": 12,
   "reserved": 2,
-  "note": "Historical capacity setting; no live agent inventory was queried. All W6 lanes are merged. Pending operator acceptance is not an active local writer."
+  "note": "Wave 7 batch 1: twelve Opus lanes dispatched 2026-10-01 from cd9f517c (lane-w7.js, fast mode); batch 2 waits on their merges."
  },
  "eta_params": {
   "review_rework_fraction": 0.3,
@@ -11535,6 +11535,464 @@
     "research/plan/08-contracts-v1-encoding.md"
    ],
    "wiring_requests": []
+  },
+  {
+   "id": "W7-api-schema",
+   "task": "AP-00",
+   "slice": "00d: migration 0060 control operations/idempotency/outbox + ControlOps store/fake (wf_eab12cdf-b60)",
+   "agent": "opus",
+   "branch": "codex/w7-api-schema",
+   "worktree": ".claude/worktrees/codex-w7-api-schema",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap0",
+    "prefix": "infrx-ap0-*",
+    "db": "infrx_ap0"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0060_control_operations.sql",
+    "apps/app/supabase/migrations/README.md",
+    "apps/infrx-api/infrx/state/control_ops.py",
+    "apps/infrx-api/tests/d/test_control_ops*.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-contracts",
+   "task": "AP-00",
+   "slice": "00a/00b/00c: route+action inventory, OpenAPI export + baseline, packages/api-client + thin transport ports (wf_6548cfca-1ff)",
+   "agent": "opus",
+   "branch": "codex/w7-api-contracts",
+   "worktree": ".claude/worktrees/codex-w7-api-contracts",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "none (fake-only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/contracts/openapi/",
+    "apps/infrx-api/openapi/",
+    "packages/api-client/",
+    "apps/app/lib/api/",
+    "apps/lab/lib/api/",
+    "research/plan/api-lifecycle/evidence/route-inventory.*"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-identity",
+   "task": "AP-01",
+   "slice": "01a–01d: auth facade, console me/capabilities, Lab workspaces/members, operator providers (wf_dfaa1c6d-30a)",
+   "agent": "opus",
+   "branch": "codex/w7-api-identity",
+   "worktree": ".claude/worktrees/codex-w7-api-identity",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap1",
+    "prefix": "infrx-ap1-*",
+    "db": "infrx_ap1"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/session.py",
+    "apps/infrx-api/infrx/auth_facade/",
+    "apps/infrx-api/infrx/gateway/routes/auth.py",
+    "apps/infrx-api/infrx/gateway/routes/console_me.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_workspaces.py",
+    "apps/infrx-api/infrx/gateway/routes/operator_providers.py",
+    "apps/infrx-api/tests/ap01/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-reads",
+   "task": "AP-02",
+   "slice": "02a–02c: console/operator read projections, cursors (wf_e645aea0-dd3)",
+   "agent": "opus",
+   "branch": "codex/w7-api-reads",
+   "worktree": ".claude/worktrees/codex-w7-api-reads",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap2",
+    "prefix": "infrx-ap2-*",
+    "db": "infrx_ap2"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/reads.py",
+    "apps/infrx-api/infrx/console/cursor.py",
+    "apps/infrx-api/infrx/gateway/routes/console_reads.py",
+    "apps/infrx-api/tests/ap02/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-actions",
+   "task": "AP-03",
+   "slice": "03a–03d: durable keys, grant claim, feedback, operator mutations (wf_1200c979-fb5)",
+   "agent": "opus",
+   "branch": "codex/w7-api-actions",
+   "worktree": ".claude/worktrees/codex-w7-api-actions",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap3",
+    "prefix": "infrx-ap3-*",
+    "db": "infrx_ap3"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/actions.py",
+    "apps/infrx-api/infrx/gateway/routes/console_actions.py",
+    "apps/infrx-api/infrx/gateway/routes/operator_actions.py",
+    "apps/infrx-api/tests/ap03/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-artifacts",
+   "task": "AP-04",
+   "slice": "04a–04e: model projects, uploads, imports, compatibility, adoption; migration 0061 (wf_f0af5587-ce4)",
+   "agent": "opus",
+   "branch": "codex/w7-api-artifacts",
+   "worktree": ".claude/worktrees/codex-w7-api-artifacts",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap4",
+    "prefix": "infrx-ap4-*",
+    "db": "infrx_ap4"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 8,
+    "likely_h": 12,
+    "pessimistic_h": 20,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0061_model_projects_artifacts.sql",
+    "apps/infrx-api/infrx/lab/artifacts/",
+    "apps/infrx-api/infrx/gateway/routes/lab_model_projects.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_artifacts.py",
+    "apps/infrx-api/tests/ap04/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-traces",
+   "task": "AP-07",
+   "slice": "07a–07d: data-use/grant CRUD, trace composition proof, projections, outage/revocation proofs (wf_bbbb9817-246)",
+   "agent": "opus",
+   "branch": "codex/w7-api-traces",
+   "worktree": ".claude/worktrees/codex-w7-api-traces",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap7",
+    "prefix": "infrx-ap7-*",
+    "db": "infrx_ap7"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 6,
+    "likely_h": 10,
+    "pessimistic_h": 16,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/data_use.py",
+    "apps/infrx-api/infrx/gateway/routes/console_data_use.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_traces.py",
+    "apps/infrx-api/tests/ap07/",
+    "tests/integration/lab_observe/ (new files)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-judge",
+   "task": "AP-08",
+   "slice": "08a/08b/08e + 08c/08d on the local judge fake; live external BLOCKED on P-10 (wf_a0c5f25b-6f0)",
+   "agent": "opus",
+   "branch": "codex/w7-api-judge",
+   "worktree": ".claude/worktrees/codex-w7-api-judge",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap8",
+    "prefix": "infrx-ap8-*",
+    "db": "infrx_ap8"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 6,
+    "likely_h": 10,
+    "pessimistic_h": 16,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/judge_api/",
+    "apps/infrx-api/infrx/gateway/routes/lab_judge.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_reviews.py",
+    "apps/infrx-api/infrx/judge/ (rubric/result schema, allowlist seam)",
+    "apps/infrx-api/tests/ap08/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-improve",
+   "task": "AP-10",
+   "slice": "10a evaluation/pipeline read composition, 10b double-debit root cause (wf_50947c1f-37d)",
+   "agent": "opus",
+   "branch": "codex/w7-api-improve",
+   "worktree": ".claude/worktrees/codex-w7-api-improve",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap10",
+    "prefix": "infrx-ap10-*",
+    "db": "infrx_ap10"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/evaluation/",
+    "apps/infrx-api/infrx/lab/pipelines/",
+    "apps/infrx-api/tests/ap10/",
+    "tests/integration/lab_evaluate/ + lab_improve/ (new files)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-lifecycle",
+   "task": "AP-11",
+   "slice": "11a/11b: the resumable API-only runner, inspect + isolated modes (wf_1267f094-f0a)",
+   "agent": "opus",
+   "branch": "codex/w7-api-lifecycle",
+   "worktree": ".claude/worktrees/codex-w7-api-lifecycle",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap11",
+    "prefix": "infrx-ap11-*",
+    "db": "infrx_ap11"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 6,
+    "likely_h": 10,
+    "pessimistic_h": 16,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/api_lifecycle/",
+    "tests/integration/api-lifecycle.sh",
+    "infra/runbooks/api-lifecycle.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-ux-foundations",
+   "task": "UX-00",
+   "slice": "UX-00 → UX-01 → UX-02: Lab primitives/stylesheet, retention truth, mobile drawer (wf_2e56a43e-159)",
+   "agent": "opus",
+   "branch": "codex/w7-ux-foundations",
+   "worktree": ".claude/worktrees/codex-w7-ux-foundations",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "none (fake-only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 8,
+    "pessimistic_h": 14,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/app/layout.tsx",
+    "apps/lab/app/lab.css",
+    "apps/lab/components/ui/",
+    "apps/lab/package.json",
+    "apps/lab/pnpm-lock.yaml",
+    "apps/app/app/globals.css (tokens)",
+    "apps/app/app/(console)/docs/content.ts",
+    "apps/app/lib/contracts/v2/published-model.ts",
+    "apps/app/app/(console)/usage/[requestId]/result-panel.tsx",
+    "apps/app/components/sidebar.tsx",
+    "apps/*/tests/ux/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-ux-app",
+   "task": "UX-04",
+   "slice": "first-call panel, model card, snippets, Docs navigation (wf_f607499c-122)",
+   "agent": "opus",
+   "branch": "codex/w7-ux-app",
+   "worktree": ".claude/worktrees/codex-w7-ux-app",
+   "base": "cd9f517c",
+   "head": null,
+   "isolation": {
+    "ports": "none (fake-only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-01T23:39:54Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 6,
+    "pessimistic_h": 10,
+    "confidence": "medium",
+    "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
+    "at": "2026-10-01T23:39:54Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/components/snippet.tsx",
+    "apps/app/app/(console)/docs/page.tsx (+layout, example generator)",
+    "apps/app/tests/ux/first-call/"
+   ],
+   "wiring_requests": []
   }
  ],
  "review_queue": [],
@@ -15022,6 +15480,12 @@
    "by": "implementation coordinator (session 03)",
    "what": "rev 397: lifecycle-plan merge 2eeff879 reconciled (planning overlay rev 396 kept; post-cutoff facts re-applied: E4C run 1 finished/classified, amendment 7, consumer window 22:54Z → box e6a8b40a, canary key operator-held). 24 tasks AP-00–AP-11/UX-00–UX-11 registered as planned; wave 7 dispatch follows.",
    "source": "STATUS.md; research/plan/consumer-v1/09-path-to-internal-testing.md; research/plan/evidence/e/E4C-41693d5/README.md"
+  },
+  {
+   "at": "2026-10-01T23:39:54Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 398: wave 7 batch 1 dispatched — twelve lanes (api-schema, api-contracts, api-identity, api-reads, api-actions, api-artifacts, api-traces, api-judge, api-improve, api-lifecycle, ux-foundations, ux-app) from the keystone base cd9f517c (R270–R271; tasklocal ap0..ap11); briefs in the coordinator scratchpad wave7-plan.md.",
+   "source": "research/plan/08-contracts-v1-encoding.md R270–R271; research/plan/consumer-v1/07-post-launch-waves.md LW7"
   }
  ],
  "history": {
