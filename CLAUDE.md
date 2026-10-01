@@ -1,27 +1,24 @@
 # CLAUDE.md
 
-**Current dispatch (2026-09-24):** read [program 22](research/plan/22-consumer-v1-implementation.md), [handoff 24](research/plan/24-consumer-v1-session-handoff.md) and [tracker/parallel instructions](research/plan/consumer-v1/06-progress-tracker.md). E3C/E4C are the current corrective backend gates, then App. Preserve original implementation; older wave/dispatch statements below are historical. Use maximum safe parallel agents/worktrees and extend the existing HTML tracker with evidence-backed progress and ETA.
+**State 2026-10-01:** the consumer v1 is live (runtime 41693d5d, CREDIT regime), hosted Supabase is at migrations 0001–0059, the Lab control service runs on the pilot box and the Lab app is live at `https://lab.callbill.ai`. Start at [the state of record](research/plan/25-state-2026-10-01.md), then [the path to internal testing 09](research/plan/consumer-v1/09-path-to-internal-testing.md) and the [v1 audit](research/plan/evidence/coordinator/2026-10-01-v1-audit.md) (§7 binds the clean-up wave). Program 22, handoff 24 and every older dispatch are historical.
 
 Repository conventions for all implementation sessions; the filename is historical.
 
 ## What this repo is
 
-Read `research/platforms/README.md` for the current two-product architecture and
-`research/plan/16-fresh-session-handoff.md` and `12-complete-build-plan.md` before continuing implementation.
-Current execution scope is Marlin backend first; see `research/plan/18-marlin-backend-first.md`.
-Complete E3B/E4B endpoint integration/recovery/optimization before App feature work; Lab follows the App. `15-pending-inputs.md` records all remaining inputs.
-`HANDOFF.md` contains historical operational context. Read manifest v4, the
-platform-split amendment, shared contracts and your assigned brief before coding.
-Wave 2 is imported at `271add9`; read `research/plan/10-wave2-platform-audit.md`
-and `11-wave3-revision-handoffs.md`. Preserve completed v1 evidence; new revision
-tasks gate product-v2 integration. No live-state claim is implied.
+Read `research/plan/25-state-2026-10-01.md` first (what runs where, what is pending, the
+reading order); `research/platforms/README.md` is the two-product architecture and
+`15-pending-inputs.md` records the remaining inputs. Programs 12/16/18/22/24 and the
+wave-2/3 handoffs are historical dispatches: preserve their evidence, do not restart
+from them. `HANDOFF.md` contains historical operational context.
 
 Per-experiment inference and benchmarking for the Gideon GPU work, plus the
 research that sizes it. Five model experiments under `models/`, one directory each:
 `deepseek41f`, `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`; shared
 scripts in `models/common/`. `apps/app` is the consumer inference product (Next.js,
-Supabase auth/DB); `apps/lab` is the planned provider product, currently a README
-scaffold. `apps/infrx-api` is their shared inference gateway/runtime. Consumer
+Supabase auth/DB); `apps/lab` is the provider Lab (Next.js, same Supabase project;
+its control service runs on the pilot box). `apps/infrx-api` is their shared inference
+gateway/runtime. Consumer
 signup receives 10,000 CREDIT once per individual user. Preserve historical USD
 separately. Provider roles and source-data permissions are distinct from consumer
 ownership. `research/platforms/` is the current product specification.
@@ -41,6 +38,8 @@ follow `research/plan/03-execution-protocol.md`. Do not automatically merge main
 unrelated experiment branches. Never merge an experiment branch into main.
 Measured results go in `<exp>/results/` on the branch, with a short
 "Measured" note in `research/models/<exp>/README.md` on `main`.
+The product integration branch is `claude/consumer-v1`; `main` (41693d5d on 2026-10-01)
+moves only by the operator's fast-forward, so every fix lands on `claude/consumer-v1`.
 
 ## Commands
 
@@ -60,9 +59,21 @@ directory name; the mirror predates the names.
 Checks: run the canonical targets from the repo root — `make api-env` (pinned
 `uv sync --frozen` into `apps/infrx-api/.venv`), `make api-test`, `make api-mutants`,
 `make console-test`, `make console-lint`, `make console-typecheck` (`next typegen`
-then `tsc`), `make console-mutants`, `make bench-test`, or `make check` for all.
+then `tsc`), `make console-mutants`, `make console-built`, `make bench-test`,
+`make lab-test`, `make lab-lint`, `make lab-typecheck`, `make lab-build`,
+`make lab-mutants`, or `make check` for all of these. `apps/app` and `apps/lab` each
+install standalone (`cd apps/<app> && pnpm install --frozen-lockfile`, own lockfile);
+the lab-* targets fail fast naming that install. Docker gates sit outside `check`, each
+on a task-local `INFRX_D_TASK` key with ports in the reserved 57000–57599 band (P-21):
+`make integration consumer-local backend-certify app-e2e backend-local lab-compositions
+lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-local` and
+`console-c0-real console-c3a-real console-u3-real console-c3f-real console-pg`
+(`tests/integration/ENVIRONMENT.md`). Switches: `INFRX_MUTANTS=all` (every mutant),
+`INFRX_D_TASK`, `INFRX_D1_IMAGE=supabase`, `INFRX_M_S3_ENDPOINT`, `INFRX_T2F_STACK`,
+`LAB_E2E_REAL`/`LAB_E2E_BUILT`, `INFRX_E5L_PROJECT`, `GATE_ARGS`/`E3C_ARGS`.
 Console tests are discovered recursively (`lib/`, `tests/`, `app/`, `components/`);
-track suites live in `apps/infrx-api/tests/<track>/` and `apps/app/tests/<track>/`.
+track suites live in `apps/infrx-api/tests/<track>/`, `apps/app/tests/<track>/`,
+`apps/lab/tests/<track>/` and `tests/integration/<gate>/`.
 Track tests never import the legacy `gateway` shim; they build apps with
 `infrx.gateway.app.create_app()`. The shared contracts are frozen in
 `apps/infrx-api/infrx/contracts/` and `apps/app/lib/contracts/`; binding rulings are
@@ -74,6 +85,11 @@ Track tests never import the legacy `gateway` shim; they build apps with
 `uvicorn --factory infrx.gateway.app:create_app` in `apps/infrx-api/infrx/` (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
 `g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
 env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `models/marlin2b/README.md`.
+The box is reached only through `infra/rollout/ssm.sh <step> [KEY=value …]` (the App's
+steps in `infra/rollout/steps/`, the Lab's in `infra/lab/rollout/steps/`, runbooks
+`infra/rollout/README.md` and `research/plan/consumer-v1/08-lab-internal-testing-rollout.md`).
+The Lab release tool is `infra/lab/rollout/launch-v1.sh box|vercel|members|main`
+(becoming `lab-release.sh`, wave 6); hosted migrations run only in an R151 window.
 
 ## AWS access from this host
 
@@ -125,3 +141,4 @@ and ships no MTP weights.
 - 2026-09-21: Commands updated after F1/F2 integration (pinned environment, make targets, recursive console discovery, contracts location); application behavior unchanged.
 - 2026-09-21: Wave 2 merged on `claude/infrx-impl`; entry point for the next session is `research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md`; `make check` now runs eight Python mutant lists (D's needs Docker and skips visibly) and four console lists; application behavior unchanged on `main`.
 - 2026-09-23: Cutover: the gateway entry point is `uvicorn --factory infrx.gateway.app:create_app`; `apps/infrx-api/gateway.py` and its legacy tests are retired (evidence `research/plan/evidence/g/CUTOVER-*.md`).
+- 2026-10-01 (W6 docs-state): entry point re-pointed at `research/plan/25-state-2026-10-01.md` after the v1 launch and the Lab deploy; `apps/lab` described as the live provider Lab; Commands list the lab-* targets, the Docker gates outside `check`, the gate switches and the box/Lab release tooling; application behavior unchanged.
