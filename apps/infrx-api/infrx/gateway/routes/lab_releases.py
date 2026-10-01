@@ -28,16 +28,20 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from pydantic import Field
 
 from ...contracts import errors
 from ...contracts.lab import records as lab
 from ...contracts.v2.records import ProviderCapability as Cap
+from ...lab.time import iso_z
 from .. import lab_auth
-from .lab_evaluations import lab_actor, lab_body, require
+from ..lab_auth import Actor, lab_actor, lab_body, require
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
 
 RELEASES_PATH, OPTIMIZATIONS_PATH = "/lab/v1/releases", "/lab/v1/optimizations"
 
@@ -53,11 +57,13 @@ class ReleaseRecords(Protocol):
 
     async def releases(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
         """D9's rows with `plan`, R1's `progress` (counts only) and R2's latest `verdict`."""
+        ...
 
     async def decisions(self, provider_org_id: str) -> Sequence[dict[str, Any]]: ...
 
     async def variants(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
         """R3's variants with both identities and their `infrx.variant_comparison.1`."""
+        ...
 
 
 class Proposals(Protocol):
@@ -67,35 +73,36 @@ class Proposals(Protocol):
 
     async def add(self, provider_org_id: str, proposal: dict[str, Any]) -> dict[str, Any]:
         """The stored proposal; `StateConflict` while another is proposed for its policy."""
+        ...
 
 
 @dataclass(frozen=True)
 class LabReleases:
     sessions: lab_auth.Sessions
-    access: object                          # infrx.lab.access.LabAccess
+    access: LabAccess
     records: ReleaseRecords | None = None
     proposals: Proposals | None = None
     store: object | None = None             # D9: R2's ReleaseStore (PgReleaseStore)
 
-    def port(self, name: str):
+    def port(self, name: str) -> Any:
         value = getattr(self, name)
         if value is None:                   # expected until its table merges: a 503
             raise errors.DependencyUnavailable(f"{name} is not wired")
         return value
 
 
-async def releases(x: LabReleases, who) -> dict[str, Any]:
+async def releases(x: LabReleases, who: Actor) -> dict[str, Any]:
     records, provider = x.port("records"), who.provider_org_id
     return {"releases": list(await records.releases(provider)),
             "decisions": list(await records.decisions(provider)),
             "proposals": list(await x.port("proposals").proposals(provider))}
 
 
-async def variants(x: LabReleases, who) -> list[dict[str, Any]]:
+async def variants(x: LabReleases, who: Actor) -> list[dict[str, Any]]:
     return list(await x.port("records").variants(who.provider_org_id))
 
 
-async def propose(x: LabReleases, who, wanted: ProposalRequest) -> dict[str, Any]:
+async def propose(x: LabReleases, who: Actor, wanted: ProposalRequest) -> dict[str, Any]:
     provider = who.provider_org_id
     shown = next((r for r in await x.port("records").releases(provider)
                   if r["policy_ref"] == wanted.policy_ref), None)
@@ -114,11 +121,12 @@ async def propose(x: LabReleases, who, wanted: ProposalRequest) -> dict[str, Any
     return await x.port("proposals").add(provider, {
         "proposal_id": str(uuid.uuid4()), "kind": wanted.kind, "policy_ref": wanted.policy_ref,
         "fence": wanted.fence, "state": "proposed",
-        "proposed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "decided_at": None,
+        "proposed_at": iso_z(now), "decided_at": None,
         "proposed_by": who.user_id})             # 0043 records the proposer (WR-R4-2)
 
 
-def register(app, rt, lab_releases: LabReleases | None = None):
+def register(app: FastAPI, rt: Any, lab_releases: LabReleases | None = None
+             ) -> LabReleases | None:
     """Mount the release routes over `lab_releases` (default `rt.lab_releases`); without one
     nothing is mounted and `None` is returned."""
     x = lab_releases if lab_releases is not None else getattr(rt, "lab_releases", None)

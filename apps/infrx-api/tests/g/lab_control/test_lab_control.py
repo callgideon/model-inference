@@ -295,11 +295,13 @@ def test_lab_control__a_body_is_json_bounded_and_valid_before_the_operations():
             ("register", {**REGISTRATION, "artifact_digest": "sha256:xyz"}, None),
             ("register", {**REGISTRATION, "name": ""}, None),
             ("proposals", {"kind": "promote", "deployment_revision_id": REV}, None),
-            ("register", {**REGISTRATION, "runtime": "x" * lc.MAX_BODY_BYTES}, None)):
+            ("register", {**REGISTRATION,
+                          "runtime": "x" * lc.lab_auth.MAX_BODY_BYTES}, None)):
         answer = call(c, ADMIN_A, "POST", path, w.A, body, headers)
         assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), path
     text = json.dumps(REGISTRATION)
-    for raw, content_type in ((text, "text/plain"), (text + " " * lc.MAX_BODY_BYTES, None)):
+    for raw, content_type in ((text, "text/plain"),
+                              (text + " " * lc.lab_auth.MAX_BODY_BYTES, None)):
         answer = call(c, ADMIN_A, "POST", "register", w.A, raw=raw,
                       headers={"content-type": content_type} if content_type else None)
         assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"})

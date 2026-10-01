@@ -29,17 +29,21 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 
 from ...contracts import errors
 from ...contracts.v2.records import DataCategory, DataPurpose
 from ...contracts.v2.records import ProviderCapability as Cap
-from ...traces.retention import CONTENT, REQUEST
 from ...state.lab_data import grant_ref
+from ...traces.retention import CONTENT, REQUEST
 from ...traces.ship.shipper import COLUMNS, TABLE, TraceRow, _row
 from .. import lab_auth
+
+if TYPE_CHECKING:
+    from ...lab.access import LabAccess
+    from ...traces.retention.policy import Retention
 
 TRACES_PATH = "/lab/v1/traces"
 DEFAULT_LIMIT, MAX_LIMIT = 50, 200
@@ -55,6 +59,7 @@ GRANTED = ("grantor_org_id", "grant_ref", "content_complete", "content_bytes", "
 class ProviderServing(Protocol):
     async def serving(self, provider_org_id: str) -> Mapping[str, str]:
         """The provider's serving versions -> each one's model id (the grant's model)."""
+        ...
 
 
 class TraceRows(Protocol):
@@ -63,6 +68,7 @@ class TraceRows(Protocol):
     async def page(self, serving_version_ids: Sequence[str],
                    before: tuple[datetime, str] | None, limit: int) -> Sequence[TraceRow]:
         """Newest first by (started_at, trace_id), strictly before `before`."""
+        ...
 
     async def request(self, serving_version_ids: Sequence[str],
                       request_id: str) -> Sequence[TraceRow]: ...
@@ -71,10 +77,10 @@ class TraceRows(Protocol):
 @dataclass(frozen=True)
 class LabTraces:
     sessions: lab_auth.Sessions
-    access: object                    # infrx.lab.access.LabAccess
+    access: LabAccess
     serving: ProviderServing
     rows: TraceRows
-    retention: object                 # infrx.traces.retention.Retention (T3)
+    retention: Retention              # T3
 
 
 class PgServing:
@@ -151,7 +157,7 @@ def parse_limit(value: str | None) -> int:
     return limit
 
 
-def register(app, rt, traces: LabTraces | None = None):
+def register(app: FastAPI, rt: Any, traces: LabTraces | None = None) -> LabTraces | None:
     """Mount the trace routes over `traces` (default `rt.lab_traces`); without one nothing
     is mounted and `None` is returned."""
     traces = traces if traces is not None else getattr(rt, "lab_traces", None)
@@ -167,13 +173,13 @@ def register(app, rt, traces: LabTraces | None = None):
     async def granted(user_id, provider, org_id, model_id) -> str | None:
         """The ref of the current grant allowing both categories, or None."""
         try:
-            for category in CATEGORIES:
-                grant = await traces.access.authorize_content(
-                    user_id=user_id, provider_org_id=provider, grantor_org_id=org_id,
-                    model_id=model_id, category=category, purpose=DataPurpose.provider_sharing)
+            grants = [await traces.access.authorize_content(
+                user_id=user_id, provider_org_id=provider, grantor_org_id=org_id,
+                model_id=model_id, category=category, purpose=DataPurpose.provider_sharing)
+                for category in CATEGORIES]
         except errors.Forbidden:
             return None
-        return grant_ref(grant)
+        return grant_ref(grants[-1])
 
     async def visible(user_id, provider, serving, rows) -> list[tuple[TraceRow, dict]]:
         t3 = traces.retention

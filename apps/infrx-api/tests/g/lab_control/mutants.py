@@ -18,10 +18,8 @@ SUITE_FILES = ("tests/g/lab_control/test_lab_control.py",)
 F = "gateway/routes/lab_control.py"
 FILES = (F, auth.F)
 C = "test_lab_control__"
-ACTOR = ("        user_id = await lab_auth.authenticate(request, control.sessions)\n"
-         "        membership = await lab_auth.member(\n"
-         "            control.access, user_id, request.query_params.get(\"provider_org_id\", \"\"), "
-         "capability)\n")
+ACTOR = ("    membership = await member(\n"
+         "        access, user_id, request.query_params.get(\"provider_org_id\", \"\"), capability)\n")
 READ = "            who = await actor(request, Cap.read_aggregate_health)\n"
 
 
@@ -39,9 +37,9 @@ MUTANTS: tuple[Mutant, ...] = (
        C + "nothing_is_mounted_without_a_control"),
     # --- identity and the actor --------------------------------------------------------------
     _m("session_skipped", "every call is the forwarded session's user",
-       "        user_id = await lab_auth.authenticate(request, control.sessions)\n",
-       '        user_id = request.query_params.get("user_id", "")\n',
-       C + "every_route_needs_the_session_before_anything_else"),
+       "    user_id = await authenticate(request, sessions)\n",
+       '    user_id = request.query_params.get("user_id", "")\n',
+       C + "every_route_needs_the_session_before_anything_else", file=auth.F),
     _m("body_before_identity", "the body is read only after the session and membership",
        "        who = await actor(request, Cap.manage_dev_deployment)\n"
        "        registration = await body(request, Registration)\n",
@@ -49,21 +47,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "        who = await actor(request, Cap.manage_dev_deployment)\n",
        C + "every_route_needs_the_session_before_anything_else"),
     _m("actor_role_not_the_memberships", "the actor's role is the current membership's",
-       "user_id=user_id,\n                     role=membership.role)",
-       "user_id=user_id,\n                     role=ProviderRole.administrator)",
-       C + "the_actor_is_the_sessions_membership_never_the_body"),
+       "user_id=user_id,\n                 role=membership.role)",
+       "user_id=user_id,\n                 role=ProviderRole.administrator)",
+       C + "the_actor_is_the_sessions_membership_never_the_body", file=auth.F),
     _m("body_extras_ignored", "a body naming a provider, user or role is refused",
        '    model_config = ConfigDict(frozen=True, extra="forbid")',
        '    model_config = ConfigDict(frozen=True, extra="ignore")',
        C + "the_actor_is_the_sessions_membership_never_the_body"),
     _m("actor_cached", "nothing is cached: a revocation refuses the next call",
        ACTOR,
-       "        user_id = await lab_auth.authenticate(request, control.sessions)\n"
-       "        membership = actor.__dict__.get(user_id) or actor.__dict__.setdefault(\n"
-       "            user_id, await lab_auth.member(\n"
-       "            control.access, user_id, request.query_params.get(\"provider_org_id\", \"\"), "
-       "capability))\n",
-       C + "a_revoked_membership_is_refused_on_the_next_call"),
+       "    membership = lab_actor.__dict__.get(user_id) or lab_actor.__dict__.setdefault(\n"
+       "        user_id, await member(\n"
+       "        access, user_id, request.query_params.get(\"provider_org_id\", \"\"), capability))\n",
+       C + "a_revoked_membership_is_refused_on_the_next_call", file=auth.F),
     _m("consumer_only_not_denied", "a consumer-only user is a 403 on every route",
        "    if not workspaces:\n", "    if False:\n",
        C + "a_consumer_only_user_is_denied_on_every_route", file=auth.F),
@@ -125,14 +121,14 @@ MUTANTS: tuple[Mutant, ...] = (
        C + "aggregates_carry_no_customer_identity"),
     # --- the body ------------------------------------------------------------------------------
     _m("content_type_unchecked", "a body is application/json",
-       "        intake.check_content_type(request)\n", "",
-       C + "a_body_is_json_bounded_and_valid_before_the_operations"),
+       "    intake.check_content_type(request)\n", "",
+       C + "a_body_is_json_bounded_and_valid_before_the_operations", file=auth.F),
     _m("body_bounded_by_the_chat_cap", "a control body is bounded by its own cap",
-       "max_bytes=MAX_BODY_BYTES", "max_bytes=limits.max_request_bytes",
-       C + "a_body_is_json_bounded_and_valid_before_the_operations"),
+       "max_bytes=max_bytes,", "max_bytes=rt.settings.pilot.max_request_bytes,",
+       C + "a_body_is_json_bounded_and_valid_before_the_operations", file=auth.F),
     _m("invalid_body_escapes", "a body failing validation is a 422, never a 5xx",
-       "        except ValidationError:\n", "        except KeyError:\n",
-       C + "a_body_is_json_bounded_and_valid_before_the_operations"),
+       "    except ValidationError:\n", "    except KeyError:\n",
+       C + "a_body_is_json_bounded_and_valid_before_the_operations", file=auth.F),
     _m("digest_unchecked", "an artifact digest is sha256:<64 hex>",
        "    artifact_digest: str = Field(pattern=DIGEST)", "    artifact_digest: str",
        C + "a_body_is_json_bounded_and_valid_before_the_operations"),

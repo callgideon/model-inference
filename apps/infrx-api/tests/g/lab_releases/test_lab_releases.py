@@ -13,6 +13,7 @@ and the proposal store (WR-R4-2) are small fakes. The membership under the actor
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -23,6 +24,7 @@ from infrx.contracts import errors
 from infrx.contracts.lab import records as lab
 from infrx.contracts.v2 import records as v2
 from infrx.gateway.routes import lab_releases as lr
+from infrx.lab.time import iso_z
 from infrx.rollouts import control as r2
 
 from .. import support
@@ -681,3 +683,23 @@ def test_lab_releases__an_unreadable_b2_report_nulls_only_its_rows_verdict():
                                 experiments=errors.DependencyUnavailable("B4 did not answer"))
     with pytest.raises(errors.DependencyUnavailable):
         asyncio.run(records.releases(r2w.P))
+
+
+def test_lab_releases__a_lab_instant_is_utc_to_the_second(monkeypatch):
+    """A6: every Lab `...Z` instant (a proposal's `proposed_at` among them) is `iso_z`: UTC,
+    whole seconds, from a datetime or the database's ISO text. Oracle: an offset kept as
+    wall time, a naive instant read as the host's local time (the host is put off UTC
+    here), a fraction kept, or text refused, goes red."""
+    monkeypatch.setenv("TZ", "Asia/Kolkata")
+    time.tzset()
+    try:
+        india = timezone(timedelta(hours=5, minutes=30))
+        assert iso_z(datetime(2026, 9, 27, 10, 0, 5, 999_999, tzinfo=timezone.utc)) \
+            == "2026-09-27T10:00:05Z"
+        assert iso_z(datetime(2026, 9, 27, 15, 30, 5, tzinfo=india)) == "2026-09-27T10:00:05Z"
+        assert iso_z(datetime(2026, 9, 27, 10, 0, 5)) == "2026-09-27T10:00:05Z"
+        assert iso_z("2026-09-27 15:30:05.25+05:30") == "2026-09-27T10:00:05Z"
+        assert iso_z("2026-09-27T10:00:05Z") == "2026-09-27T10:00:05Z"
+    finally:
+        monkeypatch.undo()
+        time.tzset()

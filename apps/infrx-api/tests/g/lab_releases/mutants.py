@@ -19,7 +19,8 @@ from ..lab_auth import mutants as auth
 SUITE_FILES = ("tests/g/lab_releases/test_lab_releases.py",)
 F = "gateway/routes/lab_releases.py"
 P = "gateway/pilot.py"                  # WR-LIVE-PAGE: the composed records' progress
-FILES = (F, auth.F, P)
+T = "lab/time.py"                       # A6: the Lab's one `...Z` instant
+FILES = (F, auth.F, P, T)
 C = "test_lab_releases__"
 MOUNT, SESSION = C + "nothing_is_mounted_without_the_switch", \
     C + "every_route_needs_the_session_before_anything_else"
@@ -44,6 +45,7 @@ NOT_RUNNING = '        if item.release.state != "running" or live is None:\n    
 ADMIN = ("        who = await lab_actor(request, x.sessions, x.access,\n"
          "                              Cap.read_aggregate_health)"
          "          # the role: `propose`\n")
+INSTANT = C + "a_lab_instant_is_utc_to_the_second"
 UNKNOWN = C + "an_unknown_policy_is_not_found_whatever_the_role"
 FOUND = ('    if shown is None:\n'
          '        raise errors.NotFound("no such release for this provider")\n')
@@ -91,7 +93,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("fence_unchecked", "a stale fence is a 409",
        "    if live.fence != wanted.fence:\n", "    if False:\n", FENCE),
     _m("proposed_at_unset", "a proposal is timed on the store's clock",
-       '"proposed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")', '"proposed_at": None', FENCE),
+       '"proposed_at": iso_z(now)', '"proposed_at": None', FENCE),
+    # --- A6: the Lab's one `...Z` instant (infrx/lab/time.py) ---------------------------------
+    _m("instant_kept_in_its_offset", "a Lab instant is UTC, never another offset's wall time",
+       "    if at.tzinfo is not None:\n        at = at.astimezone(UTC)\n", "", INSTANT, file=T),
+    _m("naive_instant_read_as_local", "a naive instant is UTC, never the host's local time",
+       "    if at.tzinfo is not None:\n", "    if True:\n", INSTANT, file=T),
+    _m("instant_text_refused", "the database's ISO text is read as the instant it names",
+       "else datetime.fromisoformat(value)", "else datetime.now(UTC)", INSTANT, file=T),
+    _m("instant_keeps_its_fraction", "a Lab instant is whole seconds",
+       'return at.strftime("%Y-%m-%dT%H:%M:%SZ")', 'return at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")',
+       INSTANT, file=T),
     _m("proposal_born_approved", "a proposal is only proposed: an operator decides",
        '"fence": wanted.fence, "state": "proposed",', '"fence": wanted.fence, "state": "approved",',
        FENCE),
