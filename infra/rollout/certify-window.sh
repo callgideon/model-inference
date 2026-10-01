@@ -135,6 +135,7 @@ do_h4-check() {
   local u2; u2=$(cat "$LOGDIR/tenant2.user" 2>/dev/null || true); [ "$DRY" = 1 ] && u2=${u2:-<tenant2-user>}
   [ -n "$u2" ] || fail H4 "export TENANT2_USER=<the tenant-2 user uuid from create-test-user.py --json>"
   run h4-grant "$CLI" grant --user "$u2" --idempotency-key grant-tenant2-20260925 --reason "E4C second test tenant" \
+    || { grep -q '"idempotency_conflict"' "$LOGDIR/h4-grant.log" && say "h4-grant: the key already recorded a grant; the account check decides"; } \
     || fail H4 "grant failed"
   run h4-account "$CLI" account --user "$u2" || fail H4 "account failed"
   jexpect h4-account "d['verification_evidence_ref'] is not None and d['credit']['available'] == '10000.00000000'" \
