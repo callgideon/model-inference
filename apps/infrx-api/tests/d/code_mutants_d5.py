@@ -21,6 +21,7 @@ from ..contracts.mutants import Mutant, Runner
 J = "state/jobstore.py"
 OPS = "state/operations.py"
 C = "state/catalog.py"
+RPC = "state/rpc.py"     # W6 A5: `_Db` connects and types errors through it
 RUNNER = Runner(name="d5", targets=("tests/d/test_settle_units.py",
                                     "tests/d/test_operations_units.py"))
 TENANT = "test_tenant_store__binds_the_organization_and_reads_a_replay_as_one"
@@ -185,23 +186,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "  where c.effective_at <= infrx.now() and c.rate_card_version = coalesce(",
        "  where c.rate_card_version = coalesce(", CATALOG, file=C),
     _m("a_connection_cached_across_calls", "review CF-4 (R09): a fresh connection per "
-       "statement", "        conn = await self._connect()\n        try:\n            yield conn",
-       '        conn = self.__dict__.get("_kept") or self.__dict__.setdefault('
-       '"_kept", await self._connect())\n        try:\n            yield conn',
-       CONNECTIONS, file=OPS),
+       "statement", "    conn = await connect()\n    try:\n        yield conn",
+       '    conn = connect.__dict__.get("_kept") or connect.__dict__.setdefault('
+       '"_kept", await connect())\n    try:\n        yield conn',
+       CONNECTIONS, file=RPC),
     _m("a_connection_never_closed", "review CF-4: every statement's connection is closed",
-       "        finally:\n            await conn.close()", "        finally:\n            pass",
-       CONNECTIONS, file=OPS),
+       "    finally:\n        await conn.close()", "    finally:\n        pass",
+       CONNECTIONS, file=RPC),
     _m("a_connection_leaks_on_error", "verifier V-N3: a statement that raises still "
        "closes its connection (the verifier's om6)",
-       "        try:\n            yield conn\n        finally:\n            await conn.close()",
-       "        yield conn\n        await conn.close()", CONNECTIONS, file=OPS),
+       "    try:\n        yield conn\n    finally:\n        await conn.close()",
+       "    yield conn\n    await conn.close()", CONNECTIONS, file=RPC),
     _m("errors_become_none", "a database error is raised, never answered as None",
-       "                return await (await conn.execute(sql, params)).fetchall()\n"
-       "            except Error as failed:\n                raise _typed(failed) from None",
-       "                return await (await conn.execute(sql, params)).fetchall()\n"
-       "            except Error as failed:\n                return []",
-       CATALOG, file=OPS),
+       "                raise error(failed) from None", "                return []",
+       CATALOG, file=RPC),
 )
 
 

@@ -1,0 +1,22 @@
+{
+  "task": "W6-api-L3",
+  "slice": "A5 (infrx/state/rpc.py replaces five _call copies + _query + operations rows/connection + pins.pg_rows body), A13 (state typing)",
+  "activity": "review",
+  "head": "633e709",
+  "base": "08983639",
+  "worktree": ".claude/worktrees/codex-w6-api-L3",
+  "branch": "codex/w6-api-L3",
+  "owned_paths": ["apps/infrx-api/infrx/state/rpc.py", "apps/infrx-api/infrx/state/feedback.py", "apps/infrx-api/infrx/state/jobstore.py (_call/_query only)", "apps/infrx-api/infrx/state/lifecycle.py", "apps/infrx-api/infrx/state/lab_access.py", "apps/infrx-api/infrx/state/lab_data.py", "apps/infrx-api/infrx/state/operations.py", "apps/infrx-api/infrx/traces/ship/pins.py (pg_rows)", "apps/infrx-api/tests/d/"],
+  "commands": [
+    {"cmd": "pytest -q tests/d/test_adapter_units.py -k rpc (before rpc.py)", "exit": 1, "summary": "4 failed: ImportError (seam red)"},
+    {"cmd": "INFRX_D_TASK=d10 pytest -q -p no:randomly tests/d tests/i tests/t", "exit": 0, "summary": "2621 passed, 43 skipped, 9 xfailed"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/d/test_code_mutants.py tests/d/test_code_mutants_d5.py", "exit": 0, "summary": "85 passed, 0 survivors (14 new rpc/wiring mutants)"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=d10: 12 tests/d lists + l3sql + l/access + w prep + t/feedback + 5 tests/i lists", "exit": 0, "summary": "all killed (counts in evidence)"},
+    {"cmd": "INFRX_MUTANTS=all tests/i/lab_control/test_mutants.py", "exit": 1, "summary": "23 passed, 1 pre-existing: releases_read_no_experiments needs INFRX_LAB_API_PG=1 on key l4 (pilot.py anchor, untouched)"},
+    {"cmd": "uvx pyright 1.1.414 basic --level error infrx/state + pins.py", "exit": 1, "summary": "48 -> 42 errors, none new; importer files 110 -> 110"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "high", "basis": "A5 and A13 done; review round only; the one failing mutant is pre-existing and key-bound (l4)", "at": "2026-10-01T06:20:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/w6/api-L3-633e709.md"]
+}

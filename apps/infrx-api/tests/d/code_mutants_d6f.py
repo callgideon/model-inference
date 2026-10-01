@@ -158,7 +158,7 @@ CODE_MUTANTS = (
        '        if not auth.is_operator:\n            raise errors.Forbidden("calibration',
        '        if False:\n            raise errors.Forbidden("calibration', LISTS),
     _p("d6f_py_flag_off_untyped", "a disabled flag is a typed 503",
-       '            if failed.sqlstate == "0A000":', "            if False:", CODES),
+       '    if getattr(failed, "sqlstate", None) == "0A000":', "    if False:", CODES),
     _p("d6f_py_never_replayed", "WR-G4F-2: a replay is reported",
        '            row["feedback_id"] != feedback_id', "            False", REPLAY),
     _p("d6f_py_new_id_per_read", "the id compared is the one sent",

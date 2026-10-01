@@ -131,7 +131,7 @@ CODE_MUTANTS = (
     _p("l2_py_write_without_actor", "the SQL decides ownership from the actor",
        '{**grant, "actor_user_id": actor_user_id}', "dict(grant)", WRITES),
     _p("l2_py_untyped_refusal", "a SQL refusal is its typed error",
-       "            raise domain_error(failed) from None", "            raise", WRITES),
+       "function, args, error=domain_error)", "function, args, error=None)", WRITES),
     _p("l2_py_aggregates_unscoped", "aggregates are the named provider's",
        '{"provider_org_id": provider_org_id})', '{})', AGGREGATES),
 )
