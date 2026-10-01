@@ -44,7 +44,7 @@ def build_operations(settings=None, *, environ=os.environ) -> service.Operations
     `$OPERATIONS_DATABASE_URL`, else `settings` (default: the process environment, as the
     gateway reads it). Messages name the variable, never the DSN."""
     from ..config import from_env
-    from ..gateway.pilot import dedicated_login
+    from ..state.jobstore import dedicated_login
     dsn = environ.get(OPERATIONS_DSN_ENV, "").strip()
     source = OPERATIONS_DSN_ENV if dsn else "DATABASE_URL"
     dsn = dsn or (from_env() if settings is None else settings).pilot.database_url.strip()

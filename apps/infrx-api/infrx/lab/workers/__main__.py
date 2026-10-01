@@ -53,8 +53,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
-import importlib
 import json
 import logging
 import os
@@ -77,6 +75,9 @@ from ...evaluation.runner import HttpDevEndpoint
 from ...state.jobstore import connector
 from ...worker import __main__ as worker_main
 from ...worker.__main__ import every
+from ..compose import (  # noqa: F401 - A1: shared with the gateway, re-exported
+    control_serving, plan_key, release_live, release_report, teacher_wiring)
+from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
@@ -125,17 +126,6 @@ def settings(mode: str, env, names) -> dict[str, str]:
     return values
 
 
-def lab_sql(mode: str, module: str, name: str):
-    """A store of lab-sql-lw3's 0041-0043 (merge batch #16). Until that merge is on this base
-    the import fails and the role refuses by name instead of crashing.
-    ponytail: drop the refusal once #16 is on every base."""
-    try:
-        return getattr(importlib.import_module(f"infrx.state.{module}"), name)
-    except (ImportError, AttributeError):
-        raise RuntimeMisconfigured(mode, detail=f"{name} (lab-sql-lw3, 0041-0043) is not in "
-                                                "this build") from None
-
-
 def lab_objects(mode: str, env):
     """The Lab objects, answering HeadBucket before anything is served; at the gateway's media
     location when the unit names it (R249, WR-LR5-3), else refused before any bucket. An unset
@@ -157,7 +147,7 @@ def lab_objects(mode: str, env):
 
 
 def trace_retention(limits, endpoint_url: str, objects=None, connect=None):
-    """T3's `Retention` over the trace projection and bucket, as `pilot._lab_traces`; with
+    """T3's `Retention` over the trace projection and bucket, as `compose.lab_traces`; with
     the Lab objects, a deletion pushes N3's tombstones (WR-N3-2a), writing 0041 too when
     `connect` (the datasets role's login) is given (1-C3-1)."""
     import clickhouse_connect
@@ -299,8 +289,9 @@ def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deploy
     from ...state.lab_access import PgAccessStore
     from ...state.lab_control import PgControlStore
     from ...state.lab_data import PgLabDataStore
+    from ...state.lab_pipeline import PgCheckpointLedger
     from ...state.outbox import OutboxRelay
-    ledger = lab_sql(mode, "lab_pipeline", "PgCheckpointLedger")(connect)
+    ledger = PgCheckpointLedger(connect)
     store = PgLabDataStore(connect)
     per_provider = (lambda _: registries) if registries else \
         partial(checkpoints.lab_registry, objects)
@@ -430,41 +421,6 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
                 jobs, store, objects, worker_id=worker_id), "import jobs")}, None
 
 
-async def release_live(releases, listing):
-    """R244 (WR-C6-LIVE): R2's `Live` of a running release, read by D9 per arm from R1's
-    assignments and the admitted jobs they name (0054). Nothing assigned yet is no
-    observation: held, never evaluated on zeros."""
-    current = await releases.live(listing.policy_ref)
-    if current is None:
-        raise errors.DependencyUnavailable("no admitted request is assigned to this release yet")
-    return current
-
-
-def plan_key(provider_org_id: str, policy_id: str) -> str:
-    """R2's full `Plan` of a release, stored write-once beside it by its launcher
-    (`rollout launch`, WR-C5-PLAN; D9 keeps only its digest, which `Controller` checks)."""
-    return f"lab/{provider_org_id}/releases/{policy_id}/plan.json"
-
-
-async def release_report(reads, store, provider: str, policy, plan):
-    """WR-C5-REPORT: the release's B2 report and its two runs (D7's records) - the provider's
-    NEWEST experiment (B4's launch record, 0043's listing) with a stored report under the
-    plan's own protocol whose runs are the policy's baseline and one of its candidates - or
-    `(None, None)` (R2 then holds `no_report`). R2 checks the binding again."""
-    protocol = "sha256:" + hashlib.sha256(lab.canonical(plan.protocol)).hexdigest()
-    for e in await reads.experiments(provider_org_id=provider):          # newest first
-        if e["report"] is None or e["protocol_digest"] != protocol:
-            continue
-        runs = tuple([(await store.resolve(e[arm]["run_ref"], provider_org_id=provider))
-                      .model_dump(mode="json", by_alias=True, exclude_unset=True)   # its ref
-                      for arm in ("baseline", "candidate")])
-        if runs[0]["serving_ref"] == policy.baseline_ref and \
-                runs[1]["serving_ref"] in {c.serving_ref for c in policy.candidates}:
-            return ({**json.loads(e["report"]["body"]),
-                     "report_digest": e["report"]["report_digest"]}, runs)
-    return None, None
-
-
 async def rollout_pass(objects, store, releases, controller, live, reads) -> dict[str, int]:
     """WR-R2-3: `Controller.step` for every running or rolled-back D9 release of every
     provider D9 lists with one (0053, WR-C5-PROVIDERS), on its stored plan and D7's policy;
@@ -501,7 +457,6 @@ async def rollout_pass(objects, store, releases, controller, live, reads) -> dic
 
 
 def _rollout(mode, env, connect, objects, worker_id, live=None, **_):
-    from ...gateway.pilot import control_serving
     from ...rollouts.control import Controller
     from ...state.lab_data import PgLabDataStore, PgLabReads
     from ...state.lab_rollout import PgReleaseStore
@@ -577,27 +532,6 @@ def _training(mode, env, connect, objects, worker_id, **_):
                                "run is prepared, submitted and finished through the Lab route")
 
 
-def teacher_wiring(connect, objects, *, provider_url: str, settings, redact, rates=None):
-    """WR-P2-D8-C: P2's `TeacherWiring` on the Lab database - D8's `PgTeacherLedger` (J2's
-    ledger + `record_failures`, which `collect` calls; a plain `PgJudgeLedger` dies at the
-    first per-item failure), P1's import over D8's label log, D7 and L2 on the same
-    connection; J2's provider refuses any host but the local teacher fake (P-10). `redact` is
-    N2's `versions.redact_content` (WR-P2-4) in the annotation role and the gateway."""
-    from ...judge.cost import APPROVED_RATES
-    from ...judge.submit import HttpJudgeProvider
-    from ...pipelines import annotations as p1
-    from ...pipelines.teachers import TeacherWiring
-    from ...state.lab_access import PgAccessStore
-    from ...state.lab_data import PgLabDataStore
-    from ...state.lab_pipeline import PgLabelLog, PgTeacherLedger
-    return TeacherWiring(members=PgAccessStore(connect), ledger=PgTeacherLedger(connect),
-                         provider=HttpJudgeProvider(provider_url),
-                         store=PgLabDataStore(connect), objects=objects,
-                         labels=p1.import_labels, log=PgLabelLog(connect),
-                         rates=APPROVED_RATES if rates is None else rates, settings=settings,
-                         redact=redact)
-
-
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
          "datasets": _datasets}
@@ -634,7 +568,6 @@ async def emergency_rollback(env, policy_ref: str, reason: str) -> int:
     match = lab.REF_RE.fullmatch(policy_ref)
     if match is None or match.group(1) != "policy":
         raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
-    from ...gateway.pilot import control_serving
     from ...rollouts.control import Controller
     from ...state.lab_data import PgLabDataStore
     from ...state.lab_rollout import PgReleaseStore
@@ -735,7 +668,6 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
     match = lab.REF_RE.fullmatch(policy_ref)
     if match is None or match.group(1) != "policy":
         raise RuntimeMisconfigured(mode, detail="--policy-ref must be a lab:policy ref")
-    from ...gateway.pilot import control_serving
     from ...rollouts.control import Controller
     from ...state.lab_data import PgLabDataStore
     from ...state.lab_rollout import PgReleaseProposals, PgReleaseStore
@@ -759,7 +691,7 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
         await proposals.decide(proposal_id, approve=True, decided_by=operator, decision={
             "schema": "lab.rollout_decision.1", "provider_org_id": provider,
             "policy_ref": policy_ref, "decision": found["kind"], "evidence_refs": evidence,
-            "decided_by": operator, "decided_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
+            "decided_by": operator, "decided_at": iso_z(now)},
             reasons=(f"operator:{reason}", f"proposal:{proposal_id}"))
         decided = True                        # committed: a later failure is converge-only
         if found["kind"] == "expand":

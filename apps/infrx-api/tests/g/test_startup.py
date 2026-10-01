@@ -397,7 +397,8 @@ def test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabl
     monkeypatch.setattr(clickhouse_connect, "get_client", connected)
     with pytest.raises(RuntimeMisconfigured, match="CLICKHOUSE_URL.*S3_TRACE_BUCKET"):
         pilot._lab(settings(lab_traces=True), connect=None)
-    monkeypatch.setattr(pilot, "_lab_traces", lambda *args: "traces")
+    from infrx.lab import compose
+    monkeypatch.setattr(compose, "lab_traces", lambda *args: "traces")
     assert pilot._lab(settings(lab_traces=True), connect=None) == {"lab_traces": "traces"}
 
 
@@ -870,7 +871,7 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     and D7 on the pool and the gateway's own object store (the Lab objects, R182).
     `LAB_CHECKPOINTS`: B3's receiver over D8's checkpoint ledger (0042) and D7 on the pool
     with the key directory `LAB_CHECKPOINT_KEYS` names - refused by name without a valid
-    one, and without the ledger in the build."""
+    one."""
     import dataclasses
     import sys
     import types
@@ -902,10 +903,6 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     secret = "cd" * 32
     good = settings(lab_checkpoints=True, lab_checkpoint_keys='{"k": {"provider_org_id": '
                     f'"{FakeProvider}", "secret": "{secret}"}}}}')
-    monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", None)       # before #16
-    refused = outcome(lambda: pilot._lab_checkpoints(good, None))
-    assert type(refused) is RuntimeMisconfigured and "0042" in str(refused)
-    assert secret not in str(refused)
     ledger = types.ModuleType("infrx.state.lab_pipeline")
     ledger.PgCheckpointLedger = lambda connect: ("ledger", connect)
     monkeypatch.setitem(sys.modules, "infrx.state.lab_pipeline", ledger)
@@ -1152,3 +1149,64 @@ def test_f_base__a_request_id_source_that_misbehaves_never_reaches_a_header():
         assert response.status_code == 200, response.text[:120]
         minted = response.headers[wire.HEADER_INFERENCE_ID]
         assert "\r" not in minted and "\n" not in minted and len(minted) == 36
+
+
+# --- W6 api-L1 (A1/A9): the composition roots ----------------------------------------------
+#: What `pilot` re-exports from `infrx.lab.compose` (tests and the e2e worlds import them):
+#: pilot's name -> compose's.
+LAB_COMPOSITIONS = {"_lab": "lab_surfaces", "_lab_2": "lab_evaluations_pipelines_releases",
+                    "_lab_checkpoints": "lab_checkpoints", "_lab_traces": "lab_traces",
+                    "_teachers": "lab_teachers", **{n: n for n in (
+                        "RunLedger", "lab_releases", "lab_optimizations", "lab_operations",
+                        "control_serving", "SHOWN", "_z", "_progress",
+                        "ReportUnavailable", "ReleaseRecords", "ReleaseProposals")}}
+
+
+def test_composition_root__the_lab_compositions_are_lab_compose_and_form_no_cycle():
+    """A1: the Lab compositions live in `infrx.lab.compose`; `pilot` keeps the consumer ones
+    and re-exports the Lab names (the same objects). Neither the gateway nor `compose` imports
+    a `__main__` module, and no Lab module imports `gateway.pilot` back - the cycle the audit
+    found. Oracle: compose missing, a re-export that is a copy, or any of those imports
+    restored goes red."""
+    import os
+    import subprocess
+    import sys
+
+    import infrx
+    root = pathlib.Path(infrx.__file__).parent
+    imported = subprocess.run(
+        [sys.executable, "-c", "import infrx.gateway.pilot, infrx.lab.compose, "
+                               "infrx.lab.control.app, infrx.lab.workers.__main__"],
+        cwd=root.parent, env={**os.environ, "PYTHONPATH": str(root.parent)},
+        capture_output=True, text=True)
+    assert imported.returncode == 0, imported.stderr[-400:]
+    for path in ("gateway/pilot.py", "lab/compose.py"):
+        assert "workers.__main__" not in (root / path).read_text(), path
+    for path in ("lab/control/app.py", "lab/workers/__main__.py", "worker/__main__.py",
+                 "operations/cli.py", "lab/compose.py"):
+        assert "gateway.pilot import" not in (root / path).read_text(), path
+    from infrx.gateway import pilot
+    from infrx.lab import compose
+    assert [n for n, c in LAB_COMPOSITIONS.items()
+            if getattr(pilot, n, None) is not getattr(compose, c, False)] == []
+    from infrx.lab.workers import __main__ as lab_workers
+    assert [n for n in ("control_serving", "plan_key", "release_live", "release_report",
+                        "teacher_wiring")
+            if getattr(lab_workers, n, None) is not getattr(compose, n, False)] == []
+
+
+def test_composition_root__one_dsn_login_parser():
+    """A9: one parser of a DSN's login (`jobstore.login_user`): bare, or Supavisor's
+    `<role>.<project-ref>`; `dedicated_login` and R1's `infrx_runtime` check both read it.
+    Oracle: the project ref taken for the role, or a missing user crashing, goes red."""
+    from infrx.gateway import pilot
+    from infrx.state import jobstore
+    assert [jobstore.login_user(dsn) for dsn in (
+        "postgresql://infrx_runtime.abcdef:pw@db.example:6543/postgres",
+        "postgresql://infrx_monitor@db.example/postgres", "host=db.example dbname=x",
+        "postgresql://postgres.abcdef:pw@db.example:5432/postgres")] \
+        == ["infrx_runtime", "infrx_monitor", "", "postgres"]
+    assert pilot.dedicated_login is jobstore.dedicated_login
+    assert [jobstore.dedicated_login(dsn) for dsn in (
+        "postgresql://infrx_runtime.abcdef@h/d", "postgresql://infrx_monitor@h/d",
+        "postgresql://postgres.abcdef@h/d", "postgresql://h/d")] == [True, True, False, False]
