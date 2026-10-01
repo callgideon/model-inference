@@ -1,7 +1,13 @@
 # Pilot rollout runbook — the headless Marlin endpoint on `i-0e8449a4ffca29bab` (I2B.c)
 
-**Coordinator-run.** The I2B session wrote and locally rehearsed these steps; it ran none of
-them against the box, AWS or hosted Supabase. Every box step is a script under `steps/`,
+**State 2026-10-01 — these steps have run.** The App cutover window (2026-09-29 08:23–08:31Z:
+hosted 0027–0051, the box at 41693d5d) and the two Lab windows (2026-09-30: hosted 0052–0056, then
+0057–0059, digest `9566fa25…`) ran through this runbook and `hosted-migrate.sh`; the Lab went onto the
+box on 2026-10-01 (§6). The records are the
+[session-03 record](../../research/plan/evidence/coordinator/2026-09-24-session-03.md) (lines 525,
+591–595) and [09](../../research/plan/consumer-v1/09-path-to-internal-testing.md)'s log; what is
+still pending (E4C, §5) is the [state of record](../../research/plan/25-state-2026-10-01.md).
+**Coordinator- or operator-run.** The I2B session wrote and locally rehearsed these steps. Every box step is a script under `steps/`,
 sent by `ssm.sh` as root through `aws ssm send-command` (AWS-RunShellScript), base64-wrapped
 so no quoting survives the trip. Coordinator-host steps are the exact AWS/Docker commands
 below. Log purpose, expected cost and rollback in the coordinator record **before** each
@@ -126,6 +132,28 @@ SIGKILL have a box form, both probing the worker's `127.0.0.1:8002/readyz` (200 
 and pass only when the probe went non-200 and answered 200 again within the bound; the others are recorded NOT RUN
 unless run by hand.
 
+## 6. The Lab on the box
+
+The Lab ships from the same checkout as the App, beside it and never through it; the procedure of
+record is runbook [08](../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md) and the
+release names are [`infra/lab/app/README.md`](../lab/app/README.md). Each box step goes through
+`ssm.sh` as above; ran 2026-10-01 at 7ecbab0e (L0, L1, L3–L6s; L7 skipped, WR-LDP-7).
+
+| Script | Where | What | Stops / exits |
+|---|---|---|---|
+| `infra/lab/rollout/launch-v1.sh preflight\|window\|box\|vercel\|members\|main` | host | the operator's sequencer over the rows below, Vercel and the memberships (wave 6 renames it `lab-release.sh box\|web\|members\|main`; the spent `window` moves to evidence) | stops at the first failing step |
+| `infra/lab/rollout/lab-migrate.sh` | host | L2: the hosted Lab apply, then exactly `hosted-migrate.sh`, only under R151's three conditions | 2: a condition unmet, nothing dialled |
+| `infra/lab/rollout/lab-checkout.sh RELEASE=` | box | L0: fetch, refuse when the engine's `serve.sh` or its pin differ, then `steps/40-checkout.sh` | 2: unknown release or engine pin differs |
+| `infra/lab/rollout/steps/10-lab-preflight.sh` | box | L1: what of the Lab is on the box, read-only | 2: not RELEASE; 3: a pre-Lab release |
+| `steps/20-lab-image.sh` | box | L3: `infrx-lab:<RELEASE>`, its `sha256:` id to `/etc/infrx-lab/image` | 2: not RELEASE; 4: no image id |
+| `steps/30-lab-units.sh` | box | L4: every Lab unit installed, none enabled | 2: not RELEASE |
+| `steps/40-lab-control.sh STATE=on\|off` | box | L5: the control env file (owner `ubuntu`), the marker, readyz | 2: refused before any change; 4: started, not ready |
+| `steps/45-lab-site.sh STATE=on\|off` | box | L6: the `lab-control` site on the App edge, validated first | 2: refused; 4: Caddy refuses, edge unchanged |
+| `steps/50-lab-role.sh STATE= ROLE=` | box | L7: one worker role's env file (its switch) | 2/3/5: refused by name, nothing replaced |
+| `steps/60-lab-smoke.sh` | box | L8: every ON switch and the App's own readyz | 1: one does not answer |
+| `steps/70-lab-status.sh [UNIT=]` | box | L5d: unit state, container, journal tail with value-bearing lines dropped (read-only) | — |
+| `steps/90-lab-revert.sh` | box | R: the whole Lab off, switches first | 1: the App does not answer after |
+
 ## Verification log
 
 - 2026-09-22: Written by I2B at the commit that carries it; steps are `bash -n`-clean and
@@ -169,3 +197,4 @@ unless run by hand.
 - 2026-09-29 (KNOWN-GOOD-REPROOF-2, WR-KGR2-1): both targets proven through 0052 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0051 proof is kept in `superseded` (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-2-68ba65f.md`; the row and the paragraph say 0052 and `files` 0019-0052. Task-local only, doc only; hosted stays at 0051 until the next R151 window.
 - 2026-09-29 (KNOWN-GOOD-REPROOF-3, WR-KGR3-1): both targets proven through 0056 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0052 proof is kept in `superseded` in front of the through-0051 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-8f0e3c9.md`; the row and the paragraph say 0056 and `files` 0019-0056. Task-local only, doc only; hosted stays at 0051 until the next R151 window.
 - 2026-09-30 (KNOWN-GOOD-REPROOF-4, WR-KGR4-1): both targets proven through 0059 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0056 proof is kept in `superseded` in front of the through-0052 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md`; the row and the paragraph say 0059 and `files` 0019-0059. Task-local only, doc only; hosted stays where the operator's windows leave it (0051 now; 0056 after the first Lab window).
+- 2026-10-01 (W6 docs-state): the preamble states what has run and where it is recorded (the 2026-09-29 cutover, the two 2026-09-30 Lab windows, the 2026-10-01 box; session-03 lines 525/591–595, 09's log); §6 'The Lab on the box' indexes launch-v1.sh, lab-migrate.sh, lab-checkout.sh and the Lab steps with their exits. Doc only.
