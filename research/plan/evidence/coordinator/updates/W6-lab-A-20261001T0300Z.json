@@ -4,7 +4,7 @@
   "slice": "LAB-01 (@infrx/shared as link:) + LAB-02 (packages/shared/console deleted; TracePage and the loss vocabulary Lab-local)",
   "activity": "review",
   "at": "2026-10-01T03:00:00Z",
-  "head": "002e2173",
+  "head": "b07fae84",
   "base": "08983639",
   "worktree": ".claude/worktrees/codex-w6-lab-A",
   "branch": "codex/w6-lab-A",
