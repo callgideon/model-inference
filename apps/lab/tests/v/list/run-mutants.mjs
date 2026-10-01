@@ -7,6 +7,7 @@ import { m, runMutants } from "../../l/shell/harness.mjs";
 const SUITE = ["adapter", "wiring", "query", "view", "page"].map((f) => `tests/v/list/${f}.test.ts`);
 const PORT = "lib/services/traces/port.ts";
 const SERVER = "lib/services/traces/server.ts";
+const SESSION = "lib/auth/session.ts"; // LAB-05: the one read-only session client
 const WIRE = "components/traces/detail/port.ts";
 const QUERY = "components/traces/list/query.ts";
 const VIEW = "components/traces/list/view-model.ts";
@@ -65,10 +66,12 @@ const MUTANTS = [
   m("V1M-X28", "a malformed row is dropped silently", PORT, "      if (items.some((x) => x === null)) return UNAVAILABLE;\n", "", [C.a04]),
   m("V1M-X29", "an unconfigured service answers empty", PORT, "return { list: async () => UNAVAILABLE,", "return { list: async () => ({ ok: true, value: { items: [], next_cursor: null } }) as const,", [C.a02]),
   // the server composition and the WR-V2-1 wiring
-  m("V1M-X30", "an unset base URL still reads", SERVER, "if (!baseUrl || config === null) return offlineTraces();", "if (config === null) return offlineTraces();", [C.w02]),
-  m("V1M-X31", "a session without a token still sends", SERVER, "access_token ?? null", 'access_token ?? "eyJ0.x.y"', [C.w01]),
-  m("V1M-X32", "the Lab session cookie is not the one read", SERVER, "        cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
-  m("V1M-X33", "the request's cookies are not read", SERVER, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+  m("V1M-X30", "an unset base URL still reads", SERVER, "if (!baseUrl || config === null) return offlineTraces();\n  return httpTraces({ baseUrl,", "if (config === null) return offlineTraces();\n  return httpTraces({ baseUrl: baseUrl ?? \"\",", [C.w02]),
+  m("V1M-X31", "a session without a token still sends", SESSION, "access_token ?? null", "access_token ?? \"eyJ0.x.y\"", [C.w01]),
+  m("V1M-X32", "the Lab session cookie is not the one read", SESSION, "    cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
+  m("V1M-X33", "the request's cookies are not read", SESSION, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
+  m("V1M-X72", "the trace adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
+  m("V1M-X73", "the trace adapter reads another family's old name", SERVER, "labApiUrl(env, \"traces\")", "labApiUrl(env, \"control\")", [C.w01]),
   m("V1M-X34", "the detail page is not wired to the adapter", WIRE, "  return { traces: labTraces(), content: UNAVAILABLE.content };\n}", "  return UNAVAILABLE;\n}", [C.w01]),
   // URL state
   m("V1M-X35", "the cursor is reported as ignored", QUERY, '.filter((name) => name !== "cursor")', ".filter(() => true)", [C.q01]),

@@ -2,12 +2,12 @@
 // user: the credential is the session's own access token (none: nothing is sent) and the provider is the
 // actor's, sent as `provider_org_id`; the route re-derives both. Records are the backends' JSON verbatim
 // (snake_case), lists come as `{data}`, every refusal is the route's status mapped to the port's reason,
-// and an answer holding one record the pages cannot read is unavailable (fails closed).
-import type { Actor, EvaluationPort, Refusal, Result } from "./port.ts";
-import { bool, list, map, nul, num, obj, oneOf, opt, str, type Check } from "./shape.ts";
+// and an answer holding one record the pages cannot read is unavailable (fails closed). The transport is
+// the shared one (../http.ts), with no key rename.
+import { bool, labClient, list, map, nul, num, obj, oneOf, opt, str, type HttpOptions } from "../http.ts";
+import type { EvaluationPort } from "./port.ts";
 
-const REASONS: Record<number, Refusal> = { 401: "denied", 403: "denied", 404: "not_found", 409: "conflict", 422: "invalid" };
-export type HttpOptions = { baseUrl: string; token: () => Promise<string | null>; fetch?: typeof fetch };
+export type { HttpOptions };
 
 const RUN = obj({
   run_id: str, run_ref: str, dataset_ref: str, state: oneOf("queued", "running", "succeeded", "failed", "cancelled"),
@@ -49,34 +49,15 @@ const SUBSCRIPTION = obj({
   })),
 });
 
-export function httpEvaluation({ baseUrl, token, fetch: send = fetch }: HttpOptions): EvaluationPort {
-  const root = `${baseUrl.replace(/\/+$/, "")}/lab/v1/evaluations`;
-  async function call<T>(actor: Actor, method: "GET" | "POST", path: string, readable: Check, body?: unknown): Promise<Result<T>> {
-    const bearer = await token().catch(() => null);
-    if (!bearer) return { ok: false, reason: "unavailable" }; // no session: nothing is sent
-    const url = `${root}/${path}?provider_org_id=${encodeURIComponent(actor.providerId)}`;
-    const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
-    try {
-      const response = await send(url, {
-        method, headers, cache: "no-store",
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (!response.ok) return { ok: false, reason: REASONS[response.status] ?? "unavailable" };
-      const payload = await response.json();
-      const value = method === "GET" ? payload.data : payload; // a read is {data}
-      return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: "unavailable" }; // an unreadable record
-    } catch {
-      return { ok: false, reason: "unavailable" }; // transport or an unparseable answer
-    }
-  }
+export function httpEvaluation(options: HttpOptions): EvaluationPort {
+  const { get, post } = labClient(options, "/lab/v1/evaluations");
   return {
-    catalog: (actor) => call(actor, "GET", "catalog", CATALOG),
-    runs: (actor) => call(actor, "GET", "runs", list(RUN)),
-    experiments: (actor) => call(actor, "GET", "experiments", list(EXPERIMENT)),
-    subscriptions: (actor) => call(actor, "GET", "subscriptions", list(SUBSCRIPTION)),
-    launch: (actor, launch) => call(actor, "POST", "experiments", EXPERIMENT, launch),
-    cancel: (actor, runId) => call(actor, "POST", `runs/${encodeURIComponent(runId)}/cancel`, RUN),
-    subscribe: (actor, request) => call(actor, "POST", "subscriptions", SUBSCRIPTION, request),
+    catalog: (actor) => get(actor, "catalog", CATALOG),
+    runs: (actor) => get(actor, "runs", list(RUN)),
+    experiments: (actor) => get(actor, "experiments", list(EXPERIMENT)),
+    subscriptions: (actor) => get(actor, "subscriptions", list(SUBSCRIPTION)),
+    launch: (actor, launch) => post(actor, "experiments", EXPERIMENT, launch),
+    cancel: (actor, runId) => post(actor, `runs/${encodeURIComponent(runId)}/cancel`, RUN),
+    subscribe: (actor, request) => post(actor, "subscriptions", SUBSCRIPTION, request),
   };
 }

@@ -1,0 +1,169 @@
+diff --git a/apps/lab/lib/auth/memberships.ts b/apps/lab/lib/auth/memberships.ts
+index 5b9ca7e0..0cc65744 100644
+--- a/apps/lab/lib/auth/memberships.ts
++++ b/apps/lab/lib/auth/memberships.ts
+@@ -2,12 +2,12 @@
+ // own session. The database takes the identity from auth.uid() and judges currency on its own clock,
+ // the same set L2's port answers (apps/infrx-api/tests/d/test_l2sql_self.py), so no identity is ever
+ // sent. Any bad row fails the read closed.
++import { UUID_ANY_RE as UUID } from "../services/shapes.ts";
+ import { ROLES, type Membership, type MembershipRead, type Role } from "./access.ts";
+ 
+ export const MEMBERSHIPS_RPC = "lab_provider_memberships";
+ export type RpcClient = { rpc: (name: string) => PromiseLike<{ data: unknown; error: unknown }> };
+ 
+-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ 
+ export function parseMemberships(data: unknown): MembershipRead {
+   if (!Array.isArray(data)) return { ok: false };
+diff --git a/apps/lab/lib/services/datasets/flows.ts b/apps/lab/lib/services/datasets/flows.ts
+index 7cf4fa9e..60e5bc09 100644
+--- a/apps/lab/lib/services/datasets/flows.ts
++++ b/apps/lab/lib/services/datasets/flows.ts
+@@ -3,6 +3,7 @@
+ // always the guarded workspace's, never a form field, and a viewer is refused before any call.
+ import type { Membership } from "../../auth/access.ts";
+ import type { DatasetsPort, Derived, ExportRecord, Failure, ImportJob, ImportReport, Leak, Preview } from "./port.ts";
++import { UUID_RE as UUID } from "../shapes.ts";
+ import { FAILURE_COPY } from "./views.ts";
+ 
+ export type ActionState<T> =
+@@ -15,7 +16,6 @@ export type ActionState<T> =
+ export const MAX_UPLOAD_BYTES = 1_000_000;
+ export const PREVIEW_BYTES = 64 * 1024;
+ export const MAX_TTL_S = 7 * 86_400;
+-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+ 
+ const refused = (message: string) => ({ status: "error", message }) as const;
+ const failed = (f: Failure) => ({ status: "error", message: `${FAILURE_COPY[f.error]} ${f.detail}`, leaks: f.leaks, report: f.report }) as const;
+diff --git a/apps/lab/lib/services/judge/core.ts b/apps/lab/lib/services/judge/core.ts
+index b07db1d6..fcc81919 100644
+--- a/apps/lab/lib/services/judge/core.ts
++++ b/apps/lab/lib/services/judge/core.ts
+@@ -6,6 +6,7 @@
+ // page, and fails closed.
+ import type { Membership, Role } from "../../auth/access.ts";
+ import { authCookieOptions, labConfig } from "../../auth/config.ts";
++import { USD_RE as USD, UUID, UUID_RE as ID } from "../shapes.ts";
+ 
+ export type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+ export type Outcome = { ok: true; data: unknown } | { ok: false; reason: "invalid" | "denied" | "unavailable" };
+@@ -19,11 +20,8 @@ export const RPC = {
+ } as const;
+ export const PAGE_MAX = 50;
+ export const MAX_SAMPLES = 200; // J1's candidate scan bound
+-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+-const ID = new RegExp(`^${UUID}$`);
+ // packages/shared REF_RE for kind `payer` (node --test cannot strip types under node_modules).
+ const PAYER = new RegExp(`^lab:payer:(${UUID}):${UUID}@sha256:[0-9a-f]{64}$`);
+-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // a Lab Amount value (R159)
+ const MODEL = /^[a-z0-9][a-z0-9.-]{0,63}$/;
+ const RANK: Record<Role, number> = { viewer: 0, developer: 1, administrator: 2 };
+ // What the RPCs raise for a caller they refuse (insufficient_privilege, no_data_found).
+diff --git a/apps/lab/lib/services/judge/runs.ts b/apps/lab/lib/services/judge/runs.ts
+index 3b227886..c812c92e 100644
+--- a/apps/lab/lib/services/judge/runs.ts
++++ b/apps/lab/lib/services/judge/runs.ts
+@@ -6,11 +6,10 @@
+ // labels and statistics behind it (J3).
+ import type { Actor, Result } from "../../../components/traces/detail/port.ts";
+ import type { JudgePort, JudgeRefusal, JudgeRun } from "../../../components/traces/judge/port.ts";
++import { USD_RE as USD, UUID_RE as ID } from "../shapes.ts";
+ import type { Rpc } from "./core.ts";
+ 
+ export const RUNS_RPC = "lab_judge_runs";
+-const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/; // PROVIDER_USD, exact to 1e-8 (R159)
+ const MODES = ["dry_run", "live"];
+ const STATES = ["estimated", "reserved", "submitted", "ambiguous", "collected", "released"];
+ const CALIBRATION = ["uncalibrated", "insufficient", "calibrated"];
+diff --git a/apps/lab/lib/services/pipelines/fake.ts b/apps/lab/lib/services/pipelines/fake.ts
+index 39bebc5d..0b26d546 100644
+--- a/apps/lab/lib/services/pipelines/fake.ts
++++ b/apps/lab/lib/services/pipelines/fake.ts
+@@ -14,13 +14,13 @@ import {
+   type Disagreement, type ExportInput, type ImportInput, type ImportReceipt, type Label, type LabelExport, type PipelinesPort,
+   type PrepareInput, type Refusal, type Result, type ReviewInput, type TeacherBatch, type TeacherInput, type TrainingRun,
+ } from "./port.ts";
++import { USD_RE as USD } from "../shapes.ts";
+ 
+ type Sample = { sampleId: string; split: "train" | "validation" | "holdout"; readable?: boolean };
+ type Owned<T> = T & { providerId: string };
+ const ok = <T>(value: T): Result<T> => ({ ok: true, value });
+ const no = <T>(reason: Refusal): Result<T> => ({ ok: false, reason });
+ const sha = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
+-const USD = /^(0|[1-9][0-9]{0,11})\.[0-9]{8}$/;
+ const METHODS: Record<string, Label["method"]> = { human: "imported", model: "synthetic" };
+ const ROW_KEYS = new Set(["sample_id", "method", "method_version", "label", "ground_truth", "annotator", "model", "prompt", "confidence", "spans"]);
+ const LIVE = ["submitted", "accepted"];
+diff --git a/apps/lab/lib/services/review/index.ts b/apps/lab/lib/services/review/index.ts
+index 45800527..fde37235 100644
+--- a/apps/lab/lib/services/review/index.ts
++++ b/apps/lab/lib/services/review/index.ts
+@@ -7,6 +7,7 @@
+ // only the selected workspace and the request, and accepts only stored customer (or judge) signals:
+ // never a label, never the customer's identity.
+ import type { Membership } from "../../auth/access.ts";
++import { UUID_ANY_RE as UUID } from "../shapes.ts";
+ 
+ export const REVIEW_RPC = "lab_review_feedback";
+ export type ReviewRpc = {
+@@ -25,7 +26,6 @@ export type ReviewEntry = {
+ };
+ export type ReviewResult = { ok: true; entries: ReviewEntry[] } | { ok: false; reason: "not_found" | "forbidden" | "unavailable" };
+ 
+-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const KEYS = ["feedback_id", "request_id", "name", "value", "comment", "author_role", "channel", "created_at"];
+ const NAMES = ["thumb", "rating", "correction", "comment"];
+ 
+diff --git a/apps/lab/tests/c/judge/run-mutants.mjs b/apps/lab/tests/c/judge/run-mutants.mjs
+index e8e72f33..8da0ae85 100644
+--- a/apps/lab/tests/c/judge/run-mutants.mjs
++++ b/apps/lab/tests/c/judge/run-mutants.mjs
+@@ -17,6 +17,7 @@ const SUITE = ["tests/c/judge/judge.test.ts", "tests/c/judge/runs.test.ts", "tes
+ const CORE = "lib/services/judge/core.ts";
+ const ACTIONS = "lib/services/judge/actions.ts";
+ const RUNS = "lib/services/judge/runs.ts";
++const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
+ const PAGE = "app/(provider)/judge/page.tsx";
+ const FORM = "app/(provider)/judge/form.tsx";
+ const COPY = "lib/services/judge/copy.ts";
+@@ -54,7 +55,7 @@ const MUTANTS = [
+   m("C3L-X04", "the calibration page takes the provider from the form", CORE, "p_provider_org_id: w.providerId, p_after", `p_provider_org_id: ${FORGED}, p_after`, [C.a01]),
+   m("C3L-X05", "a malformed grantor id is sent", CORE, "const grantor = id(input.grantor_org_id);", "const grantor = input.grantor_org_id as string;", [C.a02]),
+   m("C3L-X06", "a malformed model id is sent", CORE, "const model = id(input.model_id);", "const model = input.model_id as string;", [C.a02]),
+-  m("C3L-X07", "ids match case-insensitively", CORE, "const ID = new RegExp(`^${UUID}$`);", 'const ID = new RegExp(`^${UUID}$`, "i");', [C.a02]),
++  m("C3L-X07", "ids match case-insensitively", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(`^${UUID}$`, \"i\")", [C.a02]),
+   m("C3L-X08", "any judge model name is sent", CORE, 'typeof input.judge_model === "string" && MODEL.test(input.judge_model)', 'typeof input.judge_model === "string"', [C.a02]),
+   m("C3L-X09", "the sample size is unbounded", CORE, "count(input.sample_size, MAX_SAMPLES)", "count(input.sample_size, 999_999)", [C.a02]),
+   m("C3L-X10", "zero counts as a count", CORE, "return n >= 1 && n <= max ? n : null;", "return n >= 0 && n <= max ? n : null;", [C.a02, C.p01]),
+@@ -89,7 +90,7 @@ const MUTANTS = [
+   m("J3L-X02", "the request id is not sent", RUNS, "p_request_id: requestId }", "p_request_id: null }", [C.r01]),
+   m("J3L-X03", "a viewer reads judge runs", RUNS, '      if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.r02]),
+   m("J3L-X04", "a malformed request id is sent", RUNS, 'if (typeof requestId !== "string" || !ID.test(requestId))', 'if (typeof requestId !== "string")', [C.r02]),
+-  m("J3L-X05", "ids match case-insensitively", RUNS, "[0-9a-f]{12}$/;", "[0-9a-f]{12}$/i;", [C.r02]),
++  m("J3L-X05", "ids match case-insensitively", SHAPES, "new RegExp(`^${UUID}$`)", "new RegExp(`^${UUID}$`, \"i\")", [C.r02]),
+   m("J3L-X06", "P0002 (a foreign or unknown row) is unavailable", RUNS, 'code === "42501" || code === "P0002" ?', 'code === "42501" ?', [C.r03]),
+   m("J3L-X07", "any error reads as denied", RUNS, '? "denied" : "unavailable" };', '? "denied" : "denied" };', [C.r03]),
+   m("J3L-X08", "a thrown call reads as denied", RUNS, '      } catch {\n        return { ok: false, reason: "unavailable" };', '      } catch {\n        return { ok: false, reason: "denied" };', [C.r03]),
+diff --git a/apps/lab/tests/c/review/run-mutants.mjs b/apps/lab/tests/c/review/run-mutants.mjs
+index 52295db3..91007c24 100644
+--- a/apps/lab/tests/c/review/run-mutants.mjs
++++ b/apps/lab/tests/c/review/run-mutants.mjs
+@@ -15,6 +15,7 @@ const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",
+ const SUITE = ["tests/c/review/review.test.ts", "tests/l/shell/boundary.test.ts"];
+ const R = "lib/services/review/index.ts";
+ const A = "lib/services/review/actions.ts";
++const SHAPES = "lib/services/shapes.ts"; // LAB-10: the shared input shapes
+ 
+ const C = {
+   l01: "C3F-L01 the review reads through the one named door with the selected workspace and the request, no identity",
+@@ -30,7 +31,7 @@ const MUTANTS = [
+   m("C3F-LX02", "the review names another workspace than the selected one", R, "provider_org_id: workspace.providerId,", 'provider_org_id: "b0000009-0000-4000-8000-000000000009",', [C.l01]),
+   m("C3F-LX03", "the review sends an identity", R, "request_id: requestId } }", 'request_id: requestId, user_id: workspace.providerId } }', [C.l01]),
+   m("C3F-LX04", "a malformed request id reaches the database", R, '  if (typeof requestId !== "string" || !UUID.test(requestId)) return { ok: false, reason: "not_found" };\n', "", [C.l02]),
+-  m("C3F-LX05", "a request id with trailing text passes", R, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
++  m("C3F-LX05", "a request id with trailing text passes", SHAPES, "[0-9a-f]{12}$/i", "[0-9a-f]{12}/i", [C.l02]),
+   m("C3F-LX06", "not_found reads as unavailable", R, 'if (code === "not_found") return { ok: false, reason: "not_found" };', "", [C.l03]),
+   m("C3F-LX07", "a denied role reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "forbidden")', [C.l03]),
+   m("C3F-LX08", "a role refusal reads as unavailable", R, 'if (code === "forbidden" || code === "42501")', 'if (code === "42501")', [C.l03]),

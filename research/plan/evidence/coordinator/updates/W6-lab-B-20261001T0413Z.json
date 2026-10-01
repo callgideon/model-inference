@@ -1,0 +1,95 @@
+{
+  "task": "W6-lab-B",
+  "lane": "lab-B",
+  "slice": "LAB-04 (one HTTP transport, one camel) + LAB-05 (one read-only session client) + LAB-03 code half (LAB_API_URL, six old names as per-family fallback) + LAB-10 (one shapes module)",
+  "activity": "review (fix round 1-LABB-RV-1 done)",
+  "at": "2026-10-01T05:00:00Z",
+  "head": "eeed8aae",
+  "base": "2add8e0a",
+  "worktree": ".claude/worktrees/codex-w6-lab-B",
+  "branch": "codex/w6-lab-B",
+  "owned_paths": [
+    "apps/lab/lib/services/http.ts",
+    "apps/lab/lib/services/shapes.ts",
+    "apps/lab/lib/auth/session.ts",
+    "apps/lab/lib/auth/config.ts",
+    "apps/lab/lib/services/*/http.ts",
+    "apps/lab/lib/services/*/server.ts",
+    "apps/lab/.env.example",
+    "apps/lab/tests/{b,p,r,e2e,l/ui,l/shell,v/list}/ (cases and runners naming the moved lines)",
+    "apps/lab/tests/n/wiring.test.ts",
+    "research/plan/evidence/w6/LAB-0{3,4,5}-*.md",
+    "research/plan/evidence/w6/LAB-10-0037483.md",
+    "research/plan/evidence/w6/lab-B-WR-*.patch"
+  ],
+  "commands": [
+    {
+      "cmd": "node --test tests/l/shell/config.test.ts (L1-C06 before labApiUrl)",
+      "exit": 1,
+      "summary": "red first: no export labApiUrl; after: 6/6"
+    },
+    {
+      "cmd": "node --test tests/l/shell/shapes.test.ts on a base export",
+      "exit": 1,
+      "summary": "red first: shapes.ts missing; after: 3/3"
+    },
+    {
+      "cmd": "node --test tests/n/wiring.test.ts on a base export",
+      "exit": 0,
+      "summary": "pin green before and after (no behaviour change)"
+    },
+    {
+      "cmd": "make lab-test",
+      "exit": 0,
+      "summary": "273 tests: 259 pass, 0 fail, 14 skipped (base 268/254/0/14)"
+    },
+    {
+      "cmd": "make lab-lint lab-typecheck lab-build",
+      "exit": 0,
+      "summary": "green"
+    },
+    {
+      "cmd": "14 Lab mutant runners (base export / head export)",
+      "exit": 0,
+      "summary": "967/967 -> 1001/1001 killed, every case named; l/shared rerun in the worktree (export lacks apps/app): 9/9"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/i/lab",
+      "exit": 0,
+      "summary": "36 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab/test_mutants.py",
+      "exit": 0,
+      "summary": "70 passed"
+    },
+    {
+      "cmd": "fix round 1-LABB-RV-1: six consumers + C3L-X07/J3L-X05/C3F-LX05 back to base; WR-6 patch",
+      "exit": 0,
+      "summary": "make lab-test 259/0/14; lint/typecheck/build green; l/shell 93/93, c/judge 72/72, c/review 20/20 at head and with WR-6 applied"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.1,
+    "likely_h": 0.25,
+    "pessimistic_h": 1,
+    "confidence": "high",
+    "basis": "fix round committed and green; remaining = re-review and six wiring requests with verified patches",
+    "at": "2026-10-01T05:00:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-W6-LABB-1 lab-D: research/plan/evidence/w6/lab-B-WR-1-labD-actions-shapes.patch (actions.ts onto shapes.ts; B4-X74, P4-X73/X74, L4-X36 re-pointed; verified)",
+    "WR-W6-LABB-2 lab-E: research/plan/evidence/w6/lab-B-WR-2-labE-n-runner.patch (n runner suite + tests/n/wiring.test.ts, N4-X41..44; 4/4 killed)",
+    "WR-W6-LABB-3 lab-D: research/plan/evidence/w6/lab-B-WR-3-review-session.patch (review/actions.ts uses readOnlyClient)",
+    "WR-W6-LABB-4 infra/lab/app/lab.json (unowned) + infra/lab/app/README.md (docs-state): declare and name LAB_API_URL; then uncomment LAB_API_URL= in apps/lab/.env.example",
+    "WR-W6-LABB-5 lab-release-tool: vercel_lab() may collapse to LAB_API_URL after this merges; keep the six until the Vercel var is set (coordinator)",
+    "WR-W6-LABB-6 coordinator (six unowned consumers) + lab-E (c/judge C3L-X07, J3L-X05; c/review C3F-LX05): research/plan/evidence/w6/lab-B-WR-6-consumers-shapes.patch (consumers import from shapes.ts; verified l/shell 93/93, c/judge 72/72, c/review 20/20, tsc, pnpm test)"
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/LAB-04-9579f54.md",
+    "research/plan/evidence/w6/LAB-05-e4cd137.md",
+    "research/plan/evidence/w6/LAB-03-1e89f0c.md",
+    "research/plan/evidence/w6/LAB-10-0037483.md"
+  ]
+}
