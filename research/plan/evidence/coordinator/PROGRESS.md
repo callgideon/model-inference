@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 03:06Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 351, updated 2026-10-01 03:06Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 03:11Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 352, updated 2026-10-01 03:11Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -134,7 +134,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (150.3 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (150.4 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -381,11 +381,11 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W5-MERGE-66 | support merge batch #66 (Opus): known-good-reproof-4 31e29621 (+WR-KGR4-1/2/3, the window() push fix launch/window-<THROUGH>, lens minors KGR4-RV-1/3/4, R264); workflow wf_324ec269-637; integrated at 3ec8139d (R264; R151 condition 1 through 0059 on the tip; window() pushes launch/window-<THROUGH>) | complete | codex/w5-merge-66 | ba550eaa → aad436e4 | ports none (layer-1 only), prefix -, db - | 2026-09-30 02:03Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W5-MERGE-67 | support merge batch #67 (Opus): lab-observe-5 76d9e7ad (+the 09 log append kept both lines, LO5-RV1 partial-scrub oracle + st_job_scrub_partial, LO5-RV2 NOT RUN[ENV], LO5-RV3 pins.base, Makefile GATE_ARGS, R265); workflow wf_dfa796c8-f6b; integrated at f2ef6b2e (R265) | complete | codex/w5-merge-67 | 2bfbcc53 → 70a981e2 | ports none (layer-1 only), prefix -, db - | 2026-09-30 02:28Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
 | W5-MERGE-68 | support merge batch #68 (Opus): lab-r3-identities aba93c87 (+WR-R3I-1 the E8L k07 patch rerun on e8l, R3I-RV-2/3, WR-R3I-OPEN, R266–R267); workflow: see RESUME-NOW; integrated at e13b1ce7 (R266–R267; k07 PASS on e8l) | complete | codex/w5-merge-68 | 004f521d → 9f3789d2 | ports none (layer-1 only), prefix -, db - | 2026-09-30 02:57Z | — | 1–4 h remaining (likely 2 h), confidence unknown, estimated — |
-| W6-PLAN-LEDGER | support W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row (audit 2026-10-01 §7) | running | codex/w6-plan-ledger | 08983639 → — | none | 2026-10-01 03:06Z | handback to the coordinator | 3–9 h remaining (likely 5 h), confidence medium, estimated 2026-10-01 03:06Z; basis: wave6-plan plan-ledger 3/5/9 (lane start) |
+| W6-PLAN-LEDGER | support W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row | review | codex/w6-plan-ledger | 08983639 → 77739a36 | none | 2026-10-01 03:11Z | handback to the coordinator | 0.3–2 h remaining (likely 1 h), confidence medium, estimated 2026-10-01 03:11Z; basis: brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h |
 
 ### Queues and locks
 
-- Review queue: I2A.
+- Review queue: I2A, W6-PLAN-LEDGER.
 - Integration queue: empty.
 - e2c (55448/55493) + i8 (55450/55495/55496): G2-FIX until ≈2026-09-26 21:00Z. exclusive for the whole make check + tests/i run; no other user of either until the verdict
 - e3c compose block 56900–56999: BACKEND-MINORS. one E3C run at a time
@@ -713,6 +713,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 
 ## Activity log (newest first)
 
+- 2026-10-01 03:11Z UTC, W6-PLAN-LEDGER: running → review; head 77739a36; estimate likely 5 → 1 h (brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h)
 - 2026-10-01 03:06Z UTC, W6-PLAN-LEDGER: INT-11: W5-EVAL-RUNNER next_action restated from the B1/B2 closure_notes (the update file was corrected before commit)
 - 2026-10-01 03:06Z UTC, W5-EVAL-RUNNER: review → complete
 - 2026-10-01 03:06Z UTC, I3: queued → queued

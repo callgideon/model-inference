@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 351,
- "updated": "2026-10-01T03:06:32Z",
+ "revision": 352,
+ "updated": "2026-10-01T03:11:38Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10348,12 +10348,12 @@
   {
    "id": "W6-PLAN-LEDGER",
    "task": null,
-   "slice": "W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row (audit 2026-10-01 §7)",
+   "slice": "W6 plan-ledger: INT-01/02/03/04/07/10/11, INT-06 (README only), the P-08 row",
    "agent": "opus",
    "branch": "codex/w6-plan-ledger",
    "worktree": ".claude/worktrees/codex-w6-plan-ledger",
    "base": "08983639",
-   "head": null,
+   "head": "77739a36",
    "owned_paths": [
     "research/plan/tasks.json",
     "research/plan/evidence/coordinator/progress-state.json",
@@ -10370,21 +10370,61 @@
     "prefix": null,
     "db": null
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T02:55:00Z",
-   "updated": "2026-10-01T03:06:16Z",
+   "updated": "2026-10-01T03:11:37Z",
    "blocker": null,
    "next_action": "handback to the coordinator",
-   "evidence": [],
-   "commands": [],
-   "wiring_requests": [],
+   "evidence": [
+    "research/plan/evidence/w6/PLAN-LEDGER-77739a3.md",
+    "research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
+    "research/plan/consumer-v1/10-carried-work-register.md"
+   ],
+   "commands": [
+    {
+     "cmd": "python3 research/plan/evidence/w6/PLAN-LEDGER-raw/oracle.py",
+     "exit": 0,
+     "summary": "red at 08983639: 30 failing items; green at a7f5d917: 0"
+    },
+    {
+     "cmd": "python3 research/plan/scripts/progress.py check",
+     "exit": 0,
+     "summary": "0 errors; warnings 9 -> 3 (stale estimates on the window-bound I2A/E3A/I3)"
+    },
+    {
+     "cmd": "python3 research/plan/scripts/progress.py apply-updates",
+     "exit": 0,
+     "summary": "113 legacy updates reconciled as applied-by-hand (62 lanes, 59 merges); the lane's own 6 update files applied"
+    },
+    {
+     "cmd": "python3 research/plan/scripts/validate_plan.py --write-ledger",
+     "exit": 0,
+     "summary": "PASS; ledger current"
+    },
+    {
+     "cmd": "cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan test_mutants",
+     "exit": 1,
+     "summary": "53 tests; 1 pre-existing error (test_app_cannot_dispatch_early KeyError, same at the base)"
+    },
+    {
+     "cmd": "make console-test console-lint console-typecheck",
+     "exit": 0,
+     "summary": "591 pass / 0 fail / 59 skipped; lint 0 errors 2 pre-existing warnings; typecheck clean"
+    }
+   ],
+   "wiring_requests": [
+    "WR-PL-1 (coordinator): apply research/plan/evidence/w6/PLAN-LEDGER-raw/WR-PL-1-progress-gate-records.patch - progress.py validates and renders overlay gate_records (+2 GateRecords cases)",
+    "WR-PL-2 (coordinator): consumer-v1/README.md index line + log line for 10-carried-work-register.md",
+    "WR-PL-3 (infra-libs + coordinator): comment/docstring fixes at tests/i/lab/test_lab_rollout_steps.py:416 and infra/rollout/hosted-migrate.sh:35 (hosted at 0059; next window 0060+)",
+    "WR-PL-4 (coordinator): RESUME-NOW points at the register; create overlay support lanes for the other W6 lanes before applying their update files"
+   ],
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 5,
-    "pessimistic_h": 9,
+    "optimistic_h": 0.3,
+    "likely_h": 1,
+    "pessimistic_h": 2,
     "confidence": "medium",
-    "basis": "wave6-plan plan-ledger 3/5/9 (lane start)",
-    "at": "2026-10-01T03:06:16Z"
+    "at": "2026-10-01T03:11:37Z",
+    "basis": "brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h"
    }
   }
  ],
@@ -10394,6 +10434,12 @@
    "lane": "I2A",
    "task": "I2A",
    "head": "8ca672d0"
+  },
+  {
+   "since": "2026-10-01T03:11:37Z",
+   "lane": "W6-PLAN-LEDGER",
+   "task": "W6-PLAN-LEDGER",
+   "head": "77739a36"
   }
  ],
  "integration_queue": [],
@@ -13744,6 +13790,12 @@
    "by": "W6-PLAN-LEDGER",
    "what": "INT-11: W5-EVAL-RUNNER next_action restated from the B1/B2 closure_notes (the update file was corrected before commit)",
    "source": "research/plan/evidence/coordinator/2026-10-01-v1-audit.md"
+  },
+  {
+   "at": "2026-10-01T03:11:37Z",
+   "by": "W6-PLAN-LEDGER",
+   "what": "running → review; head 77739a36; estimate likely 5 → 1 h (brief items done and the lane oracle green; remaining = one review/fix round and the coordinator's overlay merge (ingested/activity_log conflict surface); WR-PL-1 ~0.3 h)",
+   "source": "updates/W6-PLAN-LEDGER-20261001T0311Z.json"
   }
  ],
  "history": {
@@ -15699,10 +15751,14 @@
   "W6-PLAN-LEDGER-close-W5-EVAL-RUNNER-20261001T0306Z.json": {
    "status": "applied",
    "at": "2026-10-01T03:06:16Z"
+  },
+  "W6-PLAN-LEDGER-20261001T0311Z.json": {
+   "status": "applied",
+   "at": "2026-10-01T03:11:37Z"
   }
  },
  "eta": {
-  "computed_at": "2026-10-01T03:06:16Z",
+  "computed_at": "2026-10-01T03:11:38Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
