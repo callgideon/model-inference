@@ -57,7 +57,7 @@ test("R4-A01 a proposal runs as the session's provider and role, whatever the fo
   const before = fake.calls.length;
   const claims = { ...OK, kind: "expand", providerId: "22222222-2222-4222-8222-222222222222", role: "operator" };
   assert.equal(await landing(proposeRelease(form(claims))), "/releases");
-  assert.deepEqual(fake.calls.slice(before), [["propose", { providerId: PROVIDER, role: "administrator" }, "expand", POLICY, 3]]);
+  assert.deepEqual(fake.calls.slice(before), [["propose", { providerId: PROVIDER, providerName: "Acme", role: "administrator" }, "expand", POLICY, 3]]);
 });
 
 test("R4-A02 a role without propose_publication is refused before the releases service is asked", async () => {

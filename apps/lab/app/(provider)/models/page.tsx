@@ -9,7 +9,7 @@ export const metadata = { title: "Models · infrx Lab" };
 export default async function Models({ searchParams }: PageProps<"/models">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const models = await controlPort().models({ providerId: workspace.providerId, role: workspace.role });
+  const models = await controlPort().models(workspace);
   return (
     <>
       <h1>Models</h1>

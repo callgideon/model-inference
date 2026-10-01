@@ -28,6 +28,7 @@ const FAKES: Record<string, string> = {
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier in FAKES) return { url: `data:text/javascript,${encodeURIComponent(FAKES[specifier])}`, shortCircuit: true };
+    if (specifier.startsWith("@/")) return next(new URL(`../../${specifier.slice(2)}.ts`, import.meta.url).href, context); // tsconfig's @/ (LAB-13)
     return next(specifier === "next/navigation" ? "next/navigation.js" : specifier, context);
   },
 });
@@ -73,7 +74,7 @@ test("B4-A01 a launch runs as the session's provider and role and sends the pars
   const before = port.calls.length;
   const fields = LAUNCH();
   assert.equal(await landing(launchExperiment(form({ ...fields, providerId: "22222222-2222-4222-8222-222222222222", role: "administrator" }))), `/experiments/${fields.experiment_id}`);
-  same(port.calls.slice(before), [["launch", { providerId: P, role: "developer" }, {
+  same(port.calls.slice(before), [["launch", { providerId: P, providerName: "Acme", role: "developer" }, {
     experiment_id: fields.experiment_id, dataset_ref: ref("dataset", 1), harness_ref: ref("harness", 2), evaluator_ref: ref("evaluator", 5),
     baseline_serving_ref: ref("serving", 3), candidate_serving_ref: ref("serving", 4), seed: 7, max_cases: 40,
     run_limit: { unit: "CREDIT", value: "10.00000000" },
@@ -82,7 +83,7 @@ test("B4-A01 a launch runs as the session's provider and role and sends the pars
   }]]);
   const sub = SUB();
   assert.equal(await landing(subscribeCheckpoints(form(sub))), "/evaluations/checkpoints");
-  assert.deepEqual(port.calls.at(-1)!.slice(0, 2), ["subscribe", { providerId: P, role: "developer" }]);
+  assert.deepEqual(port.calls.at(-1)!.slice(0, 2), ["subscribe", { providerId: P, providerName: "Acme", role: "developer" }]);
   assert.deepEqual((port.calls.at(-1)![2] as { limit: unknown; max_active: number }).limit, { unit: "CREDIT", value: "20.50000000" });
 });
 

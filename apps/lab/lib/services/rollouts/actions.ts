@@ -4,7 +4,8 @@
 // comes back as its reason; success is a plain return to the page, which re-reads the records.
 import { redirect } from "next/navigation";
 import { requireProviderWorkspace } from "../../auth/guard.ts";
-import { holds, releasesPort, type Refusal } from "./port.ts";
+import { land } from "../common.ts";
+import { releasesPort } from "./port.ts";
 
 const POLICY_REF = /^lab:policy:[0-9a-f-]{36}:[0-9a-f-]{36}@sha256:[0-9a-f]{64}$/;
 const FENCE = /^\d{1,15}$/;
@@ -14,9 +15,5 @@ export async function proposeRelease(data: FormData): Promise<void> {
   const [kind, policyRef, fence] = ["kind", "policyRef", "fence"].map((n) => data.get(n));
   const valid = (kind === "expand" || kind === "rollback") && typeof policyRef === "string" && POLICY_REF.test(policyRef)
     && typeof fence === "string" && FENCE.test(fence);
-  const refused: Refusal | null = !holds(w.role, "propose_publication") ? "denied" : !valid ? "invalid" : null;
-  const result = refused === null
-    ? await releasesPort().propose({ providerId: w.providerId, role: w.role }, kind as "expand" | "rollback", policyRef as string, Number(fence))
-    : { ok: false as const, reason: refused };
-  redirect(result.ok ? "/releases" : `/releases?refused=${result.reason}`);
+  redirect(await land("/releases", w, "propose_publication", valid, () => releasesPort().propose(w, kind as "expand" | "rollback", policyRef as string, Number(fence))));
 }

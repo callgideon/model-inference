@@ -4,6 +4,7 @@
 // is the HTTP adapter (server.ts); unset it is "unavailable" (fails closed), or, only outside production
 // and only when asked for, the labelled preview fake. Actor, refusals and capabilities are L4's (contracts/v2 roles).
 import { holds, REFUSALS, type Actor, type Refusal, type Result } from "../control/port.ts";
+import { down, previewPort } from "../common.ts";
 import { FakeReleases } from "./fake.ts";
 import { labReleases } from "./server.ts";
 
@@ -63,14 +64,7 @@ export interface ReleasesPort {
   propose(actor: Actor, kind: ProposalKind, policyRef: string, fence: number): Promise<Result<Proposal>>;
 }
 
-const down = async () => ({ ok: false, reason: "unavailable" }) as const;
 const UNAVAILABLE: ReleasesPort = { releases: down, variants: down, propose: down };
 
-let preview: FakeReleases | undefined;
-export const isPreview = (env: Record<string, string | undefined> = process.env) =>
-  env.LAB_RELEASES_PREVIEW === "1" && env.NODE_ENV !== "production";
-
-export function releasesPort(env: Record<string, string | undefined> = process.env): ReleasesPort {
-  if (isPreview(env)) return (preview ??= new FakeReleases());
-  return labReleases(env) ?? UNAVAILABLE;
-}
+/** The HTTP adapter when configured; otherwise unavailable, or outside production the asked-for preview (common.ts). */
+export const { isPreview, port: releasesPort } = previewPort("LAB_RELEASES_PREVIEW", () => new FakeReleases(), labReleases, UNAVAILABLE);

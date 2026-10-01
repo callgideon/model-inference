@@ -4,7 +4,10 @@
 import { m, runMutants } from "../l/shell/harness.mjs";
 
 const SUITE = ["view", "real", "journey", "actions", "pages", "http", "wiring"].map((f) => `tests/b/${f}.test.ts`);
+const COMMON = "lib/services/common.ts"; // LAB-09: land, form readers, refusal copy, preview switch
+const NOTE = "components/preview-note.tsx"; // LAB-09: the one preview note
 const PORT = "lib/services/evaluation/port.ts";
+const ACCESS = "lib/auth/access.ts"; // LAB-07: the one role table
 const FAKE = "lib/services/evaluation/fake.ts";
 const VIEW = "lib/services/evaluation/view.ts";
 const ACTIONS = "lib/services/evaluation/actions.ts";
@@ -98,14 +101,14 @@ const MUTANTS = [
   m("B4-X36", "a rejected checkpoint reads as undecided", VIEW, 'return d.receipt === "rejected" ? "not evaluated: the checkpoint was rejected" : "not decided yet";', 'return "not decided yet";', [C.v07]),
   m("B4-X37", "the policies are swapped", VIEW, 's.policy === "latest_only" ?', 's.policy === "every" ?', [C.v07]),
   m("B4-X38", "subscription limits lose their unit", VIEW, "`${s.run_limit.value} ${s.run_limit.unit} per run", "`${s.run_limit.value} per run", [C.v07]),
-  m("B4-X39", "any ?refused= string is looked up", VIEW, "(REFUSALS as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v08]),
+  m("B4-X39", "any ?refused= string is looked up", COMMON, "(refusals as readonly unknown[]).includes(value) ?", 'typeof value === "string" ?', [C.v08]),
   // port: roles and the fail-closed seam
-  m("B4-X40", "a viewer may run evaluations", PORT, 'role !== "viewer"', 'role !== "nobody"', [C.v01, C.a02, C.j02]),
-  m("B4-X41", "a developer may not run evaluations", PORT, 'capability === "read_aggregate_health" || role !== "viewer"', 'capability === "read_aggregate_health" || role === "administrator"', [C.v01, C.a01, C.j01]),
-  m("B4-X42", "a viewer may not read", PORT, 'capability === "read_aggregate_health" || ', "", [C.v01]),
-  m("B4-X43", "the preview stand-in runs in production", PORT, ' && env.NODE_ENV !== "production"', "", [C.v09]),
-  m("B4-X44", "the default port is the stand-in, not unavailable", PORT, "labEvaluation(env) ?? UNAVAILABLE", "labEvaluation(env) ?? (preview ??= new FakeEvaluation())", [C.v09, C.w02]),
-  m("B4-X45", "any preview flag value turns the stand-in on", PORT, 'env.LAB_EVALS_PREVIEW === "1"', "env.LAB_EVALS_PREVIEW !== undefined", [C.v09]),
+  m("B4-X40", "a viewer may run evaluations", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: ["read_aggregate_health", "run_evaluation"],', [C.v01, C.a02, C.j02]),
+  m("B4-X41", "a developer may not run evaluations", ACCESS, 'developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],', 'developer: ["read_aggregate_health", "manage_dev_deployment"],', [C.v01, C.a01, C.j01]),
+  m("B4-X42", "a viewer may not read", ACCESS, 'viewer: ["read_aggregate_health"],', 'viewer: [],', [C.v01]),
+  m("B4-X43", "the preview stand-in runs in production", COMMON, ' && env.NODE_ENV !== "production"', "", [C.v09]),
+  m("B4-X44", "the default port is the stand-in, not unavailable", COMMON, "real(env) ?? unavailable", "(preview ??= fake())", [C.v09, C.w02]),
+  m("B4-X45", "any preview flag value turns the stand-in on", COMMON, 'env[flag] === "1"', "env[flag] !== undefined", [C.v09]),
   // fake: what the backends must enforce
   m("B4-X46", "reads are not scoped to the provider", FAKE, "rows.filter((r) => r.providerId === actor.providerId).map(", "rows.map(", [C.j02, C.j03]),
   m("B4-X47", "the catalog is not scoped to the provider", FAKE, "ok(copy(this.offered.get(actor.providerId) ?? EMPTY))", "ok(copy([...this.offered.values()][0] ?? EMPTY))", [C.j02]),
@@ -133,10 +136,10 @@ const MUTANTS = [
   m("B4-X66", "a subscription spends PROVIDER_USD", FAKE, 'request.run_limit.unit === "CREDIT" && request.limit.unit === "CREDIT" && ', "", [C.j03]),
   m("B4-X67", "a run's limit may exceed the total", FAKE, "exact(request.run_limit.value) <= exact(request.limit.value)", "true", [C.j03]),
   // actions: the session's actor, the capability, the shapes, the landing
-  m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(actor(w), launch!)", 'evaluationPort().launch({ providerId: text(data, "providerId"), role: w.role }, launch!)', [C.a01]),
-  m("B4-X69", "the actor's role is not the session's", ACTIONS, "({ providerId: w.providerId, role: w.role });", '({ providerId: w.providerId, role: "administrator" });', [C.a01]),
-  m("B4-X70", "the capability check is skipped", ACTIONS, '!holds(w.role, "run_evaluation") ? "denied" : ', "", [C.a02]),
-  m("B4-X71", "malformed input reaches the service", ACTIONS, ' : !valid ? "invalid"', "", [C.a03]),
+  m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, providerId: text(data, "providerId") }, launch!)', [C.a01]),
+  m("B4-X69", "the actor's role is not the session's", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, role: "administrator" as const }, launch!)', [C.a01]),
+  m("B4-X70", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("B4-X71", "malformed input reaches the service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
   m("B4-X73", "a ref with trailing text passes", ACTIONS, "@sha256:[0-9a-f]{64}$`);", "@sha256:[0-9a-f]{64}`);", [C.a03]),
   m("B4-X74", "any record id passes", SHAPES, "UUID_RE = new RegExp(`^${UUID}$`);", "UUID_RE = /./;", [C.a03]),
@@ -156,21 +159,21 @@ const MUTANTS = [
   m("B4-X88", "any policy passes", ACTIONS, 'policy === "latest_only" || policy === "every" ? policy : null', "policy", [C.a03]),
   m("B4-X89", "zero concurrent runs pass", ACTIONS, 'max_active: int(data, "max_active", 1)', 'max_active: int(data, "max_active", 0)', [C.a03]),
   m("B4-X90", "the total limit is the per-run one", ACTIONS, 'limit: credit(data, "limit")', 'limit: credit(data, "run_limit")', [C.a01]),
-  m("B4-X91", "a refusal is dropped on the way back", ACTIONS, "redirect(result.ok ? to(result.value) : `${page}?refused=${result.reason}`);", "redirect(result.ok ? to(result.value) : page);", [C.a02, C.a04]),
-  m("B4-X92", "a launch lands on the list, not its records", ACTIONS, ", (e) => `/experiments/${e.experiment_id}`);", ");", [C.a01]),
-  m("B4-X93", "a success is flagged by the action, not the records", ACTIONS, "redirect(result.ok ? to(result.value) :", "redirect(result.ok ? `${to(result.value)}?done=1` :", [C.a01, C.a04]),
+  m("B4-X91", "a refusal is dropped on the way back", COMMON, 'return result.ok ? to(result.value) : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`;', "return result.ok ? to(result.value) : page;", [C.a02, C.a04]),
+  m("B4-X92", "a launch lands on the list, not its records", ACTIONS, ", (e) => `/experiments/${e.experiment_id}`))", "))", [C.a01]),
+  m("B4-X93", "a success is flagged by the action, not the records", COMMON, "return result.ok ? to(result.value) :", "return result.ok ? `${to(result.value)}?done=1` :", [C.a01, C.a04]),
   m("B4-X94", "an action runs without a provider workspace", ACTIONS, "export async function cancelRun(data: FormData): Promise<void> {\n  const w = await requireProviderWorkspace();",
     'export async function cancelRun(data: FormData): Promise<void> {\n  const w = { providerId: "x", providerName: "x", role: "administrator" } as const;', [C.a05]),
   m("B4-X95", "a subscription lands on the evaluations list", ACTIONS, 'await land("/evaluations/checkpoints", w,', 'await land("/evaluations", w,', [C.a01, C.a02]),
   // the export route
   m("B4-X96", "the export runs without a provider workspace", ROUTE, "const workspace = await requireProviderWorkspace();", 'const workspace = { providerId: "x", role: "viewer" as const };', [C.a05]),
   m("B4-X97", "the export answers before the report exists", ROUTE, '  if (experiment.report === null) return Response.json({ refusal: "conflict" }, { status: 409, headers: HEADERS });\n', "", [C.a06]),
-  m("B4-X98", "the export reads as a fixed provider", ROUTE, "{ providerId: workspace.providerId, role: workspace.role }", '{ providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role }', [C.a06]),
+  m("B4-X98", "the export reads as a fixed provider", ROUTE, "evaluationPort().experiments(workspace)", 'evaluationPort().experiments({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.a06]),
   m("B4-X99", "the export may be cached", ROUTE, 'const HEADERS = { "cache-control": "private, no-store" };', "const HEADERS = {};", [C.a06]),
   m("B4-X100", "the export is shown inline", ROUTE, '"content-disposition": `attachment; filename=', '"content-disposition": `inline; filename=', [C.a06]),
   m("B4-X101", "the export drops the report's digest", ROUTE, "return Response.json(experiment.report, {", "return Response.json({ ...experiment.report, report_digest: undefined }, {", [C.a06]),
   // pages
-  m("B4-X102", "a page reads records as a fixed provider", EVALS, "const actor = { providerId: workspace.providerId, role: workspace.role };", 'const actor = { providerId: "11111111-1111-4111-8111-111111111111", role: workspace.role };', [C.p01]),
+  m("B4-X102", "a page reads records as a fixed provider", EVALS, "port.runs(workspace)", 'port.runs({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
   m("B4-X103", "a page shows ?refused= raw", CHECKPOINTS, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
   m("B4-X104", "a page claims success on its own", EVALS, "<h1>Evaluations</h1>", "<h1>Evaluations</h1>\n      <p>Launched successfully.</p>", [C.p01]),
   m("B4-X105", "the launch form is shown to a viewer", EVALS, '{holds(workspace.role, "run_evaluation") && (\n        <form action={launchExperiment}>', "{(\n        <form action={launchExperiment}>", [C.p02]),
@@ -181,7 +184,7 @@ const MUTANTS = [
   m("B4-X110", "a deep link shows the first experiment", EXPERIMENT, "list.value.find((x) => x.experiment_id === id)", "list.value[0]", [C.p03]),
   m("B4-X111", "a comparison is drawn without B2's report", EXPERIMENT, "const c = e.report === null ? null : comparison(e.report);", "const c = comparison(e.report!);", [C.p03]),
   m("B4-X112", "the export is offered before the report exists", EXPERIMENT, "      <h2>Runs</h2>", "      <a href={`/experiments/${e.experiment_id}/report`}>Export</a>\n      <h2>Runs</h2>", [C.p03]),
-  m("B4-X113", "the preview label shows when the stand-in is off", EVALS, "{isPreview() && <PreviewNote />}", "{<PreviewNote />}", [C.p04]),
+  m("B4-X113", "the preview label shows when the stand-in is off", EVALS, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p04]),
   // the HTTP adapter (WR-B4-1, lane lab-api-2)
   m("B4-X115", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),
   m("B4-X116", "the provider is not the actor's", TRANSPORT, "encodeURIComponent(actor.providerId)", "\"\"", [C.h01]),
@@ -194,7 +197,7 @@ const MUTANTS = [
   m("B4-X123", "an unmapped status is invalid", TRANSPORT, "?? \"unavailable\"", "?? \"invalid\"", [C.h02]),
   m("B4-X124", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-B4-1): the configured adapter, the session's token, the row check
-  m("B4-X125", "the configured adapter is ignored", PORT, "return labEvaluation(env) ?? UNAVAILABLE;", "return UNAVAILABLE;", [C.w01]),
+  m("B4-X125", "the configured adapter is ignored", PORT, "labEvaluation, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.w01]),
   m("B4-X126", "another server env names the backend", SERVER, "labApiUrl(env, \"evaluation\")", "labApiUrl(env, \"traces\")", [C.w01]),
   m("B4-X127", "the publishable key is sent as the credential", SESSION, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
   m("B4-X128", "the session is read from another cookie", SESSION, "    cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
@@ -225,6 +228,11 @@ const MUTANTS = [
   m("B4-X152", "a session-token getter that rejects escapes the adapter", TRANSPORT, "const bearer = await token().catch(() => null);", "const bearer = await token();", [C.h05]),
   m("B4-X153", "a 410 reads as gone in a family that has no gone", TRANSPORT, "422: \"invalid\" }", "422: \"invalid\", 410: \"gone\" }", [C.h02]),
   m("B4-X154", "a write's answer is unwrapped from {data}", TRANSPORT, "body?: unknown, read: Answer = keys)", "body?: unknown, read: Answer = (p) => keys(p.data))", [C.h01]),
+  // LAB-09: each action names its capability now that land() is shared
+  m("B4-X156", "a launch needs only read access", ACTIONS, 'land("/evaluations", w, "run_evaluation", launch', 'land("/evaluations", w, "read_aggregate_health", launch', [C.a02]),
+  m("B4-X157", "a cancel needs only read access", ACTIONS, 'land("/evaluations", w, "run_evaluation", id', 'land("/evaluations", w, "read_aggregate_health", id', [C.a02]),
+  m("B4-X158", "a subscription needs only read access", ACTIONS, 'land("/evaluations/checkpoints", w, "run_evaluation"', 'land("/evaluations/checkpoints", w, "read_aggregate_health"', [C.a02]),
+  m("B4-X159", "the preview note does not say it is a stand-in", NOTE, "come from an in-memory stand-in, not", "come from", [C.p04]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "B4", mutants: MUTANTS }));

@@ -1,0 +1,89 @@
+diff --git a/apps/lab/app/(provider)/requests/[id]/page.tsx b/apps/lab/app/(provider)/requests/[id]/page.tsx
+index ed2415f4..8588d649 100644
+--- a/apps/lab/app/(provider)/requests/[id]/page.tsx
++++ b/apps/lab/app/(provider)/requests/[id]/page.tsx
+@@ -13,10 +13,9 @@ export const metadata = { title: "Request · infrx Lab" };
+ // reads (C2, WR-V2-2) are not wired: the panel states the record's content state. V3: the judge runs.
+ export default async function RequestDetail({ params }: PageProps<"/requests/[id]">) {
+   const workspace = await requireProviderWorkspace();
+-  const actor = { providerId: workspace.providerId, role: workspace.role };
+   const { id } = await params;
+   const { traces } = tracePorts();
+-  const [trace, feedback, judge] = await Promise.all([traces.detail(actor, id), reviewRequestFeedback(id), judgePort().runs(actor, id)]);
++  const [trace, feedback, judge] = await Promise.all([traces.detail(workspace, id), reviewRequestFeedback(id), judgePort().runs(workspace, id)]);
+   return (
+     <>
+       <h1>Request</h1>
+diff --git a/apps/lab/components/traces/detail/port.ts b/apps/lab/components/traces/detail/port.ts
+index 839fe9ca..4967aca7 100644
+--- a/apps/lab/components/traces/detail/port.ts
++++ b/apps/lab/components/traces/detail/port.ts
+@@ -3,11 +3,11 @@
+ // provider's own serving versions only, T3 tombstones applied, metadata only without a current
+ // provider_sharing grant. Content reads through C2 (WR-V2-2) are not wired: there is no content port, and
+ // the page states each record's content state instead (W6 LAB-06; the item stays in the carried-work register).
+-import type { Role } from "../../../lib/auth/access.ts";
++import type { Actor } from "../../../lib/auth/access.ts";
+ import { labTraces } from "../../../lib/services/traces/server.ts";
+ 
+-/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value. */
+-export type Actor = { providerId: string; role: Role };
++/** Always the session's workspace (lib/auth/guard.ts), never a form or URL value: lib/auth/access.ts's one Actor (LAB-08). */
++export type { Actor };
+ type Metadata = {
+   request_id: string;
+   started_at: string;
+diff --git a/apps/lab/tests/v/detail/page.test.ts b/apps/lab/tests/v/detail/page.test.ts
+index 192a30f9..d7391905 100644
+--- a/apps/lab/tests/v/detail/page.test.ts
++++ b/apps/lab/tests/v/detail/page.test.ts
+@@ -14,8 +14,9 @@ const PANELS = "components/traces/detail/panels.tsx";
+ test("V2-P01 the page reads as the session's workspace, and feedback shows whatever the trace read says", () => {
+   const page = read(PAGE);
+   assert.match(page, /const workspace = await requireProviderWorkspace\(\);/);
+-  assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/);
+-  assert.match(page, /Promise\.all\(\[traces\.detail\(actor, id\), reviewRequestFeedback\(id\), /);
++  assert.match(page, /traces\.detail\(workspace, id\)/); // LAB-08: the workspace itself is the actor
++  assert.doesNotMatch(page, /providerId:/);
++  assert.match(page, /Promise\.all\(\[traces\.detail\(workspace, id\), reviewRequestFeedback\(id\), judgePort\(\)\.runs\(workspace, id\)\]\)/);
+   assert.match(page, /\n      <FeedbackPanel result=\{feedback\} \/>\n/, "the feedback panel is not inside a trace branch");
+   assert.match(page, /\{!trace\.ok && <p role="alert">\{TRACE_COPY\[trace\.reason\]\}<\/p>\}/);
+   assert.doesNotMatch(page, /providerId:\s*(id|params|searchParams)|formData/);
+diff --git a/apps/lab/tests/v/detail/run-mutants.mjs b/apps/lab/tests/v/detail/run-mutants.mjs
+index e8d21c9e..ad02f1e1 100644
+--- a/apps/lab/tests/v/detail/run-mutants.mjs
++++ b/apps/lab/tests/v/detail/run-mutants.mjs
+@@ -47,7 +47,7 @@ const MUTANTS = [
+   m("V2-X11", "an always-unavailable content port comes back", PORT, "return { traces: labTraces() };", 'return { traces: labTraces(), content: { read: async () => ({ ok: false, reason: "unavailable" }) } } as never;', [C.d07]),
+   m("V2-X28", "the trace read is not scoped to the provider", FAKE, "r.detail.request_id === requestId && r.providerId === actor.providerId", "r.detail.request_id === requestId", [C.j02]),
+   m("V2-X29", "a viewer reads individual requests", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j02]),
+-  m("V2-X35", "the page reads as a provider from the URL", PAGE, "const actor = { providerId: workspace.providerId, role: workspace.role };", "const actor = { providerId: id, role: workspace.role };", [C.p01]),
++  m("V2-X35", "the page reads as a provider from the URL", PAGE, "traces.detail(workspace, id)", "traces.detail({ ...workspace, providerId: id }, id)", [C.p01]),
+   m("V2-X36", "feedback waits on the projection", PAGE, "\n      <FeedbackPanel result={feedback} />\n", "\n      {trace.ok && <FeedbackPanel result={feedback} />}\n", [C.p01]),
+   m("V2-X37", "a trace refusal is shown raw", PAGE, "{TRACE_COPY[trace.reason]}", "{trace.reason}", [C.p01]),
+   m("V2-X12", "the page reads ?content= again", PAGE, "RequestDetail({ params }: PageProps", "RequestDetail({ params, searchParams }: PageProps", [C.p02]),
+diff --git a/apps/lab/tests/v/judge/panel.test.ts b/apps/lab/tests/v/judge/panel.test.ts
+index 08645154..7534add3 100644
+--- a/apps/lab/tests/v/judge/panel.test.ts
++++ b/apps/lab/tests/v/judge/panel.test.ts
+@@ -23,6 +23,6 @@ test("V3-P01 the judge panel is read only, shows refusals as fixed copy and link
+ 
+ test("V3-P02 the page reads judge runs as the session's actor and shows them only beside a visible request", () => {
+   const page = read(PAGE);
+-  assert.match(page, /judgePort\(\)\.runs\(actor, id\)\]\);/);
++  assert.match(page, /judgePort\(\)\.runs\(workspace, id\)\]\);/); // LAB-08: the workspace itself is the actor
+   assert.match(page, /\n      \{trace\.ok && <JudgePanel result=\{judge\} \/>\}\n/);
+ });
+diff --git a/apps/lab/tests/v/judge/run-mutants.mjs b/apps/lab/tests/v/judge/run-mutants.mjs
+index b32f5864..693a57e8 100644
+--- a/apps/lab/tests/v/judge/run-mutants.mjs
++++ b/apps/lab/tests/v/judge/run-mutants.mjs
+@@ -57,7 +57,7 @@ const MUTANTS = [
+   m("V3-X35", "the panel prints Calibrated. for every run", PANEL, "<p>{r.calibration}</p>", "<p>Calibrated.</p>", [C.p01]),
+   m("V3-X36", "the panel prints pass for every run", PANEL, "<p>Verdict: {r.verdict}</p>", "<p>Verdict: pass</p>", [C.p01]),
+   m("V3-X33", "judge runs show beside a missing request", PAGE, "{trace.ok && <JudgePanel result={judge} />}", "<JudgePanel result={judge} />", [C.p02]),
+-  m("V3-X34", "judge runs are read as a provider from the URL", PAGE, "judgePort().runs(actor, id)", 'judgePort().runs({ providerId: id, role: "administrator" }, id)', [C.p02]),
++  m("V3-X34", "judge runs are read as a provider from the URL", PAGE, "judgePort().runs(workspace, id)", 'judgePort().runs({ providerId: id, role: "administrator" }, id)', [C.p02]),
+ ];
+ 
+ process.exit(await runMutants({ suite: SUITE, prefix: "V3", mutants: MUTANTS }));

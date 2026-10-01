@@ -6,7 +6,9 @@ import { datasetsPort } from "@/lib/services/datasets/server";
 import { FAILURE_COPY, restrictedCopy, splitSummary } from "@/lib/services/datasets/views";
 import { DeriveForm, ExportForm } from "../forms";
 
-export default async function Version({ params }: { params: Promise<{ ref: string }> }) {
+export const metadata = { title: "Dataset version · infrx Lab" };
+
+export default async function Version({ params }: PageProps<"/datasets/[ref]">) {
   const workspace = await requireProviderWorkspace();
   const ref = decodeURIComponent((await params).ref);
   const status = await (await datasetsPort()).version(workspace.providerId, ref);

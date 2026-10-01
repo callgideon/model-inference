@@ -13,7 +13,8 @@ test("L4-P01 each page reads the control records as the session's workspace and 
   for (const path of PAGES.filter((p) => !p.includes("settings"))) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /\{ providerId: workspace\.providerId, role: workspace\.role \}/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
   }
   for (const path of ["app/(provider)/models/page.tsx", "app/(provider)/deployments/page.tsx"])
@@ -24,5 +25,6 @@ test("L4-P01 each page reads the control records as the session's workspace and 
 test("L4-P02 the provider layout links the L4 pages and labels the preview stand-in only when it is on", () => {
   const layout = read("app/(provider)/layout.tsx");
   for (const href of ["/overview", "/models", "/deployments", "/judge", "/evaluations", "/releases", "/optimizations", "/annotations", "/training", "/datasets", "/settings"]) assert.ok(layout.includes(`href="${href}"`), href);
-  assert.match(layout, /\{isPreview\(\) && <p role="note">Preview: /);
+  assert.match(layout, /\{isPreview\(\) && <PreviewNote records="control" service="control" \/>\}/);
+  assert.match(read("components/preview-note.tsx"), /<p role="note">\{`Preview: \$\{records\} records come from an in-memory stand-in, not the \$\{service\} service\.`\}<\/p>/, "LAB-09: the one preview note");
 });

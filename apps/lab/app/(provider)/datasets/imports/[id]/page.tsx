@@ -6,7 +6,9 @@ import { datasetsPort } from "@/lib/services/datasets/server";
 import { FAILURE_COPY, importView } from "@/lib/services/datasets/views";
 import { ImportAgain } from "../../forms";
 
-export default async function ImportJob({ params }: { params: Promise<{ id: string }> }) {
+export const metadata = { title: "Dataset import · infrx Lab" };
+
+export default async function ImportJob({ params }: PageProps<"/datasets/imports/[id]">) {
   const workspace = await requireProviderWorkspace();
   const id = (await params).id;
   const job = await (await datasetsPort()).importJob(workspace.providerId, id);

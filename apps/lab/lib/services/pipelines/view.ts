@@ -1,5 +1,6 @@
 // P4: rows and copy derived only from the P1/P3 records. Nothing here remembers what a button did; an
 // unknown submission, an unknown cost and a rejected checkpoint are said as such (WR-P-6).
+import { fixedCopy } from "../common.ts";
 import type { Role } from "../../auth/access.ts";
 import {
   holds, IMPORT_REFUSALS, MANUAL, REFUSALS, type Checkpoint, type ImportReceipt, type Label, type LabelExport, type Refusal, type TeacherBatch,
@@ -166,7 +167,5 @@ export const REFUSAL_COPY: Record<Refusal, string> = {
   unavailable: "Pipeline records could not be read. Nothing is shown until they can be; try again shortly.",
 };
 
-/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown. */
-export function refusalCopy(value: unknown): string | null {
-  return (REFUSALS as readonly unknown[]).includes(value) ? REFUSAL_COPY[value as Refusal] : null;
-}
+/** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown (common.ts). */
+export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);

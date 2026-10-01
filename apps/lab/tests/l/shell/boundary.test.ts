@@ -142,6 +142,24 @@ test("L1-B03 the selection action stores the membership it validated, never the 
   assert.equal(action.split(".set(").length - 1, 1);
 });
 
+test("L1-B06 the action, refusal-copy and preview boilerplate lives once, in lib/services/common.ts and components/preview-note.tsx", () => {
+  const families = /^lib\/services\/(control|evaluation|pipelines|rollouts)\//;
+  for (const { path, source } of sources()) {
+    if (path.startsWith("app/")) assert.doesNotMatch(source, /in-memory stand-in/, path);
+    if (families.test(path)) assert.doesNotMatch(source, /function land\b|\.includes\(value\)|let preview\b|NODE_ENV !== "production"|const (field|oneOf) = |redirect\(result/, path);
+  }
+});
+
+// LAB-13: the page conventions, documented in apps/lab/README.md.
+test("L1-B07 every page types its props with Next's PageProps and has a title; app code imports lib and components by @/", () => {
+  for (const { path, source } of sources().filter((s) => s.path.startsWith("app/"))) {
+    assert.doesNotMatch(source, /from "(\.\.\/)+(lib|components)\//, path);
+    if (!path.endsWith("/page.tsx") || path === "app/(provider)/page.tsx") continue; // the home page only redirects
+    assert.match(source, /^export const metadata = \{ title: "[^"]+ · infrx Lab" \};$/m, path);
+    if (/\b(params|searchParams)\b/.test(source)) assert.match(source, /export default async function \w+\(\{ [^}]+ \}: PageProps<"\/[^"]*">\)/, path);
+  }
+});
+
 test("L1-B04 the Lab never imports the App: shared code comes only from packages/shared", () => {
   const offenders = sources().filter(({ source }) => /from\s+["'][^"']*apps\/app|from\s+["'](\.\.\/)+app\//.test(source));
   assert.deepEqual(offenders.map((f) => f.path), []);

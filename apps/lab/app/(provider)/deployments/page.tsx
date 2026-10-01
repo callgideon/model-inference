@@ -12,9 +12,8 @@ const LABEL: Record<Action, string> = { smoke: "Run dev smoke", publish: "Propos
 export default async function Deployments({ searchParams }: PageProps<"/deployments">) {
   const workspace = await requireProviderWorkspace();
   const refused = refusalCopy((await searchParams).refused);
-  const actor = { providerId: workspace.providerId, role: workspace.role };
   const port = controlPort();
-  const [deployments, proposals] = await Promise.all([port.deployments(actor), port.proposals(actor)]);
+  const [deployments, proposals] = await Promise.all([port.deployments(workspace), port.proposals(workspace)]);
   if (!deployments.ok || !proposals.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
   const rows = deploymentRows(workspace.role, deployments.value, proposals.value);
   return (

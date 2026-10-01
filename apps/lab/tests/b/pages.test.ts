@@ -18,7 +18,8 @@ test("B4-P01 each page reads the evaluation records as the session's workspace a
   for (const path of PAGES) {
     const page = read(path);
     assert.match(page, /const workspace = await requireProviderWorkspace\(\);/, path);
-    assert.match(page, /const actor = \{ providerId: workspace\.providerId, role: workspace\.role \};/, path);
+    assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+    assert.doesNotMatch(page, /providerId:/, path);
     assert.match(page, /return <p role="alert">\{REFUSAL_COPY\.unavailable\}<\/p>;/, path);
     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
     assert.doesNotMatch(page, /success|succeeded|complete!|saved|improved!/i, path);
@@ -46,6 +47,6 @@ test("B4-P03 an experiment is found only among the workspace's own, compared onl
 });
 
 test("B4-P04 the preview stand-in is labelled on every page only when it is on", () => {
-  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote \/>\}/, path);
-  assert.match(read(RUNS), /<p role="note">Preview: /);
+  for (const path of PAGES) assert.match(read(path), /\{isPreview\(\) && <PreviewNote records="evaluation" service="evaluation" \/>\}/, path);
+  assert.match(read("components/preview-note.tsx"), /<p role="note">\{`Preview: \$\{records\} records come from an in-memory stand-in, not the \$\{service\} service\.`\}<\/p>/, "LAB-09: the one preview note");
 });

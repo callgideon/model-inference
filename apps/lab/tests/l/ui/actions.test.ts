@@ -56,7 +56,7 @@ test("L4-A01 register runs as the session's provider and role, whatever the form
   as("developer");
   const before = control.calls.length;
   assert.equal(await landing(registerModel(form({ ...REG, providerId: "22222222-2222-4222-8222-222222222222", role: "administrator" }))), "/models");
-  assert.deepEqual(control.calls.slice(before), [["register", { providerId: A.provider_org_id, role: "developer" }, REG]]);
+  assert.deepEqual(control.calls.slice(before), [["register", { providerId: A.provider_org_id, providerName: "Acme", role: "developer" }, REG]]);
 });
 
 test("L4-A02 a role without the capability is refused before the control service is asked", async () => {

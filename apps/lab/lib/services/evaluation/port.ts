@@ -4,16 +4,13 @@
 // re-derived here. With LAB_API_URL (else LAB_EVALS_API_URL) set the port is the HTTP adapter (server.ts); unset it is
 // "unavailable" (fails closed), or, only outside production and only when asked for, the labelled
 // preview fake.
-import type { Role } from "../../auth/access.ts";
+import type { Actor } from "../../auth/access.ts";
+import { down, previewPort } from "../common.ts";
 import { FakeEvaluation } from "./fake.ts";
 import { labEvaluation } from "./server.ts";
 
-/** contracts/v2 ROLE_CAPABILITIES: every role reads, developer and administrator run evaluations. */
-export type Capability = "read_aggregate_health" | "run_evaluation";
-export const holds = (role: Role, capability: Capability): boolean => capability === "read_aggregate_health" || role !== "viewer";
-
-/** Always the session's workspace (lib/auth/guard.ts), never a form value. */
-export type Actor = { providerId: string; role: Role };
+/** The one role table and actor (lib/auth/access.ts, contracts/v2 ROLE_CAPABILITIES): every role reads, developer and administrator run evaluations. */
+export { holds, type Actor, type Capability } from "../../auth/access.ts";
 /** F3 `Amount`: an exact 8-decimal string tagged with its unit; units are never mixed or converted. */
 export type Amount = { unit: "CREDIT" | "PROVIDER_USD"; value: string };
 
@@ -127,15 +124,7 @@ export interface EvaluationPort {
   subscribe(actor: Actor, request: SubscriptionRequest): Promise<Result<Subscription>>;
 }
 
-const down = async () => ({ ok: false, reason: "unavailable" }) as const;
 const UNAVAILABLE: EvaluationPort = { catalog: down, runs: down, experiments: down, subscriptions: down, launch: down, cancel: down, subscribe: down };
 
-let preview: FakeEvaluation | undefined;
-export const isPreview = (env: Record<string, string | undefined> = process.env) =>
-  env.LAB_EVALS_PREVIEW === "1" && env.NODE_ENV !== "production";
-
-/** WR-B4-1: the HTTP adapter when configured; otherwise unavailable. */
-export function evaluationPort(env: Record<string, string | undefined> = process.env): EvaluationPort {
-  if (isPreview(env)) return (preview ??= new FakeEvaluation());
-  return labEvaluation(env) ?? UNAVAILABLE;
-}
+/** The HTTP adapter when configured; otherwise unavailable, or outside production the asked-for preview (common.ts). */
+export const { isPreview, port: evaluationPort } = previewPort("LAB_EVALS_PREVIEW", () => new FakeEvaluation(), labEvaluation, UNAVAILABLE);
