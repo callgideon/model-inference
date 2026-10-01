@@ -126,11 +126,13 @@ def test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing
     import httpx
     from fastapi import FastAPI
 
+    from infrx import config
+
     rt = support.runtime(support.settings("dev"))
     seen = []
 
     def engine_health(request):
-        seen.append(request.url.path)
+        seen.append((request.url.path, request.extensions["timeout"]["read"]))
         return httpx.Response(engine)
 
     rt.client = httpx.AsyncClient(base_url="http://vllm.local",
@@ -139,7 +141,7 @@ def test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing
     health.register(app, rt)
     response = TestClient(app).get("/health")
     assert (response.status_code, response.json()) == (status, body)
-    assert seen == ["/health"]
+    assert seen == [("/health", config.HEALTH_TIMEOUT_S)] and config.HEALTH_TIMEOUT_S == 5
 
     def unreachable(request):
         raise httpx.ConnectError("vllm.local unreachable")
@@ -148,6 +150,23 @@ def test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing
                                   transport=httpx.MockTransport(unreachable))
     response = TestClient(app, raise_server_exceptions=False).get("/health")
     assert response.status_code == 503 and response.json()["ok"] is False
+
+
+def test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once():
+    """W6 A10: the values every composition root wrote as literals, named once in
+    `infrx.config` - the engine client 600 s (10 s to connect), the Supabase/GoTrue clients
+    5 s (2 s), the trace bucket's object prefix `infrx/` - and the gateway's own clients
+    are built from them. Oracle: a changed constant, or a client that stops reading it."""
+    import httpx
+
+    from infrx import config
+
+    built = support.settings("dev")
+    assert composition.upstream_client(built).timeout == httpx.Timeout(600, connect=10)
+    assert composition.supabase_client(built).timeout == httpx.Timeout(5, connect=2)
+    assert (config.UPSTREAM_TIMEOUT_S, config.UPSTREAM_CONNECT_S) == (600, 10)
+    assert (config.SUPABASE_TIMEOUT_S, config.SUPABASE_CONNECT_S) == (5, 2)
+    assert config.TRACE_PREFIX == "infrx/"
 
 
 def test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500():

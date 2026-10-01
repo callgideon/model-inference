@@ -30,6 +30,15 @@ EXT_MIME = {".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
             ".mov": "video/quicktime"}
 
 
+# W6 A10: the HTTP client timeouts and the trace bucket's object prefix every composition
+# root uses, named once (seconds; a client takes `httpx.Timeout(total, connect=connect)`).
+# Plain numbers: this module stays importable without httpx (deploy/preflight.py, runbooks).
+UPSTREAM_TIMEOUT_S, UPSTREAM_CONNECT_S = 600, 10      # the engine: a whole generation
+SUPABASE_TIMEOUT_S, SUPABASE_CONNECT_S = 5, 2         # PostgREST and GoTrue
+HEALTH_TIMEOUT_S = 5                                  # the gateway /health's engine probe
+TRACE_PREFIX = "infrx/"                               # S3_TRACE_BUCKET's object prefix
+
+
 def _mimes(raw):
     return {m.strip().lower() for m in raw.split(",") if m.strip()}
 

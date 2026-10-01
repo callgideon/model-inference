@@ -16,7 +16,8 @@ import httpx
 from fastapi import FastAPI
 
 from ..auth.keys import Auth
-from ..config import from_env, validate_runtime
+from ..config import (SUPABASE_CONNECT_S, SUPABASE_TIMEOUT_S, UPSTREAM_CONNECT_S,
+                      UPSTREAM_TIMEOUT_S, from_env, validate_runtime)
 from . import pilot
 from ..observe import route as metrics
 from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
@@ -42,11 +43,13 @@ ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_c
 
 
 def upstream_client(settings):
-    return httpx.AsyncClient(base_url=settings.upstream, timeout=httpx.Timeout(600, connect=10))
+    return httpx.AsyncClient(base_url=settings.upstream,
+                             timeout=httpx.Timeout(UPSTREAM_TIMEOUT_S, connect=UPSTREAM_CONNECT_S))
 
 
 def supabase_client(settings):
-    return httpx.AsyncClient(base_url=f"{settings.supabase_url}/rest/v1", timeout=httpx.Timeout(5, connect=2),
+    return httpx.AsyncClient(base_url=f"{settings.supabase_url}/rest/v1",
+                             timeout=httpx.Timeout(SUPABASE_TIMEOUT_S, connect=SUPABASE_CONNECT_S),
                              headers={"apikey": settings.supabase_key,
                                       "Authorization": f"Bearer {settings.supabase_key}",
                                       "Content-Type": "application/json"})

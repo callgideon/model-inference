@@ -6,12 +6,14 @@ loopback readers (deploy/lib.sh, rehearse.sh) read the status only.
 """
 from fastapi.responses import JSONResponse
 
+from ...config import HEALTH_TIMEOUT_S
+
 
 def register(app, rt):
     @app.get("/health")
     async def health():
         try:
-            r = await rt.client.get("/health", timeout=5)
+            r = await rt.client.get("/health", timeout=HEALTH_TIMEOUT_S)
             return JSONResponse({"ok": r.status_code == 200},
                                 status_code=200 if r.status_code == 200 else 503)
         except Exception as e:
