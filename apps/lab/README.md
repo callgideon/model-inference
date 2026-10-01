@@ -33,9 +33,10 @@ runbook 08 §0 and the state file's carried-work table.
 
 - Public: `NEXT_PUBLIC_LAB_URL` (the Lab's https origin, no path), `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key).
-- Server-only base URLs: `LAB_CONTROL_URL`, `LAB_TRACES_API_URL`, `LAB_EVALS_API_URL`,
-  `LAB_PIPELINES_API_URL`, `LAB_RELEASES_API_URL`, `LAB_DATASETS_API_URL` (wave-6 lane lab-B adds
-  one `LAB_API_URL` with these six as fallbacks).
+- Server-only base URL: `LAB_API_URL` (lab-api, which serves every family; `lib/auth/config.ts`
+  `labApiUrl`). Deprecated fallbacks, read per family only while `LAB_API_URL` is unset:
+  `LAB_CONTROL_URL`, `LAB_TRACES_API_URL`, `LAB_EVALS_API_URL`, `LAB_PIPELINES_API_URL`,
+  `LAB_RELEASES_API_URL`, `LAB_DATASETS_API_URL`.
 - Development only (ignored in production): `LAB_CONTROL_PREVIEW`, `LAB_PIPELINES_PREVIEW`,
   `LAB_EVALS_PREVIEW`, `LAB_RELEASES_PREVIEW` — labelled in-memory stand-ins.
 
@@ -58,8 +59,8 @@ listed in `make lab-mutants`.
 
 Vercel project `infrx-lab` with **Root Directory `apps/lab`**, deployed from the **repository root**
 (an `apps/lab`-only upload lacks `packages/shared`: pnpm ENOENT). The operator tool is
-`infra/lab/rollout/launch-v1.sh vercel` (renamed `lab-release.sh` in wave 6); the box half is
-`launch-v1.sh box` and [`infra/lab/app/README.md`](../../infra/lab/app/README.md).
+`infra/lab/rollout/lab-release.sh web` (`launch-v1.sh` is its deprecated shim, `vercel` → `web`); the box half is
+`lab-release.sh box` and [`infra/lab/app/README.md`](../../infra/lab/app/README.md).
 
 [Requirements](../../research/platforms/05-lab-spec.md) · [Roadmap](../../research/platforms/06-lab-roadmap.md) · [Architecture and authorization](../../research/platforms/01-architecture.md)
 
@@ -70,3 +71,4 @@ insufficient, and consumer owner status is never provider authorization.
 
 - 2026-09-27 (LW0, R154): the package and lockfile only; `app/` followed with L1.
 - 2026-10-01 (W6 docs-state): rewritten as the built, deployed product (pages, families, env, checks, deploy from the repository root; lab.callbill.ai per the session-03 record line 595 and 09's log); the 2026-09-22 sequence banners retired.
+- 2026-10-01 (merge #76): `LAB_API_URL` first with the six old names deprecated (lab-B, merge #74); the deploy tool is `lab-release.sh` (lab-release-tool, merged).

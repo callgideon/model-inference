@@ -1,6 +1,6 @@
 # Lab observe runbook — trace gauges, the judge worker, grants, egress, alarms (I2L-OBS)
 
-**Disabled by default. Operator-run, preparation only.** The lab-observe lane wrote this runbook,
+**Disabled by default — still disabled on 2026-10-01** (the Lab control service is ON on the box, the observe units are installed inert; runbook 08's state block). **Operator-run; not yet run.** The lab-observe lane wrote this runbook,
 the units it installs (`apps/infrx-api/deploy/lab/observe/`), the names manifest
 ([`observe.json`](observe.json)), the alarms ([`alerts.json`](alerts.json), T3's `RULES`) and the
 exporter ([`trace_gauges.py`](trace_gauges.py)). Nothing here changed a host, AWS, S3, Supabase or

@@ -2,7 +2,7 @@
 
 **State 2026-10-01:** the consumer v1 is live, hosted is at 0001–0059 and the Lab is deployed for internal testing. Start at the [state of record 25](25-state-2026-10-01.md), then [the path to internal testing 09](consumer-v1/09-path-to-internal-testing.md) and the [v1 audit](evidence/coordinator/2026-10-01-v1-audit.md); the [manifest](tasks.json) holds task status.
 
-**Historical dispatches (preserved, not current):** [program 22](22-consumer-v1-implementation.md) and [prompt 24](24-consumer-v1-session-handoff.md) (2026-09-24, E3C/E4C then App), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20 §14](20-platform-handoff-2026-09-24.md) with its [operational tail](../../HANDOFF-20260924T2115Z.md), the [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md), [pending inputs](15-pending-inputs.md), [session prompt 16](16-fresh-session-handoff.md) and the [GPU hosting roadmap 23](23-inference-hosting-roadmap.md). The sequence below describes the original program.
+**Historical dispatches (preserved, not current):** [program 22](22-consumer-v1-implementation.md) and [prompt 24](24-consumer-v1-session-handoff.md) (2026-09-24, E3C/E4C then App), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20 §14](20-platform-handoff-2026-09-24.md) with its [operational tail](handoffs/operational/HANDOFF-20260924T2115Z.md), the [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md), [pending inputs](15-pending-inputs.md), [session prompt 16](16-fresh-session-handoff.md) and the [GPU hosting roadmap 23](23-inference-hosting-roadmap.md). The sequence below describes the original program.
 
 ## Start here
 

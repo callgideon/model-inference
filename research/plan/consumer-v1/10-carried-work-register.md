@@ -102,6 +102,7 @@ These rows record where each pending item of the api, lab-app, infra and docs-te
 | 75 | launch-v1.sh shim removal (W7): the deprecation shim forwarding to `lab-release.sh` goes | merge #71 (WR-W6-LRT-3); `infra/lab/rollout/launch-v1.sh` | W7 | no |
 | 76 | LAB-03 deploy half: switch the env list to `LAB_API_URL` after lab-B merges; the coordinator sets the Vercel var; `vercel env rm` the six names | merge #71 (WR-W6-LRT-3); `evidence/w6/lab-release-tool-5c6c9e6.md` §7 | `lab-release-tool` follow-up after `lab-B` + coordinator | no |
 | 77 | The live box's checkout 7ecbab0e predates `infra/rollout/box-lib.sh`: 45-lab-site and 90-lab-revert carry an inline `caddy_reload` fallback for it (fix round 6945a627); 72-observe-install is BLOCKED (exit 3) on that checkout by design. The next `lab-release.sh box` run's L0 (lab-checkout) advances the checkout and clears both | merge #72 (infra-libs); `evidence/w6/infra-libs-fa3addbd.md` Merge | operator (the next `lab-release.sh box`) | no |
+| 78 | Pre-existing red `tests/integration/backend/recovery/test_runbooks.py::test_e4c_rb09_the_copy_is_seeded_with_hosted_s_own_applied_history`: `infra/runbooks/rollout.md` §W6/§W7's migration range text (`0001-<newest>`) is stale against the tree's newest migration 0059 | merge #76 (DS-RV-6); `evidence/w6/DOCS-STATE-a146fd0.md` OI-1 | unassigned (rollout.md has no wave-6 owner) | no |
 
 ## 4. RESUME-NOW:6 cross-check
 
@@ -113,3 +114,4 @@ These rows record where each pending item of the api, lab-app, infra and docs-te
 - 2026-10-01: Row 3 (E4C) gains readiness findings RV-04/08/09/10, closed by P-17 check 8 in the E4C window; blocks testing: no (merge #70, plan-ledger lens PL-3).
 - 2026-10-01: Rows 1 and 2 name the tool (`TESTER_EMAILS=... infra/lab/rollout/lab-release.sh members`, `lab-release.sh main`); rows 75 (launch-v1.sh shim removal, W7) and 76 (LAB-03 deploy half after lab-B) added (merge #71, lab-release-tool WR-W6-LRT-3).
 - 2026-10-01: Row 77 added (merge #72, infra-libs): the live box's pre-box-lib checkout 7ecbab0e (45/90 caddy_reload fallback, 72 BLOCKED(3)) is cleared by the next `lab-release.sh box` L0.
+- 2026-10-01: Row 78 added (merge #76, docs-state DS-RV-6): the pre-existing test_e4c_rb09 failure (rollout.md's stale migration range), unowned in wave 6.

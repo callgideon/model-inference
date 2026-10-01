@@ -2,7 +2,7 @@
 
 Reviewed on 2026-09-24: code/tests at **`d7dc3690`**, then refreshed to main **`726d004d`** when new E1B results arrived during review. That delta adds measurements and coordination notes, with no runtime-code change. This is a repository and release-evidence audit, followed by a proposed priority order for discussion. It does not declare BACKEND-READY, authorize a hosted cutover, or mark pending tasks complete.
 
-Read this beside [handoff 20, especially §14](20-platform-handoff-2026-09-24.md), [the operational tail](../../HANDOFF-20260924T2115Z.md), and [tracker v46](evidence/coordinator/PROGRESS.md). Historical session records remain evidence for their own environments. Implementation-agent names have no bearing on the product architecture.
+Read this beside [handoff 20, especially §14](20-platform-handoff-2026-09-24.md), [the operational tail](handoffs/operational/HANDOFF-20260924T2115Z.md), and [tracker v46](evidence/coordinator/PROGRESS.md). Historical session records remain evidence for their own environments. Implementation-agent names have no bearing on the product architecture.
 
 ## 1. Decision supported by the review
 

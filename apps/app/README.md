@@ -14,9 +14,9 @@ single-console spec. Provider models/endpoints/traces/evaluation belong in
 [`apps/lab`](../lab/README.md).
 
 Onboarding is verified signup (`/signup` → `/verify-email` → `/welcome`) with **10,000 CREDIT once
-per individual user**, only a free plan. Whether public signup is open on the hosted project is the
-operator's Auth setting ([operations](../../infra/app/operations.md) X7, reversible), not this file's;
-the invite-only section below is the pre-v1 baseline, kept as the operator path for creating users.
+per individual user**, only a free plan. Public signup is **closed** on the hosted project: P-05 keeps `disable_signup true` (`research/plan/15-pending-inputs.md`, I1B-inventory-2026-09-22.md:34), the session-03 record logs no run of operations X7 ("Open public signup"), and internal users are created by script (session-03 record line 455). Opening it is
+the operator's reversible Auth setting ([operations](../../infra/app/operations.md) X7). The
+invite-only section below is the pre-v1 baseline and still the operator path for creating users.
 
 Historical (2026-09-22, before C0 and A1–A3 landed; not re-verified): Usage/Balance/Traces had development-only fixture previews, enabled by
 `INFRX_CONSOLE_PREVIEW=1` under `next dev`; production always shows an unavailable
@@ -154,3 +154,4 @@ the same values live in AWS SSM under `/INFRX-SUPABASE-PROD/*`.
 ## Verification log
 
 - 2026-10-01 (W6 docs-state): the 2026-09-22 sequence banners replaced by a dated state line (live since 2026-09-27, CREDIT flags per session-03 line 525); onboarding paragraph states the implemented signup routes; the invite-only section labelled as the pre-v1 baseline; nothing re-probed live.
+- 2026-10-01 (merge #76, DS-2): one statement on public signup, matching research/platforms/README.md: closed (P-05 `disable_signup true`; no X7 run in the session-03 record; internal users by script, line 455).

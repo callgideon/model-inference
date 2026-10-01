@@ -57,14 +57,16 @@ account approved. `S3_DIR` in `model.env` deliberately differs from the
 directory name; the mirror predates the names.
 
 Checks: run the canonical targets from the repo root — `make api-env` (pinned
-`uv sync --frozen` into `apps/infrx-api/.venv`), `make api-test`, `make api-mutants`,
+`uv sync --frozen` into `apps/infrx-api/.venv`), `make api-test`, `make api-lint`,
+`make api-typecheck`, `make api-mutants`,
 `make console-test`, `make console-lint`, `make console-typecheck` (`next typegen`
 then `tsc`), `make console-mutants`, `make console-built`, `make bench-test`,
 `make lab-test`, `make lab-lint`, `make lab-typecheck`, `make lab-build`,
 `make lab-mutants`, or `make check` for all of these. `apps/app` and `apps/lab` each
 install standalone (`cd apps/<app> && pnpm install --frozen-lockfile`, own lockfile);
-the lab-* targets fail fast naming that install. Docker gates sit outside `check`, each
-on a task-local `INFRX_D_TASK` key with ports in the reserved 57000–57599 band (P-21):
+lab-lint/lab-typecheck/lab-build fail fast naming the install. Measured per-target
+wall-clocks: `tests/integration/README.md` (W6 DT-16). Docker gates sit outside `check`, each
+on a task-local key whose ports come from `infrx/contracts/tasklocal.py`:
 `make integration consumer-local backend-certify app-e2e backend-local lab-compositions
 lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-local` and
 `console-c0-real console-c3a-real console-u3-real console-c3f-real console-pg`
@@ -88,8 +90,10 @@ env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `models/marlin2b/README
 The box is reached only through `infra/rollout/ssm.sh <step> [KEY=value …]` (the App's
 steps in `infra/rollout/steps/`, the Lab's in `infra/lab/rollout/steps/`, runbooks
 `infra/rollout/README.md` and `research/plan/consumer-v1/08-lab-internal-testing-rollout.md`).
-The Lab release tool is `infra/lab/rollout/launch-v1.sh box|vercel|members|main`
-(becoming `lab-release.sh`, wave 6); hosted migrations run only in an R151 window.
+The Lab release tool is `infra/lab/rollout/lab-release.sh preflight|box|web|members|main`
+(inputs `RELEASE`, `SUPABASE_URL`, `VERCEL_SCOPE`, `TESTER_EMAILS`, `OPERATOR_NAME`,
+`OPS_DSN_PARAM`, `WINDOW`; header of the script); `launch-v1.sh` is its deprecated shim
+(removed in W7). Hosted migrations run only in an R151 window.
 
 ## AWS access from this host
 
@@ -142,3 +146,4 @@ and ships no MTP weights.
 - 2026-09-21: Wave 2 merged on `claude/infrx-impl`; entry point for the next session is `research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md`; `make check` now runs eight Python mutant lists (D's needs Docker and skips visibly) and four console lists; application behavior unchanged on `main`.
 - 2026-09-23: Cutover: the gateway entry point is `uvicorn --factory infrx.gateway.app:create_app`; `apps/infrx-api/gateway.py` and its legacy tests are retired (evidence `research/plan/evidence/g/CUTOVER-*.md`).
 - 2026-10-01 (W6 docs-state): entry point re-pointed at `research/plan/25-state-2026-10-01.md` after the v1 launch and the Lab deploy; `apps/lab` described as the live provider Lab; Commands list the lab-* targets, the Docker gates outside `check`, the gate switches and the box/Lab release tooling; application behavior unchanged.
+- 2026-10-01 (merge #76): Commands add `make api-lint`/`make api-typecheck` and the DT-16 wall-clock pointer; only lab-lint/lab-typecheck/lab-build fail fast on a missing install; Docker-gate ports from `infrx/contracts/tasklocal.py`; the Lab release tool is `lab-release.sh` (launch-v1.sh a deprecated shim); application behavior unchanged.

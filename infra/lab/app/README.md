@@ -103,7 +103,7 @@ runbooks `infra/lab/workers/{training,rollout}/RUNBOOK.md`) [OP]:
   2026-09-30; both answer since 2026-10-01, session-03 lines 594–595; DNS A record of the control
   origin → the backend box).
 - **Site URL stays the App's.** The Lab only adds its own callbacks to **Redirect URLs**:
-  staging project `https://infrx-lab-*-humanbit.vercel.app/auth/callback**` and
+  staging project `https://infrx-lab-*-callgideon.vercel.app/auth/callback**` (the `infrx-lab` project is in team `callgideon`) and
   `http://localhost:3100/auth/callback**`; production `https://lab.callbill.ai/auth/callback**`.
 - The production entry is an App-side change first: `REDIRECT_ALLOWLIST.production` in
   `apps/app/lib/deploy/env.ts` says "only" the App's callback today (I2A-AUTH-03/04). Add the Lab
@@ -176,3 +176,4 @@ The Lab web is taken down in its own Vercel project (pause or remove the product
 - 2026-09-29 (lab-c7-gaps, C7-RV-5): `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` declared for the rollout role (R249: the plan location the page reads); nothing hosted run.
 - 2026-09-29 (lab-c7-gaps merge, 1-C7G-RV-B): WR-C7G-PREFLIGHT applied: the rollout unit's env file names `S3_MEDIA_BUCKET` / `S3_MEDIA_PREFIX` equal to the gateway's (R249, R256); nothing hosted run.
 - 2026-10-01 (W6 docs-state): head replaced by the dated enabled state (session-03 lines 594–595, 09 log); `lab.json` `enabled` documented as the repository default (the box switch is the marker); the control env file's owner is `ubuntu` in §2 and §4 (40-lab-control.sh, 7ecbab0e); §3 origins cite the P-08 record.
+- 2026-10-01 (merge #76, WR-W6DS-4/DS-RV-7): §3 and `lab.json`'s staging callback name the `callgideon` team (`https://infrx-lab-*-callgideon.vercel.app/auth/callback**`; the project is in callgideon, session-03 line 595); `lab.json`'s comment says `enabled` is the repository default and the box switch is `enable_marker`; the control env owner lines (ubuntu:ubuntu, §2/§4) confirmed (WR-IL-4).

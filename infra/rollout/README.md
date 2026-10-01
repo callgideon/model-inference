@@ -141,7 +141,7 @@ release names are [`infra/lab/app/README.md`](../lab/app/README.md). Each box st
 
 | Script | Where | What | Stops / exits |
 |---|---|---|---|
-| `infra/lab/rollout/launch-v1.sh preflight\|window\|box\|vercel\|members\|main` | host | the operator's sequencer over the rows below, Vercel and the memberships (wave 6 renames it `lab-release.sh box\|web\|members\|main`; the spent `window` moves to evidence) | stops at the first failing step |
+| `infra/lab/rollout/lab-release.sh preflight\|box\|web\|members\|main` | host | the operator's sequencer over the rows below, Vercel and the memberships (was `launch-v1.sh`, now its deprecated shim, `vercel` → `web`; the spent `window` and its patches are in `research/plan/evidence/i/`) | stops at the first failing step |
 | `infra/lab/rollout/lab-migrate.sh` | host | L2: the hosted Lab apply, then exactly `hosted-migrate.sh`, only under R151's three conditions | 2: a condition unmet, nothing dialled |
 | `infra/lab/rollout/lab-checkout.sh RELEASE=` | box | L0: fetch, refuse when the engine's `serve.sh` or its pin differ, then `steps/40-checkout.sh` | 2: unknown release or engine pin differs |
 | `infra/lab/rollout/steps/10-lab-preflight.sh` | box | L1: what of the Lab is on the box, read-only | 2: not RELEASE; 3: a pre-Lab release |
@@ -149,7 +149,7 @@ release names are [`infra/lab/app/README.md`](../lab/app/README.md). Each box st
 | `steps/30-lab-units.sh` | box | L4: every Lab unit installed, none enabled | 2: not RELEASE |
 | `steps/40-lab-control.sh STATE=on\|off` | box | L5: the control env file (owner `ubuntu`), the marker, readyz | 2: refused before any change; 4: started, not ready |
 | `steps/45-lab-site.sh STATE=on\|off` | box | L6: the `lab-control` site on the App edge, validated first | 2: refused; 4: Caddy refuses, edge unchanged |
-| `steps/50-lab-role.sh STATE= ROLE=` | box | L7: one worker role's env file (its switch) | 2/3/5: refused by name, nothing replaced |
+| `steps/50-lab-role.sh STATE= ROLE=` | box | L7: one worker role's env file (its switch) | 2/3: refused, nothing replaced; 5: a pending role refused by name after start; 4: started, not ready |
 | `steps/60-lab-smoke.sh` | box | L8: every ON switch and the App's own readyz | 1: one does not answer |
 | `steps/70-lab-status.sh [UNIT=]` | box | L5d: unit state, container, journal tail with value-bearing lines dropped (read-only) | — |
 | `steps/90-lab-revert.sh` | box | R: the whole Lab off, switches first | 1: the App does not answer after |
@@ -198,3 +198,4 @@ release names are [`infra/lab/app/README.md`](../lab/app/README.md). Each box st
 - 2026-09-29 (KNOWN-GOOD-REPROOF-3, WR-KGR3-1): both targets proven through 0056 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0052 proof is kept in `superseded` in front of the through-0051 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-3-8f0e3c9.md`; the row and the paragraph say 0056 and `files` 0019-0056. Task-local only, doc only; hosted stays at 0051 until the next R151 window.
 - 2026-09-30 (KNOWN-GOOD-REPROOF-4, WR-KGR4-1): both targets proven through 0059 on plain PostgreSQL and the Supabase image with the driver at fca3ea38, unchanged (SHAPE 14, 26/26 suites, 383 passed); the through-0056 proof is kept in `superseded` in front of the through-0052 one (R224); evidence `research/plan/evidence/i/KNOWN-GOOD-REPROOF-4-1c986c6.md`; the row and the paragraph say 0059 and `files` 0019-0059. Task-local only, doc only; hosted stays where the operator's windows leave it (0051 now; 0056 after the first Lab window).
 - 2026-10-01 (W6 docs-state): the preamble states what has run and where it is recorded (the 2026-09-29 cutover, the two 2026-09-30 Lab windows, the 2026-10-01 box; session-03 lines 525/591–595, 09's log); §6 'The Lab on the box' indexes launch-v1.sh, lab-migrate.sh, lab-checkout.sh and the Lab steps with their exits. Doc only.
+- 2026-10-01 (merge #76, DS-3/DS-RV-2/DS-RV-4): §6's 50-lab-role.sh exits split as the script header states (2/3, 5, 4); the sequencer row names `lab-release.sh` (merged, wave 6 lab-release-tool) with `launch-v1.sh` as its deprecated shim.

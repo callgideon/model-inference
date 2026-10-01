@@ -1,6 +1,6 @@
 # Two-platform product architecture
 
-**Status 2026-10-01:** both products are deployed. The App runs the CREDIT regime (public verified signup, one-time 10,000 CREDIT per individual user) on runtime 41693d5d; the Lab is live for internal testing at `https://lab.callbill.ai` with its control service on the pilot box; hosted Supabase is at migrations 0001–0059. What runs where and what is pending: [state of record 25](../plan/25-state-2026-10-01.md). The requirements below are retained as the product specification; the 2026-09-21/22 sequence banners ("backend first, then App, then Lab") were history once the App launched (2026-09-27) and the Lab deployed (2026-10-01).
+**Status 2026-10-01:** both products are deployed. The App runs the CREDIT regime (verified signup implemented, one-time 10,000 CREDIT per individual user) on runtime 41693d5d; public signup is closed (P-05 `disable_signup true`; no X7 run in the session-03 record); the Lab is live for internal testing at `https://lab.callbill.ai` with its control service on the pilot box; hosted Supabase is at migrations 0001–0059. What runs where and what is pending: [state of record 25](../plan/25-state-2026-10-01.md). The requirements below are retained as the product specification; the 2026-09-21/22 sequence banners ("backend first, then App, then Lab") were history once the App launched (2026-09-27) and the Lab deployed (2026-10-01).
 
 The business operates inference infrastructure. Two products make that infrastructure useful to different users:
 
@@ -36,3 +36,4 @@ Longer-term Lab closes the loop: production evidence → curated dataset → eva
 ## Verification log
 
 - 2026-10-01 (W6 docs-state): the 2026-09-21/22 sequence banners replaced by one dated status line citing `research/plan/25-state-2026-10-01.md`; the wave-2 status sentence marked as of `271add9`; requirements unchanged.
+- 2026-10-01 (merge #76, DS-2): the status line says public signup is closed (P-05 `disable_signup true`; no X7 run recorded), matching apps/app/README.md; the product requirement (public signup) is unchanged.

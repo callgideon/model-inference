@@ -1,5 +1,5 @@
 {
-  "comment": "I2L: the Lab's deployment inputs, NAMES only (values live in the operator's stores, never here). Origins are P-08 placeholders (TO BE VERIFIED). Read by apps/infrx-api/tests/i/lab and infra/lab/app/README.md.",
+  "comment": "I2L: the Lab's deployment inputs, NAMES only (values live in the operator's stores, never here). Origins are P-08 placeholders (TO BE VERIFIED). Read by apps/infrx-api/tests/i/lab and infra/lab/app/README.md. \"enabled\" is the repository default, never read by a deploy step; the box switch is enable_marker.",
   "enabled": false,
   "enable_marker": "/etc/infrx-lab/enabled",
   "origins": {
@@ -10,7 +10,7 @@
   "auth": {
     "site_url": "unchanged",
     "redirect_allowlist": {
-      "staging": ["https://infrx-lab-*-humanbit.vercel.app/auth/callback**", "http://localhost:3100/auth/callback**"],
+      "staging": ["https://infrx-lab-*-callgideon.vercel.app/auth/callback**", "http://localhost:3100/auth/callback**"],
       "production": ["https://lab.callbill.ai/auth/callback**"]
     }
   },
