@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 377,
- "updated": "2026-10-01T05:41:24Z",
+ "revision": 378,
+ "updated": "2026-10-01T05:44:28Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -10904,17 +10904,17 @@
    "branch": "codex/w6-certify-release",
    "worktree": ".claude/worktrees/codex-w6-certify-release",
    "base": "2add8e0a",
-   "head": null,
+   "head": "95f680a8",
    "isolation": {
     "ports": "m6",
     "prefix": "infrx-m6",
     "db": "task-local"
    },
-   "activity": "running",
+   "activity": "review",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T03:35:26Z",
+   "updated": "2026-10-01T05:44:28Z",
    "blocker": null,
-   "next_action": "handback → merge",
+   "next_action": "merge batch #78 (PRIORITY: unblocks the E4C window; README patch; WR-IL-2; CR minors)",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -11359,6 +11359,48 @@
    "updated": "2026-10-01T05:41:24Z",
    "blocker": null,
    "next_action": "integrate",
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MERGE-78",
+   "task": null,
+   "slice": "merge batch #78 (Opus): certify-release 95f680a8 (+the README patch, WR-IL-2 host-lib, CR-2/3/5 minors; the pinned-per-LOGDIR RELEASE/MIGRATION_VERSION from the fix round); workflow (see RESUME-NOW)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-78",
+   "worktree": ".claude/worktrees/codex-w5-merge-78",
+   "base": "c56cfce5",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T05:44:28Z",
+   "updated": "2026-10-01T05:44:28Z",
+   "blocker": null,
+   "next_action": "integrate → the operator runs /tmp/e4c",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
