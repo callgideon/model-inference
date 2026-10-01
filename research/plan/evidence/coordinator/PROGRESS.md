@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-10-01 04:28Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 367, updated 2026-10-01 04:28Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-10-01 04:40Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 369, updated 2026-10-01 04:40Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## v1 launch scope
 
@@ -26,10 +26,10 @@ Remaining, in order:
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `c31b8ff2`), base `dff31efc`, main `41693d5de57746b7dd1d68e40230db6dcd8c4e20`.
+- Integration branch `claude/consumer-v1` (head `681168df`), base `dff31efc`, main `41693d5de57746b7dd1d68e40230db6dcd8c4e20`.
 - Deployed candidate `41693d5de57746b7dd1d68e40230db6dcd8c4e20` (consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime; image infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e; MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, ACCOUNTING_REGIME=credit; regime **credit**).
 - Lowest open band: V4 measured backend; bands with active work: V5, V6.
-- Agent slots: 16 total, 13 active lanes, 2 reserved.
+- Agent slots: 16 total, 12 active lanes, 2 reserved.
 - Validation: 0 error(s), 13 warning(s).
 
 ### Actionable blockers
@@ -138,7 +138,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (151.7 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (151.9 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -400,9 +400,10 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 | W6-CERTIFY-RELEASE | support wave 6 clean-up lane certify-release (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_41fb9a88-ad1 | running | codex/w6-certify-release | 2add8e0a → — | ports m6, prefix infrx-m6, db task-local | 2026-10-01 03:35Z | handback → merge | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-PGRESTORE-TESTS | support wave 6 clean-up lane pgrestore-tests (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_d73a757d-83a | running | codex/w6-pgrestore-tests | 2add8e0a → — | ports i3b, prefix infrx-i3b, db task-local | 2026-10-01 03:35Z | handback → merge | 2–6 h remaining (likely 3 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-API-L5 | support wave 6 clean-up lane api-L5 (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_9771b2d5-76e | running | codex/w6-api-L5 | 2add8e0a → — | ports w5, prefix infrx-w5, db task-local | 2026-10-01 03:35Z | handback → merge | 4–12 h remaining (likely 6 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
-| W6-MAKEFILE-PINS | support wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54 | running | codex/w6-makefile-pins | 2add8e0a → — | ports -, prefix -, db - | 2026-10-01 03:35Z | handback → merge | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
+| W6-MAKEFILE-PINS | support wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54; merged #73 | complete | codex/w6-makefile-pins | 2add8e0a → 3208407a | ports -, prefix -, db - | 2026-10-01 04:40Z | — | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:35Z; basis: wave6-plan.md brief estimate |
 | W6-MERGE-71 | support merge batch #71 (Opus): lab-release-tool f4cdfb13 (+the launch-v1.sh shim conflict, LRT-RV-1/2/3/4, WR-W6-LRT-3, R269); workflow wf_00e7119f-36e; integrated at c31b8ff2 (R269) | complete | codex/w5-merge-71 | 87637f37 → 836bf555 | ports none (layer-1 only), prefix -, db - | 2026-10-01 04:02Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 | W6-MERGE-72 | support merge batch #72 (Opus): infra-libs 6be89bac (+the tests/i/mutants.py union with #71, WR-W6-LRT-1/WR-PL-3/WR-IL-1/WR-IL-3, IL-3/F2/F3/F4; WR-IL-2/4/5 carried); workflow (see RESUME-NOW) | running | codex/w5-merge-72 | efb398a8 → — | ports none (layer-1 only), prefix -, db - | 2026-10-01 04:03Z | integrate | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
+| W6-MERGE-73 | support merge batch #73 (Opus): makefile-pins 3208407a (+MP-RV-2/3/4; api-L5 recipes, docs pointers and the e3bm62 anchor carried); workflow wf_5f1a3e2f-0eb; integrated at 681168df | complete | codex/w5-merge-73 | 4c11a462 → 945139f3 | ports none (layer-1 only), prefix -, db - | 2026-10-01 04:40Z | — | 1–3 h remaining (likely 2 h), confidence medium, estimated 2026-10-01 03:32Z; basis: wave6-plan.md brief estimate (lane analogues from wave 5) |
 
 ### Queues and locks
 
@@ -427,7 +428,7 @@ Wave map: [research/plan/consumer-v1/07-post-launch-waves.md](../../consumer-v1/
 - warning: overlapping writers: W6-API-L3 (running) and W6-MERGE-72 (running) both own apps/infrx-api/tests/d/ / apps/infrx-api/tests/d/
 - warning: overlapping writers: W6-API-L4 (running) and W6-MERGE-72 (running) both own apps/infrx-api/tests/g/lab_*/ / apps/infrx-api/tests/g/lab_releases/
 - warning: overlapping writers: W6-LAB-B (running) and W6-LAB-E (running) both own apps/lab/tests/* / apps/lab/tests/c/content/ (+6 more)
-- warning: 2 update file(s) not applied yet: W6-lab-A-20261001T0300Z.json, W6-lab-release-tool-20261001T0320Z.json (run apply-updates)
+- warning: 3 update file(s) not applied yet: W6-lab-A-20261001T0300Z.json, W6-lab-release-tool-20261001T0320Z.json, W6-makefile-pins-20261001T0420Z.json (run apply-updates)
 
 ## Pending inputs
 

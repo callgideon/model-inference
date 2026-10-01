@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
- "integration_head": "c31b8ff2",
+ "integration_head": "681168df",
  "deployed": {
   "as_of": "2026-10-01T02:30Z",
   "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 368,
- "updated": "2026-10-01T04:34:43Z",
+ "revision": 369,
+ "updated": "2026-10-01T04:40:21Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -11014,7 +11014,7 @@
   {
    "id": "W6-MAKEFILE-PINS",
    "task": null,
-   "slice": "wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54",
+   "slice": "wave 6 clean-up lane makefile-pins (Opus; brief in the audit §7 + wave6-plan.md); workflow wf_1b4de604-b54; merged #73",
    "agent": "opus",
    "branch": "codex/w6-makefile-pins",
    "worktree": ".claude/worktrees/codex-w6-makefile-pins",
@@ -11025,11 +11025,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "review",
+   "activity": "complete",
    "started": "2026-10-01T03:35:26Z",
-   "updated": "2026-10-01T04:34:43Z",
+   "updated": "2026-10-01T04:40:21Z",
    "blocker": null,
-   "next_action": "merge batch #73 (MP-RV minors; api-L5 recipes carried)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -11135,22 +11135,22 @@
   {
    "id": "W6-MERGE-73",
    "task": null,
-   "slice": "merge batch #73 (Opus): makefile-pins 3208407a (+MP-RV-2/3/4; api-L5 recipes, docs pointers and the e3bm62 anchor carried); workflow (see RESUME-NOW)",
+   "slice": "merge batch #73 (Opus): makefile-pins 3208407a (+MP-RV-2/3/4; api-L5 recipes, docs pointers and the e3bm62 anchor carried); workflow wf_5f1a3e2f-0eb; integrated at 681168df",
    "agent": "opus",
    "branch": "codex/w5-merge-73",
    "worktree": ".claude/worktrees/codex-w5-merge-73",
    "base": "4c11a462",
-   "head": null,
+   "head": "945139f3",
    "isolation": {
     "ports": "none (layer-1 only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T04:34:43Z",
-   "updated": "2026-10-01T04:34:43Z",
+   "updated": "2026-10-01T04:40:21Z",
    "blocker": null,
-   "next_action": "integrate",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
