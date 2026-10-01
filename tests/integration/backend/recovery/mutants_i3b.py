@@ -37,6 +37,17 @@ ALERTS = "apps/infrx-api/infrx/observe/alerts.py"
 RULES = "infra/alerts/alerts.json"
 DASHBOARD = "infra/alerts/dashboard.json"
 PGRESTORE = "infra/runbooks/pgrestore.py"
+# i3bm40f moves the pre-creation below the project restore: one contiguous edit.
+PRECREATE = ("    precreate_roles(conninfo, backup)   # the dump's policies name infrx_* roles "
+             "the template lacks\n")
+PROJECT_RESTORE = ("    listing = run(backup, \"pg_restore\", \"-l\", \"/backup/project.dump\")\n"
+                   "    list_file = backup / \"project.list\"\n"
+                   "    list_file.write_text(restorable(listing))\n"
+                   "    try:\n"
+                   "        run(backup, \"pg_restore\", \"-d\", conninfo, \"--exit-on-error\",\n"
+                   "            \"-L\", \"/backup/project.list\", \"/backup/project.dump\")\n"
+                   "    finally:\n"
+                   "        list_file.unlink(missing_ok=True)\n")
 # I2B's scripts, which rc10 runs unmodified (the runner must copy apps/infrx-api/deploy)
 ROLLBACK = "apps/infrx-api/deploy/rollback.sh"
 
@@ -266,6 +277,27 @@ MUTANTS += (
     Mutant("i3bm40b", "a restore creates the dump's migration roles (infrx_*) before the project restore", PGRESTORE,
            '    return {n for n in names if n.startswith("infrx_")}\n',
            "    return set()\n", RESTORE, "bk00b"),
+    # DT-06: the executed half of the pre-creation, on a dump whose roles the cluster lacks
+    Mutant("i3bm40c", "DT-06: the pre-created migration roles are NOLOGIN", PGRESTORE,
+           'sql.SQL("create role {} nologin")', 'sql.SQL("create role {} login")',
+           RESTORE, "bk00c", layer=2),
+    Mutant("i3bm40d", "DT-06: the pre-creation skips a role that exists (a rerun is a no-op)",
+           PGRESTORE,
+           '            if conn.execute("select 1 from pg_roles where rolname = %s", '
+           "(name,)).fetchone():\n                continue\n", "", RESTORE, "bk00c", layer=2),
+    Mutant("i3bm40e", "DT-06: a restore runs the role pre-creation at all", PGRESTORE,
+           PRECREATE, "", RESTORE, "bk00c", layer=2),
+    Mutant("i3bm40f", "DT-06: the roles are pre-created BEFORE the project restore", PGRESTORE,
+           PRECREATE + PROJECT_RESTORE, PROJECT_RESTORE + "    precreate_roles(conninfo, backup)\n",
+           RESTORE, "bk00c", layer=2),
+    Mutant("i3bm40g", "DT-06 (cfb674fa): the pre-creation is plain statements, not a DO block "
+                      "with a bound parameter", PGRESTORE,
+           '            if conn.execute("select 1 from pg_roles where rolname = %s", '
+           "(name,)).fetchone():\n                continue\n"
+           '            conn.execute(sql.SQL("create role {} nologin").format(sql.Identifier(name)))\n',
+           '            conn.execute("do $$ begin if not exists (select 1 from pg_roles where '
+           "rolname = %(n)s) then execute format('create role %%I nologin', %(n)s); end if; "
+           'end $$", {"n": name})\n', RESTORE, "bk00c", layer=2),
     Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", PGRESTORE,
            '        for definition in meta["auth_triggers"]:\n',
            "        for definition in []:\n", RESTORE, "bk01_a", layer=2),
