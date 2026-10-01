@@ -17,7 +17,8 @@ ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per invariant group (who decides, capture, grants, the projection).
-SUBSET = ("any_member_decides", "head_is_the_key_mode", "every_purpose_granted")
+SUBSET = ("any_member_decides", "head_is_the_key_mode", "every_purpose_granted",
+          "lapse_reads_metadata", "cursor_crosses_filters")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

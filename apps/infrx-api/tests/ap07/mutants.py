@@ -20,10 +20,11 @@ from ..contracts.mutants import Mutant, Result, Runner
 from ..g.feedback.mutants import _layout
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
-SUITE_FILES = ("tests/ap07/test_data_use.py",)
+SUITE_FILES = ("tests/ap07/test_data_use.py", "tests/ap07/test_trace_reads.py")
 D = "console/data_use.py"
 R = "gateway/routes/console_data_use.py"
-FILES = (D, R)
+L = "gateway/routes/lab_traces.py"
+FILES = (D, R, L)
 U = "test_data_use__"
 OWNER = U + "only_the_grantors_owner_decides"
 CAPTURE = U + "capture_is_a_versioned_consent_the_gateway_reads"
@@ -32,6 +33,11 @@ REPLAY = U + "a_replay_writes_nothing_and_a_stale_view_conflicts"
 GRANTS = U + "grants_are_purpose_specific_versions"
 EXPIRY = U + "a_grant_expires_on_the_databases_clock"
 REVOKE = U + "revocation_is_the_grantors_and_holds_at_once"
+T = "test_trace_reads__"
+STATES = T + "each_row_states_why_its_content_is_or_is_not_there"
+LAPSED = T + "a_lapsed_grant_is_revoked_not_never_granted"
+BETWEEN = T + "a_revocation_between_list_and_detail_withholds_content"
+FILTERED = T + "filters_run_server_side_and_bind_the_cursor"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -118,6 +124,58 @@ MUTANTS: tuple[Mutant, ...] = (
        '"infrx.lab_access_grants where grant_id = %s and %s::uuid is not null "', REVOKE),
     _m("revoke_replay_rewrites", "a second DELETE answers the revoked grant", D,
        "if current is None or current.revoked_at is None:", "if True:", REVOKE),
+    # --- the Lab projection: one access state per reason (AP-07c) ------------------------------
+    _m("minimal_reads_captured", "a capture below full kept no content, grant or not", L,
+       '    if row.mode != "full":\n        return "not_captured"',
+       '    if False:\n        return "not_captured"', LAPSED),
+    _m("lapse_reads_metadata", "a withdrawn grant is revoked, not never granted", L,
+       'return "revoked" if lapsed else "metadata"', 'return "metadata"', LAPSED, BETWEEN),
+    _m("never_granted_reads_revoked", "a grantor with no grant to this provider is metadata", L,
+       "return bool(history) and not history[-1].is_current(",
+       "return True or bool(history) and not history[-1].is_current(", STATES, LAPSED),
+    _m("current_grant_reads_lapsed", "only a revoked or expired latest grant is withdrawn", L,
+       "and not history[-1].is_current(", "and history[-1].is_current(", LAPSED),
+    _m("oldest_grant_judged", "the latest version is the grant", L,
+       "and not history[-1].is_current(", "and not history[0].is_current(", LAPSED),
+    _m("lapse_not_read", "the grant history is read for a row without a grant", L,
+       "withdrawn[key] = await lapsed(user_id, provider, row.org_id)",
+       "withdrawn[key] = False", LAPSED),
+    _m("unstored_reads_expired", "a granted capture that kept nothing is not_captured", L,
+       '    if not row.content_stored:\n        return "not_captured"',
+       '    if False:\n        return "not_captured"', STATES),
+    _m("expired_reads_content", "deleted or past-bound content is expired", L,
+       '    if not available:\n        return "expired"', '    if False:\n        return "expired"',
+       STATES),
+    _m("broken_reads_content", "an answer that broke off is partial", L,
+       'return "content" if row.content_complete else "partial"', 'return "content"', STATES),
+    _m("granted_state_not_derived", "a granted row's state is judged on its content", L,
+       'item["access_state"] = access_state(row, True, False, item["content_available"])',
+       'item["access_state"] = item["access_state"]', STATES),
+    _m("unfinished_is_zero", "an unfinished capture has no elapsed time, not 0", L,
+       "    if row.completed_at is None:\n        return None",
+       "    if row.completed_at is None:\n        return 0", T + "timing_is_measured_or_absent_never_zero"),
+    _m("elapsed_in_seconds", "elapsed_ms is milliseconds", L,
+       ".total_seconds() * 1000)", ".total_seconds())", T + "timing_is_measured_or_absent_never_zero"),
+    _m("pins_dropped", "every row names its price and trace schema version", L,
+       '"price_version", "request_schema_version")', ")",
+       T + "pins_name_the_admitted_revision_and_trace_schema"),
+    _m("object_key_projected", "no object key leaves the route", L,
+       '"price_version", "request_schema_version")',
+       '"price_version", "request_schema_version", "content_key")',
+       T + "no_object_key_or_storage_link_leaves_the_route"),
+    _m("serving_filter_after_read", "a serving-version filter narrows what is asked", L,
+       'if filters["serving_version_id"] in ("", version)\n', "if True\n", FILTERED),
+    _m("model_filter_ignored", "a model filter narrows what is asked", L,
+       'and filters["model_id"] in ("", model)}', "and True}", FILTERED),
+    _m("cursor_crosses_filters", "a cursor is refused under another filter", L,
+       "before = parse_cursor(unscoped(cursor, scope))",
+       'before = parse_cursor(cursor.partition(".")[0])', FILTERED),
+    _m("cursor_scope_not_minted", "a filtered list's cursor carries its filter", L,
+       '"next_cursor": last and (f"{last}.{scope}" if scope else last)', '"next_cursor": last',
+       FILTERED),
+    _m("empty_filter_asks_everything", "a filter outside the provider's own asks nothing", L,
+       "rows = await traces.rows.page(tuple(serving), before, limit) if serving else []",
+       "rows = await traces.rows.page(tuple(serving), before, limit)", FILTERED),
 )
 
 
