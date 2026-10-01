@@ -877,17 +877,13 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- G1R item 4: pilot never serves chat through the legacy route (E3B dr17) -----
     # `config.validate_runtime` is the coordinator's hook; G1R's brief places this refusal
     # there, so these three edit it in the temporary copy.
-    _m("pilot_serves_the_legacy_route", "pilot refuses while the legacy chat route is composed",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if False:",
-       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
-    _m("legacy_route_beside_the_ingress", "the legacy route beside the ingress still refuses",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if ingress not in composition.ROUTERS:",
-       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    # W6 A4: the legacy route is retired, so `legacy_route_beside_the_ingress` (the module
+    # check) is retired with it; the route table's one-handler rule refuses that composition.
     _m("no_metered_ingress_accepted", "a pilot with no metered ingress refuses (I0's predicate)",
-       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
-       "        if chat in composition.ROUTERS:",
+       "config.py", "        if ingress not in composition.ROUTERS:", "        if False:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("pilot_route_table_unchecked", "a legacy-style chat route beside the ingress refuses",
+       "gateway/app.py", "    ingress.assert_route_table(app)\n", "",
        "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
     # --- G1R item 5: the headless client's declared surface is served -------------
     _m("https_video_refused", "an https video reference is served",
@@ -901,7 +897,8 @@ MUTANTS: tuple[Mutant, ...] = (
     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
        "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "from .routes import chat as _chat\n"
+       "import types as _types\n"
+       "_chat = _types.SimpleNamespace(register=lambda app, rt: app.post('/v1/chat/completions')(lambda: {}))\n"
        "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
@@ -1398,7 +1395,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                   request_id=request.request_id, model=request.model_revision,",
        "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement"),
     _m("replay_reaccepted", "a terminal replay re-runs nothing of acceptance (admission's "
-       "replay answer, while the store refuses the lookup until D5)",
+       "replay answer, when the lookup missed the key)",
        R, "            if admission.replayed:              # a replay the lookup could not see yet",
        "            if False:              # a replay the lookup could not see yet",
        "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
@@ -1424,9 +1421,12 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if found is None:\n            # A fresh admission",
        "        if found is None or found[1] is not None:\n            # A fresh admission",
        "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
-    _m("lookup_refusal_escapes", "until D5 a store that cannot look up is admission's to answer",
-       R, '            if refused.param != "lookup":', "            if True:",
-       "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
+    # W6 A2: the D5-era lookup interim is retired; restoring it is the mutant.
+    _m("lookup_refusal_swallowed", "a store refusal of the lookup is the caller's answer (W6 A2)",
+       R, "        found = await _dependency(self.jobs.lookup(org_id, idem))\n",
+       "        try:\n            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+       "        except errors.UnsupportedParameter:\n            return None\n",
+       "test_dur_admit__a_store_refusal_of_the_lookup_is_never_swallowed"),
     _m("replay_crosses_regimes", "a key naming another regime's job is a conflict",
        R, '        if found is not None and getattr(found[0], "accounting_regime", LEGACY) '
           "!= self.regime:",
@@ -1690,19 +1690,48 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "                TerminalCause.client_disconnected if left else TerminalCause.client_cancelled))",
        "                TerminalCause.client_cancelled))",
        "test_api_stream__a_client_gone_before_the_first_byte_still_cancels"),
-    _m("cause_fallback_missing", "a store that cannot record the cause yet still cancels (0018)",
-       R, '            if refused.param != "cause" or cause is TerminalCause.client_cancelled:',
-       "            if True:",
-       "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels"),
-    _m("fallback_log_dropped", "the 0018 fallback is recorded in the log (review S6)",
-       R, '            log.warning("cancel cause %s is not recordable yet: cancelling job %s as %s",\n'
-          "                        cause.value, handle, TerminalCause.client_cancelled.value)\n",
-       "",
-       "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels"),
-    _m("fallback_on_any_param", "only a refusal of the cause falls back (review S6)",
-       R, '            if refused.param != "cause" or cause is TerminalCause.client_cancelled:',
-       "            if cause is TerminalCause.client_cancelled:",
-       "test_api_modes__only_the_cause_refusal_falls_back_to_the_default_cancel"),
+    # W6 A2: the D5-era cause interim is retired; restoring it is the mutant.
+    _m("cause_refusal_relabelled", "a store refusal of a cancel is never re-cancelled under "
+       "another label (review S6, W6 A2)",
+       R, "            return await self.jobs.cancel(org_id, handle, cause=cause)\n"
+          "        except errors.AlreadyTerminal:",
+       "            return await self.jobs.cancel(org_id, handle, cause=cause)\n"
+       "        except errors.UnsupportedParameter:\n"
+       "            return await self.jobs.cancel(org_id, handle,\n"
+       "                                          cause=TerminalCause.client_cancelled)\n"
+       "        except errors.AlreadyTerminal:",
+       "test_api_modes__a_cancel_refusal_is_never_relabelled"),
+    # === W6 A4: the gateway's /health says up or down and counts nothing ==================
+    _m("health_counts_inflight", "the gateway /health carries no in-flight counter (W6 A4)",
+       "gateway/routes/health.py", '            return JSONResponse({"ok": r.status_code == 200},',
+       '            return JSONResponse({"ok": r.status_code == 200, "inflight": 0},',
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
+    _m("health_up_when_engine_down", "an engine that is down is a 503",
+       "gateway/routes/health.py", "                                status_code=200 if r.status_code == 200 else 503)",
+       "                                status_code=200)",
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
+    _m("health_unreachable_raises", "an unreachable engine is a 503, not a 500",
+       "gateway/routes/health.py", "        except Exception as e:", "        except KeyError as e:",
+       "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
+    # === W6 A10: the client timeouts and the trace prefix, named once in config ===========
+    _m("upstream_timeout_moved", "the engine client waits 600 s, 10 s to connect",
+       "config.py", "UPSTREAM_TIMEOUT_S, UPSTREAM_CONNECT_S = 600, 10", "UPSTREAM_TIMEOUT_S, UPSTREAM_CONNECT_S = 600, 30",
+       "test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once"),
+    _m("supabase_timeout_moved", "the Supabase clients wait 5 s, 2 s to connect",
+       "config.py", "SUPABASE_TIMEOUT_S, SUPABASE_CONNECT_S = 5, 2", "SUPABASE_TIMEOUT_S, SUPABASE_CONNECT_S = 5, 5",
+       "test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once"),
+    _m("supabase_client_ignores_the_setting", "the gateway's Supabase client is built from the setting",
+       "gateway/app.py", "timeout=httpx.Timeout(SUPABASE_TIMEOUT_S, connect=SUPABASE_CONNECT_S),",
+       "timeout=httpx.Timeout(5),", "test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once"),
+    _m("upstream_client_ignores_the_setting", "the gateway's engine client is built from the setting",
+       "gateway/app.py", "timeout=httpx.Timeout(UPSTREAM_TIMEOUT_S, connect=UPSTREAM_CONNECT_S))",
+       "timeout=httpx.Timeout(600))",
+       "test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once"),
+    _m("trace_prefix_moved", "the trace bucket's object prefix is infrx/",
+       "config.py", 'TRACE_PREFIX = "infrx/"', 'TRACE_PREFIX = ""', "test_f_base__the_client_timeouts_and_trace_prefix_are_settings_named_once"),
+    _m("health_probe_unbounded", "the /health engine probe is bounded by HEALTH_TIMEOUT_S",
+       "gateway/routes/health.py", 'rt.client.get("/health", timeout=HEALTH_TIMEOUT_S)',
+       'rt.client.get("/health", timeout=None)', "test_f_base__the_gateway_health_is_the_engines_up_or_down_and_counts_nothing"),
     # === G2 item 5: composition, readiness and the route table ===========================
     _m("pilot_built_without_catalog", "no pilot without a CatalogDirectory (D5)",
        P, "        if value is None:", '        if value is None and name != "catalog":',

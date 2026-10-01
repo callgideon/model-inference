@@ -1,0 +1,59 @@
+diff --git a/apps/infrx-api/tests/i/test_install.py b/apps/infrx-api/tests/i/test_install.py
+index bcf275a9..17bf7992 100644
+--- a/apps/infrx-api/tests/i/test_install.py
++++ b/apps/infrx-api/tests/i/test_install.py
+@@ -211,10 +211,10 @@ def test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_i
+     from unittest import mock
+ 
+     from infrx.gateway import app as composition
+-    from infrx.gateway.routes import chat, health, models
++    from infrx.gateway.routes import health, models
+     staged = tmp_path / "pilot.env"
+     staged.write_text(cfg.env_file.read_text() if cfg.env_file.exists() else "INFRX_MODE=pilot\n")
+-    with mock.patch.object(composition, "ROUTERS", (health, models, chat)):
++    with mock.patch.object(composition, "ROUTERS", (health, models)):
+         verdict = preflight.probe(staged, "pilot")
+     assert any("pilot routers to be composed" in problem for problem in verdict["problems"])
+ 
+diff --git a/tests/integration/backend/test_drills.py b/tests/integration/backend/test_drills.py
+index 35639f4c..710fa56b 100644
+--- a/tests/integration/backend/test_drills.py
++++ b/tests/integration/backend/test_drills.py
+@@ -1214,7 +1214,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
+     bucket's HeadBucket) answer from this stack."""
+     from infrx.config import RuntimeMisconfigured, from_env
+     from infrx.gateway import app as composition
+-    from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
++    from infrx.gateway.routes import health, ingress, jobs, models, uploads
+     from infrx.observe import route as metrics
+     h = stack.pg_jobstore()
+     env = stack.pilot_env(h.extra["database"], tmp_path)
+@@ -1236,7 +1236,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
+     assert {module for (_, path), module in served.items()
+             if path.startswith("/v1/uploads")} == {uploads.__name__}, served
+     assert served[("GET", metrics.PATH)] == metrics.__name__, served
+-    assert chat.__name__ not in served.values(), served
+-    chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
++    # the legacy route is retired (W6 A4): a legacy-style chat handler, mounted behind its back
++    app.post("/v1/chat/completions")(lambda: {})
+     with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
+         ingress.assert_route_table(app)
+diff --git a/tests/integration/mutants.py b/tests/integration/mutants.py
+index 546bf6db..6e4b22b8 100644
+--- a/tests/integration/mutants.py
++++ b/tests/integration/mutants.py
+@@ -1072,11 +1072,9 @@ MUTANTS: tuple[Mutant, ...] = (
+     Mutant("e3bm71", "E3B3 review J1 (the reviewer's mutant M): a key conflict is 409 at the "
+                      "lookup, before anything is fetched, staged or admitted",
+            "apps/infrx-api/infrx/gateway/routes/relay.py",
+-           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+-           "        except errors.UnsupportedParameter as refused:",
+-           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+-           "        except errors.IdempotencyConflict:\n            return None\n"
+-           "        except errors.UnsupportedParameter as refused:",
++           "        found = await _dependency(self.jobs.lookup(org_id, idem))\n",
++           "        try:\n            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
++           "        except errors.IdempotencyConflict:\n            return None\n",
+            "tests/integration/backend/test_journey.py",
+            "backend_journey and text and sync and not resume", layer=2,
+            cases=("test_backend_journey[text-sync]",)),
