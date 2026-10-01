@@ -29,8 +29,8 @@
   ],
   "note": "One dated block written 2026-10-01 by W6 plan-ledger (audit INT-01). It replaces the 2026-09-24 entry (release bda15866, \"third install\", legacy_usd), which stays in git history and in historical run E4B-run3."
  },
- "revision": 364,
- "updated": "2026-10-01T04:02:44Z",
+ "revision": 365,
+ "updated": "2026-10-01T04:03:37Z",
  "agent_slots": {
   "total": 16,
   "active": 5,
@@ -11067,6 +11067,48 @@
    "updated": "2026-10-01T04:02:44Z",
    "blocker": null,
    "next_action": null,
+   "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "wave6-plan.md brief estimate (lane analogues from wave 5)",
+    "at": "2026-10-01T03:32:15Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0058_*",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/state/lab_variants.py",
+    "apps/infrx-api/infrx/state/lab_rollout.py",
+    "apps/infrx-api/tests/d/",
+    "apps/infrx-api/tests/l3sql/",
+    "apps/infrx-api/tests/g/lab_releases/",
+    "tests/integration/test_harness.py",
+    "research/plan/08-contracts-v1-encoding.md"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W6-MERGE-72",
+   "task": null,
+   "slice": "merge batch #72 (Opus): infra-libs 6be89bac (+the tests/i/mutants.py union with #71, WR-W6-LRT-1/WR-PL-3/WR-IL-1/WR-IL-3, IL-3/F2/F3/F4; WR-IL-2/4/5 carried); workflow (see RESUME-NOW)",
+   "agent": "opus",
+   "branch": "codex/w5-merge-72",
+   "worktree": ".claude/worktrees/codex-w5-merge-72",
+   "base": "efb398a8",
+   "head": null,
+   "isolation": {
+    "ports": "none (layer-1 only)",
+    "prefix": "-",
+    "db": "-"
+   },
+   "activity": "running",
+   "started": "2026-10-01T04:03:37Z",
+   "updated": "2026-10-01T04:03:37Z",
+   "blocker": null,
+   "next_action": "integrate",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
