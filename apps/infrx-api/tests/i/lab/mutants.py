@@ -270,6 +270,7 @@ STEP_MUTANTS: tuple[Mutant, ...] = (
 CHECKOUT_SH = LR + "lab-checkout.sh"
 SMOKE_WAIT = "test_ldp__the_smoke_waits_thirty_tries_by_default"
 STATUS = "test_ldp__status_prints_unit_state_and_drops_value_bearing_lines"
+LAB_LOG_CASE = "test_ldp__a_steps_lines_reach_the_lab_log"
 CHECKOUT = "test_ldp__the_lab_checkout_fetches_guards_the_engine_pin_and_delegates_once"
 STEP_MUTANTS += (
     _m("control_env_root_owned", "the control env file is the unit user's (User=ubuntu reads --env-file)",
@@ -292,6 +293,11 @@ STEP_MUTANTS += (
        'unit=${UNIT:-$(basename "$(unit_file "$role")" .service)}', "unit=${UNIT:-infrx-lab-control}", STATUS),
     _m("status_port_fixed", "ROLE picks the unit's health port (INFRA-11)", ST + "70-lab-status.sh",
        'port=${PORT:-$(health_port "$role" 2>/dev/null || true)}', "port=${PORT:-8003}", STATUS),
+    # merge #72 lens minors: IL-3 (70 refuses an unknown ROLE), F3 (lib.sh wires the Lab log)
+    _m("status_any_role", "70 refuses a ROLE lib.sh does not know (exit 2)", ST + "70-lab-status.sh",
+       '*) die 2 "unknown ROLE $role', '*) : "unknown ROLE $role', STATUS),
+    _m("lab_log_unwired", "every Lab step's say lines reach the Lab rollout log", LIB,
+       "BOX_LOG=$LAB_LOG STEP=${STEP:-lab}", "STEP=${STEP:-lab}", LAB_LOG_CASE),
     _m("checkout_not_strict", "lab-checkout.sh stops on its first failure", CHECKOUT_SH,
        "\nset -euo pipefail\n", "\nset -uo pipefail\n", STRICT),
     _m("checkout_no_fetch", "the integration branch is fetched first", CHECKOUT_SH,

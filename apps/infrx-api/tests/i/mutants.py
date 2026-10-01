@@ -901,8 +901,8 @@ MUTANTS += (
     _m("bundle_ships_head", "the bundle carries the commit named, not HEAD",
        RB, 'update-ref "$REF" "$sha"', 'update-ref "$REF" "$(git -C "$repo" rev-parse HEAD)"',
        RB_OK),
-    _m("bundle_uploads_with_stale_keys", "the upload never uses the shell's stale AWS keys",
-       RB, "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \\",
+    _m("bundle_uploads_with_stale_keys", "the upload never uses the shell's stale AWS keys (host-lib's aws, WR-IL-3)",
+       "../../infra/rollout/host-lib.sh", "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \\",
        "aws() { env \\", RB_OK),
     _m("bundle_short_commit_accepted", "only a full lower-case commit id is shipped",
        RB, "^[0-9a-f]{40}$", "^[0-9a-fA-F]{7,40}$", RB_BAD),
@@ -1849,12 +1849,12 @@ MUTANTS += (
     _m("lab_release_l0_dropped", "box makes the box's checkout RELEASE first (L0)",
        LR, '  infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE="$RELEASE"\n', "", LR_BOX),
     _m("lab_release_box_without_supabase_url", "box refuses before any call without SUPABASE_URL",
-       LR, '  need SUPABASE_URL\n  say "L0', '  say "L0', LR_BOX),
+       LR, '  need SUPABASE_URL\n  banner "L0', '  banner "L0', LR_BOX),
     _m("lab_release_control_dsn_renamed", "L5 passes the control DSN's SSM name",
        LR, 'CONTROL_DSN_PARAM="$SSM_CONTROL_DSN"', "CONTROL_DSN_PARAM=/model-inference/lab/control_dsn", LR_BOX),
     _m("lab_release_edge_before_control", "the edge (L6) opens only after the control service (L5) and its smoke",
-       LR, '  say "L5 control service ON', '  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on '
-       'RELEASE="$RELEASE"\n  say "L5 control service ON', LR_BOX),
+       LR, '  banner "L5 control service ON', '  infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on '
+       'RELEASE="$RELEASE"\n  banner "L5 control service ON', LR_BOX),
     _m("lab_release_token_stored_before_whoami", "a pasted token is proven before it overwrites the stored one",
        LR, '    VERCEL_TOKEN=$(cat "$t") vercel whoami', "    " + LR_PUT + '; VERCEL_TOKEN=$(cat "$t") vercel whoami',
        LR_TOKEN),
@@ -1935,6 +1935,16 @@ MUTANTS += (
        "aws() { command aws \"$@\"; }\nINFRX_OPERATOR_KEY=$(ssm_value /model-inference/operator_key)\n", HL_ONE, HL_CLI),
     _m("operator_cli_empty_secret_runs", "an empty operator secret never starts the CLI",
        OPCLI, '[ -n "$OPERATIONS_DATABASE_URL" ] && [ -n "$INFRX_OPERATOR_KEY" ] || {', "true || {", HL_CLI),
+    # merge #72 lens minors: F2 (hosted-migrate's run log), F4 (unblock-coordinator's region)
+    _m("hosted_migrate_unlogged", "hosted-migrate's say lines reach its run log",
+       HOSTED_MIGRATE, '/host-lib.sh"; HOST_LOG=$LOG   #', '/host-lib.sh"   #',
+       "test_rollout_host__hosted_migrate_says_into_its_run_log"),
+    _m("unblock_region_default", "unblock-coordinator runs in us-east-1 unless AWS_REGION says otherwise",
+       "../../infra/rollout/unblock-coordinator.sh", "REGION=${AWS_REGION:-us-east-1}", "REGION=${AWS_REGION:-us-west-2}",
+       "test_rollout_host__unblock_coordinator_runs_aws_in_aws_region"),
+    _m("unblock_region_unmapped", "AWS_REGION picks unblock-coordinator's region",
+       "../../infra/rollout/unblock-coordinator.sh", "REGION=${AWS_REGION:-us-east-1}", "REGION=us-east-1",
+       "test_rollout_host__unblock_coordinator_runs_aws_in_aws_region"),
 )
 
 # W6 infra-libs (INFRA-06): the box lib as 72-observe-install.sh uses it

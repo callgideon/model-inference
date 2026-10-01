@@ -344,6 +344,22 @@ def test_ldp__status_prints_unit_state_and_drops_value_bearing_lines(tmp_path):
         assert "started ok" in done.stdout and '"ready": false' in done.stdout, done.stdout
         assert calls(stub, "journalctl")[-1][:2] == ["-u", unit]
         assert calls(stub, "curl")[-1][-1] == f"http://127.0.0.1:{port}/readyz"
+    # IL-3: a ROLE lib.sh does not know is refused (exit 2) before any unit is looked at
+    seen = len(calls(stub))
+    done = run("70-lab-status.sh", stub, root, RELEASE=head(), ROLE="bogus")
+    assert done.returncode == 2 and "unknown ROLE bogus" in done.stderr, done.stderr
+    assert len(calls(stub)) == seen, calls(stub)[seen:]
+
+
+def test_ldp__a_steps_lines_reach_the_lab_log(tmp_path):
+    """F3: lib.sh hands box-lib's say the Lab log (BOX_LOG=$LAB_LOG): each line a step prints
+    with say is also appended to $R/var/log/infrx-lab-rollout.log, the box's rollout record."""
+    stub, root = box(tmp_path)
+    done = run("10-lab-preflight.sh", stub, root, RELEASE=head())
+    assert done.returncode == 0, done.stderr
+    said = [line for line in done.stdout.splitlines() if " 10-lab-preflight " in line]
+    log = root / "var" / "log" / "infrx-lab-rollout.log"
+    assert said and log.exists() and log.read_text().splitlines() == said, done.stdout
 
 
 def checkout_box(tmp_path):
@@ -530,12 +546,15 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
 
 def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
-    (hosted at 0051 since 2026-09-29: EXPECTED_PENDING 0052-0056, its W7 post-check `*"0056 lab_control_grants"`), so condition 2
+    (--hosted-at is read from hosted-migrate.sh's HOSTED_APPLIED anchor, so the case follows
+    each window's reviewed edit without a sed), so condition 2
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
     newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
+    hosted_at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ',
+                          (REPO / "infra/rollout/hosted-migrate.sh").read_text())[1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
-                           "--hosted-at", "0056", "--window", "P-08:dry"], capture_output=True,
+                           "--hosted-at", hosted_at, "--window", "P-08:dry"], capture_output=True,
                           text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
                                                     "PY": "/usr/bin/env"})
     assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr

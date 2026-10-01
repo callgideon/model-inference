@@ -140,9 +140,7 @@ window, from a checkout whose newest migration is the re-proven one:
    anchor (hosted's newest, `migrate.py plan`'s "NNNN name" form) and the W7 `case "$POST"`
    post-check (the new newest) — plus the three `hosted_migrate_*` anchors in
    `apps/infrx-api/tests/i/mutants.py`; `tests/i/test_known_good_proof.py`'s anchor case and
-   `lab-migrate.sh` check it (it derives the pending list exactly as lab-migrate.sh does);
-   until WR-W6-LRT-1 lands, also change test_lab_rollout_steps.py's `--hosted-at` (still the
-   literal `0056`) in the same commit.
+   `lab-migrate.sh` check it (it derives the pending list exactly as lab-migrate.sh does).
 3. Condition 3: the dated coordinator-log entry (`--window`).
 4. The window (the W7 precondition needs the public `/health` 503; the maintenance switch is the
    box's INSTALLED consumer release's `drain.sh`, not the Lab release):
@@ -415,3 +413,4 @@ reversal of Lab tables is never part of this runbook.
 - 2026-09-30 (merge #64, lab-local-3 WR-LL3-2, R262): §11 G1–G6 and L5 rows — `make lab-local` at 5bb93621 (`E4ON-raw-5bb93621`): `r222.accepted: true`, by_design = R198 + R237 only, all 18 e4-on skips PASS on their keys (p3 added to KEYED, t2f free), journeys 5/5, o05's control factory as the owner login with releases 200 (0059); E4-ON accepted. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.
 - 2026-10-01 (W6 lab-release-tool, INFRA-01/03/09, DT-13/18): §2 "Next window (0060+)" — the spent window tooling retired (patches to evidence/i, `launch-v1.sh window` gone), the next window is a re-proof plus one reviewed three-line edit, BOX_RELEASE after a fetch; §7 steps 2–4 — `lab-release.sh members` (owner DSN by SSM name, psycopg bound parameters, `p.provider_org_id`; the base statement's `p.id` failed on 0001–0059: UndefinedColumn, i6 task-local run).
 - 2026-10-01 (merge #71, codex/w5-merge-71, LRT-RV-3): §2 "Next window" step 2 names test_lab_rollout_steps.py's literal `--hosted-at` as part of the reviewed edit until WR-W6-LRT-1 lands; R269 (08-contracts §10) is the window rule.
+- 2026-10-01 (merge #72, codex/w5-merge-72, WR-W6-LRT-1): §2 "Next window" step 2 — the "until WR-W6-LRT-1 lands" sentence removed: test_lab_rollout_steps.py now reads `--hosted-at` from hosted-migrate.sh's HOSTED_APPLIED anchor. Nothing was run against the box, AWS, SSM, Vercel or hosted Supabase.

@@ -28,9 +28,9 @@
 #   OPS_DSN_PARAM  the SSM NAME of the owner DSN (default /model-inference/pg_journal_url; members)
 #   WINDOW         the P-08 reference for the audit column (default launch-v1; members)
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../rollout/host-lib.sh"   # aws(), ssm_value (WR-IL-1)
 cd "$(git rev-parse --show-toplevel)"
-aws() { command env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
-say() { printf '\n== %s\n' "$*"; }
+banner() { printf '\n== %s\n' "$*"; }
 need() { [ -n "${!1:-}" ] || { printf 'set %s\n' "$1" >&2; exit 2; }; }
 RELEASE=${RELEASE:-$(git rev-parse claude/consumer-v1)}
 [[ $RELEASE =~ ^[0-9a-f]{40}$ ]] || { echo "RELEASE must be a 40-hex sha" >&2; exit 2; }
@@ -39,35 +39,35 @@ SSM_ANON=/model-inference/lab/supabase_anon_key
 SSM_VERCEL=/callgideon/prod/VERCEL_TOKEN
 
 preflight() {
-  say "preflight at $RELEASE"
+  banner "preflight at $RELEASE"
   git merge-base --is-ancestor "$RELEASE" claude/consumer-v1 || { echo "RELEASE is not on claude/consumer-v1" >&2; exit 2; }
   [ -x apps/infrx-api/.venv/bin/python ] || make api-env
-  say "SSM names present (values never shown)"
+  banner "SSM names present (values never shown)"
   aws ssm describe-parameters --parameter-filters "Key=Name,Values=$SSM_CONTROL_DSN,$SSM_ANON,/model-inference/infrx_lab_control_password" --query 'Parameters[].[Name,Type,Version]' --output text
-  say "App health"; curl -s -o /dev/null -w 'https://marlin2b.callbill.ai/health %{http_code}\n' https://marlin2b.callbill.ai/health || true
+  banner "App health"; curl -s -o /dev/null -w 'https://marlin2b.callbill.ai/health %{http_code}\n' https://marlin2b.callbill.ai/health || true
 }
 
 box() {
   need SUPABASE_URL
-  say "L0 the box's checkout becomes $RELEASE (fetch; refuses if the engine script differs)"
+  banner "L0 the box's checkout becomes $RELEASE (fetch; refuses if the engine script differs)"
   infra/rollout/ssm.sh infra/lab/rollout/lab-checkout.sh RELEASE="$RELEASE"
-  say "L1 inventory"; infra/rollout/ssm.sh infra/lab/rollout/steps/10-lab-preflight.sh RELEASE="$RELEASE"
-  say "L3 Lab image (up to 1 h)"; TIMEOUT_S=3600 infra/rollout/ssm.sh infra/lab/rollout/steps/20-lab-image.sh RELEASE="$RELEASE"
-  say "L4 units (inert)"; infra/rollout/ssm.sh infra/lab/rollout/steps/30-lab-units.sh RELEASE="$RELEASE"
-  say "L5 control service ON (DSN and anon key by SSM name)"
+  banner "L1 inventory"; infra/rollout/ssm.sh infra/lab/rollout/steps/10-lab-preflight.sh RELEASE="$RELEASE"
+  banner "L3 Lab image (up to 1 h)"; TIMEOUT_S=3600 infra/rollout/ssm.sh infra/lab/rollout/steps/20-lab-image.sh RELEASE="$RELEASE"
+  banner "L4 units (inert)"; infra/rollout/ssm.sh infra/lab/rollout/steps/30-lab-units.sh RELEASE="$RELEASE"
+  banner "L5 control service ON (DSN and anon key by SSM name)"
   infra/rollout/ssm.sh infra/lab/rollout/steps/40-lab-control.sh STATE=on RELEASE="$RELEASE" \
     CONTROL_DSN_PARAM="$SSM_CONTROL_DSN" ANON_KEY_PARAM="$SSM_ANON" SUPABASE_URL="$SUPABASE_URL" LAB_ORIGIN=https://lab.callbill.ai
-  say "L5s smoke"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh
-  say "L6 the control origin on the edge (DNS lab-control.callbill.ai → the box is already set)"
+  banner "L5s smoke"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh
+  banner "L6 the control origin on the edge (DNS lab-control.callbill.ai → the box is already set)"
   infra/rollout/ssm.sh infra/lab/rollout/steps/45-lab-site.sh STATE=on RELEASE="$RELEASE"
   curl -s -o /dev/null -w 'https://lab-control.callbill.ai/lab/v1/releases %{http_code} (401 = the control service answers through the edge; /readyz is loopback-only)\n' https://lab-control.callbill.ai/lab/v1/releases || true
-  say "L6s smoke + the App's external checks"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh; infra/rollout/verify-external.sh || true
+  banner "L6s smoke + the App's external checks"; infra/rollout/ssm.sh infra/lab/rollout/steps/60-lab-smoke.sh; infra/rollout/verify-external.sh || true
   echo "L7 (eval/judge/datasets roles) is NOT run: no role login exists yet (WR-LDP-7); the control unit serves every Lab family (R237, 0056)."
 }
 
 vercel_lab() {
   command -v vercel >/dev/null || vercel() { npx --yes vercel@latest "$@"; }   # no global install (EACCES on this host)
-  say "the Vercel credential: paste a new token for SSM $SSM_VERCEL (proven by vercel whoami before it is stored), or Enter = the stored token or the CLI login"
+  banner "the Vercel credential: paste a new token for SSM $SSM_VERCEL (proven by vercel whoami before it is stored), or Enter = the stored token or the CLI login"
   T=""; { read -rs -p "token (hidden): " T </dev/tty 2>/dev/tty; } 2>/dev/null || true; echo   # the prompt on the terminal; no terminal (the `!` runner): the stored token
   if [ -n "$T" ]; then
     t=$(umask 077; mktemp); trap 'shred -u "$t" 2>/dev/null || rm -f "$t"' EXIT
@@ -76,16 +76,16 @@ vercel_lab() {
     aws ssm put-parameter --name "$SSM_VERCEL" --type SecureString --overwrite --value "file://$t" >/dev/null
     shred -u "$t" 2>/dev/null || rm -f "$t"; trap - EXIT
   fi
-  export VERCEL_TOKEN; VERCEL_TOKEN=$(aws ssm get-parameter --name "$SSM_VERCEL" --with-decryption --query Parameter.Value --output text)
+  export VERCEL_TOKEN; VERCEL_TOKEN=$(ssm_value "$SSM_VERCEL")
   if ! vercel whoami >/dev/null 2>&1; then          # the stored token is invalid: the CLI's own login (npx vercel login, device flow)
     unset VERCEL_TOKEN
     vercel whoami >/dev/null 2>&1 || { echo "no valid Vercel credential: run 'npx vercel@latest login' once on this host (device flow), or store a token at $SSM_VERCEL" >&2; exit 2; }
-    say "using the CLI's own login (the SSM token is invalid)"
+    banner "using the CLI's own login (the SSM token is invalid)"
   fi
-  ANON=$(aws ssm get-parameter --name "$SSM_ANON" --with-decryption --query Parameter.Value --output text)
+  ANON=$(ssm_value "$SSM_ANON")
   need SUPABASE_URL
   SCOPE=${VERCEL_SCOPE:-callgideon}   # the App's team (infrx-app lives there), never the login's default team
-  say "project infrx-lab in team $SCOPE (Root Directory apps/lab, set in the dashboard; linked and deployed from the REPO ROOT so packages/shared, a link: dependency, is uploaded)"
+  banner "project infrx-lab in team $SCOPE (Root Directory apps/lab, set in the dashboard; linked and deployed from the REPO ROOT so packages/shared, a link: dependency, is uploaded)"
   vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null 2>&1 \
     || { vercel project add infrx-lab --scope "$SCOPE" && vercel link --yes --project infrx-lab --scope "$SCOPE" >/dev/null; }
   for kv in "NEXT_PUBLIC_LAB_URL=https://lab.callbill.ai" "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON" \
@@ -103,7 +103,7 @@ members() {
   need TESTER_EMAILS
   OP=${OPERATOR_NAME:-$(git config user.name || true)}; need OP
   OPS_DSN_PARAM=${OPS_DSN_PARAM:-/model-inference/pg_journal_url}
-  say "provider org infrx-internal + memberships (the owner DSN from SSM $OPS_DSN_PARAM by name, never on argv or printed)"
+  banner "provider org infrx-internal + memberships (the owner DSN from SSM $OPS_DSN_PARAM by name, never on argv or printed)"
   OPERATIONS_DATABASE_URL=$(aws ssm get-parameter --with-decryption --name "$OPS_DSN_PARAM" --query Parameter.Value --output text)
   [ -n "$OPERATIONS_DATABASE_URL" ] || { echo "SSM read failed (name: $OPS_DSN_PARAM)" >&2; exit 3; }
   export OPERATIONS_DATABASE_URL
@@ -127,7 +127,7 @@ PY
 }
 
 main_ff() {
-  say "fast-forward main to $RELEASE (the App's Vercel project builds main; every Lab switch is OFF there)"
+  banner "fast-forward main to $RELEASE (the App's Vercel project builds main; every Lab switch is OFF there)"
   git fetch -q origin main; git merge-base --is-ancestor origin/main "$RELEASE" || { echo "main is not an ancestor of RELEASE" >&2; exit 1; }
   git push origin "$RELEASE:main"
 }

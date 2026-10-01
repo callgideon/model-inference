@@ -32,7 +32,7 @@ git diff --quiet "$RELEASE" HEAD -- "${INPUTS[@]}" || { echo "HEAD $(git rev-par
 [ -x apps/infrx-api/.venv/bin/python ] || { echo "run from the repo root after make api-env" >&2; exit 2; }
 PY=apps/infrx-api/.venv/bin/python
 HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
-EXPECTED_PENDING="0057, 0058, 0059"   # the second R151 window (runbook 08 §2): 0001-0056 -> 0001-0059, the trace consent read and the Lab migrations; both targets proven through 0059 (KNOWN-GOOD-REPROOF-4)
+EXPECTED_PENDING="0057, 0058, 0059"   # the second R151 window (runbook 08 §2): 0001-0056 -> 0001-0059, the trace consent read and the Lab migrations; both targets proven through 0059 (KNOWN-GOOD-REPROOF-4); applied 2026-09-30T08:01Z - the next window is 0060+ (a reviewed edit)
 EXPECTED_FLAGS="credit_admission=true legacy_usd_admission=false signup_grant=true"   # hosted since the W7f CREDIT activation (2026-09-27); the Lab window changes no flag
 PORT=${PGPORT_LOCAL:-55697}
 BACKUP_ROOT=${BACKUP_ROOT:-$HOME/infrx-backups}

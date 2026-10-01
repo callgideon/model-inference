@@ -21,7 +21,8 @@ HOST_LIB = ROLLOUT / "host-lib.sh"
 BOX_LIB = ROLLOUT / "box-lib.sh"
 SECRET = f"{support.MARKER}-ssm-value"
 #: The coordinator-host scripts this lane owns that read AWS: each sources the one lib.
-HOST_SCRIPTS = ("ssm.sh", "hosted-migrate.sh", "operator-cli.sh", "unblock-coordinator.sh")
+HOST_SCRIPTS = ("ssm.sh", "hosted-migrate.sh", "operator-cli.sh", "unblock-coordinator.sh",
+                "../lab/rollout/lab-release.sh")   # WR-IL-1
 
 AWS = '''#!{python}
 import json, os, pathlib, sys
@@ -134,7 +135,8 @@ def test_rollout_host__every_host_script_sources_the_one_lib():
     for name in HOST_SCRIPTS:
         text = (ROLLOUT / name).read_text()
         assert subprocess.run(["bash", "-n", str(ROLLOUT / name)]).returncode == 0, name
-        assert '. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"' in text, name
+        lib = os.path.relpath(HOST_LIB, (ROLLOUT / name).parent)
+        assert f'. "$(dirname "${{BASH_SOURCE[0]}}")/{lib}"' in text, name
         assert "aws() {" not in text and "aws --region" not in text, name
 
 
@@ -170,6 +172,52 @@ def test_rollout_host__operator_cli_reads_its_two_secrets_by_name_into_the_envir
     done = subprocess.run(["bash", script, "flag"], capture_output=True, text=True, cwd=tmp_path, env=env)
     assert done.returncode == 3 and "operator_key" in done.stderr
     assert not (tmp_path / "cli.json").exists()
+
+
+def scratch_repo(path: Path) -> str:
+    """A one-commit git checkout to run a host script from (its HEAD returned)."""
+    path.mkdir(parents=True)
+    git = ["git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@x"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "c"], check=True)
+    return subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_rollout_host__hosted_migrate_says_into_its_run_log(tmp_path):
+    """F2: hosted-migrate.sh hands host-lib's say its run log (HOST_LOG=$LOG): the lines it
+    prints before a stop are also in $BACKUP_ROOT/migrate-<stamp>.log, the window's record."""
+    bin_ = stub(tmp_path, None, "docker")
+    repo = tmp_path / "repo"
+    release = scratch_repo(repo)
+    venv = repo / "apps/infrx-api/.venv/bin"
+    venv.mkdir(parents=True)
+    (venv / "python").write_text("#!/bin/sh\n")
+    (venv / "python").chmod(0o755)
+    backups = tmp_path / "backups"
+    done = subprocess.run(["bash", str(ROLLOUT / "hosted-migrate.sh"), "--release", release],
+                          capture_output=True, text=True, cwd=repo, env={
+                              "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path),
+                              "BACKUP_ROOT": str(backups), "STUB_EXIT_docker": "1"})
+    assert done.returncode == 3 and "ss or docker unavailable" in done.stdout, done.stdout + done.stderr
+    logs = list(backups.glob("migrate-*.log"))
+    assert len(logs) == 1 and logs[0].read_text().splitlines() == done.stdout.splitlines(), done.stdout
+
+
+def test_rollout_host__unblock_coordinator_runs_aws_in_aws_region(tmp_path):
+    """F4: unblock-coordinator.sh maps AWS_REGION onto host-lib's REGION: every aws call names
+    --region, us-east-1 unless AWS_REGION says otherwise (the first call, sts, stops the run
+    here: the stub fails it)."""
+    bin_ = stub(tmp_path)
+    repo = tmp_path / "repo"
+    scratch_repo(repo)
+    for extra, region in (({}, "us-east-1"), ({"AWS_REGION": "eu-west-1"}, "eu-west-1")):
+        done = subprocess.run(["bash", str(ROLLOUT / "unblock-coordinator.sh")], capture_output=True,
+                              text=True, cwd=repo, env={
+                                  "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path),
+                                  "AWS_ACCESS_KEY_ID": "stale", "STUB_EXIT_aws": "254", **extra})
+        assert done.returncode == 254, done.stderr
+        last = calls(bin_)[-1]
+        assert last["argv"][:3] == ["--region", region, "sts"] and "AWS_ACCESS_KEY_ID" not in last["aws_env"], last
 
 
 # --- INFRA-06: the box lib, as 72-observe-install.sh uses it -------------------------------------

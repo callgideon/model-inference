@@ -144,3 +144,24 @@ None blocking.
   - `bash -n` over the Lab steps: clean.
   - The I list was not rerun: no I mutant names 45 or 90, and `tests/i/mutants.py` is unchanged.
 - Log: 2026-10-01: fix round appended by the infra-libs implementer.
+
+## Merge (merge batch #72, codex/w5-merge-72, 2026-10-01)
+- Lane head `6be89bac` merged with `--no-ff` onto `efb398a8` (after merge #71). The coordinator's lane verdict was REJECT at 6be89bac with one open item, this merge's conflict; both lenses' majors were fixed in the fix round (6945a627).
+- **Conflict, `apps/infrx-api/tests/i/mutants.py`** (append vs merge #71's `lab_release_*` block): resolved as a union. The tip's `lab_release_*` block and its `hosted_migrate_*` anchors stay; the lane's INFRA-05 and INFRA-06 blocks and its re-pointed `observe_install_env_world_readable` follow. No mutant from either side was dropped.
+- **Wirings applied (one commit):**
+  - **WR-W6-LRT-1 + WR-PL-3:** `test_ldp__todays_hosted_migrate_carries_the_reviewed_patch` reads `--hosted-at` from hosted-migrate.sh's HOSTED_APPLIED anchor, with WR-W6-LRT-1's docstring. `hosted-migrate.sh:35`'s comment gains `; applied 2026-09-30T08:01Z - the next window is 0060+ (a reviewed edit)`; the EXPECTED_PENDING value and every other line are unchanged. 08 §2 step 2's "until WR-W6-LRT-1 lands" sentence is removed (08 log line added).
+  - **WR-IL-1:** `infra/lab/rollout/lab-release.sh` sources `../../rollout/host-lib.sh` (before its `cd`); its own `aws()` is gone; its banner `say` is renamed `banner()` (host-lib's `say` is the stamped form); VERCEL_TOKEN and ANON are read through `ssm_value`. `test_rollout_host.py`'s HOST_SCRIPTS gains `../lab/rollout/lab-release.sh` (the source line is checked relative to each script's directory). `test_lab_release.py`'s scratch checkout now carries `infra/rollout/host-lib.sh`; its PATH stubs still intercept `aws`. The two `lab_release_*` anchors that named `say "L0` / `say "L5` now name `banner`.
+  - **WR-IL-3:** `apps/infrx-api/deploy/release-bundle.sh` sources `$repo/infra/rollout/host-lib.sh` (the repository root, so the test's scratch repository works) in place of its own `aws()`. `test_release_bundle.py`'s scratch repository carries host-lib.sh. `bundle_uploads_with_stale_keys` is re-pointed to host-lib.sh's `aws()` (same anchor text).
+  - **Lens minors, each with a case and a mutant:**
+    - IL-3: `70-lab-status.sh` refuses a ROLE outside `control` + lib.sh's ROLES (exit 2, before any unit is looked at). Case: the status case's ROLE=bogus half. Lab mutant `status_any_role`.
+    - F2: `test_rollout_host__hosted_migrate_says_into_its_run_log` (hosted-migrate.sh stopped at its docker check with a stub; its say lines equal `$BACKUP_ROOT/migrate-*.log`). I mutant `hosted_migrate_unlogged`.
+    - F3: `test_ldp__a_steps_lines_reach_the_lab_log` (10-lab-preflight's say lines equal `$R/var/log/infrx-lab-rollout.log`). Lab mutant `lab_log_unwired`.
+    - F4: `test_rollout_host__unblock_coordinator_runs_aws_in_aws_region` (stubbed aws fails sts; `--region us-east-1` by default, `eu-west-1` from AWS_REGION). I mutants `unblock_region_default` and `unblock_region_unmapped`.
+  - Lists: I 503 mutants (the tip's 487 + the lane's 13 + 3 here), Lab 85 (83 + 2 here).
+- **Carried (not applied here), exact text:**
+  - WR-IL-2 (certify-release), `infra/rollout/certify-window.sh`: `:44` → `need_venv`; `:49-50` → `. "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"; HOST_LOG=$LOGDIR/window.log`; `:101` secret_to_file → `ssm_to_file` (its `[ -s ]` passes an empty value, because `--output text` writes "\n"). `go-live-remaining.sh` is being retired by that lane; there is nothing to wire there.
+  - WR-IL-4 (docs-state), `infra/lab/app/README.md`: `:44` → `` Lab control (`/etc/infrx-lab-control.env`, mode 0600, owned by ubuntu:ubuntu - the unit's User=ubuntu reads it as docker --env-file) [OP]: ``; `:111` → `sudo install -m 0600 -o ubuntu -g ubuntu /dev/stdin /etc/infrx-lab-control.env < lab-control.env`.
+  - WR-IL-5 (tests/integration owner): when WR-OBS-5.diff is retired from `test_i2l_obs.py`, fix the garbled comment at `72-observe-install.sh:64-65` to: `# I2L-OBS (WR-OBS-5): the Lab observe rules and exporter, which the observe cycle and the Lab` / `# trace-gauges unit read from this copy (inert until the Lab traces env file exists).`
+- **Operational note:** the live box's checkout 7ecbab0e predates box-lib.sh. 45-lab-site and 90-lab-revert carry an inline `caddy_reload` fallback for it (fix round 6945a627); 72-observe-install is BLOCKED (exit 3) on that checkout by design. The next `lab-release.sh box` run's L0 (lab-checkout) advances the checkout and clears both. Carried-work register row 77.
+- No ruling is numbered at this merge (the lane proposed none). Nothing was run against hosted Supabase, the box, AWS, SSM, Vercel or S3; key i5 only; every case runs on PATH stubs.
+- Log: 2026-10-01: Merge section appended by the merge #72 coordinator lane.
