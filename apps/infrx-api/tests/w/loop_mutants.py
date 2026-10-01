@@ -23,6 +23,7 @@ SUITE = ("tests/w/test_loop.py",)
 A = "worker/attempt.py"
 L = "worker/loop.py"
 E = "worker/engine.py"
+EW = "worker/engine_wire.py"   # A12: the pure helpers moved here
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -366,41 +367,41 @@ MUTANTS: tuple[Mutant, ...] = (
        # M2's path under the pinned root fails the default root's check: that is the kill
        dies_by=("NotFound",)),
     _m("media_path_unchecked", "R61: M2's path is checked, not trusted",
-       E, "    if not _inside_tenant_root(path, root, org_id, ref):", "    if False:",
+       EW, "    if not _inside_tenant_root(path, root, org_id, ref):", "    if False:",
        MEDIA_FILE),
     _m("media_org_from_the_ref", "R61: the organization is the request's, not a carried field",
-       E, "    if not _inside_tenant_root(path, root, org_id, ref):",
+       EW, "    if not _inside_tenant_root(path, root, org_id, ref):",
        "    if not _inside_tenant_root(path, root, ref.org_id, ref):", MEDIA_FILE),
     _m("media_path_any_tenant", "the path's organization segment must be the request's",
-       E, "segments[:3] == [org_id, ref.profile_version, digest16]",
+       EW, "segments[:3] == [org_id, ref.profile_version, digest16]",
        "segments[:3] == [segments[0], ref.profile_version, digest16]", MEDIA_FILE),
     _m("media_path_any_profile", "R61 amended: two profile versions never share a file",
-       E, "segments[:3] == [org_id, ref.profile_version, digest16]",
+       EW, "segments[:3] == [org_id, ref.profile_version, digest16]",
        "segments[:3] == [org_id, segments[1], digest16]", MEDIA_FILE),
     _m("media_path_any_object", "the path names this ref's own object",
-       E, "segments[:3] == [org_id, ref.profile_version, digest16]",
+       EW, "segments[:3] == [org_id, ref.profile_version, digest16]",
        "segments[:3] == [org_id, ref.profile_version, segments[2]]", MEDIA_FILE),
     _m("media_file_name_unchecked", "the last segment is M2's file name",
-       E, "            and LOCAL_MEDIA_FILE.fullmatch(segments[3]) is not None)", "            )",
+       EW, "            and LOCAL_MEDIA_FILE.fullmatch(segments[3]) is not None)", "            )",
        MEDIA_FILE),
     _m("media_depth_unchecked", "exactly four segments under the root",
-       E, "return (len(segments) == 4 and segments", "return (segments", MEDIA_FILE),
+       EW, "return (len(segments) == 4 and segments", "return (segments", MEDIA_FILE),
     _m("media_scheme_unchecked", "only a file:// answer becomes a path",
-       E, "    path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) \\\n"
+       EW, "    path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) \\\n"
           "        and uri.startswith(LOCAL_MEDIA_SCHEME) else \"\"",
        "    path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) else \"\"",
        MEDIA_FILE),
     _m("media_relative_root_accepted", "a relative root cannot be compared, so it is refused",
-       E, '    if not root.startswith("/") or not path.startswith("/") or not org_id:',
+       EW, '    if not root.startswith("/") or not path.startswith("/") or not org_id:',
        "    if not org_id:", MEDIA_FILE),
     _m("media_no_request_org_accepted", "a request with no organization owns no file",
-       E, '    if not root.startswith("/") or not path.startswith("/") or not org_id:',
+       EW, '    if not root.startswith("/") or not path.startswith("/") or not org_id:',
        '    if not root.startswith("/") or not path.startswith("/"):', MEDIA_FILE),
     _m("media_path_guessed_without_resolver", "no resolver is a typed refusal, not a guess",
-       E, '        raise errors.DependencyUnavailable("no local media resolver is configured")',
+       EW, '        raise errors.DependencyUnavailable("no local media resolver is configured")',
        '        return f"{LOCAL_MEDIA_SCHEME}{root}/{ref.storage_ref}"', MEDIA_FILE),
     _m("inside_root_by_string_prefix", "a sibling directory sharing the root's prefix is outside",
-       E, '    prefix = posixpath.normpath(root) + "/"\n    if not path.startswith(prefix):\n'
+       EW, '    prefix = posixpath.normpath(root) + "/"\n    if not path.startswith(prefix):\n'
           '        return False\n    segments = path[len(prefix):].split("/")',
        "    prefix = posixpath.normpath(root)\n    if not path.startswith(prefix):\n"
        '        return False\n    segments = path[len(prefix):].split("/")[1:]',

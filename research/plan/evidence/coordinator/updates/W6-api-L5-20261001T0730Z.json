@@ -1,0 +1,105 @@
+{
+  "task": "W6-api-L5",
+  "slice": "A12 (engine_wire.py, traces/segment.py), A14 (ruff config + UP in owned files), A13 (pyright config + baseline + worker/service typing); fix round 1-L5-INT-1",
+  "activity": "review",
+  "head": "e751e42d",
+  "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w6-api-L5",
+  "branch": "codex/w6-api-L5",
+  "owned_paths": [
+    "apps/infrx-api/pyproject.toml",
+    "apps/infrx-api/infrx/worker/engine.py",
+    "apps/infrx-api/infrx/worker/engine_wire.py",
+    "apps/infrx-api/infrx/worker/service.py",
+    "apps/infrx-api/infrx/worker/attempt.py",
+    "apps/infrx-api/infrx/traces/spool.py",
+    "apps/infrx-api/infrx/traces/segment.py",
+    "apps/infrx-api/tests/w/ (anchors, file guards, one case)",
+    "apps/infrx-api/tests/t/ (anchors, runner self-test, one case)"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest -k reexport (before the split)",
+      "exit": 1,
+      "summary": "2 failed (RED: no engine_wire/segment)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 pytest -q tests/w tests/t tests/m/test_prepare.py --ignore-glob='*mutants*'",
+      "exit": 0,
+      "summary": "519 passed, 38 skipped (other keys' stacks)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/t/test_trace_mutants.py",
+      "exit": 1,
+      "summary": "520 passed, 1 failed (T runner self-test anchor moved) -> fixed 2ecf3958, rerun 2 passed; 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all pytest -q tests/w/test_w5_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_lab_workers_mutants.py tests/t/ship/test_mutants.py tests/t/feedback/test_mutants.py tests/t/retention/test_mutants.py",
+      "exit": 0,
+      "summary": "445 passed, 27 skipped (S3/ClickHouse-only); 0 survivors"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 pytest -q <13 other suites importing infrx.worker/infrx.traces>",
+      "exit": 0,
+      "summary": "252 passed, 49 skipped, 1 xfailed"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uvx ruff@0.15.12 check",
+      "exit": 0,
+      "summary": "All checks passed (199 -> 18 fixed, 26 frozen-ignored, 155 baselined in 98 files)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uvx pyright@1.1.414",
+      "exit": 1,
+      "summary": "508 errors (baseline; 527 before, worker 36 -> 17); 26 s, 0.74 GB, no OOM"
+    },
+    {
+      "cmd": "make -f <wiring lines> api-lint api-typecheck",
+      "exit": 0,
+      "summary": "lint clean; pyright 508 <= 508; baseline 507 -> exit 2"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    },
+    {
+      "cmd": "merged tree (merge-tree db2f3445 9ef4aa93 = 995aae2e): uvx ruff@0.15.12 check",
+      "exit": 1,
+      "summary": "RED: tests/i/test_rollout_host.py:98:17 UP031 (only finding)"
+    },
+    {
+      "cmd": "same with e751e42d pyproject (per-file-ignore added)",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "merged tree: uvx pyright@1.1.414 -p pyproject.toml --outputjson",
+      "exit": 1,
+      "summary": "508 errors (baseline holds), 13.5 s, 0.77 GB"
+    },
+    {
+      "cmd": "merged tree root: make api-lint / api-typecheck / api-typecheck API_PYRIGHT_BASELINE=507 with the wiring diff",
+      "exit": 0,
+      "summary": "0 / 0 (508 <= 508) / 2 (gate bites)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0.25,
+    "pessimistic_h": 1,
+    "confidence": "medium",
+    "basis": "owned fix committed; remaining = makefile-pins/coordinator applying the Makefile diff at merge",
+    "at": "2026-10-01T07:30Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "makefile-pins/coordinator at merge: replace consumer-v1's api-lint/api-typecheck recipes with the diff in research/plan/evidence/w6/api-L5-A13-3cb8d2f.md 'Fix round' (uvx-pinned ruff 0.15.12 / pyright 1.1.414 -p pyproject.toml, API_PYRIGHT_BASELINE := 508 gate, if/else guard kept); without it make check is red (uv run --frozen cannot spawn either tool)",
+    "ruff baseline owners (98 files, list in research/plan/evidence/w6/api-L5-A14-0076e94.md): fix and delete the per-file-ignores line, or one coordinator sweep after the wave",
+    "uv.lock owner (optional): ruff==0.15.12 and pyright==1.1.414 in the dev group would let the targets use uv run --frozen instead of uvx"
+  ],
+  "evidence": [
+    "research/plan/evidence/w6/api-L5-A12-2ecf395.md",
+    "research/plan/evidence/w6/api-L5-A14-0076e94.md",
+    "research/plan/evidence/w6/api-L5-A13-3cb8d2f.md"
+  ]
+}
