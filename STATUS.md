@@ -1,6 +1,8 @@
 # Current project state
 
-**Evidence cutoff: 2026-10-01, 21:40 UTC. Reviewed upstream main: `1a991367` (metadata-only update after source `6462ed06`); original broad review: `252f3ea8`.** This page consolidates the latest implementation record and independent review. Repository changes after this cutoff must be reconciled before operating production. A past report of a running process is not a fresh liveness check.
+**Reconciled 2026-10-01T23:20Z by the implementation coordinator at the lifecycle-plan merge `2eeff879` (planning `3012dfb0` is an ancestor):** E4C run 1 on 41693d5d finished at 22:37Z and its four measured cells are classified in [evidence e/E4C-41693d5](research/plan/evidence/e/E4C-41693d5/README.md) — dataset-resume: oracle defect only (fixed `6462ed06`, the run's problem list is empty under it); envelope: the per-clip-minute metric was ill-posed below the 30 s short-clip class ([E4B-protocol §5 amendment 7](models/marlin2b/results/E4B-protocol.md), `e6a8b40a`, threshold unchanged) **and** a real TTFT tail regression vs run 3 (register row 87); soak: PENDING on two UNKNOWN gauges because the observe exporter (step 72) is not installed; overload: an invalid measurement (driver lag). The consumer window of 22:49–22:54Z installed `e6a8b40a` on the box (W3–W11 PASS, hosted 0001–0059 unchanged, public /health 200). Still open: step 72 needs a canary tenant key in SSM (the coordinator's write was refused by its sandbox; the operator creates it), then the E4C rerun (≈5 h) and the BACKEND-READY/APP-PILOT decisions. The API-first lifecycle plan and the UX design package are merged and registered as tasks AP-00–AP-11 and UX-00–UX-11 (planned); wave 7 dispatches from `2eeff879`.
+
+**Evidence cutoff of the review below: 2026-10-01, 21:40 UTC.** Reviewed upstream main: `1a991367` (metadata-only update after source `6462ed06`); original broad review: `252f3ea8`.** This page consolidates the latest implementation record and independent review. Repository changes after this cutoff must be reconciled before operating production. A past report of a running process is not a fresh liveness check.
 
 ## Launch decision
 
@@ -14,11 +16,11 @@ Fresh read-only host/API audit at **21:36–21:40 UTC**: E4C container `infrx-ce
 
 | Component | Last known state | Evidence and limit |
 |---|---|---|
-| Consumer API | `https://marlin2b.callbill.ai`; runtime `41693d5d`, one L40S, CREDIT mode | Runtime identity from operator record; independent `/health` and `/v1/models` probes returned 200 again at 20:40 UTC. No authenticated inference was submitted by the review. |
-| Consumer App | `https://app.callbill.ai`; deployed source `6462ed06`, built 20:06:14Z | Public `/api/version` response at 20:40 UTC. Public signup remains closed according to the latest operator record; a rendered signup page does not prove signup works. |
+| Consumer API | `https://marlin2b.callbill.ai`; runtime **`e6a8b40a`** since 2026-10-01T22:54Z (consumer window; launch-day INSTALL_ARGS, `MIGRATION_DIGEST=nothing-pending`), one L40S, CREDIT mode | Window log `~/infrx-e4c/window-20261001T2249Z`; public `/health` 200 after resume. E4C run 1 measured 41693d5d; the rerun on `e6a8b40a` is pending step 72. |
+| Consumer App | `https://app.callbill.ai`; deployed source `8b63eb36`, built 22:49:41Z (Vercel builds main) | Public `/api/version` response at 20:40 UTC. Public signup remains closed according to the latest operator record; a rendered signup page does not prove signup works. |
 | Hosted database | Supabase, applied migrations 0001–0059 | Operator record; not independently queried in the review. Next additive migration requires the existing R151 migration/reproof workflow. |
 | Lab web | `https://lab.callbill.ai`; deployed from the W6/main work | Root served a sign-in form at 18:46 UTC. Exact deployed web SHA was not independently verified. |
-| Lab control | `https://lab-control.callbill.ai`; checkout `7ecbab0e`, image `sha256:870aa2ea…` | Operator record; unauthenticated release read freshly returned 401 as expected. Other Lab worker roles remain installed but inert. |
+| Lab control | `https://lab-control.callbill.ai`; control-unit image `sha256:870aa2ea…` built from `7ecbab0e`; the box checkout itself advanced to `e6a8b40a` with the consumer window (register row 77: box-lib.sh is now present, step 72 no longer refuses on that ground) | Operator record; unauthenticated release read freshly returned 401 as expected. Other Lab worker roles remain installed but inert. |
 | Membership | `infrx-internal`, one developer tester provisioned | Operator's 18:23 UTC addendum; the internal checklist still needs its recorded outcome. |
 
 The App's source outside README/migrations is unchanged between `41693d5d` and upstream `6462ed06`. Main includes newer backend refactors; the commit difference alone does not require interrupting the current runtime to upgrade it.
@@ -34,7 +36,7 @@ The App's source outside README/migrations is unchanged between `41693d5d` and u
 
 ## Certification and next work
 
-The latest operator diagnosis is **18:58 UTC**, for `LOGDIR=~/infrx-e4c/20261001T175557Z`, run `20261001T181109Z`, installed `RELEASE=41693d5d`. Preconditions/config/build and SOP parity were reported green. **Dataset-resume failed on the oracle's hold-row count**: the tenant's `active_holds` view excludes released holds. Upstream `6462ed06` removes that count and retains the one-usage-record, charge-versus-ledger, reserved-total and remaining-held checks. This source correction is not a new production pass.
+The dated review paragraphs below are superseded by the reconciliation at the top of this page; they are kept as the review's record. The latest operator diagnosis at review time was **18:58 UTC**, for `LOGDIR=~/infrx-e4c/20261001T175557Z`, run `20261001T181109Z`, installed `RELEASE=41693d5d`. Preconditions/config/build and SOP parity were reported green. **Dataset-resume failed on the oracle's hold-row count**: the tenant's `active_holds` view excludes released holds. Upstream `6462ed06` removes that count and retains the one-usage-record, charge-versus-ledger, reserved-total and remaining-held checks. This source correction is not a new production pass.
 
 **The envelope also failed at the declared 0.5 requests/second.** The report says core rung verdicts passed; the specific secondary threshold/cap failure still needs the fetched report. Do not label it only an oracle failure or relax a threshold without reviewing the evidence. Two outage drills, O4–O6 and the canary were skipped by decision; P-17 checks 1, 5 and 7 remain false in the earlier window record. No completed result or BACKEND-READY/APP-PILOT acceptance is present at this cutoff. The corrected oracle requires either an explicitly recorded judgment of the original report or a separately pinned rerun; this merge does not change the running box.
 
@@ -42,13 +44,13 @@ Before another production action, inspect the latest [operational log](research/
 
 | Priority / scope | Remaining work | Existing owner / reference |
 |---|---|---|
-| Consumer acceptance | Fetch the complete E4C report, diagnose the envelope failure, reconcile the corrected dataset oracle, close missing cells/operating proofs, and record separate backend/App decisions | E4C/I3/E4; carried row 3; review LR-01/LR-03 |
+| Consumer acceptance | Run 1 fetched and classified (fixes `6462ed06`, `e6a8b40a`; TTFT tail = row 87). Next: canary key → step 72 observe install → E4C rerun on `e6a8b40a` → P-17 enumeration → separate BACKEND-READY/APP-PILOT decisions | E4C/I3/E4; carried rows 3, 8, 87; review LR-01/LR-03 |
 | Public onboarding | Implement CAPTCHA token handling for signup/recovery; verify SMTP, confirmation/recovery delivery, allowlist, auth rate limits and exactly one grant | A2/I2A; P-05; review LR-02 |
 | Consumer production workflow | Two users through real auth, App-created keys, Marlin sync/SSE/async, uploads/results, retry/isolation, usage/balance and revocation | E3A/I2A/I3/E4; review LR-04 and §4 |
 | Verification | Final combined supported-host checks; recovery test/mutant gaps; benchmark test override restoration | Register rows 11, 79, 86; review LR-06 (row 78 documentation regression is closed) |
 | Lab enablement only | Missing evaluation/pipeline listings, trace composition, dedicated role logins and real engine smoke | Register rows 14–19, 30; review LR-05 |
 | Lab accounting only | Root-cause killed-evaluation-attempt double debit before enabling eval worker; real worker lost-ack test before enabling trace pumps | Register rows 26–27; affected workers remain off |
-| API-first lifecycle (new requirement) | Move App/Lab product logic behind FastAPI; add first-model import, durable real deployment/readiness, private-key/publication/catalog APIs and consented trace/judge flow | [AP-00–11](research/plan/api-lifecycle/implementation.md); proposed, undispatched; complete lifecycle BLOCKED |
+| API-first lifecycle (new requirement) | Move App/Lab product logic behind FastAPI; add first-model import, durable real deployment/readiness, private-key/publication/catalog APIs and consented trace/judge flow | Tasks [AP-00–AP-11](research/plan/17-task-ledger.md) registered 2026-10-01 (planned; wave 7 from `2eeff879`); UX-00–UX-11 beside them; complete lifecycle BLOCKED until AP-11 runs |
 
 Alert delivery/canary evidence is incomplete. Known-good schema proofs through 0059 and same-host recovery work exist; replacement-host restoration remains uncovered. The older Lab checkout blocks the newer observe installer by design. Use the actual runbooks and an owned window to resolve these, not repeated blind restarts.
 

@@ -80,6 +80,26 @@ The earlier combined G0–G4 sequence is superseded by these independent gates:
 
 Payments/OpenRouter/second-owner commercial gates remain deferred. No throughput, availability or quality claim is promoted from a research estimate to a measurement without attached raw evidence.
 
+
+## API-first lifecycle and UX oracles (2026-10-01)
+
+Registered at the lifecycle-plan merge for tasks AP-00–AP-11 and UX-00–UX-11 ([work packages](api-lifecycle/implementation.md), [acceptance](api-lifecycle/verification.md), [UX lanes](../design/v1/06-implementation.md)). Exit codes follow [the gate convention](../../tests/integration/ENVIRONMENT.md) (0 PASS, 1 FAIL, 3 BLOCKED/NOT RUN, 4 INVALID), which supersedes verification.md's 2/3 proposal.
+
+| ID | Injection / action | Required passing observation | Owners |
+|---|---|---|---|
+| API-SCHEMA | Export OpenAPI from every enabled composition; add a route without a body/response schema; bundle a server secret; null retention bound | Every mounted route documented with request/response/error/auth; schema diff test fails on an undocumented route; clients compile; unknown stays unknown | AP-00/AP-02 |
+| API-IDENTITY | Expired token, forged provider/user id, wrong audience (consumer key at the Lab door, developer at the operator door), revoked member, cross-origin submission | 401/403/404 per policy with no side effect or hidden-record disclosure; same enumeration policy as current auth | AP-01 |
+| API-KEYGRANT | Lost successful key-creation response; repeated grant claim across web/API instances; two API instances racing | One key record and one campaign grant; retry returns metadata with secret_returned:false; no recoverable plaintext | AP-03 |
+| API-ARTIFACT | Wrong shard hash, interrupted part, duplicate complete, mutable source ref, foreign object path, worker killed while hashing | No verified artifact from unverified bytes; replay stable; interrupted upload expires; safe cleanup | AP-04 |
+| API-DEPLOY | Kill the controller after allocation and before the receipt; failed image load; OOM; smoke timeout; stale fence | Exactly one resource, stale fence refused, terminal or reconcilable state, no public readiness, production instance untouched | AP-05 |
+| API-PUBLISH | Concurrent approval/rollback, stale expected version, stale smoke receipt, unpriced ready revision, consumer key at a private endpoint | One listing winner; no unready/unpriced public model; active job pins unchanged; wrong-wallet debit impossible | AP-06 |
+| API-TRACE | Trace store down, lost acknowledgement, duplicate delivery, capture off, expiry, revocation before read/egress | Serving continues; eventually one logical trace when configured; no fabricated or retained-forbidden content; revoked content unreadable | AP-07 |
+| API-JUDGE | Permission revoked before send; missing video; budget race; timeout after the provider accepted; worker kill; dry-run mode | No unauthorized egress; abstention for missing evidence; bounded PROVIDER_USD spend; ambiguous send quarantined; dry-run never scored; consumer CREDIT unchanged | AP-08 |
+| API-BOUNDARY | Static inventory of both apps for product .from/.rpc/admin clients/SQL drivers/key generation/credit arithmetic; API failure injected; stale capabilities | Zero product database calls outside the explicit auth-transport allowlist; clear unavailable state; no legacy fallback; no false zero metric | AP-09 |
+| API-EVAL | Killed evaluation attempt before/after usage receipt and settlement; service down vs authorized empty | No double debit; released holds reconciled by the current oracle; 503 for a failed read, 200 empty only for an authorized empty read | AP-10 |
+| API-LIFECYCLE | verification.md's 18 API-only steps in isolated then live mode; a step attempted through SQL/CLI/RPC; a required stage BLOCKED | Exit 0 only when every required selected stage passed; 1 assertion; 3 BLOCKED/NOT RUN; 4 INVALID (repository convention); a bypass is never counted; four verdicts reported separately | AP-11 |
+| UX-JOURNEY | 07-handoff UX-T01…T13 with synthetic fixtures at 320/390/768/1440 px, keyboard-only, reduced motion; role/service/content-state matrix | Every journey's observable pass condition met in a real browser; no secret, customer content or production record in captures; blocked prerequisites recorded as BLOCKED, never PASS | UX-00…UX-11 |
+
 ## Verification log
 
 - 2026-09-20: Defined planned pass/fail oracles and release gate separation. Existing local baseline results are recorded in the scope document; new implementation tests remain pending.
@@ -158,3 +178,4 @@ These supplement, not replace, the original suites. Implementation briefs specif
 | VERIFY-REPRO | Clean supported Linux, missing dependency, changed Git default and deliberately broken seam | Reproducible baseline; explicit BLOCKED/FAIL/INVALID/NOT RUN; required skips never pass | S3/E2C/E3C |
 | CREDIT-CUTOVER | Grant/callback races, USD in-flight replay, rate publication, reconcile and feature transition | One individual entitlement, exact isolated units, pinned historical settlement and approved active card | D10/G8/E3C/E4C |
 | USER-RESULTS | Two users, guessed ID, expiry on open page, reconnect/retry | Only owned valid output; safe status/charge, bounded polling, no automatic second paid request | U4/C0/C3A/E3A/E4 |
+- 2026-10-01T23:19Z: API-first lifecycle and UX oracles added (API-SCHEMA … UX-JOURNEY) for the AP/UX tasks registered at the lifecycle-plan merge 2eeff879; exit-code convention ruled (0/1/3/4).

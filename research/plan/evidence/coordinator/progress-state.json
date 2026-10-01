@@ -4,12 +4,12 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "6462ed06",
- "integration_head": "6462ed06",
+ "main": "2eeff879 (fast-forward with the tracker commit that follows)",
+ "integration_head": "2eeff879",
  "deployed": {
-  "as_of": "2026-10-01T20:40:00Z",
-  "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
-  "install": "consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime",
+  "as_of": "2026-10-01T22:54Z",
+  "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
+  "install": "consumer window 2026-10-01T22:49–22:54Z (operator-run /tmp/window2: w3-inventory … w11-verify-local PASS; launch-day INSTALL_ARGS ENGINE_MAX_NUM_SEQS=8, MAX_VIDEO_SECONDS=82, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8, DATABASE_POOL_MAX_SIZE=6, ACCOUNTING_REGIME=credit, ACTIVE_RATE_CARD_VERSION=rc_marlin2b_20260925_launch; MIGRATION_DIGEST=nothing-pending; hosted 0001–0059 unchanged; public /health 200 after resume); every Lab switch OFF in the runtime; the Lab control unit image unchanged (870aa2ea from 7ecbab0e)",
   "image": "infrx-runtime built at 41693d5d (its digest is not recorded in the plan); the Lab control unit image sha256:870aa2ea... from the checkout 7ecbab0e",
   "config": {
    "MAX_VIDEO_SECONDS": "82",
@@ -31,10 +31,17 @@
   ],
   "note": "Documentation reconciliation: exact current-state inventory in STATUS.md. Fresh public probes do not prove authenticated workflows or release acceptance. No production change or operating-window action performed.",
   "main": "6462ed06 (reviewed upstream main and public App /api/version before this documentation merge); consumer runtime remains reported at 41693d5d",
-  "app": "https://app.callbill.ai; /api/version source 6462ed06, built 2026-10-01T20:06:14Z, observed 20:40Z; public signup closed per operator record; no new authenticated journey."
+  "app": "https://app.callbill.ai; /api/version source 6462ed06, built 2026-10-01T20:06:14Z, observed 20:40Z; public signup closed per operator record; no new authenticated journey.",
+  "history": [
+   {
+    "as_of": "2026-10-01T20:40:00Z",
+    "release": "41693d5de57746b7dd1d68e40230db6dcd8c4e20",
+    "install": "consumer runtime install of 2026-09-29 (window 08:23-08:31Z: 50-install RELEASE 41693d5d with go-live-remaining.sh INSTALL_ARGS; session-03 record line 525); every Lab switch OFF in the runtime"
+   }
+  ]
  },
- "revision": 396,
- "updated": "2026-10-01T20:41:39Z",
+ "revision": 397,
+ "updated": "2026-10-01T23:20Z",
  "agent_slots": {
   "total": 16,
   "active": 0,
@@ -12232,7 +12239,7 @@
   {
    "id": "P-17",
    "status": "resolved",
-   "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab)",
+   "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) E4C run 1 (20261001T181109Z on 41693d5d) FINISHED 2026-10-01T22:37Z: dataset-resume oracle-only (fixed 6462ed06), envelope = ill-posed sub-30 s clip-minute (amendment 7, e6a8b40a) + a real TTFT tail regression (register row 87), soak PENDING (observe exporter absent: step 72), overload invalid (driver lag) — evidence e/E4C-41693d5. Box installed e6a8b40a 22:54Z; step 72 awaits the operator's canary key (SSM); then the E4C rerun (≈5 h) and the decisions.",
    "owner": "coordinator at E4C handback",
    "blocks": [
     "E4C"
@@ -15009,6 +15016,12 @@
    "by": "review coordinator",
    "what": "Latest-main merge reconciliation: upstream/App 6462ed06, operator 18:58 E4C diagnosis preserved; dataset oracle correction does not close envelope failure or release gates. Public App version and API health/models checked at 20:40Z; no authenticated workload or production mutation.",
    "source": "STATUS.md; research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-10-01T23:20Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 397: lifecycle-plan merge 2eeff879 reconciled (planning overlay rev 396 kept; post-cutoff facts re-applied: E4C run 1 finished/classified, amendment 7, consumer window 22:54Z → box e6a8b40a, canary key operator-held). 24 tasks AP-00–AP-11/UX-00–UX-11 registered as planned; wave 7 dispatch follows.",
+   "source": "STATUS.md; research/plan/consumer-v1/09-path-to-internal-testing.md; research/plan/evidence/e/E4C-41693d5/README.md"
   }
  ],
  "history": {

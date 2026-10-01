@@ -252,6 +252,35 @@
     "apps/infrx-api/tests/x/",
     "Backend implementation requires explicit W-owner path transfer"
    ]
+  },
+  {
+   "id": "AP",
+   "title": "API-first Marlin lifecycle (thin frontends, verified onboarding, private deployment, publication, consent, judge, acceptance)",
+   "handoff": "api-lifecycle/implementation.md",
+   "ownership": [
+    "apps/infrx-api/infrx/console/ (new)",
+    "apps/infrx-api/infrx/auth_facade/ (new)",
+    "apps/infrx-api/infrx/lab/artifacts/ (new)",
+    "apps/infrx-api/infrx/lab/hosting/ (new)",
+    "apps/infrx-api/infrx/lab/judge_api/ (new)",
+    "apps/infrx-api/infrx/gateway/routes/{auth,console,operator,lab_workspaces,lab_artifacts,lab_deployments,lab_judge,lab_reviews}.py (new)",
+    "apps/infrx-api/infrx/contracts/openapi/ (new; schema export)",
+    "packages/api-client/ (new generated TS clients)",
+    "tests/integration/api_lifecycle/ (new)",
+    "infra/lab/hosting/ (new)",
+    "composition roots, migrations 0060+, lockfiles and route registries stay with the coordinator"
+   ]
+  },
+  {
+   "id": "UX",
+   "title": "App and Lab UX implementation (design package research/design/v1)",
+   "handoff": "../design/v1/06-implementation.md",
+   "ownership": [
+    "apps/app/components/, apps/app/app/(console)/*, apps/app/app/(auth)/* presentation",
+    "apps/lab/app/*, apps/lab/components/*, apps/lab/lib/ui/ (new) presentation",
+    "apps/*/tests/ux/ (new synthetic browser suite)",
+    "business ports/services/routes/permissions are not UX-owned"
+   ]
   }
  ],
  "tasks": [
@@ -4679,6 +4708,910 @@
     "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
    },
    "closure_note": "2026-09-26: implemented on claude/consumer-v1 via codex/app-union-2 f0d592f5 (lane d76f912f, verified ACCEPT_WITH_FIXES; WR-U4-1 console-pg target applied). OPEN until 0024 merges: 0-U4-V-03 / WR-U4-2 (consumer_job_result withholds an unknown-usage result; request_world U4-P08 flips from todo). WR-U4-3 optional. 2026-09-26: U4-P08 closed at the 0024 merge (f95377b9): consumer_job_result withholds an unknown-usage success (result_pending); console-pg request_world 8/8, todo 0."
+  },
+  {
+   "id": "AP-00",
+   "title": "Contract, schema and integration owner: route/action inventory, OpenAPI export from enabled compositions, generated TS clients, durable operation/idempotency allocation, route mounts and availability",
+   "start_dependencies": [],
+   "integration_dependencies": [],
+   "test_ids": [
+    "API-SCHEMA"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/contracts/openapi/",
+    "apps/infrx-api/infrx/gateway/app.py (ROUTERS)",
+    "apps/infrx-api/infrx/gateway/pilot.py",
+    "apps/infrx-api/infrx/lab/compose.py",
+    "apps/infrx-api/infrx/lab/control/app.py",
+    "apps/infrx-api/infrx/config.py (switches)",
+    "packages/api-client/",
+    "apps/app/supabase/migrations/0060+ (allocation only)",
+    "research/plan/api-lifecycle/contracts.md (finalized paths)"
+   ],
+   "implementation_slices": [
+    "00a route/action coverage artifact; finalize paths, DTOs, error mapping and auth audiences",
+    "00b export OpenAPI from each enabled composition with real body/response schemas and security declarations; schema diff checked by a test",
+    "00c generate TS clients and thin transport ports for both apps; no server secrets bundled; no circular imports",
+    "00d allocate durable operations/idempotency/artifact/model-project/readiness schema (0060+) with rehearsal and rollback notes",
+    "00e integrate route mounts, feature availability (configured/disabled/unavailable/unknown), least-privilege DB roles and deployment config"
+   ],
+   "acceptance": "Every mounted route in every enabled composition appears in a checked OpenAPI artifact with explicit request/response/error/auth schemas; both apps compile against generated clients; one coverage artifact flags undocumented or unsupported actions.",
+   "failure_oracle": "A generic `Request` handler without a body schema, an unknown money unit, a null retention bound without unknown semantics, a duplicate operation ID, a silent mounted-503 presented as enabled, or a frontend bundle carrying a server credential fails the gate.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-01",
+   "title": "Identity, account and workspace APIs: auth facade over Supabase flows, console me/capabilities, Lab workspace/capability/member reads and authorized mutations, operator provider onboarding",
+   "start_dependencies": [
+    "AP-00"
+   ],
+   "integration_dependencies": [
+    "AP-00"
+   ],
+   "test_ids": [
+    "API-IDENTITY"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/session/",
+    "apps/infrx-api/infrx/auth_facade/",
+    "apps/infrx-api/infrx/gateway/routes/auth.py",
+    "apps/infrx-api/infrx/gateway/routes/console_me.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_workspaces.py",
+    "apps/infrx-api/tests/ap01/"
+   ],
+   "implementation_slices": [
+    "01a typed /auth/v1/* operations wrapping the IdP's supported flows; tokens/passwords absent from logs; unavailable IdP is not bad credentials",
+    "01b /console/v1/me and /console/v1/capabilities: server-owned verified/suspended/grant status; caller cannot choose another individual",
+    "01c /lab/v1/workspaces, capabilities, members read and authorized member mutations; revoked membership fails immediately; no self-promotion",
+    "01d POST /operator/v1/providers using existing ownership rules; no reassignment of the NemoStation model"
+   ],
+   "acceptance": "Login, recovery, verification and sign-out work through the facade; me/capabilities and workspace reads are server-owned; the failure matrix (consumer key at the Lab door, developer at the operator door, foreign workspace, forged user id, expired/revoked session, cross-origin) returns 401/403/404 per policy with no side effect.",
+   "failure_oracle": "A request body naming the actor, role or org that is honored as authority; a password or token in a log; an enumeration-revealing error; a membership read that outlives revocation.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-02",
+   "title": "Consumer reads and exact billing projection behind FastAPI: wallet/ledger/legacy statement, request list/detail/result with server cursors, key/account/operator read projections",
+   "start_dependencies": [
+    "AP-00",
+    "AP-01"
+   ],
+   "integration_dependencies": [
+    "AP-01"
+   ],
+   "test_ids": [
+    "API-SCHEMA"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "app",
+   "milestone": "LIFECYCLE-M1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/reads/",
+    "apps/infrx-api/infrx/gateway/routes/console_reads.py",
+    "apps/infrx-api/tests/ap02/"
+   ],
+   "implementation_slices": [
+    "02a port wallet/ledger/legacy-USD reads into backend repositories over the existing console views/functions; decimals as strings with a unit",
+    "02b request list/detail/result with filters and backend-issued opaque cursors; execution and settlement states separate; expired/unsettled/unknown preserved",
+    "02c key summaries, account/member summaries and operator list/read projections; bounded and authorized"
+   ],
+   "acceptance": "Identical balances to the App's current adapters on seeded real-PG fixtures; CREDIT and USD separate; key isolation and stable pagination survive a real wire round trip; every existing screen's fields are covered.",
+   "failure_oracle": "A cursor from another user/filter accepted; a deleted/expired result rendered; a failed read returning 200 empty; float arithmetic on money; raw SQL errors on the wire.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-03",
+   "title": "Consumer mutations, grant and operator APIs: durable key create/list/revoke, signup-grant claim, session feedback, operator credit adjustment/suspension/key revocation",
+   "start_dependencies": [
+    "AP-00",
+    "AP-01"
+   ],
+   "integration_dependencies": [
+    "AP-00",
+    "AP-01"
+   ],
+   "test_ids": [
+    "API-KEYGRANT"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "app",
+   "milestone": "LIFECYCLE-M1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/actions/",
+    "apps/infrx-api/infrx/gateway/routes/console_actions.py",
+    "apps/infrx-api/infrx/gateway/routes/operator.py",
+    "apps/infrx-api/tests/ap03/"
+   ],
+   "implementation_slices": [
+    "03a durable API-key create/list/revoke keyed by a stored operation identity (no web-process replay cache); secret returned once, retry answers secret_returned:false",
+    "03b signup-grant claim as a verified-individual campaign operation over claim_signup_grant; concurrent retries across accounts create exactly one grant",
+    "03c session-authorized feedback over the existing domain and flag; replay does not duplicate",
+    "03d operator credit adjustment, suspension and key revocation with mandatory reason/idempotency over the audited SQL operations"
+   ],
+   "acceptance": "Two API instances racing the same key creation produce one key; a lost response replays the same metadata without a second secret; one 10,000 CREDIT grant per verified individual across callback/relogin/retry; operator mutations audited with actor and reason and applied once.",
+   "failure_oracle": "A second key or grant on retry; a plaintext secret stored for recovery; a non-operator reaching an operator mutation at the API or repository layer; a feedback replay counted twice.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-04",
+   "title": "Model projects and verified artifacts: project identity, resumable bounded upload, pinned repository import, compatibility report, immutable serving revision, operator adoption of the hosted Marlin bytes",
+   "start_dependencies": [
+    "AP-00",
+    "AP-01"
+   ],
+   "integration_dependencies": [
+    "AP-00"
+   ],
+   "test_ids": [
+    "API-ARTIFACT"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "lab",
+   "milestone": "LIFECYCLE-M2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/artifacts/",
+    "apps/infrx-api/infrx/gateway/routes/lab_artifacts.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_model_projects.py",
+    "apps/infrx-api/tests/ap04/",
+    "apps/infrx-api/infrx/lab/control/operations.py (register revision logic once allocated)"
+   ],
+   "implementation_slices": [
+    "04a model-project identity and immutable artifact manifest schema; card/task metadata; repeated creation returns the same id",
+    "04b resumable bounded upload session, part transport via API-issued scoped PUTs, final server-side rehash verification",
+    "04c pinned repository import from an allowlisted source + immutable commit with a secret reference; every expected file verified",
+    "04d compatibility report and immutable serving revision creation; unsupported architecture/runtime/input format refused with reasons; no count-based label race",
+    "04e operator adoption of the verified hosted Marlin artifact with independently measured hashes; foreign resource adoption refused"
+   ],
+   "acceptance": "An empty provider creates a model project and verified artifact without a preseeded serving revision; the actual Marlin source/commit imports and every expected file verifies; a wrong shard hash, missing shard, path traversal, mutable ref or extra object path is refused; interrupted uploads expire cleanly.",
+   "failure_oracle": "A verified artifact from unverified bytes; a manifest-only test standing in for real bytes; a mutable ref or unverified single shard digest as identity; credentials in a card or response.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-05",
+   "title": "Durable private deployment and real smoke: operation/outbox/lease/fence transitions with cancel, one approved host/profile allocator and engine launcher, artifact and pinned-identity checks, finite-video smoke receipt, retirement/drain/restart reconciliation",
+   "start_dependencies": [
+    "AP-00",
+    "AP-04"
+   ],
+   "integration_dependencies": [
+    "AP-04"
+   ],
+   "test_ids": [
+    "API-DEPLOY"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "lab",
+   "milestone": "LIFECYCLE-M2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/hosting/",
+    "apps/infrx-api/infrx/gateway/routes/lab_deployments.py",
+    "infra/lab/hosting/",
+    "apps/infrx-api/tests/ap05/",
+    "tests/integration/lab_hosting/"
+   ],
+   "implementation_slices": [
+    "05a durable deployment operations (queued/running/succeeded/failed/cancel_requested/cancelled), outbox, lease and fence; controller killed at each boundary resumes or fails terminally; validation cannot stay orphaned",
+    "05b one approved host/profile allocator and engine launcher on task-owned capacity/ports; the serving Marlin instance untouched; no spare capacity = capacity_unavailable",
+    "05c artifact install and pinned engine/readiness identity checks; mismatch prevents readiness",
+    "05d real finite-video smoke through the private admission path with a readiness receipt (GPU response, bounded timing, usage)",
+    "05e retirement/drain/cleanup, readiness expiry and restart reconciliation; only owned resources torn down"
+   ],
+   "acceptance": "A private candidate deploys from a verified artifact on an isolated target, reports matching served identity, passes a real finite-video smoke recorded as a receipt, and can be retired; the production instance is never replaced or overloaded.",
+   "failure_oracle": "A deployment record presented as a running engine; NoEngine or a mocked smoke promoting a revision; a second resource after a controller kill; a stale fence accepted; readiness inferred from record presence.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-06",
+   "title": "Private credentials, publication and catalog routing: dev keys/dev wallet/private card APIs, proposal detail and operator approve/reject/rollback, registry publication connected to per-model profile and endpoint routing, rollback and route-propagation failure behavior",
+   "start_dependencies": [
+    "AP-03",
+    "AP-05"
+   ],
+   "integration_dependencies": [
+    "AP-03",
+    "AP-05"
+   ],
+   "test_ids": [
+    "API-PUBLISH"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/gateway/routes/lab_control.py (dev keys, dev wallet)",
+    "apps/infrx-api/infrx/gateway/routes/operator_publication.py",
+    "apps/infrx-api/infrx/gateway/routes/models.py (registry-derived catalog)",
+    "apps/infrx-api/infrx/gateway/routes/catalog.py",
+    "apps/infrx-api/infrx/lab/control/__init__.py (HTTP exposure of approve/issue_dev_key/fund/price_dev/rollback)",
+    "apps/infrx-api/tests/ap06/"
+   ],
+   "implementation_slices": [
+    "06a expose issue_dev_key, dev-wallet reads and operator private card/funding over HTTP; dev key invokes only its private ready endpoint",
+    "06b proposal detail and operator approval/rejection/rollback through the API with expected version, reason and immutable candidate pins; two racing approvals cannot both win",
+    "06c connect registry publication, approved per-model profile and endpoint routing so /v1/models derives from the registry; private/unpriced/stale revisions hidden",
+    "06d rollback and route-propagation failure: new admissions follow the confirmed listing, old jobs keep pins, route outage is explicit unavailable"
+   ],
+   "acceptance": "A newly approved internal test listing appears in /v1/models and routes to its engine; consumer and operator keys cannot call a private endpoint; approval is atomic and audited; the existing Marlin alias and card are preserved and never overwritten by an unqualified candidate.",
+   "failure_oracle": "A public model from a record+price+generic text response; a private candidate discoverable via an alias; a dev key spending a consumer wallet; a stale smoke receipt accepted at approval.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-07",
+   "title": "Consent, trace capture and analysis APIs: data-use/grant/capture CRUD with expiry, trace storage/pump/retention composition and scoped Lab routes, trace list/detail/media/feedback projections, lost-ack/duplicate/outage/revocation proofs",
+   "start_dependencies": [
+    "AP-01",
+    "AP-02"
+   ],
+   "integration_dependencies": [
+    "AP-01",
+    "AP-02"
+   ],
+   "test_ids": [
+    "API-TRACE"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M3",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/console/data_use/",
+    "apps/infrx-api/infrx/gateway/routes/console_data_use.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_traces.py (projections, filters)",
+    "apps/infrx-api/infrx/gateway/capture.py",
+    "apps/infrx-api/infrx/lab/compose.py (trace composition via AP-00)",
+    "apps/infrx-api/tests/ap07/",
+    "tests/integration/lab_observe/ (extensions)"
+   ],
+   "implementation_slices": [
+    "07a typed capture/data-grant CRUD with purpose, scope, expiry and consent version; provider admin cannot grant itself content or judge rights",
+    "07b compose trace storage/pumps/retention and scoped Lab routes; sync/SSE/async requests with capture produce inspectable traces; off mode produces no content trace",
+    "07c trace list/detail/filters/media and feedback read projections with faithful access states (metadata, content, not_captured, expired, revoked, partial)",
+    "07d lost-ack, duplicate delivery, storage outage and retention/revocation reconciliation: exactly one logical projection; inference unaffected; revocation blocks future reads/egress"
+   ],
+   "acceptance": "A consenting test tenant's sync, SSE and async requests appear as inspectable Lab traces with real timing/usage/pins; an uncaptured request stays uncaptured; revocation before read or egress blocks access; inference continues during a trace-store outage.",
+   "failure_oracle": "Content capture enabled for all customers by deployment; a fabricated or retained-forbidden content; a 404 route rendered as an empty healthy list; an internal object key or permanent raw S3 link exposed.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-08",
+   "title": "Judge and review API/worker loop: judge config/budget/run/calibration over HTTP, versioned SOP rubric with media-aware result schema, live worker composition with reservation/egress checks, restart/budget/cancel integration, human review and calibration projection",
+   "start_dependencies": [
+    "AP-01",
+    "AP-07"
+   ],
+   "integration_dependencies": [
+    "AP-07"
+   ],
+   "test_ids": [
+    "API-JUDGE"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "lab",
+   "milestone": "LIFECYCLE-M3",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/judge_api/",
+    "apps/infrx-api/infrx/gateway/routes/lab_judge.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_reviews.py",
+    "apps/infrx-api/infrx/judge/ (rubric/result schema, provider allowlist per P-10)",
+    "apps/infrx-api/infrx/lab/workers/__main__.py (judge role composition)",
+    "apps/infrx-api/tests/ap08/"
+   ],
+   "implementation_slices": [
+    "08a wrap lab_judge_* configuration/budget/run/calibration in FastAPI; add detail/list/estimate contracts; no Supabase calls required from the Lab",
+    "08b versioned SOP rubric and media/evidence-aware result schema; missing video = abstention; malformed judge result quarantined; human label distinct from teacher label",
+    "08c live worker composition with frozen sample, reservation and egress checks; one bounded real call records exact pins and cost; dry-run never presented as scored",
+    "08d restart/ambiguous send/budget exhaustion/cancel integration: no duplicate charge or blind resubmission; revocation before send sends nothing; consumer CREDIT unchanged",
+    "08e human review and calibration projection; review stored once with provenance; insufficient references never display calibrated"
+   ],
+   "acceptance": "One bounded real media-aware judge call on a consented test trace returns a scored result or an honest abstention with exact provider spend in PROVIDER_USD; a human review is preserved immutably; the consumer wallet is unchanged; live judging stays BLOCKED without approved credentials, budget and modality (P-10).",
+   "failure_oracle": "A dry run shown as a score; a duplicate reservation after a worker kill; egress after revocation; a judge score presented as a universal quality guarantee; the consumer CREDIT wallet debited for provider judging.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-09",
+   "title": "Thin Consumer App and Lab adapters: App reads and actions through generated clients, Lab legacy RPC adapters replaced, Add model/import/deploy wizard, capabilities/unavailable/session states, static boundary tests in both apps",
+   "start_dependencies": [
+    "AP-00"
+   ],
+   "integration_dependencies": [
+    "AP-02",
+    "AP-03",
+    "AP-07",
+    "AP-08"
+   ],
+   "test_ids": [
+    "API-BOUNDARY"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/lib/services/ (adapters)",
+    "apps/app/lib/session.ts",
+    "apps/app/app/(auth)/grant.ts",
+    "apps/app/app/actions.ts",
+    "apps/app/app/(console)/billing/credit-reads.ts",
+    "apps/app/app/(console)/usage/[requestId]/request-reads.ts",
+    "apps/app/app/(console)/admin/operator-{reads,port}.ts",
+    "apps/app/tests/boundary/",
+    "apps/lab/lib/auth/{memberships,access}.ts",
+    "apps/lab/lib/services/{judge,review}/",
+    "apps/lab/app/(provider)/models/ (Add model flow)",
+    "apps/lab/tests/boundary/"
+   ],
+   "implementation_slices": [
+    "09a App reads: console/query/billing/usage/direct page DB reads replaced with generated clients; fixtures and hosted scoped data match",
+    "09b App actions: grant/key/feedback/operator mutation adapters replaced; durable uncertain-outcome UX; no key minting or replay cache in Next",
+    "09c Lab legacy adapters: memberships/judge/review RPCs replaced; existing HTTP ports retained via generated transport",
+    "09d Lab onboarding: Add model/import/deploy operation wizard with API-backed readiness and details; no deployed badge from record creation",
+    "09e both apps: capabilities, service-unavailable, mobile/keyboard and session-expiration states; every visible action maps to a documented API"
+   ],
+   "acceptance": "A static boundary check in both apps finds no product .from/.rpc/admin client/SQL driver/key generation/credit arithmetic outside an explicit, small auth-transport allowlist; every rendered action maps to one documented operation or an honest unavailable state; no direct-DB fallback activates on API failure.",
+   "failure_oracle": "A dormant Supabase fallback that activates when the API fails; a server-action replay cache standing in for durable identity; the legacy Register form offered as first-model onboarding; a mocked client pass claimed as hosted acceptance.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-10",
+   "title": "Dataset, evaluation and improvement closure: evaluation/pipeline read composition, killed-attempt double-debit root cause, objects/import workers and rights-preserving trace-to-dataset, SOP benchmark on the private candidate, reviewed labels through external training/checkpoint/release evidence",
+   "start_dependencies": [
+    "AP-00"
+   ],
+   "integration_dependencies": [
+    "AP-05",
+    "AP-06",
+    "AP-07",
+    "AP-08"
+   ],
+   "test_ids": [
+    "API-EVAL"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "lab",
+   "milestone": "LIFECYCLE-M4",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/infrx-api/infrx/lab/compose.py (evaluation ports via AP-00)",
+    "apps/infrx-api/infrx/lab/evaluation/",
+    "apps/infrx-api/infrx/lab/pipelines/",
+    "apps/infrx-api/infrx/lab/datasets/",
+    "apps/infrx-api/tests/ap10/",
+    "tests/integration/lab_evaluate/, lab_improve/ (extensions)"
+   ],
+   "implementation_slices": [
+    "10a fix evaluation listings and pipeline read composition: authorized empty = 200 empty, service failure = 503, nonempty records readable",
+    "10b root-cause the killed evaluation attempt double debit (register row 27); rerun the real-process kill/restart oracle unchanged",
+    "10c objects/import workers and a rights-preserving trace-to-dataset operation (immutable version/manifest, purpose/expiry/holdout checks)",
+    "10d SOP benchmark on the private candidate with a repeatable report (dataset/model/harness pins, seed, failures/abstentions, quality and performance separate)",
+    "10e reviewed labels through the supported external-training/checkpoint path and release evidence; unsupported trainer explicit"
+   ],
+   "acceptance": "Evaluation and pipeline listings are backed by the database; the killed-attempt debit race is reproduced, fixed at the authoritative boundary and re-proven; an authorized trace set becomes an immutable dataset; a repeatable SOP benchmark report compares revisions on the same cases.",
+   "failure_oracle": "The eval worker enabled before 10b passes; a weakened kill/restart oracle; checkpoint import relabelled as hosted training; a comparison inferred from different cases.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "AP-11",
+   "title": "API-only lifecycle acceptance and deployment evidence: resumable runner with persistent state and owned cleanup, stage-local assertions and secret-safe evidence, isolated real artifact→engine→publication→consumer run, consent→trace→judge→review run, deployment of the verified API and clients with hosted smoke and thin-boundary check",
+   "start_dependencies": [
+    "AP-00"
+   ],
+   "integration_dependencies": [
+    "AP-01",
+    "AP-02",
+    "AP-03",
+    "AP-04",
+    "AP-05",
+    "AP-06",
+    "AP-07",
+    "AP-08",
+    "AP-09",
+    "AP-10"
+   ],
+   "test_ids": [
+    "API-LIFECYCLE"
+   ],
+   "track": "AP",
+   "handoff": "api-lifecycle/implementation.md",
+   "status": "planned",
+   "disposition": "api-lifecycle-addition",
+   "product": "shared",
+   "milestone": "LIFECYCLE-M3",
+   "execution_class": "core",
+   "owned_paths": [
+    "tests/integration/api_lifecycle/",
+    "tests/integration/api-lifecycle.sh",
+    "Makefile (api-lifecycle target via the coordinator)",
+    "infra/runbooks/api-lifecycle.md",
+    "research/plan/api-lifecycle/evidence/ (new runs)"
+   ],
+   "implementation_slices": [
+    "11a persistent 0600 runner state with operation ids, input hashes and explicit cleanup ownership; modes inspect/isolated/live/cleanup; restart resumes by GET-and-reconcile",
+    "11b stage-local API assertions and secret-safe evidence capture; prerequisites yield BLOCKED (exit 3 per ENVIRONMENT.md), never a green skip",
+    "11c execute the isolated real artifact → private engine → publication → consumer request path",
+    "11d execute consent → trace → live judge → human review, then the optional improvement extension",
+    "11e deploy the verified API and generated clients with the existing runbooks; hosted smoke and UI thin-boundary check; rollback plan usable"
+   ],
+   "acceptance": "Every selected required stage of verification.md's 18-step sequence passes through APIs only, first against isolated real services then the approved live target, with exit codes 0/1/3/4 aligned to the repository's gate convention, redacted evidence, counted resources/requests/spend and owned cleanup; the four verdicts (API boundary, lifecycle, quality, operations/performance) are reported separately.",
+   "failure_oracle": "A direct SQL/CLI/RPC step counted as an API pass; probe.py's exit 0 presented as a lifecycle pass; a mocked engine, dry-run judge, empty listing, health response or build labelled complete; an all-green headline with a BLOCKED or skipped required stage.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-00",
+   "title": "Foundations and shared decisions: semantic tokens, Lab scoped stylesheet and primitives (Button, Field, Badge, PageHeader, ServiceState, drawer/dialog), fixture-state names",
+   "start_dependencies": [],
+   "integration_dependencies": [],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "shared",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/layout.tsx",
+    "apps/lab/lib/ui/",
+    "apps/lab/components/ui/",
+    "apps/app/app/globals.css (additive tokens only)",
+    "apps/*/package.json + lockfiles (foundation owner, via the coordinator)"
+   ],
+   "implementation_slices": [
+    "tokens matching the App; Lab font loading",
+    "Button/Field/Badge/PageHeader/ServiceState/drawer/dialog contracts",
+    "fixture entry points isolated from production",
+    "primitive examples for loading/error/denied/empty/long IDs"
+   ],
+   "acceptance": "Independent builds, no global CSS leaks, keyboard primitives verified at desktop and mobile widths, no production fake fallback, one frozen component-interface note consumed by all lanes.",
+   "failure_oracle": "A cross-import from apps/app into the Lab; a production path that renders sample records; a package added outside the foundation owner's reviewed change.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-01",
+   "title": "Truthful retention, expiry and retry copy (P1): wire null physical-deletion bound never renders a zero-hour deletion claim; result expiry says unavailable, not purged",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "app",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/app/(console)/docs/content.ts",
+    "apps/app/lib/contracts/v2/published-model.ts (retention parsing)",
+    "apps/app/app/(console)/usage/[requestId]/result-panel.tsx (expiry copy)"
+   ],
+   "implementation_slices": [
+    "reproduce wire null → zero-hour message through the catalog path",
+    "represent unknown safely; distinguish readability expiry from physical deletion",
+    "audit pricing/idempotency/retry claims for scope and time bounds"
+   ],
+   "acceptance": "Absent, null, zero, positive and malformed retention values each have intentional behavior through the wire-to-view boundary; a live-shaped payload produces accurate Docs and Settings copy; unknown cannot produce a deletion guarantee.",
+   "failure_oracle": "A formatter-only test with a cast value; an immediate-deletion promise from an unknown bound; a result-expiry message claiming physical purge.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-02",
+   "title": "Consumer navigation and mobile access (P1): accessible modal drawer, inert hidden navigation, Escape and focus restoration, active-page semantics, skip link",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "app",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/components/sidebar.tsx",
+    "apps/app/tests/ux/shell/"
+   ],
+   "implementation_slices": [
+    "nav order and active-page semantics; skip link; internal Docs icon",
+    "mobile drawer via the existing accessible primitive; hidden nav out of the focus order; background inert; Escape and focus return; route-change close"
+   ],
+   "acceptance": "At 390px the keyboard never reaches offscreen links while closed, cannot escape an open modal into page controls, and Escape returns focus to the trigger; audit C9 reproductions fail before and pass after.",
+   "failure_oracle": "Offscreen links focusable; a drawer that stays open on Escape; long email or unavailable balance overflowing.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-03",
+   "title": "Lab shell, access and model/deployment operations: grouped sidebar, workspace selector, role context, per-section states, setup checklist from API records, Add model flow on the AP-04/05 APIs, legacy four-field form restricted to imported models, honest readiness terminology",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-01",
+    "AP-04",
+    "AP-05",
+    "AP-09"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/layout.tsx",
+    "apps/lab/lib/auth/sign-in-form.tsx (presentation)",
+    "apps/lab/app/(provider)/{overview,models,deployments,settings}/",
+    "apps/lab/lib/services/control/view.ts",
+    "apps/lab/tests/ux/operate/"
+   ],
+   "implementation_slices": [
+    "L-01/02/06 shell, sign-in, workspace, settings states",
+    "L-03 Add model (project/import/validation/setup) once AP-04/05 exist; legacy form = New revision of an imported model",
+    "L-04 deployment list/detail with record state vs readiness evidence; Request publication; no Connect without a verified endpoint"
+   ],
+   "acceptance": "Role fixture matrix through server actions; registration validation and uncertain-response path; a passed generic smoke cannot enable a real-engine Ready badge; publication submission cannot claim public acceptance; a missing service never becomes a zero metric.",
+   "failure_oracle": "A Healthy or Live badge from an active record; the legacy Register form offered to an empty workspace as weight upload; a guessed endpoint URL.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-04",
+   "title": "Consumer model setup and documentation: first-call panel (create key → test call → view request), compact model card, environment-variable snippets, video guide with explicit input substitution, Docs contents navigation and bounded async examples",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "UX-01"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "app",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/components/snippet.tsx",
+    "apps/app/app/(console)/docs/ (layout, example generator; content.ts after UX-01)",
+    "apps/app/tests/ux/first-call/"
+   ],
+   "implementation_slices": [
+    "C-02 first-call panel and model card",
+    "C-06 contents/anchors, bounded polling examples, escaped substitutions",
+    "key dialog return state coordinated with its owner"
+   ],
+   "acceptance": "A brand-new fixture account finds Create key above the fold at 1280×720; an existing-key user is not forced to create another; copied examples never insert a public prefix as a secret; the video placeholder is visibly incomplete; a safe input produces correctly escaped code.",
+   "failure_oracle": "A new UI inference endpoint; a browser-persisted secret; example.com/clip.mp4 passed off as runnable; a hard-coded limit that disagrees with the catalog.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-05",
+   "title": "Lab request list and evidence detail: readable metadata list, cursor navigation, independent states, request detail hierarchy, explicit access/completeness labels, read-only content boundary",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-07"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/requests/",
+    "apps/lab/components/traces/list/",
+    "apps/lab/components/traces/detail/ (presentation)",
+    "apps/lab/tests/ux/requests/"
+   ],
+   "implementation_slices": [
+    "L-05 list with next/previous cursor context",
+    "detail: summary → timeline → authorized content → pins → judge → review",
+    "access states: metadata only / shared / partial / expired / unknown"
+   ],
+   "acceptance": "A metadata-only fixture emits no content read; expired or revoked content disappears; a cross-workspace URL is rejected; partial capture is marked; an unavailable service preserves shell and heading with retry.",
+   "failure_oracle": "A current-page filter pretending to search all traffic; model output rendered as HTML; service failure shown as zero traffic.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-06",
+   "title": "Dataset workflow: library/details, Source → Mapping → Validate → Import around the real schema, reject review, status/receipt and requeue, exact split percentages, lineage and omission-aware export",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-10"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/datasets/",
+    "apps/lab/lib/services/datasets/views.ts",
+    "apps/lab/tests/ux/datasets/"
+   ],
+   "implementation_slices": [
+    "L-07 library/details",
+    "guided import with preview invalidation and strict/partial acceptance",
+    "derive with basis-point splits; export with omissions"
+   ],
+   "acceptance": "Valid import, malformed JSONL, partial acceptance, preview invalidation, lost response, failed/requeued import, split overlap and expired export all exercised; holdout/training restrictions survive the guided UI.",
+   "failure_oracle": "Mapping reduced to an invented prompt/completion pair; a guessed latest+1 version; Download all exporting holdout data.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-07",
+   "title": "Consumer usage, credits and privacy: requests-first usage hierarchy, meaningful empty states, execution vs financial distinction, result focus/expiry/error states, readable exact ledger, privacy copy aligned with UX-01",
+   "start_dependencies": [
+    "UX-01"
+   ],
+   "integration_dependencies": [
+    "AP-02"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "app",
+   "milestone": "UX-L1",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/app/(console)/usage/ (routes, result/status presentation)",
+    "apps/app/app/(console)/billing/ (presentation)",
+    "apps/app/app/(console)/settings/",
+    "apps/app/tests/ux/usage/"
+   ],
+   "implementation_slices": [
+    "C-04 usage list/detail hierarchy",
+    "C-05 credits: available/reserved/spent/balance and friendly ledger labels",
+    "C-07 settings/privacy copy"
+   ],
+   "acceptance": "Ready/running/failed/expired/not-found/unavailable result fixtures; expiry while the tab is open and back navigation; wallet failure never zero; a tiny nonzero debit never free; no double charge or new inference from Retry.",
+   "failure_oracle": "A hold labelled spent; a failed query rendering zero spent; a Retry that submits a new paid request.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-08",
+   "title": "Evaluation comparison interface: comparison wizard, evidence-first report, runs/subscriptions separated, judge settings from Evaluations, explicit protocol and budgets, actual backend state/cancel semantics",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-08",
+    "AP-10"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/evaluations/",
+    "apps/lab/app/(provider)/judge/ (presentation)",
+    "apps/lab/tests/ux/evaluations/"
+   ],
+   "implementation_slices": [
+    "L-08 create comparison steps and report",
+    "runs/subscriptions tabs; cancel on the chosen run id",
+    "judge settings discovered from Evaluations"
+   ],
+   "acceptance": "Accept/reject/inconclusive, insufficient/missing/error, mixed units, changed immutable refs, duplicate launch and cancel race exercised; no inferred scientific decision in the frontend; no seeded quality threshold as a silent default.",
+   "failure_oracle": "A platform-invented scientific threshold; zero accuracy for no result; a comparison across non-comparable hardware labelled conclusive.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-09",
+   "title": "Review, teacher batches and external training: queue-detail-review, lineage and methods, teacher dry-run/approval, manual external-training bundle/checkpoint flow, ambiguous outcomes",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-08",
+    "AP-10"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/annotations/",
+    "apps/lab/app/(provider)/training/",
+    "apps/lab/tests/ux/improve/"
+   ],
+   "implementation_slices": [
+    "L-09 review queue → sample → decision",
+    "L-10 teacher dry-run → approval; training bundle → ambiguous/completed; checkpoint import receipt"
+   ],
+   "acceptance": "A synthetic label is never silently human; no content access without grants; no holdout leakage; teacher dry-run sends nothing; approval/retry does not duplicate paid work; an ambiguous training state cannot resubmit; unknown PROVIDER_USD stays unknown.",
+   "failure_oracle": "A fabricated member or model list; CREDIT converted to PROVIDER_USD; Submit again on an ambiguous outcome.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-10",
+   "title": "Release and optimization evidence: summary/detail states, scoped comparison evidence, proposal summary with a server-bound fence, missing identity and non-comparable data labels",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "AP-06"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "lab",
+   "milestone": "UX-L2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/lab/app/(provider)/releases/",
+    "apps/lab/app/(provider)/optimizations/",
+    "apps/lab/tests/ux/releases/"
+   ],
+   "implementation_slices": [
+    "L-11 release detail and proposal with the server fence",
+    "optimization comparison with Not recorded identities"
+   ],
+   "acceptance": "Stale-fence re-review, viewer/developer/admin distinction, unit refusal, null progress, inconclusive comparison and mismatched hardware exercised; an approved proposal never substitutes for current serving proof.",
+   "failure_oracle": "An editable fence field; a traffic slider implying immediate deployment; a Modal parity claim from a fixture.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
+  },
+  {
+   "id": "UX-11",
+   "title": "Integration, accessibility and evidence: synthetic browser suite and fixtures, cross-app integration checks, screenshot index, acceptance report, tracker reconciliation via the coordinator",
+   "start_dependencies": [
+    "UX-00"
+   ],
+   "integration_dependencies": [
+    "UX-01",
+    "UX-02",
+    "UX-03",
+    "UX-04",
+    "UX-05",
+    "UX-06",
+    "UX-07",
+    "UX-08",
+    "UX-09",
+    "UX-10"
+   ],
+   "test_ids": [
+    "UX-JOURNEY"
+   ],
+   "track": "UX",
+   "handoff": "../design/v1/06-implementation.md",
+   "status": "planned",
+   "disposition": "ux-design-addition",
+   "product": "shared",
+   "milestone": "UX-L2",
+   "execution_class": "core",
+   "owned_paths": [
+    "apps/app/tests/ux/ (suite config)",
+    "apps/lab/tests/ux/ (suite config)",
+    "research/design/v1/evidence/ (new captures)",
+    "research/plan/evidence/ux/"
+   ],
+   "implementation_slices": [
+    "role/service/content-state fixtures",
+    "07-handoff UX-T01..T13 journeys at 320/390/768/1440 and keyboard-only",
+    "open-gap register mapped to backend task ids"
+   ],
+   "acceptance": "The merged SHA passes relevant local checks; supported-host real suites run or are explicitly BLOCKED with cause; the invited consumer journey has operational evidence in its authorized window; screenshots use synthetic data isolated from the E3A suite.",
+   "failure_oracle": "Screenshots enabled on the real E3A suite; a task marked done because its branch tests pass before integration; a mocked service pass labelled hosted acceptance.",
+   "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
+   "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths."
   }
  ],
  "product_revision": "2026-09-21-two-platforms-individual-grant",
@@ -4700,7 +5633,7 @@
   "13-lab-improvement-handoffs.md",
   "14-expansion-gates.md"
  ],
- "status_semantics": "Implemented and integrated records identify code and local evidence, not deployed or production-accepted behavior. Current state is STATUS.md; release decisions require their recorded gates. Task statuses are unchanged by the documentation cleanup.",
+ "status_semantics": "Implemented and integrated records identify code and local evidence, not deployed or production-accepted behavior. Current state is STATUS.md; release decisions require their recorded gates. Task statuses are unchanged by the documentation cleanup. AP-00–AP-11 (API-first lifecycle) and UX-00–UX-11 (design package) were registered 2026-10-01 as planned work at the lifecycle-plan merge; their statuses move only on lane evidence.",
  "release_gates": {
   "BACKEND-LOCAL": {
    "requires": [
@@ -4806,7 +5739,7 @@
  "current_execution_scope": {
   "id": "BACKEND-FIRST-MARLIN",
   "objective": "Qualify the deployed Marlin endpoint and consumer App for a bounded invited production pilot, then public self-service; provider enablement and fleet/optimization follow their own gates.",
-  "dispatch_now": "Close E4C/operating evidence, hosted auth/CAPTCHA and the actual two-user consumer journey per review 26. Reuse implemented repairs and existing valid evidence; do not redispatch S3/F2C or completed App work from historical plans.",
+  "dispatch_now": "Close E4C/operating evidence, hosted auth/CAPTCHA and the actual two-user consumer journey per review 26. Reuse implemented repairs and existing valid evidence; do not redispatch S3/F2C or completed App work from historical plans. Wave 7 (2026-10-01, base 2eeff879): the API-first lifecycle AP-00–AP-11 and the UX lanes in dependency order; the E4C rerun on the box is serialized by the coordinator.",
   "dispatch_later": "After consumer acceptance, prioritize the measured SOP workload and inference optimization. Provider workflow enablement, scaling and general hosting follow their independent roadmap/activation gates; do not redispatch completed consumer feature tasks.",
   "robustness": "Durable accepted work, exact accounting, isolated tenants, bounded overload, tested restart/restore/rollback and observable recovery inside a measured serving envelope. Single-GPU recovery does not establish high availability.",
   "optimization": "Baseline and profile first; controlled media/engine experiments and final combined load/soak/parity proof. No invented latency/throughput target or quality-preserving quantization claim.",
