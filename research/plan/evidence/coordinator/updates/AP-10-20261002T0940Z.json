@@ -1,0 +1,102 @@
+{
+  "task": "AP-10",
+  "slice": "10d, 10e, register row 92 (WR-AP10C-4)",
+  "activity": "review",
+  "head": "8cb7baa3",
+  "worktree": ".claude/worktrees/codex-w7-api-improve-3",
+  "branch": "codex/w7-api-improve-3",
+  "owned_paths": [
+    "apps/infrx-api/infrx/gateway/routes/lab_datasets.py (the from-traces route only)",
+    "apps/infrx-api/infrx/lab/improve/",
+    "apps/infrx-api/tests/ap10/",
+    "models/marlin2b/sop/"
+  ],
+  "commands": [
+    {
+      "cmd": "pytest tests/ap10/test_from_traces_route.py (base LabDatasets)",
+      "exit": 1,
+      "summary": "2 failed (red)"
+    },
+    {
+      "cmd": "pytest tests/ap10/test_sop_benchmark.py (module set aside)",
+      "exit": 2,
+      "summary": "1 collection error (red)"
+    },
+    {
+      "cmd": "pytest tests/ap10/test_release.py (before the module)",
+      "exit": 2,
+      "summary": "1 collection error (red)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10 tests/g/lab_datasets tests/p/training tests/n tests/contracts/test_openapi_export.py --ignore=tests/ap10/test_mutants.py",
+      "exit": 0,
+      "summary": "190 passed, 5 skipped (p3-key _pg)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap10/test_mutants.py",
+      "exit": 0,
+      "summary": "77 mutants killed (41 new), 0 survivors; every-case green"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/ap10/test_sop_fake_engine.py",
+      "exit": 0,
+      "summary": "1 passed (real fake_vllm process; performance fake, quality BLOCKED[P-07])"
+    },
+    {
+      "cmd": "pytest tests/contracts/test_openapi_export.py; make api-client-test",
+      "exit": 0,
+      "summary": "12 passed; 6 pass 0 fail; baseline unchanged"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 0,
+      "summary": "7 passed"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 457 (baseline 458)"
+    },
+    {
+      "cmd": "make lab-evaluate",
+      "exit": 2,
+      "summary": "E6L NOT RUN (runner 3): 6 PASS, EVAL-COMPARE NOT RUN j10[SR-AP10-1]; no FAIL"
+    },
+    {
+      "cmd": "make lab-improve",
+      "exit": 2,
+      "summary": "E7L NOT RUN (runner 3): PIPELINE-LINEAGE PASS; i07 NOT RUN[P-11], i09 NOT RUN[staging-target]; no FAIL"
+    },
+    {
+      "cmd": "WR-AP10D-1 transient: pytest tests/g/test_startup.py -k lab",
+      "exit": 0,
+      "summary": "13 passed; red without the compose half"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "row 92 route, 10d harness and 10e functions done on the branch; remaining = WR-AP10D-1 (verified, ~0.5 h), 10e routes + a composed AP-04 test (~2-4 h), the real-candidate SOP run in a coordinator GPU window (~1 h + window); P-07 gates the quality verdict (operator input)",
+    "at": "2026-10-02T09:40Z"
+  },
+  "blockers": [
+    "10d real candidate: GPU window with AP-05's candidate engine on the box (coordinator)",
+    "10d quality verdict: P-07 (SOP definition + human-reviewed gold labels)"
+  ],
+  "wiring_requests": [
+    "WR-AP10D-1: compose.lab_surfaces passes PgControlOps(connect) to LabDatasets (patch research/plan/evidence/w7/api-improve-3-8cb7baa-WR-AP10D-1.patch; composed test tests/g/test_startup.py lab-datasets case)"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-improve-3-8cb7baa.md",
+    "research/plan/evidence/w7/api-improve-3-8cb7baa-WR-AP10D-1.patch",
+    "research/plan/evidence/e/E6L-raw-8cb7baa3/verdict.json",
+    "research/plan/evidence/e/E7L-raw-8cb7baa3/verdict.json"
+  ]
+}

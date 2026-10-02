@@ -1,0 +1,25 @@
+{
+ "checkpoint_id": "00000c3e-0000-4000-8000-00000000005c",
+ "counts": [
+  1,
+  1,
+  1,
+  1,
+  1
+ ],
+ "run_id": "8ddfaa1a-7fd0-4f62-8090-4058c63bd288",
+ "serving_ref": "lab:serving:b0000001-0000-4000-8000-000000000001:000000de-0000-4000-8000-00000000005c@sha256:645991cacc8fdfd53c3c4a07f56c4d4d77a5995ddbc38bce38f3cebd550a531e",
+ "status": {
+  "attempts": {},
+  "cases": {
+   "pending": 20
+  },
+  "costs": {},
+  "created_at": "2026-09-20T12:01:02+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000001@sha256:6234174b37e1cacc9e02065056b0a8d871c3b13e05db716f03c85be64c94f47d",
+  "run_id": "8ddfaa1a-7fd0-4f62-8090-4058c63bd288",
+  "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:8ddfaa1a-7fd0-4f62-8090-4058c63bd288@sha256:5bdf9860154d0e9e93abb5a3b6509aaa7257d8630efe907f631a44c254aeb198",
+  "state": "queued",
+  "updated_at": "2026-09-20T12:01:02+00:00"
+ }
+}

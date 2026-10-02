@@ -1,0 +1,31 @@
+diff --git a/apps/infrx-api/infrx/lab/compose.py b/apps/infrx-api/infrx/lab/compose.py
+index 09776e7a..d9a916dd 100644
+--- a/apps/infrx-api/infrx/lab/compose.py
++++ b/apps/infrx-api/infrx/lab/compose.py
+@@ -116,10 +116,12 @@ def lab_surfaces(settings, connect, objects=None) -> dict:
+     if deployment.lab_traces:
+         lab["lab_traces"] = lab_traces(settings, connect, sessions, access)
+     if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
++        from ..state.control_ops import PgControlOps
+         from ..state.lab_data import PgLabDataStore, PgLabImportJobs
+         from ..gateway.routes.lab_datasets import LabDatasets
+         lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects,
+-                                          PgLabImportJobs(connect))    # WR-C5-N4-ROUTE (0051)
++                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE (0051)
++                                          PgControlOps(connect))       # WR-AP10D-1 (0060)
+     return {**lab, **lab_evaluations_pipelines_releases(deployment, connect, sessions, access,
+                                                         objects, teachers)}
+ 
+diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
+index 0d0149a8..9ee575f9 100644
+--- a/apps/infrx-api/tests/g/test_startup.py
++++ b/apps/infrx-api/tests/g/test_startup.py
+@@ -905,6 +905,8 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
+     assert type(x.store) is PgLabDataStore and x.objects is objects
+     from infrx.state.lab_data import PgLabImportJobs          # WR-C5-N4-ROUTE: 0051's queue
+     assert type(x.jobs) is PgLabImportJobs and x.jobs._connect is x.store._connect
++    from infrx.state.control_ops import PgControlOps          # WR-AP10D-1: from-traces ops
++    assert type(x.ops) is PgControlOps and x.ops._connect is x.store._connect
+     assert outcome(lambda: pilot._lab_checkpoints(settings(), None)) == {}
+     for keys in ("", "not a directory"):
+         refused = outcome(lambda: pilot._lab_checkpoints(

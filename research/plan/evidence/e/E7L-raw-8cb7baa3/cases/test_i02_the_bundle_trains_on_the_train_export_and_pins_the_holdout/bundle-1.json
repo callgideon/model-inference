@@ -1,0 +1,42 @@
+{
+ "config": {
+  "adaptation": "lora",
+  "base_model": "marlin-2b",
+  "environment": {
+   "trainer": "provider-own"
+  },
+  "hyperparameters": {
+   "epochs": 1
+  },
+  "objective": "sft"
+ },
+ "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da7-0000-4000-8000-000000000001@sha256:21506dcc6e64c9f1b77033cb012975c28bd654eaee47ca9c5ff6db4d146638d8",
+ "dev": [
+  "268f4b3b-d8a5-43f2-8c11-369d70016e00",
+  "3f539322-4fb7-48cd-89d8-b0168c078b8a"
+ ],
+ "export": {
+  "export_id": "000000e8-0000-4000-8000-000000000001",
+  "format": "infrx.label_export.1",
+  "sha256": "e7c39bc5a25e2a5a66d68b4525b34e877f0f1b0cf1de6e75ae03a95d696d251e"
+ },
+ "external_run_ref": "lab:external_run:b0000001-0000-4000-8000-000000000001:00000e71-0000-4000-8000-000000000001@sha256:c7c3966e37c56bf57e1a0d93743a7c79d899070a23e1dafbfecc8f030a0e7338",
+ "format": "infrx.training_bundle.1",
+ "holdout": {
+  "sha256": "217511ff3bce479390e32a09a6f393328180c727460ec3a71ef99c2f736dcf5e",
+  "size": 12
+ },
+ "omitted": [],
+ "train": [
+  "2c915104-af29-43b1-87df-747db27a5da3",
+  "36e7ec6e-ae63-441a-80b0-e1327a03d85a",
+  "50ad02e6-af59-4480-8d7d-59e94a133e17",
+  "5c52582b-ae2e-4145-80e0-fae389afcdb1",
+  "aaf2b8dc-c96a-41a1-82e8-27cf6333c75b",
+  "c8980deb-6377-44ea-8710-47dd4dbb1739",
+  "c8efbc48-e281-440d-840e-a1e8508a589d",
+  "d0a5492e-0520-4b98-842d-02b7f9d3eb7f",
+  "d2625b97-f35c-4c0f-821c-a65446450ddb",
+  "dbaa3d3e-d05b-419b-8e01-0961aafce4e0"
+ ]
+}

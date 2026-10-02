@@ -1,0 +1,95 @@
+{
+ "report": {
+  "abandoned": [],
+  "attempts": {
+   "succeeded": 3
+  },
+  "cases": {
+   "done": 3
+  },
+  "costs": {
+   "CREDIT": "17.64000000"
+  },
+  "created_at": "2026-09-20T12:00:31+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da6-0000-4000-8000-000000000002@sha256:33487ac44c91f7f5d598d87ee951b5070e937361d0e396998dc5ab17d0260c64",
+  "failures": {},
+  "run_id": "000007e6-0000-4000-8000-00000000006f",
+  "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:000007e6-0000-4000-8000-00000000006f@sha256:471c7fd5578b55ae4aca535821e455e0742894d9db8a58e30ffe931fe95e29a1",
+  "state": "succeeded",
+  "stopped": null,
+  "unrecorded": {
+   "CREDIT": "0.00000000"
+  },
+  "updated_at": "2026-09-20T12:00:31+00:00"
+ },
+ "results": {
+  "4f715318-0b01-4792-80dc-9db1b40e7746": {
+   "comparable": true,
+   "latency_ms": 44,
+   "output": "unknown",
+   "reasons": [],
+   "score": 0,
+   "split": "train",
+   "status": "complete",
+   "usage": {
+    "calls": 1,
+    "completion_tokens": 1000,
+    "prompt_tokens": 11700
+   }
+  },
+  "51ceafd3-3f75-4053-858f-432059ed1fe1": {
+   "comparable": true,
+   "latency_ms": 38,
+   "output": "unknown",
+   "reasons": [],
+   "score": 0,
+   "split": "train",
+   "status": "complete",
+   "usage": {
+    "calls": 1,
+    "completion_tokens": 1000,
+    "prompt_tokens": 11700
+   }
+  },
+  "b38b1fb2-b9e2-41b1-852f-491de3b3c2a9": {
+   "comparable": true,
+   "latency_ms": 25,
+   "output": "unknown",
+   "reasons": [],
+   "score": 0,
+   "split": "train",
+   "status": "complete",
+   "usage": {
+    "calls": 1,
+    "completion_tokens": 1000,
+    "prompt_tokens": 11700
+   }
+  }
+ },
+ "sent": {
+  "t=0,30": {
+   "expires": [
+    "600"
+   ],
+   "path": "/infrx-e6l/test/e6l/bf68d25ecc6d43d2b3e68b3c3010d246/lab/b0000001-0000-4000-8000-000000000001/media/920fa35982af1d51727c74b3fbb3043733e1d04d95abe5c4e3408ea9444b3ae1",
+   "sha256": "920fa35982af1d51727c74b3fbb3043733e1d04d95abe5c4e3408ea9444b3ae1",
+   "status": 200
+  },
+  "t=0,82": {
+   "expires": [
+    "600"
+   ],
+   "path": "/infrx-e6l/test/e6l/bf68d25ecc6d43d2b3e68b3c3010d246/lab/b0000001-0000-4000-8000-000000000001/media/75c84231ae3b9066b7e1eac482c57ac1c910ae4c205e7acc1bf9282524e35a58",
+   "sha256": "75c84231ae3b9066b7e1eac482c57ac1c910ae4c205e7acc1bf9282524e35a58",
+   "status": 200
+  },
+  "t=30,60": {
+   "expires": [
+    "600"
+   ],
+   "path": "/infrx-e6l/test/e6l/bf68d25ecc6d43d2b3e68b3c3010d246/lab/b0000001-0000-4000-8000-000000000001/media/920fa35982af1d51727c74b3fbb3043733e1d04d95abe5c4e3408ea9444b3ae1",
+   "sha256": "920fa35982af1d51727c74b3fbb3043733e1d04d95abe5c4e3408ea9444b3ae1",
+   "status": 200
+  }
+ }
+}
