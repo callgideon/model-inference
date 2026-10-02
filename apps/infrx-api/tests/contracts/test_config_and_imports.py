@@ -486,7 +486,7 @@ LAB_LANE_PORTS = {
     "ap5": {"postgres": 57556, "engine-fake": 57557}, "ap6": {"postgres": 57558},
     "ap7": {"postgres": 57559, "clickhouse": 57560, "s3": 57562},
     "ap8": {"postgres": 57563, "judge-fake": 57564}, "ap9": {"postgres": 57565},
-    "ap10": {"postgres": 57566},
+    "ap10": {"postgres": 57566, "s3": 57572},
     "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569, "clickhouse": 57570},
 }
 

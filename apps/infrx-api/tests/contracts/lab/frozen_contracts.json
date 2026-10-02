@@ -118,7 +118,7 @@
     "apps/infrx-api/infrx/contracts/money.py": "c40bbac22c111f6590179300cee1794cf86452aa3b3775da8f72444cee1602ac",
     "apps/infrx-api/infrx/contracts/ports.py": "39a1d0f3913deb245080b98bd835014a7e2a7dc38a713eb0af74f262f3b0bed6",
     "apps/infrx-api/infrx/contracts/records.py": "91ccfefbcb5a783c1752915ebf101c8d3425d2aa50e479838121142d26095836",
-    "apps/infrx-api/infrx/contracts/tasklocal.py": "061663efb03ac183ec060e14944b391f92122cadb74f5303c41c0c0e31353025",
+    "apps/infrx-api/infrx/contracts/tasklocal.py": "8a29387c484f2e5b035237a794906083893082c9633783042bcbdbd24a684a67",
     "apps/infrx-api/infrx/contracts/traces_accounting.py": "5b4ff9d7396c23e11f7a66f298168577e1e06275baf1e48f6f9def979e6b872e",
     "apps/infrx-api/infrx/contracts/v2/__init__.py": "e616f36dd5f176652bf6fb416395dddf2731091740b3bedbcbbddc1c6043a161",
     "apps/infrx-api/infrx/contracts/v2/fixtures.py": "c36b7da7420803e2363eb907dac5c6305b3e48d943876f5b547b51719c838268",
@@ -193,6 +193,14 @@
         "apps/infrx-api/infrx/contracts/tasklocal.py"
       ],
       "why": "WR-AP11C-1: TASK_BLOCKS gains ap11's ClickHouse block (57570, native 57571) so the AP-11 isolated world composes trace storage (stages 12-17)"
+    },
+    {
+      "at": "2026-10-02",
+      "ruling": "R270/AP-10",
+      "files": [
+        "apps/infrx-api/infrx/contracts/tasklocal.py"
+      ],
+      "why": "WR-AP10E-2: TASK_PORTS gains ap10's MinIO (57572) so AP-10 10e's composed AP-04 world runs on its own key"
     }
   ]
 }

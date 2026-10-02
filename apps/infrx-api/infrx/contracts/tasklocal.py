@@ -99,12 +99,13 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e3l": {"postgres": 57032}, "e5l": {"postgres": 57132}, "e6l": {"postgres": 57232},
     "e7l": {"postgres": 57332}, "e8l": {"postgres": 57432},
     # LW7 (R270): the API-first lifecycle lanes AP-00..AP-11, keys ap0..ap11, 57550-57569
+    # (+ ap10's MinIO 57572, WR-AP10E-2: the composed AP-04 world of AP-10 10e)
     # inside the Lab band (the UX lanes are fake-only). ap7's ClickHouse is a block (below).
     "ap0": {"postgres": 57550}, "ap1": {"postgres": 57551}, "ap2": {"postgres": 57552},
     "ap3": {"postgres": 57553}, "ap4": {"postgres": 57554, "s3": 57555},
     "ap5": {"postgres": 57556, "engine-fake": 57557}, "ap6": {"postgres": 57558},
     "ap7": {"postgres": 57559, "s3": 57562}, "ap8": {"postgres": 57563, "judge-fake": 57564},
-    "ap9": {"postgres": 57565}, "ap10": {"postgres": 57566},
+    "ap9": {"postgres": 57565}, "ap10": {"postgres": 57566, "s3": 57572},
     "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569},
 }
 
