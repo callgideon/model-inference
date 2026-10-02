@@ -1,0 +1,23 @@
+{
+  "task": "UX-11",
+  "slice": "final acceptance (ux-verify-final)",
+  "activity": "review",
+  "head": "4f513de8",
+  "worktree": ".claude/worktrees/codex-w7-ux-verify-final",
+  "branch": "codex/w7-ux-verify-final",
+  "owned_paths": ["apps/app/tests/ux/matrix/**", "apps/lab/tests/ux/matrix/**", "apps/lab/tests/e2e/** (journeys)", "research/design/v1/acceptance/**"],
+  "commands": [
+    {"cmd": "node apps/app/tests/ux/matrix/run-matrix.mjs --real", "exit": 1, "summary": "FAIL only on WR-UXVF-3; 26 PASS / 1 FAIL / 9 BLOCKED parts; journeys 5 PASS, 1 FAIL, 7 BLOCKED"},
+    {"cmd": "INFRX_D_TASK=l4 make lab-e2e", "exit": 0, "summary": "20 pass, 4 NOT RUN[SR-AP10-1]"},
+    {"cmd": "LAB_V1M_REAL=1 INFRX_D_TASK=lab-v1m node --test tests/v/list/stack.test.ts", "exit": 0, "summary": "6/6 on t2i ClickHouse"},
+    {"cmd": "apps/app node tests/ux/matrix/run-mutants.mjs", "exit": 0, "summary": "27/27 killed"},
+    {"cmd": "apps/lab node tests/ux/matrix/run-mutants.mjs", "exit": 0, "summary": "7/7 killed"},
+    {"cmd": "make console-test lab-test", "exit": 0, "summary": "589 (0 fail) / 365 (0 fail)"},
+    {"cmd": "make console-lint console-typecheck lab-lint lab-typecheck lab-build", "exit": 0, "summary": "clean"},
+    {"cmd": "tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "needs WR-UXVF-4 (7 passed with it)"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "local slices green and measured; remaining = merge review, matrix rerun after UX-10/row 98/WR-UXVF-1..3; coordinator real/production cells excluded", "at": "2026-10-02T10:00Z"},
+  "blockers": ["UX-10 (ux-lab-releases) in flight", "row 98 (lab-judge-runs) in flight", "WR-UXVF-1+2 for T11 real", "e4b app-e2e / operator window for T03/T04/T06", "CANDIDATE-ENGINE for T08", "P-10 for T12 live", "participants for T13"],
+  "wiring_requests": ["WR-UXVF-1", "WR-UXVF-2", "WR-UXVF-3", "WR-UXVF-4"],
+  "evidence": ["research/plan/evidence/w7/ux-verify-final-e28ee95.md", "research/design/v1/acceptance/acceptance-e28ee95.md", "research/design/v1/acceptance/matrix-e28ee95.json"]
+}

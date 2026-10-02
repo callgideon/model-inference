@@ -1,0 +1,55 @@
+diff --git a/apps/app/app/globals.css b/apps/app/app/globals.css
+index 24227706..4a7d8ebc 100644
+--- a/apps/app/app/globals.css
++++ b/apps/app/app/globals.css
+@@ -137,3 +137,15 @@
+ @theme inline {
+   --font-mono: var(--font-mono);
+ }
++
++/* WR-UXVF-3 (UX-11): respect reduced motion (02-foundations) - popups appear without zoom/slide; a
++   pending spinner stands still, as the Lab's .lab-spin does. */
++@media (prefers-reduced-motion: reduce) {
++  *,
++  ::before,
++  ::after {
++    animation-duration: 0.01ms !important;
++    animation-iteration-count: 1 !important;
++    transition-duration: 0.01ms !important;
++  }
++}
+diff --git a/apps/app/tests/ux/matrix/a11y.check.ts b/apps/app/tests/ux/matrix/a11y.check.ts
+index bf17a700..2fa59eee 100644
+--- a/apps/app/tests/ux/matrix/a11y.check.ts
++++ b/apps/app/tests/ux/matrix/a11y.check.ts
+@@ -164,7 +164,7 @@ test("UXV-A04 reduced motion: opening and closing the mobile menu moves nothing"
+ // whatever the setting. Reported FAIL in the acceptance report; this case passes once the WR lands, and
+ // its todo comes off then (the todo keeps the suite green while the defect is open; the matrix reads a
+ // TODO FAIL[...] as FAIL, so it never hides it).
+-test("UXV-A05 reduced motion: the App's dialog and dropdown menu popups, as committed, move nothing", { todo: "FAIL[WR-UXVF-3]: no prefers-reduced-motion rule in app/globals.css" }, async () => {
++test("UXV-A05 reduced motion: the App's dialog and dropdown menu popups, as committed, move nothing", async () => {
+   const page = await open(DESKTOP);
+   const popups = [classesOf("components/ui/dialog.tsx", "zoom-in-95"), classesOf("components/ui/dropdown-menu.tsx", "slide-in-from-top-2")];
+   await page.evaluate((list) => {
+diff --git a/apps/app/tests/ux/matrix/run-mutants.mjs b/apps/app/tests/ux/matrix/run-mutants.mjs
+index 4615de65..946a0bfe 100644
+--- a/apps/app/tests/ux/matrix/run-mutants.mjs
++++ b/apps/app/tests/ux/matrix/run-mutants.mjs
+@@ -32,6 +32,7 @@ const C = {
+   a02: "UXV-A02 at 200% zoom (640×400 CSS px) the shell never scrolls sideways; Tab reaches every control in view, uncovered and with a focus indicator; the menu opens and closes by keyboard",
+   a03: "UXV-A03 every control is named and all text meets AA contrast, at 1440 px and with the 390 px menu open",
+   a04: "UXV-A04 reduced motion: opening and closing the mobile menu moves nothing",
++  a05: "UXV-A05 reduced motion: the App's dialog and dropdown menu popups, as committed, move nothing",
+ };
+ 
+ const MUTANTS = [
+@@ -60,8 +61,8 @@ const MUTANTS = [
+   m("UXV-X21", "a hidden pending spinner counts as motion", P, '!el || el.closest("[role=status], [aria-busy=true], [aria-hidden=true]") !== null', "!el", [C.a01], A11Y),
+   m("UXV-X22", "an opacity fade counts as motion", P, "const MOVES = /^(transform|", "const MOVES = /^(opacity|transform|", [C.a01], A11Y),
+   m("UXV-X23", "the menu button loses its accessible name", "components/sidebar.tsx", '<Button variant="ghost" size="icon-sm" aria-label="Open menu" />', '<Button variant="ghost" size="icon-sm" />', [C.a02, C.a03], A11Y),
+-  m("UXV-X24", "the menu slides in under reduced motion", "components/sidebar.tsx", '<Dialog.Popup className="fixed inset-y-0 left-0 z-50', '<Dialog.Popup style={{ animation: "enter 400ms", ["--tw-enter-translate-x" as string]: "-100%" }} className="fixed inset-y-0 left-0 z-50', [C.a04], A11Y),
+   m("UXV-X25", "the focus ring is removed from the App's buttons", "components/ui/button.tsx", "focus-visible:ring-3 ", "", [C.a02], A11Y),
++  m("UXV-X28", "the reduced-motion rule lets animations run", "app/globals.css", "    animation-duration: 0.01ms !important;\n", "", [C.a04, C.a05], A11Y),
+ ];
+ 
+ function failed(out) {
