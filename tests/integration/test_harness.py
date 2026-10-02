@@ -153,10 +153,15 @@ PRODUCTION_ALLOWED = {
 }
 
 
+#: `env -u NAME` strips a credential from the child's environment: naming it to remove it is
+#: not a reference to production (api-lifecycle.sh, AP-11). Any other mention still is.
+UNSET = re.compile(r"(?<![\w-])-u\s+[A-Z][A-Z0-9_]*")
+
+
 def production_offenders(root: Path, files) -> set[tuple[str, str]]:
     return {(path.relative_to(root).as_posix(), needle) for path in files
             for needle in PRODUCTION_NEEDLES
-            if needle in path.read_text(errors="ignore")} - PRODUCTION_ALLOWED
+            if needle in UNSET.sub("", path.read_text(errors="ignore"))} - PRODUCTION_ALLOWED
 
 
 def test_nothing_in_this_directory_points_at_production():
@@ -173,9 +178,12 @@ def test_the_production_allow_list_excuses_only_its_own_file_and_needle(tmp_path
     (tmp_path / "new_key.py").write_text("NAME = '" + "SUPABASE_SERVICE" "_ROLE_KEY'\n")
     (tmp_path / "backend" / "test_certify.py").write_text("callbill" ".ai " + "supabase" ".co")
     (tmp_path / "ops" / "test_create_test_user.py").write_text("SUPABASE_SERVICE" "_ROLE_KEY")
+    secret = "AWS_SECRET" "_ACCESS_KEY"
+    (tmp_path / "strips.py").write_text(f"env -u {secret} -u AWS_SESSION_TOKEN run\n")
+    (tmp_path / "strips_then_reads.py").write_text(f"env -u {secret} run\necho ${secret}\n")
     assert production_offenders(tmp_path, sorted(tmp_path.rglob("*.py"))) == {
         ("new_host.py", "callbill" ".ai"), ("new_key.py", "SUPABASE_SERVICE" "_ROLE_KEY"),
-        ("backend/test_certify.py", "supabase" ".co")}
+        ("backend/test_certify.py", "supabase" ".co"), ("strips_then_reads.py", secret)}
 
 
 # ------------------------------------------------------------------ the test-only clock
