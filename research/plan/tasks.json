@@ -5145,7 +5145,7 @@
       "acceptance": "Evaluation and pipeline listings are backed by the database; the killed-attempt debit race is reproduced, fixed at the authoritative boundary and re-proven; an authorized trace set becomes an immutable dataset; a repeatable SOP benchmark report compares revisions on the same cases.",
       "failure_oracle": "The eval worker enabled before 10b passes; a weakened kill/restart oracle; checkpoint import relabelled as hosted training; a comparison inferred from different cases.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 10a–10c implemented 2026-10-02 (merges #85, #92); 10d/10e remain (batch 3, api-improve-3)."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 10a–10c implemented 2026-10-02 (merges #85, #92); 10d/10e remain (batch 3, api-improve-3). 10d/10e implemented 2026-10-02 (api-improve-3, merge #99): the SOP benchmark report (quality BLOCKED[P-07]; the real-candidate run BLOCKED[GPU-window]) and the release-evidence path; register row 105 lists what remains."
     },
     {
       "id": "AP-11",
@@ -5192,7 +5192,7 @@
       "acceptance": "Every selected required stage of verification.md's 18-step sequence passes through APIs only, first against isolated real services then the approved live target, with exit codes 0/1/3/4 aligned to the repository's gate convention, redacted evidence, counted resources/requests/spend and owned cleanup; the four verdicts (API boundary, lifecycle, quality, operations/performance) are reported separately.",
       "failure_oracle": "A direct SQL/CLI/RPC step counted as an API pass; probe.py's exit 0 presented as a lifecycle pass; a mocked engine, dry-run judge, empty listing, health response or build labelled complete; an all-green headline with a BLOCKED or skipped required stage.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 11a–11c implemented 2026-10-02 (merges #86, #97); the isolated gate FAILs on stages 02/14 (register row 97); 11d/11e remain (batch 3, api-lifecycle-3)."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 11a–11c implemented 2026-10-02 (merges #86, #97); the isolated gate FAILs on stages 02/14 (register row 97); 11d/11e remain (batch 3, api-lifecycle-3). 11c closed 2026-10-02 (api-lifecycle-3, merge #99): the isolated verdict has no FAIL cell; 11d/11e prepared (R274); execution waits for P-10, a GPU target, the window record and the R151 window."
     },
     {
       "id": "UX-00",
@@ -5550,7 +5550,7 @@
       ],
       "track": "UX",
       "handoff": "../design/v1/06-implementation.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "ux-design-addition",
       "product": "lab",
       "milestone": "UX-L2",
@@ -5567,7 +5567,7 @@
       "acceptance": "Stale-fence re-review, viewer/developer/admin distinction, unit refusal, null progress, inconclusive comparison and mismatched hardware exercised; an approved proposal never substitutes for current serving proof.",
       "failure_oracle": "An editable fence field; a traffic slider implying immediate deployment; a Modal parity claim from a fixture.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Undispatched; depends on AP-06 (merged #92) — batch 3, ux-lab-releases."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Undispatched; depends on AP-06 (merged #92) — batch 3, ux-lab-releases. Status implemented 2026-10-02 at the batch-3 integration 39065ef0 (UX-10: ux-lab-releases, merge #98; UX-11: ux-verify-final + lab-catalog-carry, merges #99/#100 — the acceptance matrix on the merged tree reads 30 PASS / 0 FAIL / 6 BLOCKED on operator inputs: real key/charge, real clip, two-user journey, candidate engine, live teacher, moderated session)."
     },
     {
       "id": "UX-11",
@@ -5592,7 +5592,7 @@
       ],
       "track": "UX",
       "handoff": "../design/v1/06-implementation.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "ux-design-addition",
       "product": "shared",
       "milestone": "UX-L2",
@@ -5611,7 +5611,7 @@
       "acceptance": "The merged SHA passes relevant local checks; supported-host real suites run or are explicitly BLOCKED with cause; the invited consumer journey has operational evidence in its authorized window; screenshots use synthetic data isolated from the E3A suite.",
       "failure_oracle": "Screenshots enabled on the real E3A suite; a task marked done because its branch tests pass before integration; a mocked service pass labelled hosted acceptance.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Synthetic browser suite and the Lab e2e gate green on the merged tree 2026-10-02 (ux-verify, lab-e2e-fix); the final acceptance pass remains (batch 3, ux-verify-final)."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Synthetic browser suite and the Lab e2e gate green on the merged tree 2026-10-02 (ux-verify, lab-e2e-fix); the final acceptance pass remains (batch 3, ux-verify-final). Status implemented 2026-10-02 at the batch-3 integration 39065ef0 (UX-10: ux-lab-releases, merge #98; UX-11: ux-verify-final + lab-catalog-carry, merges #99/#100 — the acceptance matrix on the merged tree reads 30 PASS / 0 FAIL / 6 BLOCKED on operator inputs: real key/charge, real clip, two-user journey, candidate engine, live teacher, moderated session)."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",

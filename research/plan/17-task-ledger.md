@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**157 records; 151 active; 6 retired; 17 planned; 129 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**157 records; 151 active; 6 retired; 15 planned; 131 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** qualify the deployed consumer App and Marlin API, close production/onboarding evidence, then enable later provider/hosting workflows under their own gates. Implemented statuses are not release acceptance. See [current state](../../STATUS.md), [launch review 26](26-launch-readiness-review-2026-10-01.md), [planning index](README.md) and [carried work](consumer-v1/10-carried-work-register.md).
 
@@ -161,8 +161,8 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | UX-07 | implemented / UX | [Consumer usage, credits and privacy: requests-first usage hierarchy, meaningful empty states, execution vs financial distinction, result focus/expiry/error states, readable exact ledger, privacy copy aligned with UX-01](../design/v1/06-implementation.md) | UX-01 | AP-02 |
 | UX-08 | implemented / UX | [Evaluation comparison interface: comparison wizard, evidence-first report, runs/subscriptions separated, judge settings from Evaluations, explicit protocol and budgets, actual backend state/cancel semantics](../design/v1/06-implementation.md) | UX-00 | AP-08, AP-10 |
 | UX-09 | implemented / UX | [Review, teacher batches and external training: queue-detail-review, lineage and methods, teacher dry-run/approval, manual external-training bundle/checkpoint flow, ambiguous outcomes](../design/v1/06-implementation.md) | UX-00 | AP-08, AP-10 |
-| UX-10 | planned / UX | [Release and optimization evidence: summary/detail states, scoped comparison evidence, proposal summary with a server-bound fence, missing identity and non-comparable data labels](../design/v1/06-implementation.md) | UX-00 | AP-06 |
-| UX-11 | planned / UX | [Integration, accessibility and evidence: synthetic browser suite and fixtures, cross-app integration checks, screenshot index, acceptance report, tracker reconciliation via the coordinator](../design/v1/06-implementation.md) | UX-00 | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10 |
+| UX-10 | implemented / UX | [Release and optimization evidence: summary/detail states, scoped comparison evidence, proposal summary with a server-bound fence, missing identity and non-comparable data labels](../design/v1/06-implementation.md) | UX-00 | AP-06 |
+| UX-11 | implemented / UX | [Integration, accessibility and evidence: synthetic browser suite and fixtures, cross-app integration checks, screenshot index, acceptance report, tracker reconciliation via the coordinator](../design/v1/06-implementation.md) | UX-00 | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10 |
 
 ## Conditional work — activation required
 
