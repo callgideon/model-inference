@@ -73,6 +73,9 @@ def check_a_configuration_is_keyed_replayed_and_role_checked(conn) -> None:
     assert refused(d.call(VIEWER, "lab_judge_configure_keyed", NEMO,
                           "0c000000-0000-4000-8000-0000000000c2", l2.org(conn, C1), l2.MODEL,
                           "judge-1", 1, 20)) == "Forbidden"
+    assert refused(d.call(DEV, "lab_judge_configure_keyed", NEMO,
+                          "0c000000-0000-4000-8000-0000000000c3", l2.org(conn, C1),
+                          l2.OTHER_MODEL, "judge-1", 1, 20)) == "Forbidden", "ungranted model"
     assert refused(d.call(j.BOTH, "lab_judge_config_list", NEMO, None, None, 26)) == "Forbidden"
     listed = run(d.call(DEV, "lab_judge_config_list", NEMO, None, None, 26))
     assert [c["config_id"] for c in listed] == [CONFIG]

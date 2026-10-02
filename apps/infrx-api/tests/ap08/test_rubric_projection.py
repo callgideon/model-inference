@@ -36,10 +36,11 @@ def test_ap08_rubric__missing_video_abstains_on_media_criteria_and_never_passes(
     """Failure oracle: a media criterion shown as scored/omitted without video, or a pass."""
     shown = rubric.project(judged(media=False))
     by_name = {c.name: c for c in shown.criteria}
-    assert by_name["groundedness"].state == "abstained"
-    assert by_name["groundedness"].abstain_reason == "no_media"
-    assert by_name["groundedness"].score is None and by_name["groundedness"].evidence == "media"
-    assert by_name["relevance"].state == "scored" and by_name["relevance"].score == 5
+    ground, relevance = by_name.get("groundedness"), by_name.get("relevance")
+    assert ground is not None and ground.state == "abstained", shown.criteria
+    assert ground.abstain_reason == "no_media"
+    assert ground.score is None and ground.evidence == "media"
+    assert relevance is not None and relevance.state == "scored" and relevance.score == 5
     assert (shown.state, shown.limited, shown.overall_pass) == ("scored", True, False)
     assert [c.name for c in shown.criteria] == [c.name for c in MARLIN_VIDEO_V1.criteria]
 

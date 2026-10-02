@@ -91,13 +91,6 @@ class Worker:
                                  "from infrx.credit_wallets").fetchone()
 
 
-@pytest.fixture
-def fake():
-    judge = JudgeFake(FAKE_PORT)
-    yield judge
-    judge.close()
-
-
 def check_a_queued_run_is_frozen_reserved_and_sent_once(conn, fake) -> None:
     """08c: the start pass reserves the worst case BEFORE the one send, sends exactly the
     frozen sample (seeded by the run id, media marked), and a restart sends nothing more; the
@@ -160,11 +153,25 @@ async def _async(value):
     return value
 
 
-CHECKS = {c.__name__: c for c in (check_a_queued_run_is_frozen_reserved_and_sent_once,
-                                  check_cancel_dry_run_budget_and_revocation_send_nothing,
-                                  check_an_ambiguous_send_is_quarantined_and_never_resent)}
+WORKER = (check_a_queued_run_is_frozen_reserved_and_sent_once,
+          check_cancel_dry_run_budget_and_revocation_send_nothing,
+          check_an_ambiguous_send_is_quarantined_and_never_resent)
+
+
+def _with_fake(check):
+    def run_check(conn) -> None:
+        judge = JudgeFake(FAKE_PORT)
+        try:
+            check(conn, judge)
+        finally:
+            judge.close()
+    return run_check
+
+
+#: `code_mutants_d7.kill`'s world shape: `check(conn)` with its own judge fake.
+CHECKS = {c.__name__: _with_fake(c) for c in WORKER}
 
 
 @pytest.mark.parametrize("name", sorted(CHECKS))
-def test_ap08_worker(pg, fake, name) -> None:
-    CHECKS[name](pg, fake)
+def test_ap08_worker(pg, name) -> None:
+    CHECKS[name](pg)

@@ -23,7 +23,7 @@ def allowed(url: str, hosts: frozenset[str] = frozenset()) -> bool:
 def test_ap08_egress__loopback_only_by_default():
     """Failure oracle: any non-loopback host reachable without the allowlist."""
     assert allowed("http://127.0.0.1:57564") and allowed("http://localhost:1")
-    assert not allowed(f"https://{HOST}")
+    assert not allowed(f"https://{HOST}") and not allowed(f"http://{HOST}")
     assert not allowed("https://127.0.0.1.example")
 
 

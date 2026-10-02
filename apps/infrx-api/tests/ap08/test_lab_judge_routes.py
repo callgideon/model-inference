@@ -118,7 +118,8 @@ def test_ap08_routes__run_identity_comes_from_the_idempotency_key():
     missing = c.post(f"{lab_judge.PREFIX}/runs", params=Q,
                      json={"config_id": CONFIG, "payer_ref": PAYER})
     assert missing.status_code == 422
-    assert [f["field"] for f in missing.json()["error"]["field_errors"]] == ["Idempotency-Key"]
+    fields = missing.json().get("error", {}).get("field_errors", [])
+    assert [f["field"] for f in fields] == ["Idempotency-Key"]
     other = client(doors, control.StaticActors(api.Actor(audience="session", user_id=OTHER_DEV)))
     assert post_run(other).json()["operation_id"] != run_id, "a key is scoped to its actor"
 
