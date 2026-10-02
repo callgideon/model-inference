@@ -1121,11 +1121,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "LabPipelines(sessions, access, objects=objects,", "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # WR-C5-N4-ROUTE (composition-6): the datasets surface's imports are 0051's queue
     _m("lab_datasets_jobs_absent", "LAB_DATASETS enqueues imports on 0051's queue (no 503)",
-       LC, "                                          PgLabImportJobs(connect))",
-       "                                          None)", DATASETS_C6),
+       LC, "                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE",
+       "                                          None,    # WR-C5-N4-ROUTE", DATASETS_C6),
     _m("lab_datasets_jobs_off_the_pool", "the import queue is on the gateway's pool",
-       LC, "                                          PgLabImportJobs(connect))",
-       "                                          PgLabImportJobs(None))", DATASETS_C6),
+       LC, "                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE",
+       "                                          PgLabImportJobs(None),    # WR-C5-N4-ROUTE", DATASETS_C6),
     # WR-R4-2 (composition-6): the release surface's ports over D9, D7, the Lab objects, 0043
     _m("lab_releases_records_absent", "LAB_RELEASES reads the release models (no 503)",
        LC, "                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects,\n"
