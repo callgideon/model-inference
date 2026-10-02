@@ -29,8 +29,9 @@ BOUNDARY = tuple(f"infrx.control_op_{m}(jsonb)" for m in
                  ("start", "lease", "advance", "finish", "cancel", "get", "pending"))
 INTERNAL = ("infrx.control_owner(jsonb)", "infrx.control_op_row(jsonb)",
             "infrx.control_op_doc(infrx.control_operations)")
-WRITERS = ("service_role", "infrx_runtime", "infrx_lab_control")
-BROWSERS = ("anon", "authenticated")
+WRITERS = ("service_role", "infrx_lab_control")
+#: no 0060 function: the gateway's dedicated login (its set is checks_reads.RUNTIME_FUNCTIONS)
+OTHERS = ("anon", "authenticated", "infrx_runtime", "infrx_monitor")
 TABLES = ("infrx.control_operations", "infrx.control_idempotency")
 
 
@@ -58,12 +59,12 @@ def _can(conn, role: str, what: str, obj: str, privilege: str) -> bool:
 
 
 def check_browser_roles_reach_nothing(conn) -> str:
-    """R271 / DUR-RLS: no browser session reads a table or executes a function of 0060; the
-    runtime logins execute exactly the seven boundary functions and write nothing directly;
-    the helpers are nobody's; row security is on."""
-    reached = [f"{r} {f}" for r in BROWSERS for f in BOUNDARY + INTERNAL
+    """R271 / DUR-RLS: no browser session (nor the gateway's pinned dedicated logins) reads a
+    table or executes a function of 0060; the writer logins execute exactly the seven boundary
+    functions and write nothing directly; the helpers are nobody's; row security is on."""
+    reached = [f"{r} {f}" for r in OTHERS for f in BOUNDARY + INTERNAL
                if _can(conn, r, "function", f, "execute")]
-    reached += [f"{r} {p} {t}" for r in BROWSERS for t in TABLES
+    reached += [f"{r} {p} {t}" for r in OTHERS for t in TABLES
                 for p in ("select", "insert", "update", "delete")
                 if _can(conn, r, "table", t, p)]
     assert not reached, f"browser roles reach 0060: {reached}"
@@ -80,7 +81,7 @@ def check_browser_roles_reach_nothing(conn) -> str:
     rls = dict(conn.execute("select oid::regclass::text, relrowsecurity from pg_class "
                             "where oid = any(%s::regclass[])", (list(TABLES),)).fetchall())
     assert rls == {t: True for t in TABLES}, rls
-    return (f"{len(BROWSERS)} browser roles reach nothing; {len(WRITERS)} logins x "
+    return (f"{len(OTHERS)} other roles reach nothing; {len(WRITERS)} logins x "
             f"{len(BOUNDARY)} functions; RLS on")
 
 

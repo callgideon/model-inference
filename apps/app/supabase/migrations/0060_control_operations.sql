@@ -16,7 +16,10 @@
 -- Read authority: the browser roles reach nothing (no schema usage, RLS on, no policy; R271:
 -- the web apps read through FastAPI). The owning tenant (the actor's provider workspace, else
 -- its organization, else its user) or an operator actor reads, enforced in `control_op_get`.
--- Writers: the runtime logins only (service_role, infrx_runtime, infrx_lab_control).
+-- Writers: service_role (the gateway's broad login, 0004's default) and the Lab control
+-- unit's login infrx_lab_control (where the new /lab/v1 operation routes run). The gateway's
+-- dedicated login infrx_runtime gains them with the first gateway route that needs one (its
+-- grant set is pinned by tests/d/checks_reads.RUNTIME_FUNCTIONS).
 -- LOCAL-ONLY (R151/R201/R271): never applied hosted; 0060 is api-schema's allocated number.
 --
 -- ROLLBACK (this file alone; tests/d/test_control_ops_upgrade.py runs these lines):
@@ -310,4 +313,4 @@ revoke all on function infrx.control_owner(jsonb), infrx.control_op_doc(infrx.co
 grant execute on function infrx.control_op_start(jsonb), infrx.control_op_lease(jsonb),
   infrx.control_op_advance(jsonb), infrx.control_op_finish(jsonb), infrx.control_op_cancel(jsonb),
   infrx.control_op_get(jsonb), infrx.control_op_pending(jsonb)
-  to service_role, infrx_runtime, infrx_lab_control;
+  to service_role, infrx_lab_control;

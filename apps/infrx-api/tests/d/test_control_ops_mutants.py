@@ -42,7 +42,7 @@ CANCEL_SEEN = ("  if not (coalesce((p_args->'actor'->>'operator')::boolean, fals
                "          or infrx.control_owner(r.actor) = infrx.control_owner(p_args->'actor'))")
 GET_SEEN = ("     or not (coalesce((p_args->'actor'->>'operator')::boolean, false)\n"
             "             or infrx.control_owner(r.actor) = infrx.control_owner(p_args->'actor'))")
-GRANT = "  to service_role, infrx_runtime, infrx_lab_control;"
+GRANT = "  to service_role, infrx_lab_control;"
 TS = """'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')"""
 
 
@@ -212,11 +212,11 @@ SQL_MUTANTS = (
        "limit 0 starves the controller"),
     # --- privileges (R271)
     _s("cto_browser_executes", GRANT,
-       "  to service_role, infrx_runtime, infrx_lab_control, authenticated;", ROLES,
+       "  to service_role, infrx_lab_control, authenticated;", ROLES,
        "a browser session starts and reads operations around FastAPI"),
-    _s("cto_runtime_cannot_run", GRANT, "  to service_role, infrx_lab_control;", ROLES,
-       "the gateway on its dedicated login answers 503 for every operation"),
-    _s("cto_control_unit_cannot_run", GRANT, "  to service_role, infrx_runtime;", ROLES,
+    _s("cto_runtime_granted", GRANT, "  to service_role, infrx_lab_control, infrx_runtime;",
+       ROLES, "the gateway's pinned dedicated login silently gains seven functions"),
+    _s("cto_control_unit_cannot_run", GRANT, "  to service_role;", ROLES,
        "the Lab control unit answers 503 for every operation"),
     _s("cto_helpers_callable", "infrx.control_op_row(jsonb) from public, anon, authenticated, "
        "service_role;", "infrx.control_op_row(jsonb) from public, anon, authenticated;", ROLES,
