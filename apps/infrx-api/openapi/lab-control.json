@@ -2057,6 +2057,34 @@
         "title": "ListPage[SampleResult]",
         "type": "object"
       },
+      "ListPage_TraceJudgeRun_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TraceJudgeRun"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[TraceJudgeRun]",
+        "type": "object"
+      },
       "ListPage_Workspace_": {
         "additionalProperties": false,
         "properties": {
@@ -3604,6 +3632,120 @@
           "created_at"
         ],
         "title": "Signal",
+        "type": "object"
+      },
+      "TraceJudgeRun": {
+        "additionalProperties": false,
+        "description": "One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its\njudging grant is current): criterion scores only, never a rationale.",
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calibration": {
+            "$ref": "#/components/schemas/CalibrationDoc"
+          },
+          "judge_model": {
+            "title": "Judge Model",
+            "type": "string"
+          },
+          "media": {
+            "title": "Media",
+            "type": "boolean"
+          },
+          "overall_pass": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Pass"
+          },
+          "reserved": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/TraceJudgeScore"
+            },
+            "title": "Scores",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "reserved",
+              "submitted",
+              "ambiguous",
+              "collected",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "state",
+          "judge_model",
+          "rubric_version",
+          "media",
+          "scores",
+          "calibration"
+        ],
+        "title": "TraceJudgeRun",
+        "type": "object"
+      },
+      "TraceJudgeScore": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "title": "Criterion",
+            "type": "string"
+          },
+          "max_score": {
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "requires_media": {
+            "title": "Requires Media",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "criterion",
+          "score",
+          "max_score",
+          "requires_media"
+        ],
+        "title": "TraceJudgeScore",
         "type": "object"
       },
       "Upload": {
@@ -8657,6 +8799,59 @@
           }
         ],
         "summary": "Feedback"
+      }
+    },
+    "/lab/v1/traces/{request_id}/judge-runs": {
+      "get": {
+        "operationId": "getLabV1TracesByRequestIdJudgeRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_TraceJudgeRun_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Judge Runs"
       }
     },
     "/lab/v1/traces/{request_id}/reviews": {

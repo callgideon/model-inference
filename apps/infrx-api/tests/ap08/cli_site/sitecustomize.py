@@ -35,4 +35,4 @@ if os.environ.get("AP08_WORLD"):
             return []
         return [(t["request_id"], t["video"]) for t in WORLD["traces"]][:limit]
 
-    start.eligible_read = lambda limits: eligible
+    start.eligible_read = lambda *_: eligible

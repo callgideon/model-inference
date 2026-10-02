@@ -85,11 +85,11 @@ async def start_pass(queued: Queued, wiring: JudgeWiring, eligible: Eligible,
     return done
 
 
-def eligible_read(limits) -> Eligible | None:
-    """AP-07's `infrx.traces.eligible` read over the trace projection (published by
-    api-traces-2), for the judge role's start job. None until that read is on this base: the
-    role then composes no start job (WIRING REQUEST WR-AP08-2b binds it at merge)."""
-    return None
+def eligible_read(connect, retention) -> Eligible:
+    """AP-07's `infrx.traces.eligible` read (WR-AP08-2b, WR-AP07B-3) for the judge role's start
+    job: the role's own login and T3's retention over the trace projection."""
+    from ..traces.eligible import TraceEligible
+    return TraceEligible(connect, retention)
 
 
 def pg_queued(connect) -> Queued:

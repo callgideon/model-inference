@@ -34,7 +34,7 @@ never runs in a consumer process.
                work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS), each graded with the
                rubric its configuration pins (SR-AP08-1); `jobs["judge_report"]` is J3's report
                on the same ledger (WR-J3-D8-C). AP-08: the START pass turns queued requests
-               into J2's `submit` once AP-07's eligible read is composed
+               into J2's `submit` over AP-07's eligible read
                (`judge.start.eligible_read`); JUDGE_PROVIDER_ALLOWLIST names the https hosts
                honoured in live mode only (P-10; loopback otherwise); JUDGE_GOLD_SET names the
                operator's reviewed reference set, graded after each collect pass.
@@ -353,10 +353,9 @@ def _judge(mode, env, connect, objects, worker_id, **_):
                                          "judge sweep"),
             "judge_collect": lambda: every(JUDGE_PASS_S, lambda: collected(
                 wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}
-    eligible = start.eligible_read(limits)
-    if eligible is not None:
-        jobs["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
-            start.pg_queued(connect), wiring, eligible), "judge start")
+    eligible = start.eligible_read(connect, retention)
+    jobs["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
+        start.pg_queued(connect), wiring, eligible), "judge start")
     return jobs, wiring
 
 

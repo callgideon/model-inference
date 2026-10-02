@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """R271 whole-set re-proof / R151 rehearsal (api-schema 00d, api-schema-2's remainder): every
-LOCAL-ONLY wave-7 file (0060-0066 as merged: 0060, 0061, 0064, 0065, 0066; 0062 when it
-lands) applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase
+LOCAL-ONLY wave-7 file (0060-0067 as merged: 0060, 0061, 0064, 0065, 0066, 0067; 0062 when
+it lands) applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase
 CLI history table) to a database at the hosted level 0059 that holds consumer history:
 nothing that existed changes (row counts, money sums, the jobs' identity and money, every
 ACL of an existing relation or column) except the control login's EXECUTE on 0066's six
-route reads and 0064's three judge/review doors; the set re-runs as a no-op; 0066's then 0065's own ROLLBACK lines restore the
-state before them exactly (their functions gone, those six grants revoked, the two bodies
-0066 re-creates back to 0043's and 0060's); rolling forward again is the same set, and an
+route reads, 0043's per-request judge read (0067) and 0064's three judge/review doors; 0067 adds one table (`lab_judge_rubrics`) and
+its two public doors EXECUTE to the control login only; the set re-runs as a no-op; 0067's, 0066's
+then 0065's own ROLLBACK lines restore the state before them exactly (their functions and 0067's
+table gone, those six grants revoked, the two bodies 0066 re-creates back to 0043's and 0060's); rolling forward again is the same set, and an
 operation starts. 0061/0064 carry prose rollbacks; their lanes' upgrade proofs stand.
 
     INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_upgrade.py
@@ -33,12 +34,15 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_control_ops_upgrade"
-MINE = ("0066_wave7_grants_and_reads.sql", "0065_identity_functions.sql")   # rollback order
+MINE = ("0067_judge_rubrics.sql", "0066_wave7_grants_and_reads.sql",
+        "0065_identity_functions.sql")                                     # rollback order
 #: The only existing functions whose grants the set changes, each + infrx_lab_control:
-#: 0066's SR-AP10-3 (its rollback revokes them) and 0064's judge/review doors (api-judge).
-REGRANTED = {f"infrx.{n}(jsonb)" for n in (
+#: 0066's SR-AP10-3 and 0067's per-request judge read (their rollbacks revoke them) and
+#: 0064's judge/review doors (api-judge).
+REGRANTED = {*(f"infrx.{n}(jsonb)" for n in (
     "lab_put_experiment", "lab_checkpoint_listing", "lab_list_datasets", "lab_evaluator",
-    "lab_checkpoint_subscribe", "lab_checkpoint_decisions")}
+    "lab_checkpoint_subscribe", "lab_checkpoint_decisions")),
+    "lab_judge_runs(uuid,uuid)"}           # 0067 (WR-AP09L-3); its rollback revokes it
 REGRANTED_0064 = {"lab_judge_calibration(uuid,uuid,integer)",
                   "lab_judge_request_run(uuid,uuid,uuid,text)", "lab_review_feedback(jsonb)"}
 #: (function, the earlier file whose body 0066's rollback restores)
@@ -47,7 +51,14 @@ REDEFINED = (("infrx.lab_experiments(jsonb)", "0043_lab_reads_and_proposals.sql"
 DROPPED = {*(f"infrx.identity_{n}" for n in ("account", "user_by_email", "members",
                                              "grant_member", "revoke_member", "create_provider")),
            *(f"infrx.{n}" for n in ("lab_eval_catalog", "lab_external_runs_of",
-                                    "lab_checkpoint_receipts_of", "lab_withdraw_access_grant"))}
+                                    "lab_checkpoint_receipts_of", "lab_withdraw_access_grant")),
+           # 0067 (SR-AP08-1): public doors print unqualified (public is on the search path)
+           "lab_judge_rubric_create", "lab_judge_rubric_list",
+           *(f"infrx.{n}" for n in ("lab_judge_rubric_json", "lab_judge_rubric_of",
+                                    "lab_judge_results_of"))}
+#: 0067's one table and its two public doors (EXECUTE: the control login only, R271)
+TABLE_0067 = "infrx.lab_judge_rubrics"
+DOORS_0067 = ("lab_judge_rubric_create(jsonb)", "lab_judge_rubric_list(uuid)")
 
 _spec = importlib.util.spec_from_file_location(
     "infrx_migrate_0060", migrations.DIR.parents[3] / "apps" / "infrx-api" / "deploy" / "migrate.py")
@@ -123,7 +134,11 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     after = d10.snapshot(conn)
 
     added = new_tables(wave7)
-    assert set(after["counts"]) - set(before["counts"]) == added
+    assert TABLE_0067 in added and set(after["counts"]) - set(before["counts"]) == added
+    for door in DOORS_0067:
+        acl = after["fns"][door][0]
+        assert "infrx_lab_control=X" in acl and not any(
+            g in acl for g in ("authenticated=", "anon=", "{=X", ",=X")), (door, acl)
     assert {t: after["counts"][t] for t in added} == dict.fromkeys(added, 0)
     assert {t: n for t, n in after["counts"].items() if t not in added} == before["counts"], \
         "the wave-7 set changed a row count"
@@ -141,7 +156,8 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     for name in MINE:
         pgharness.apply(DB, ((f"rollback {name}", rollback_sql(name)),))
     back, back_bodies = d10.snapshot(conn), bodies(conn)
-    assert back["counts"] == after["counts"] and back["acl"] == after["acl"]
+    assert back["counts"] == {t: n for t, n in after["counts"].items() if t != TABLE_0067}
+    assert back["acl"] == {t: v for t, v in after["acl"].items() if t != TABLE_0067}
     assert {k: v for k, v in back["fns"].items() if k in before["fns"]} == \
         {k: after["fns"][k] if k in REGRANTED_0064 else v for k, v in before["fns"].items()}, \
         "the ROLLBACK lines do not restore the existing functions' grants"
@@ -160,4 +176,4 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     conn.close()
     print(f"{labels} over {len(made)} seeded job states at 0059: {len(before['counts'])} "
           f"tables unchanged, +{len(added)} tables, {len(REGRANTED)} regrants; migrate.py "
-          f"plan/apply; re-run; 0066+0065 rollback; forward")
+          f"plan/apply; re-run; 0067+0066+0065 rollback; forward")

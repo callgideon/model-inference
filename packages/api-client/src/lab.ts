@@ -1203,6 +1203,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/traces/{request_id}/judge-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Judge Runs */
+        get: operations["getLabV1TracesByRequestIdJudgeRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lab/v1/traces/{request_id}/reviews": {
         parameters: {
             query?: never;
@@ -2164,6 +2181,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** ListPage[TraceJudgeRun] */
+        ListPage_TraceJudgeRun_: {
+            /** Data */
+            data: components["schemas"]["TraceJudgeRun"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** ListPage[Workspace] */
         ListPage_Workspace_: {
             /** Data */
@@ -2758,6 +2782,44 @@ export interface components {
             name: string;
             /** Value */
             value: boolean | number | string;
+        };
+        /**
+         * TraceJudgeRun
+         * @description One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its
+         *     judging grant is current): criterion scores only, never a rationale.
+         */
+        TraceJudgeRun: {
+            actual?: components["schemas"]["Money"] | null;
+            calibration: components["schemas"]["CalibrationDoc"];
+            /** Judge Model */
+            judge_model: string;
+            /** Media */
+            media: boolean;
+            /** Overall Pass */
+            overall_pass?: boolean | null;
+            reserved?: components["schemas"]["Money"] | null;
+            /** Rubric Version */
+            rubric_version: number;
+            /** Run Id */
+            run_id: string;
+            /** Scores */
+            scores: components["schemas"]["TraceJudgeScore"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "reserved" | "submitted" | "ambiguous" | "collected" | "released";
+        };
+        /** TraceJudgeScore */
+        TraceJudgeScore: {
+            /** Criterion */
+            criterion: string;
+            /** Max Score */
+            max_score: number;
+            /** Requires Media */
+            requires_media: boolean;
+            /** Score */
+            score: number;
         };
         /** Upload */
         Upload: {
@@ -6442,6 +6504,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1TracesByRequestIdJudgeRuns: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_TraceJudgeRun_"];
                 };
             };
             /** @description Validation Error */

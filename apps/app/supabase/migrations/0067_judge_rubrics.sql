@@ -1,3 +1,15 @@
+-- LOCAL-ONLY (R151/R201/R271): never applied hosted; 0067 is allocated by the coordinator
+-- (merge #95) to api-judge-2's schema request SR-AP08-1, moved here unchanged from
+-- apps/infrx-api/tests/ap08/sr_ap08_1.sql (evidence/w7/api-judge-2-e354988.md). One coordinator
+-- line follows it (WR-AP09L-3): EXECUTE on 0043's `public.lab_judge_runs(uuid, uuid)` for the
+-- Lab control login, so `GET /lab/v1/traces/{id}/judge-runs` runs the door as the session user
+-- on that login (0043 granted it to `authenticated` only; the door's own role check is unchanged).
+--
+-- ROLLBACK (this file alone; nothing earlier references it; tests/d/test_control_ops_upgrade.py runs these lines):
+-- rollback: drop function if exists public.lab_judge_rubric_create(jsonb), public.lab_judge_rubric_list(uuid), infrx.lab_judge_rubric_of(jsonb), infrx.lab_judge_results_of(jsonb), infrx.lab_judge_rubric_json(infrx.lab_judge_rubrics);
+-- rollback: drop table if exists infrx.lab_judge_rubrics;
+-- rollback: revoke execute on function public.lab_judge_runs(uuid, uuid) from infrx_lab_control;
+--
 -- SR-AP08-1 (api-judge-2, AP-08): the SCHEMA REQUEST's exact DDL, applied by `tests/ap08`'s
 -- PostgreSQL world after 0001..0064 so the request is proven before it is allocated (R271:
 -- no lane but the schema owner writes under migrations/). The coordinator moves this text,
@@ -128,3 +140,6 @@ revoke all on function infrx.lab_judge_rubric_json(infrx.lab_judge_rubrics),
   from public, anon, authenticated;
 grant execute on function public.lab_judge_rubric_create(jsonb),
   public.lab_judge_rubric_list(uuid) to infrx_lab_control;
+
+-- WR-AP09L-3 (coordinator, merge #95): the per-request judge read on the Lab control login.
+grant execute on function public.lab_judge_runs(uuid, uuid) to infrx_lab_control;

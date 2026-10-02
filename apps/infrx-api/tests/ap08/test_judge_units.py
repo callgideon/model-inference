@@ -36,6 +36,35 @@ def test_ap08_units__a_door_refusal_is_the_status_r270_names():
     assert api.status_of(refusal(failed("P0001", "idempotency_conflict: x")))[0] == 409
 
 
+def test_ap08_units__a_disabled_feature_is_maintenance_not_an_outage():
+    """55000 (`infrx.require_feature`: the door's flag is off) through the session doors is
+    jobstore's maintenance 503 (retry 30 s, its message). Failure oracle: psycopg types 55000
+    as an OperationalError, so a flag-off door read as the judge store being unreachable."""
+    from contextlib import asynccontextmanager
+
+    from psycopg.errors import ObjectNotInPrerequisiteState
+
+    from infrx.lab.judge_api.doors import SessionDoors
+
+    class Conn:
+        @asynccontextmanager
+        async def transaction(self):
+            yield
+
+        async def execute(self, *_):
+            raise ObjectNotInPrerequisiteState("maintenance: lab_submission is not enabled")
+
+        async def close(self):
+            pass
+
+    async def connect():
+        return Conn()
+
+    with pytest.raises(errors.DependencyUnavailable) as off:
+        asyncio.run(SessionDoors(connect).call("u", "lab_judge_budget_list", "p"))
+    assert off.value.retry_after_s == 30 and "lab_submission" in (off.value.detail or "")
+
+
 def test_ap08_units__the_sample_is_frozen_by_the_run_and_bounded():
     """Failure oracle: a sample larger than the configuration, or one that moves between
     passes or with the rows' order."""

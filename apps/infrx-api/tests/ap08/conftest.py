@@ -1,7 +1,8 @@
 """AP-08's PostgreSQL world on the lane's key (`INFRX_D_TASK=ap8`, PG 57563), the D6J judge
 world (`tests/d/test_d6j_judge.seed`: NEMO's DEV/ADMIN/VIEWER, C1's external_judging grant, the
 `lab_submission` flag, NEMO's 100 PROVIDER_USD payer) plus D6F's request (one CREDIT job of C1
-on NEMO's model, C1's `feedback`/`provider_sharing` grant, the `feedback` flag), with 0064.
+on NEMO's model, C1's `feedback`/`provider_sharing` grant, the `feedback` flag), with 0064 and
+0067 (SR-AP08-1's rubric store).
 
 The doors run on the Lab control unit's own login (0043's `infrx_lab_control`, `set_role=False`
 as `lab/control/app.py` composes it). Skips visibly unless the key is ap8 and Docker answers:
@@ -9,7 +10,6 @@ never the d1 default."""
 from __future__ import annotations
 
 import os
-import pathlib
 
 import pytest
 
@@ -19,13 +19,6 @@ KEY = "ap8"
 TEMPLATE, CASE = f"{pgharness.DATABASE}_ap8tpl", f"{pgharness.DATABASE}_ap8case"
 LAB_PASSWORD = "infrx-ap8-lab-control"
 W: dict[str, str] = {}
-#: SR-AP08-1's DDL (api-judge-2's schema request), applied after 0001..0064 until it is
-#: allocated a migration; the SR mutants (`mutants.SR_MUTANTS`) edit this text.
-SR = pathlib.Path(__file__).with_name("sr_ap08_1.sql")
-
-
-def sr_sql() -> str:
-    return SR.read_text()
 
 
 def pg_reason() -> str | None:
@@ -34,12 +27,11 @@ def pg_reason() -> str | None:
     return pgharness.unavailable()
 
 
-def seed(conn, sr: str | None = None) -> None:
+def seed(conn) -> None:
     from infrx.contracts.conformance import builders as b
     from tests.d import checks_admission as ca
     from tests.d import checks_credit as cc
     from tests.d import test_d6j_judge as j
-    conn.execute(sr_sql() if sr is None else sr)
     j.seed(conn)
     conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
                  "values ('feedback', true, 'ap8', 'reviews') on conflict (name) do update "

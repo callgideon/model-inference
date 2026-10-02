@@ -551,7 +551,7 @@ def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch(tmp_path):
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
     after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's).
     R269/R271 (merge #88 WR-4, as merge #86's W3 for test_known_good_proof): the files after
-    EXPECTED_PENDING may be exactly the LOCAL-ONLY wave-7 range 0060-0066 until their own window
+    EXPECTED_PENDING may be exactly the LOCAL-ONLY wave-7 range 0060-0067 until their own window
     edits hosted-migrate.sh; the gate runs on the tree without them (its MIGRATIONS seam)."""
     text = (REPO / "infra/rollout/hosted-migrate.sh").read_text()
     hosted_at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ', text)[1]
@@ -559,7 +559,7 @@ def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch(tmp_path):
     files = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))
     after = [f for f in files if f.name[:4] > hosted_at]
     local_only = after[len(expected):]
-    assert all("0060" <= f.name[:4] <= "0066" for f in local_only), local_only
+    assert all("0060" <= f.name[:4] <= "0067" for f in local_only), local_only
     released = tmp_path / "migrations"
     released.mkdir()
     for f in files:

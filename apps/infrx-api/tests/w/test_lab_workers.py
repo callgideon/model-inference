@@ -345,7 +345,8 @@ def test_lab_workers__the_judge_is_j2_on_its_ledger_dry_run_by_default(no_trace_
     assert type(wiring.provider) is HttpJudgeProvider and wiring.rates is APPROVED_RATES
     assert type(wiring.retention) is Retention
     assert no_trace_stack["limits"].clickhouse_url == ENV["judge"]["CLICKHOUSE_URL"]
-    assert set(worker.tasks) == {"judge_sweep", "judge_collect"}
+    # AP-08 + AP-07 (WR-AP08-2b/WR-AP07B-3): the START pass over the eligible read
+    assert set(worker.tasks) == {"judge_sweep", "judge_collect", "judge_start"}
     with pytest.raises(RuntimeMisconfigured, match="JUDGE_LIVE_BUDGET_USD"):
         composed("judge", {**ENV["judge"], "JUDGE_MODE": "live"})
     live = composed("judge", {**ENV["judge"], "JUDGE_MODE": "live",

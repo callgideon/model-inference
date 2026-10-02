@@ -42,6 +42,8 @@ ABSTAIN = "test_ap08_rubric__missing_video_abstains_on_media_criteria_and_never_
 QUARANTINE = "test_ap08_rubric__malformed_judge_output_is_quarantined_without_its_detail"
 CALIBRATED = "test_ap08_rubric__calibration_needs_enough_reference_labels"
 REFUSAL = "test_ap08_units__a_door_refusal_is_the_status_r270_names"
+FLAG_OFF = "test_ap08_units__a_disabled_feature_is_maintenance_not_an_outage"
+TRACE_RUNS = "test_ap08_routes__a_requests_judge_runs_are_typed_scores_with_honest_calibration"
 FROZEN = "test_ap08_units__the_sample_is_frozen_by_the_run_and_bounded"
 UNGRADED = "test_ap08_units__start_refuses_what_it_cannot_grade_and_waits_for_traces"
 DRYRUN = "test_ap08_units__a_dry_run_worker_refuses_and_counts_it"
@@ -119,6 +121,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("budget_refusal_is_internal", "a budget refusal is 429 budget_exceeded",
        DOORS, 'return errors.RateLimitError(mapped.detail, code="budget_exceeded")',
        "return mapped", REFUSAL),
+    _m("flag_off_is_an_outage", "a door's 55000 (flag off) is the maintenance 503",
+       DOORS, "        except ObjectNotInPrerequisiteState as off:",
+       "        except ImportError as off:", FLAG_OFF),
+    _m("trace_runs_calibration_trusted", "a request's judge runs re-check their calibration",
+       SVC, '        calibration=rubric.calibration(r["calibration"]))',
+       '        calibration=rubric.CalibrationDoc(**r["calibration"]))', TRACE_RUNS),
+    _m("trace_runs_without_session", "the per-request judge read takes the verified session",
+       "gateway/routes/lab_reviews.py", "        user = await session_user(rt, request)\n"
+       "        return control.ok(await judge.trace_runs(",
+       "        user = provider_org_id\n        return control.ok(await judge.trace_runs(",
+       TRACE_RUNS),
     # --- result projection (08b) and calibration (08e) ---------------------------------------
     _m("missing_video_criterion_omitted", "a media criterion without video is shown abstained",
        RUB, '            shown.append(CriterionResult(name=c.name, state="abstained", '
@@ -242,11 +255,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "judge/calibration/report.py", '    if n < MIN_PAIRS:\n        verdict = "insufficient"',
        '    if False:\n        verdict = "insufficient"', G_THRESHOLD),
     # --- api-judge-2: the judge role ----------------------------------------------------------
-    _m("start_job_never_composed", "the role starts queued runs once the eligible read exists",
-       ROLE, "    eligible = start.eligible_read(limits)", "    eligible = None", R_START),
-    _m("start_job_without_read", "no start job without the eligible read",
-       ROLE, "    if eligible is not None:\n        jobs[\"judge_start\"]",
-       "    if True:\n        jobs[\"judge_start\"]", R_START),
+    _m("start_job_never_composed", "the role starts queued runs over the eligible read",
+       ROLE, '    jobs["judge_start"] = lambda', '    jobs["judge_start_off"] = lambda', R_START),
+    _m("start_job_without_read", "the start job reads AP-07's eligible traces",
+       START, "    return TraceEligible(connect, retention)", "    return None", R_START),
     _m("role_grades_first_rubric", "the role's wiring grades each run with its rubric",
        ROLE, "settings=limits, rubric_of=start.pg_rubric_of(connect))", "settings=limits)",
        R_START),
@@ -345,12 +357,13 @@ SQL_MUTANTS: tuple[tuple[_d.Mutant, str], ...] = (
 )
 
 
-# --- SR-AP08-1 (`sr_ap08_1.sql`, applied by the world's seed until it is allocated) -------------
+# --- SR-AP08-1 (`0067_judge_rubrics.sql`, killed in process like 0064's list) -----------------
+SR_FILE = "0067_judge_rubrics.sql"
 SR_STORE, SR_WORKER = "store", "worker"
 
 
-def _r(name, old, new, world, check, why) -> tuple[str, str, str, str, str, str]:
-    return name, old, new, world, check, why
+def _r(name, old, new, world, check, why) -> tuple[_d.Mutant, str]:
+    return _d.Mutant(name, SR_FILE, old, new, "ap8", check, why), world
 
 
 STORED = "check_a_rubric_version_is_stored_once_by_an_operator"

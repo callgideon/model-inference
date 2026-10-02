@@ -36,6 +36,7 @@ SIGNATURES: dict[str, tuple[str, ...]] = {
     "lab_trace_reviews": ("jsonb",),
     "lab_judge_rubric_create": ("jsonb",),       # SR-AP08-1
     "lab_judge_rubric_list": ("uuid",),          # SR-AP08-1
+    "lab_judge_runs": ("uuid", "uuid"),          # 0043 (EXECUTE for the Lab login: 0067)
 }
 CLAIMS = ("select set_config('request.jwt.claims', %s, true), "
           "set_config('request.jwt.claim.sub', %s, true), "
@@ -61,6 +62,7 @@ class SessionDoors:
 
     async def call(self, user_id: str, door: str, *args: Any) -> Any:
         from psycopg import Error, OperationalError
+        from psycopg.errors import ObjectNotInPrerequisiteState
         from psycopg.types.json import Jsonb
         casts = SIGNATURES[door]
         if len(args) != len(casts):
@@ -74,6 +76,8 @@ class SessionDoors:
                                                   for a in args])
                 (answer,) = await cursor.fetchone()
                 return answer
+        except ObjectNotInPrerequisiteState as off:   # 55000 (require_feature): the 30 s
+            raise domain_error(off) from None          # maintenance 503, not an outage
         except OperationalError:
             raise errors.DependencyUnavailable("the judge store is unreachable",
                                                retry_after_s=5) from None

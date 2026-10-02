@@ -1468,6 +1468,20 @@
         "apps/lab/lib/services/traces/port.ts"
       ],
       "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/traces/{request_id}/judge-runs",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/traces/port.ts"
+      ],
+      "envelope": "refusal",
       "method": "POST",
       "path": "/lab/v1/traces/{request_id}/reviews",
       "request_schema": "typed",

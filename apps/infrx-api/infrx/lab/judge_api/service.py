@@ -167,6 +167,41 @@ class FeedbackDoc(Wire):
     reviews: tuple[ReviewDoc, ...]
 
 
+class TraceJudgeScore(Wire):
+    criterion: str
+    score: int
+    max_score: int
+    requires_media: bool
+
+
+class TraceJudgeRun(Wire):
+    """One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its
+    judging grant is current): criterion scores only, never a rationale."""
+
+    run_id: str
+    state: Literal["reserved", "submitted", "ambiguous", "collected", "released"]
+    judge_model: str
+    rubric_version: int
+    media: bool
+    reserved: Money | None = None
+    actual: Money | None = None
+    scores: tuple[TraceJudgeScore, ...]
+    overall_pass: bool | None = None
+    calibration: rubric.CalibrationDoc
+
+
+def trace_run(r: dict[str, Any]) -> TraceJudgeRun:
+    """0043's V3 `JudgeRun` row, typed; its calibration re-checked as every other read's."""
+    return TraceJudgeRun(
+        run_id=str(r["runId"]), state=r["state"], judge_model=r["judgeModel"],
+        rubric_version=r["rubricVersion"], media=r["media"], reserved=_usd(r["reservedUsd"]),
+        actual=_usd(r["actualUsd"]), overall_pass=r["overallPass"],
+        scores=tuple(TraceJudgeScore(criterion=s["criterion"], score=s["score"],
+                                     max_score=s["max"], requires_media=s["requiresMedia"])
+                     for s in r["scores"]),
+        calibration=rubric.calibration(r["calibration"]))
+
+
 class JudgeModelDoc(Wire):
     model: str
     price_version: str
@@ -436,6 +471,12 @@ class JudgeApi:
                                  author_role=s["author_role"], channel=s["channel"],
                                  created_at=str(s["created_at"])) for s in signals),
             reviews=tuple(review_doc(r) for r in reviews))
+
+    async def trace_runs(self, user: str, provider: str,
+                         request_id: str) -> api.ListPage[TraceJudgeRun]:
+        rows = await self.doors.call(user, "lab_judge_runs", _uuid(provider, "provider"),
+                                     _uuid(request_id, "request"))
+        return api.ListPage[TraceJudgeRun](data=tuple(trace_run(r) for r in rows))
 
     async def review(self, user: str, provider: str, request_id: str, key: str,
                      body: ReviewBody) -> ReviewDoc:

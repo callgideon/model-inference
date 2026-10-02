@@ -34,15 +34,27 @@ def compose(**env):
 
 
 def test_ap08_role__the_start_job_needs_the_eligible_read(monkeypatch):
-    """Failure oracle: a start job over no trace read (it would judge nothing, or guess), or
-    none when the read is composed (queued runs never start)."""
-    assert "judge_start" not in compose().tasks
-    async def eligible(*_):
-        return []
-    monkeypatch.setattr(start, "eligible_read", lambda limits: eligible)
+    """Failure oracle: no start job (queued runs never start), or one over no trace read or
+    another than AP-07's over the role's own retention (it would judge nothing, or guess)."""
+    from infrx.traces.eligible import TraceEligible
+    seen, steps = [], {}
+
+    async def start_pass(queued, wiring, eligible):
+        seen.append(eligible)
+        return {}
+
+    def every(interval, step, what):
+        steps[what] = step
+        return asyncio.sleep(0)
+
+    monkeypatch.setattr(start, "start_pass", start_pass)
+    monkeypatch.setattr(lab_workers, "every", every)
     worker = compose()
     assert set(worker.tasks) == {"judge_sweep", "judge_collect", "judge_start"}
     assert worker.wiring.rubric_of is not None, "runs graded with the first rubric"
+    asyncio.run(worker.tasks["judge_start"]())
+    asyncio.run(steps["judge start"]())
+    assert isinstance(seen[0], TraceEligible) and seen[0].retention is worker.wiring.retention
 
 
 def test_ap08_role__a_remote_judge_is_an_allowlisted_https_host_in_live_mode_only():
