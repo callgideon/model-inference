@@ -66,9 +66,10 @@ export function overall(journeys, fixtures, dirty) {
 const git = (...args) => spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" }).stdout.trim();
 
 function execute(part, cache) {
+  if (part.blocked) return { cases: [], code: 0, missing: [] };
   const cwd = join(repo, "apps", part.app);
   const missing = part.paths.filter((p) => !existsSync(join(cwd, p)));
-  if (part.blocked || missing.length > 0) return { cases: [], code: 0, missing };
+  if (missing.length > 0) return { cases: [], code: 0, missing };
   const files = part.paths.map((p) => (statSync(join(cwd, p)).isDirectory() ? `${p}/**/*.test.ts` : p));
   const key = `${part.app}:${files.join(" ")}`;
   if (!cache.has(key)) {
@@ -88,7 +89,7 @@ function main(argv) {
   const journeys = matrix.journeys
     .filter((j) => only === null || only.includes(j.id))
     .map((j) => {
-      const parts = j.parts.map((p) => ({ ...p, ...judgePart(p, execute({ paths: [], ...p }, cache)) }));
+      const parts = j.parts.map((p) => ({ ...p, ...judgePart(p, execute(p, cache)) }));
       return { id: j.id, title: j.title, status: worst(parts.map((p) => p.status)), parts };
     });
   const fixtures = matrix.fixtures.map((f) => ({ ...f, status: checkFixture(f) }));
