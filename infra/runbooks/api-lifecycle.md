@@ -45,6 +45,19 @@ $PY $R --mode cleanup  --config c.json --secrets s.json --state /priv/live/state
 - **cleanup**: removes only the resources the state file records, newest first; 404/410 is
   `gone`, anything else non-2xx fails the cleanup.
 
+### Live (11d) and hosted (11e)
+
+- `--mode live` is **BLOCKED (exit 3) before any request** until the config names all three
+  operator inputs; each missing one is reported by name: `BLOCKED[P-10]` (`judge: live` and
+  `judge_secret_ref` an SSM parameter name `ssm:/...`, never a value), `BLOCKED[GPU-TARGET]`
+  (`live_target`: the approved isolated candidate slot) and `BLOCKED[WINDOW]`
+  (`window_record`: an existing operator window record file, never overlapping E4C).
+- `--mode hosted` prints a 7-step plan (`HOSTED_PLAN`: release identity, OpenAPI export and
+  generated clients, the coordinator's deploy via `infra/rollout/ssm.sh` and
+  `infra/lab/rollout/lab-release.sh`, hosted smoke in inspect mode, the R271 thin-boundary
+  tests, consumer regression, rollback via `90-revert.sh`) and reports **NOT RUN** (exit 3):
+  nothing is composed, sent or written, and it is never a pass.
+
 ## Exit codes and verdicts
 
 0 PASS · 1 FAIL · 3 BLOCKED or NOT RUN · 4 INVALID (tests/integration/ENVIRONMENT.md). The gate
@@ -83,3 +96,5 @@ never the state or secrets file, never box logs that might carry customer conten
 - 2026-10-02: AP-11 11c (lane api-lifecycle-2): `composed`, minted-key file, pinned CAS
   versions, the Lab unit and trace storage in the isolated world, the dry-run label, cleanup
   rows that fail alone.
+- 2026-10-02: AP-11 11c close-out + 11d/11e preparation (lane api-lifecycle-3): `--mode live`
+  BLOCKED per missing operator input; `--mode hosted` print-only plan.
