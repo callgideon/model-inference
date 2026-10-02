@@ -10,7 +10,7 @@ export async function preview(_: ActionState<Preview>, form: FormData): Promise<
   if (spec.includes("slow")) await new Promise((r) => setTimeout(r, 1500));
   return {
     status: "ok",
-    value: { fields: { content: ["string"], split: ["string"] }, rows: [{ line: 1, mapped: { content: "synthetic row one" } }, { line: 2, reason: "missing_field" }] },
+    value: { fields: { content: ["string"], split: ["string"] }, rows: [{ line: 1, mapped: { content: `synthetic-${"0".repeat(160)}` } }, { line: 2, reason: "missing_field" }] },
   };
 }
 
