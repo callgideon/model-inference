@@ -4,7 +4,9 @@
 task-local PostgreSQL, every migration, D7's seeded world. The session verifier and the L2
 port are B1's fakes (as `tests/g/lab_evaluations/test_lab_evaluations_pg.py`).
 
-Oracles: an authorized member with nothing reads 200 `[]` (the base composition: 503); a
+Oracles: an authorized member with nothing reads 200 `[]` (the base composition: 503) and
+its catalog is 0066's listing of its own records and ready private dev serving (before
+WR-UXVF-1: 503), another provider's none of them; a
 stored experiment and a subscription are read back through the routes from their SQL rows;
 a resubmit is the first launch; a database that does not answer is 503, never `[]`.
 Outside the mutant runner (B1's `_pg` pattern); `test_evaluation_ports.py` carries the
@@ -32,6 +34,7 @@ from infrx.state.lab_data import PgLabDataStore
 from ..b.checkpoints.world import World as B3World
 from ..b.runner.world import (DEV, EVALUATOR_ID, NEMO, OTHER, OUTSIDER, SPEC, access, harness,
                               manifest, uid)
+from ..d import checks_credit as cc
 from ..d import pgharness
 from ..d import test_d7_lab_data as d7
 from ..g import support
@@ -87,14 +90,22 @@ def get(c, path, user=DEV, provider=NEMO):
                  headers={"authorization": f"Bearer {token(user)}"})
 
 
-def test_ap10_pg__authorized_empty_reads_are_200_empty_and_the_catalog_is_503(world):
-    _, connect, store, _, _ = world
+def test_ap10_pg__authorized_empty_reads_are_200_empty_and_the_catalog_is_0066s(world):
+    conn, connect, store, dataset, harness_ref = world
     c = client(connect, store)
     for path in ("experiments", "runs", "subscriptions"):
         answer = get(c, path, OUTSIDER, OTHER)
         assert (answer.status_code, answer.json()) == (200, {"data": []}), path
+    ready = conn.execute("select infrx.lab_serving_ref(%s)", (cc.DEV_DEPLOYMENT,)).fetchone()[0]
     answer = get(c, "catalog")
-    assert (answer.status_code, answer.json()) == (503, {"refusal": "unavailable"})
+    assert answer.status_code == 200, answer.text
+    mine = {kind: [o["ref"] for o in listed] for kind, listed in answer.json()["data"].items()}
+    assert (dataset in mine["datasets"], harness_ref in mine["harnesses"],
+            EVALUATOR in mine["evaluators"], mine["servings"]) == (True, True, True, [ready]), mine
+    answer = get(c, "catalog", OUTSIDER, OTHER)
+    theirs = {kind: [o["ref"] for o in listed] for kind, listed in answer.json()["data"].items()}
+    assert answer.status_code == 200 and theirs["servings"] == [] and \
+        not {dataset, harness_ref, EVALUATOR} & {r for refs in theirs.values() for r in refs}, theirs
 
 
 def test_ap10_pg__a_stored_experiment_is_read_back_and_a_resubmit_is_the_first_launch(world):
@@ -159,6 +170,6 @@ def test_ap10_pg__a_subscription_is_stored_and_listed_through_the_routes(world):
 def test_ap10_pg__a_database_that_does_not_answer_is_503_never_empty(world):
     dead = connector("postgresql://infrx:x@127.0.0.1:9/none?connect_timeout=2")
     c = client(dead, PgLabDataStore(dead))
-    for path in ("experiments", "runs", "subscriptions"):
+    for path in ("experiments", "runs", "subscriptions", "catalog"):
         answer = get(c, path)
         assert (answer.status_code, answer.json()) == (503, {"refusal": "unavailable"}), path

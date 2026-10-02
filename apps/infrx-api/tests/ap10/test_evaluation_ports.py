@@ -2,7 +2,7 @@
 """AP-10 10a (API-EVAL, the read half): `infrx.lab.evaluation`'s ports for
 `/lab/v1/evaluations` over fakes with 0043's semantics - an authorized empty read is 200
 empty, a database failure 503, a stored experiment readable with its launch, a resubmit the
-first launch, another launch under the id a conflict; the catalog listing an honest 503.
+first launch, another launch under the id a conflict; the catalog listing 0066's (WR-UXVF-1).
 The real SQL half is `test_evaluation_ports_pg.py` (ap10's PostgreSQL).
 
     uv run --frozen pytest -q tests/ap10/test_evaluation_ports.py
@@ -40,6 +40,11 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def CATALOG_OF(provider):  # noqa: N802 - a constant per provider
+    return {"datasets": [{"ref": f"d-{provider}"}], "harnesses": [], "evaluators": [],
+            "servings": []}
+
+
 class Store:
     """D7's records as `Experiments` uses them: content-addressed publish, resolve."""
 
@@ -56,6 +61,15 @@ class Store:
 
     async def evaluator(self, ref, *, provider_org_id):
         return {"ref": ref, "provider": provider_org_id}
+
+    fail: Exception | None = None
+
+    async def eval_catalog(self, *, provider_org_id):
+        """0066: the provider's own listings; NEMO alone has a ready private dev serving."""
+        if self.fail:
+            raise self.fail
+        return {**CATALOG_OF(provider_org_id),
+                "servings": [{"ref": SERVING}] if provider_org_id == NEMO else []}
 
 
 class Reads:
@@ -187,10 +201,16 @@ def test_ap10_the_subscription_listing_is_flattened_and_the_rest_is_d8s():
     assert run(x.add_subscription("sub")) == ("added", "sub")
 
 
-def test_ap10_the_catalog_listing_is_503_naming_its_request_and_the_evaluator_is_d7s():
+def test_ap10_the_catalog_listing_is_0066s_under_the_asking_provider_and_the_evaluator_is_d7s():
+    """WR-UXVF-1: the listing is `PgLabDataStore.eval_catalog` (0066's `lab_eval_catalog`) for
+    the asking provider, passed through; a store failure propagates (the route's 503)."""
     x = ev.Catalog(Store())
-    with pytest.raises(errors.DependencyUnavailable, match="SR-AP10-1"):
-        run(x.catalog(NEMO))
+    assert run(x.catalog(NEMO)) == {**CATALOG_OF(NEMO), "servings": [{"ref": SERVING}]}
+    assert run(x.catalog(OTHER)) == CATALOG_OF(OTHER)
+    down = Store()
+    down.fail = errors.DependencyUnavailable("postgres down")
+    with pytest.raises(errors.DependencyUnavailable):
+        run(ev.Catalog(down).catalog(NEMO))
     assert run(x.evaluator(NEMO, EVALUATOR)) == {"ref": EVALUATOR, "provider": NEMO}
 
 
@@ -205,8 +225,8 @@ def test_ap10_the_ports_share_one_pool():
 
 
 # ----------------------------------------------------------------------- the routes
-def client(reads=None, ledger_rows=()):
-    store, reads = Store(), reads or Reads()
+def client(reads=None, ledger_rows=(), store=None):
+    store, reads = store or Store(), reads or Reads()
 
     class Ledger:
         async def listing(self, *, provider_org_id):
@@ -228,18 +248,22 @@ def get(c, path, user=DEV, provider=NEMO):
 
 def test_ap10_authorized_empty_reads_are_200_empty_and_a_failed_read_is_503():
     """API-EVAL: with the ports composed, an authorized member with nothing reads 200 `[]`
-    (before AP-10: 503 "experiments is not wired"); the database failing is 503, never an
-    empty 200; the catalog is the honest 503; a stranger is refused before any read."""
+    (before AP-10: 503 "experiments is not wired") and its catalog is 0066's listing, empty
+    of servings (before WR-UXVF-1: 503); the database failing is 503, never an empty 200; a
+    stranger is refused before any read."""
     c = client()
     for path in ("experiments", "runs", "subscriptions"):
         answer = get(c, path, OUTSIDER, OTHER)
         assert (answer.status_code, answer.json()) == (200, {"data": []}), path
         assert answer.headers["cache-control"] == "no-store"
-    assert get(c, "catalog").status_code == 503
+    answer = get(c, "catalog", OUTSIDER, OTHER)
+    assert (answer.status_code, answer.json()) == (200, {"data": CATALOG_OF(OTHER)})
     assert get(c, "experiments", OUTSIDER).status_code == 404
     broken = Reads()
     broken.fail = OSError("connection refused")
-    c = client(broken)
-    for path in ("experiments", "runs"):
+    down = Store()
+    down.fail = OSError("connection refused")
+    c = client(broken, store=down)
+    for path in ("experiments", "runs", "catalog"):
         answer = get(c, path)
         assert (answer.status_code, answer.json()) == (503, {"refusal": "unavailable"}), path
