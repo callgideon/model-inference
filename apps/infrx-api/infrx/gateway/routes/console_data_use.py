@@ -20,6 +20,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from ...console import data_use
+from ...console.session import web_session
 from ...contracts import api
 from .. import control
 
@@ -35,7 +36,7 @@ def register(app: FastAPI, rt: Any) -> data_use.DataUse | None:
     router = APIRouter(route_class=control.R270Route)
 
     async def answer(request: Request, work, status: int = 200) -> JSONResponse:
-        result = await work(await rt.actors.actor(request))
+        result = await work(web_session(await rt.actors.actor(request)))   # R272: a web door takes no API key
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], bool):
             result, created = result
             status = 201 if created else 200

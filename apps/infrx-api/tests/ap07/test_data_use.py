@@ -255,10 +255,13 @@ def test_data_use__a_failure_is_an_envelope_never_a_trace():
     assert answer.json()["error"]["request_id"] == "rid-ap7"
     assert "secret-internal-detail" not in answer.text
     assert client(None).get(routes.DATA_USE_PATH).status_code == 401
+    # R272: a valid API key of any audience at the web door is unauthenticated (401), never a
+    # disclosed 403 - the door takes no credential; the repository's own 403 stays behind it.
+    assert client(session("u", "o", "consumer")).get(routes.DATA_USE_PATH).status_code == 401
 
 # --- who decides -----------------------------------------------------------------------------
 def test_data_use__only_the_grantors_owner_decides(pg_world):
-    """Oracle: no session 401; a key session (any audience but a verified web session) 403;
+    """Oracle: no session 401; a key session (any audience but a verified web session) 401 (R272);
     a member who is not the organization's owner 403; another organization's key 404; a body
     naming a grantor 422 - and nothing is written by any of them."""
     w = pg_world
@@ -267,7 +270,7 @@ def test_data_use__only_the_grantors_owner_decides(pg_world):
     shared_key = add_key(w, shared, cc.SHARED)
     assert client(None).get(routes.DATA_USE_PATH).status_code == 401
     for actor, target, status in (
-            (session(w.BOTH, w.C1, "consumer"), key, 403),
+            (session(w.BOTH, w.C1, "consumer"), key, 401),   # R272: the web door takes no key
             (session(w.DEV_A, w.C1), key, 403),        # a provider developer, not C1's owner
             (session(cc.CONSUMER_2, shared), shared_key, 403),
             (session(w.CONSUMER_ONLY, w.C2), key, 404)):
