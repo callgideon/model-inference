@@ -4573,6 +4573,32 @@
         "title": "TraceDataset",
         "type": "object"
       },
+      "TraceDatasetRead": {
+        "additionalProperties": false,
+        "description": "A trace -> dataset operation and, once it succeeded, its outcome (`from_traces`'s\nrecord: the selected and split dataset refs, the split digest, the holdout, omissions).",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/OperationDoc"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "title": "TraceDatasetRead",
+        "type": "object"
+      },
       "TraceJudgeRun": {
         "additionalProperties": false,
         "description": "One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its\njudging grant is current): criterion scores only, never a rationale.",
@@ -10534,6 +10560,129 @@
           }
         ],
         "summary": "From Traces Start"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/from-traces/{operation_id}": {
+      "get": {
+        "operationId": "getLabV1ProvidersByProviderDatasetsFromTracesByOperationId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceDatasetRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "From Traces Read"
       }
     },
     "/lab/v1/providers/{provider}/datasets/imports": {

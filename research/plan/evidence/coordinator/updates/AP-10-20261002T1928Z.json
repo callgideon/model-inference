@@ -1,0 +1,42 @@
+{
+  "task": "AP-10",
+  "slice": "10e routes + composed AP-04 test; row 105 from-traces outcome read (lane api-improve-4)",
+  "activity": "review",
+  "head": "3ab5946e",
+  "worktree": ".claude/worktrees/codex-w7-api-improve-4",
+  "branch": "codex/w7-api-improve-4",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/improve/**",
+    "apps/infrx-api/infrx/gateway/routes/lab_improve.py",
+    "apps/infrx-api/infrx/gateway/routes/lab_datasets.py (the outcome read only)",
+    "apps/infrx-api/tests/ap10/",
+    "apps/infrx-api/openapi/lab-control.json, packages/api-client/src/lab.ts, research/plan/api-lifecycle/evidence/route-inventory.* (regenerated)"
+  ],
+  "commands": [
+    {"cmd": "uv run --frozen pytest -q tests/ap10/test_from_traces_route.py (before the read)", "exit": 1, "summary": "1 failed (red: 404 Not Found)"},
+    {"cmd": "uv run --frozen pytest -q tests/ap10/test_release.py (before the fix)", "exit": 1, "summary": "1 failed (red: a second key reached AP-04)"},
+    {"cmd": "uv run --frozen pytest -q tests/ap10/test_improve_routes.py (module set aside)", "exit": 2, "summary": "1 collection error (red)"},
+    {"cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10 tests/contracts/test_openapi_export.py -k 'not test_mutants'", "exit": 0, "summary": "75 passed, 1 skipped BLOCKED[WR-AP10E-2]"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap10/test_mutants.py", "exit": 0, "summary": "99 passed: 97 mutants (20 new) killed, 0 survivors; every-case green"},
+    {"cmd": "WR-AP10E-2 transient: INFRX_D_TASK=ap10 pytest tests/ap10/test_improve_composed_pg.py (plain + supabase)", "exit": 0, "summary": "1 passed on each image; with the release.py fix reverted 1 failed (2 import rows)"},
+    {"cmd": "WR-AP10E-1 transient: INFRX_D_TASK=ap10 pytest tests/l/control/test_operations.py -k 'artifact or judge'", "exit": 0, "summary": "4 passed; without app.py half 2 failed"},
+    {"cmd": "make api-client-test", "exit": 0, "summary": "6 pass, 0 fail"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 457 (baseline 458), none in touched files"},
+    {"cmd": "make lab-improve", "exit": 2, "summary": "E7L NOT RUN: PIPELINE-LINEAGE PASS; i07 NOT RUN[P-11], i09 NOT RUN[staging-target]; no FAIL"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium",
+               "basis": "both WRs verified transiently (~0.5 h to apply + regenerate); Lab UI wiring is AP-09d/UX; 10d real run needs a GPU window, quality needs P-07", "at": "2026-10-02T19:28Z"},
+  "blockers": ["BLOCKED[WR-AP10E-2]: composed AP-04 test needs ap10's MinIO port", "10d real candidate BLOCKED[GPU-window]", "10d quality BLOCKED[P-07]"],
+  "wiring_requests": [
+    "WR-AP10E-1: research/plan/evidence/w7/api-improve-4-3ab5946-WR-AP10E-1.patch (lab/control/app.py composes rt.lab_improve with LAB_ARTIFACTS and registers lab_improve; tests/l/control/test_operations.py); then regenerate the OpenAPI export + client",
+    "WR-AP10E-2: research/plan/evidence/w7/api-improve-4-3ab5946-WR-AP10E-2.patch (tasklocal ap10 s3 57572; LAB_LANE_PORTS; frozen_contracts digest + revision)"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-improve-4-3ab5946.md",
+    "research/plan/evidence/w7/api-improve-4-3ab5946-WR-AP10E-1.patch",
+    "research/plan/evidence/w7/api-improve-4-3ab5946-WR-AP10E-2.patch",
+    "research/plan/evidence/e/E7L-raw-3ab5946e/"
+  ]
+}

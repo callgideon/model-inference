@@ -102,8 +102,15 @@ async def register_candidate(store, objects, ledger, artifacts, actor: api.Actor
     if sorted(f.relative_path for f in body.files) != declared:
         raise _refuse("files", "not_the_checkpoint",
                       "the import declares other files than the checkpoint")
+    keyed = "sha256:" + hashlib.sha256(key.encode()).hexdigest()
+    noted = await ledger.noted(f"candidate:{checkpoint_id}", provider_org_id=provider_org_id)
+    if noted is not None and noted.get("key_sha256") != keyed:
+        # ponytail: two first registrations racing under different keys both pass this read;
+        # the later note refuses after AP-04 queued its import (one unused artifact). A D8
+        # claim before the import closes it if registrations ever race.
+        raise errors.IdempotencyConflict("this checkpoint is registered under another key")
     op = await artifacts.imports.start(actor, body, key)
-    await ledger.note(f"candidate:{checkpoint_id}", {
+    await ledger.note(f"candidate:{checkpoint_id}", {"key_sha256": keyed,
         "operation_id": op.doc.operation_id, "artifact_id": op.doc.resource_id,
         "artifact_digest": receipt[1], "repo": body.source.repo, "commit": body.source.commit,
         "files": declared, "manifest_sha256": body.digest}, provider_org_id=provider_org_id)

@@ -1,0 +1,57 @@
+TAP version 13
+# (node:3296204) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w7-api-improve-4/apps/lab/tests/e2e/improve/stack.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w7-api-improve-4/apps/lab/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+    # Subtest: E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+    ok 1 - E2E-I01 as the gateway composes LAB_PIPELINES today: the annotations page reads, the training page fails closed
+      ---
+      duration_ms: 319.448404
+      type: 'test'
+      ...
+    # Subtest: E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+    ok 2 - E2E-I02 labels imported through the page's form: accepted rows listed as not ground truth, rejected rows with their reason
+      ---
+      duration_ms: 674.934884
+      type: 'test'
+      ...
+    # Subtest: E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+    ok 3 - E2E-I03 an administrator assigns the reviewer, the developer accepts each label: an accepted import is still not ground truth
+      ---
+      duration_ms: 3804.528574
+      type: 'test'
+      ...
+    # Subtest: E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+    ok 4 - E2E-I04 a train-only export through the page's form: train samples in its lineage, the held-out label omitted with its reason
+      ---
+      duration_ms: 625.061843
+      type: 'test'
+      ...
+    # Subtest: E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+    ok 5 - E2E-I05 the manual bundle: prepared, submitted and finished from the training page; a returned checkpoint is never eligible without its held-out evaluation
+      ---
+      duration_ms: 1950.526399
+      type: 'test'
+      ...
+    # Subtest: E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+    ok 6 - E2E-I06 a viewer, another provider and a consumer-only account neither see nor write this provider's labels
+      ---
+      duration_ms: 1069.273644
+      type: 'test'
+      ...
+    1..6
+ok 1 - E2E-I i08 the pipeline surface drives labels to a checkpoint through the provider UI
+  ---
+  duration_ms: 30080.202612
+  type: 'test'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 31005.183316

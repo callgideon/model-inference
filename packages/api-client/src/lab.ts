@@ -1260,6 +1260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/providers/{provider}/datasets/from-traces/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** From Traces Read */
+        get: operations["getLabV1ProvidersByProviderDatasetsFromTracesByOperationId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lab/v1/providers/{provider}/datasets/imports": {
         parameters: {
             query?: never;
@@ -3395,6 +3412,18 @@ export interface components {
             validation_bp: number;
             /** Version */
             version: number;
+        };
+        /**
+         * TraceDatasetRead
+         * @description A trace -> dataset operation and, once it succeeded, its outcome (`from_traces`'s
+         *     record: the selected and split dataset refs, the split digest, the holdout, omissions).
+         */
+        TraceDatasetRead: {
+            operation: components["schemas"]["OperationDoc"];
+            /** Outcome */
+            outcome?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * TraceJudgeRun
@@ -7670,6 +7699,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1ProvidersByProviderDatasetsFromTracesByOperationId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceDatasetRead"];
                 };
             };
             /** @description Unauthorized */
