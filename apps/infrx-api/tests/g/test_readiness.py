@@ -134,10 +134,13 @@ def test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_within_i
     database = pgstore.fresh_database()
     with pgharness.connect(database, autocommit=False) as holder:
         holder.execute("lock table infrx.stream_chunks in access exclusive mode")
-        started = time.monotonic()
-        with pytest.raises(pg.QueryCanceled):
-            asyncio.run(asyncio.wait_for(
-                PgStreamStore(_as(database, "service_role")).ready(), 8))
+        started, answer = time.monotonic(), None
+        try:
+            asyncio.run(asyncio.wait_for(PgStreamStore(_as(database, "service_role")).ready(),
+                                         8))
+        except Exception as failure:      # noqa: BLE001 - the assertion names what it was
+            answer = failure
         elapsed = time.monotonic() - started
         holder.rollback()
+    assert isinstance(answer, pg.QueryCanceled), repr(answer)
     assert 1.5 <= elapsed < 4.0, elapsed
