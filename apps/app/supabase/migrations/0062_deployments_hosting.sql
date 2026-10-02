@@ -123,7 +123,7 @@ create or replace trigger hosting_receipts_immutable before update or delete
 
 -- ================================================================ functions ===
 -- {operation_id, fence, deployment_revision_id} -> void. The caller's transaction holds the
--- live lease (this fence, not expired) of an unfinished operation on this deployment; the
+-- live lease (this fence, not expired) of an operation on this deployment; the
 -- 0060 row stays locked until the caller commits, so no other holder interleaves.
 create or replace function infrx.hosting_fence(p_args jsonb) returns void
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
@@ -134,8 +134,9 @@ begin
      or r.resource_id is distinct from p_args->>'deployment_revision_id' then
     perform infrx.refuse('not_found', 'no such operation on this deployment');
   end if;
+  -- (a finished operation holds no lease: 0060's finish clears it)
   if r.fence is distinct from (p_args->>'fence')::bigint or r.lease_until is null
-     or r.lease_until <= infrx.now() or r.state in ('succeeded', 'failed', 'cancelled') then
+     or r.lease_until <= infrx.now() then
     perform infrx.refuse('state_conflict', 'stale fence: the lease was lost');
   end if;
 end $$;
