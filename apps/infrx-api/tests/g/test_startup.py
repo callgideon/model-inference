@@ -21,6 +21,7 @@ from infrx.gateway import app as composition
 from infrx.gateway.routes import (auth, console_actions, console_data_use, console_me,
                                   console_reads, feedback, health, ingress, jobs,
                                   lab_artifacts, lab_checkpoints, lab_control, lab_datasets,
+                                  lab_deployments,
                                   lab_evaluations, lab_model_projects, lab_pipelines, lab_releases, lab_traces, lab_workspaces, models,
                                   operator_actions, operator_providers, trace_export, uploads)
 from infrx.observe import host
@@ -222,7 +223,7 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
                                    console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines,
                                    lab_releases, lab_datasets, lab_checkpoints, auth,
                                    console_me, lab_workspaces, operator_providers, lab_model_projects,
-                                   lab_artifacts, console_reads, metrics)
+                                   lab_artifacts, lab_deployments, console_reads, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}

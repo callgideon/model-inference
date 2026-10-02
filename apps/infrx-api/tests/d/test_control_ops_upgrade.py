@@ -151,7 +151,9 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
         "the wave-7 set changed money or a job"
     assert {k: v for k, v in after["acl"].items() if k in before["acl"]} == before["acl"], \
         "the wave-7 set changed an existing relation's grants"
-    assert after["cols"] == before["cols"]
+    # a new table's own column grants (0062's allocation UPDATE columns) are not "existing"
+    assert {c: v for c, v in after["cols"].items() if c.rsplit(".", 1)[0] not in added} == \
+        before["cols"]
     moved = {k for k, v in after["fns"].items() if k in before["fns"] and v != before["fns"][k]}
     assert moved == REGRANTED | REGRANTED_0064, f"existing function grants moved: {sorted(moved)}"
     assert all("infrx_lab_control=X" in after["fns"][k][0] for k in moved)
