@@ -59,9 +59,10 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert set(runner.REQUIRED) == set(runner.SCENARIOS)
     assert len(runner.SCENARIOS) == 11
     assert runner.SCENARIOS["j09"]["lanes"] == []
-    assert runner.SCENARIOS["j10"]["lanes"] == ["SR-AP10-1"], (
-        "j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E); NOT RUN until the gateway's own "
-        "LAB_EVALS composition carries the catalog (SR-AP10-1; WR-AP10C-2)")
+    assert runner.SCENARIOS["j10"]["lanes"] == [], (
+        "j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E) and is bound since lab-catalog-carry "
+        "(merge #100: the gateway's own LAB_EVALS composition carries the catalog, SR-AP10-1), "
+        "so a NOT RUN of it is in local scope")
     assert runner.SCENARIOS["j11"]["lanes"] == [], (
         "j11 is bound (WR-E6L-J11, lab-eval-media): its presigned video_url reaches the dev "
         "endpoint, so a NOT RUN of it is in local scope")
@@ -69,11 +70,12 @@ def test_e6l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
 
 def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     """R222: the gate is accepted locally with no FAIL cell and every NOT RUN waiting only on
-    out-of-local-scope work (a GPU, staging, an external provider, a product WR: j10's
-    catalog, SR-AP10-1), by its own NOT RUN reason. A NOT RUN on in-scope work (j11, bound since
-    WR-E6L-J11), a FAIL, or a scenario NOT RUN for another reason (deselected, a case absent)
-    is left open. `L3` stays out of scope only for the recorded 24a7a065 verdict, whose j11
-    waited NOT RUN[L3]."""
+    out-of-local-scope work (a GPU, staging, an external provider, a product WR), by its own
+    NOT RUN reason. A NOT RUN on in-scope work (j10, bound since lab-catalog-carry, merge #100;
+    j11, bound since WR-E6L-J11), a FAIL, or a scenario NOT RUN for another reason (deselected,
+    a case absent) is left open. `L3` stays out of scope only for the recorded 24a7a065 verdict,
+    whose j11 waited NOT RUN[L3]; `SR-AP10-1` only for the recorded 8cb7baa3 verdict, whose j10
+    waited NOT RUN[SR-AP10-1]."""
     assert runner.OUT_OF_SCOPE == {"lab-e2e": "lab-e2e UI", "WR-B4-2": "product WR: WR-B4-2",
                                    "WR-LAB2-2": "product WR: WR-LAB2-2",
                                    "WR-B3-1": "product WR: WR-B3-1",
@@ -81,10 +83,13 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
                                    "SR-AP10-1": "product WR: SR-AP10-1"}
     ui = "NOT RUN[SR-AP10-1] the UI; rerun after the merge: x --only j10"
     others = [c for sid in runner.SCENARIOS if sid not in ("j10", "j11") for c in everything(sid)]
-    base = [*others, *everything("j10", "skipped", ui)]
+    base = [*others, *everything("j10")]
     result = runner.classify(junit(*base, *everything("j11", "skipped", "NOT RUN[L3] media")))
     assert runner.r222(result) == {"accepted": False, "open": {"j11": "NOT RUN"}}, \
         "j11 is bound (WR-E6L-J11): a NOT RUN of it is in-scope work and stays open"
+    result = runner.classify(junit(*others, *everything("j10", "skipped", ui), *everything("j11")))
+    assert runner.r222(result) == {"accepted": False, "open": {"j10": "NOT RUN"}}, \
+        "j10 is bound (merge #100): a NOT RUN[SR-AP10-1] of it is in-scope work and stays open"
     # R234: an in-scope FAIL is never excused, whatever its message says (WR-E6L-RV-1)
     result = runner.classify(junit(*others, *everything("j10", "failure", ui), *everything("j11")))
     assert runner.r222(result) == {"accepted": False, "open": {"j10": "FAIL"}}
@@ -100,13 +105,27 @@ def test_e6l_r222_accepts_only_a_not_run_out_of_local_scope(monkeypatch):
     with monkeypatch.context() as patch:            # a NOT RUN on in-scope work stays open
         patch.delitem(runner.OUT_OF_SCOPE, "L3")
         assert runner.r222(statuses) == {"accepted": False, "open": {"j11": "NOT RUN"}}
+    # the recorded 8cb7baa3 verdict's statuses (E6L-raw-8cb7baa3, inline: the mutant copy carries
+    # only 24a7a065's file): every scenario PASS but j10, which waited NOT RUN[SR-AP10-1]
+    statuses = {sid: {"status": "PASS", "cases": {c: "PASS" for c in runner.REQUIRED[sid]},
+                      "reasons": [], "lanes": []} for sid in runner.SCENARIOS}
+    statuses["j10"] = {"status": "NOT RUN", "cases": {c: "NOT RUN" for c in runner.REQUIRED["j10"]},
+                       "reasons": [f"{runner.REQUIRED['j10'][0]}: {ui}"], "lanes": ["SR-AP10-1"]}
+    assert runner.r222(statuses) == {"accepted": True, "open": {}}, "R234 (ii): SR-AP10-1"
+    assert runner.gate(statuses) == "NOT RUN", "accepted is not a PASS"
+    with monkeypatch.context() as patch:
+        patch.delitem(runner.OUT_OF_SCOPE, "SR-AP10-1")
+        assert runner.r222(statuses) == {"accepted": False, "open": {"j10": "NOT RUN"}}
+    failed = {**statuses, "j10": {**statuses["j10"], "status": "FAIL"}}
+    assert runner.r222(failed) == {"accepted": False, "open": {"j10": "FAIL"}}, \
+        "R234: an out-of-scope lane never excuses a FAIL, whatever its message says"
     result = runner.classify(junit(*base, *everything("j11")))
     assert runner.r222(result) == {"accepted": True, "open": {}}
-    assert runner.gate(result) == "NOT RUN", "accepted is not a PASS"
+    assert runner.gate(result) == "PASS"
     result = runner.classify(junit(*everything("j01")))
     assert "j10" in runner.r222(result)["open"], "a scenario never run is open"
-    result = runner.classify(junit(*base, *everything("j11")), only={"j01"})
-    assert "j10" in runner.r222(result)["open"], "every reason must be the lane's wait"
+    statuses["j10"]["reasons"] = [*statuses["j10"]["reasons"], "not selected (--only)"]
+    assert runner.r222(statuses)["open"] == {"j10": "NOT RUN"}, "every reason must be the lane's wait"
     result = runner.classify(junit(*base, *everything("j11", "failure", "AssertionError")))
     assert runner.r222(result)["open"] == {"j11": "FAIL"}
 

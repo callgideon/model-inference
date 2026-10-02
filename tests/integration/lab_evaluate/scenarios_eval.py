@@ -363,8 +363,10 @@ def test_j10_the_provider_ui_launches_compares_and_cancels(workdir):
     page fails closed on the gateway's own LAB_EVALS composition, then a launch through the
     page's form freezes two real D7 runs (B1, L2), progress and a cancel come from D7's records,
     B2's stored report is shown with its slices and intervals, and the unsafe variants are
-    refused. A red suite fails this case; a green one is NOT RUN while the gateway's own
-    composition does not carry the catalog (SR-AP10-1: its listing answers 503 until then)."""
+    refused. A red suite fails this case. Bound since lab-catalog-carry (merge #100): the
+    gateway's own composition carries every port (0066's catalog through Catalog.catalog,
+    WR-UXVF-1; no route-suite fake swapped in, WR-UXVF-2), so a green suite PASSes; should a port
+    ever go uncarried again, the cell is NOT RUN naming it - in-scope work, never excused."""
     e2e = _e2e()
     got = e2e.run("evaluate", workdir)
     lw.save(workdir, "j10.json", {k: v for k, v in got.items() if k != "tail"})
@@ -372,5 +374,4 @@ def test_j10_the_provider_ui_launches_compares_and_cancels(workdir):
     if absent:
         lw.not_run("j10", "SR-AP10-1",
                    why=f"{e2e.command('evaluate')} passed ({got['pass']} cases) over D7/B1/L2 "
-                       f"with the route suite's experiments/catalog/ledger, but the gateway's own "
-                       f"composition does not carry {absent}")
+                       f"but the gateway's own composition does not carry {absent}")

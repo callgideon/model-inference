@@ -114,7 +114,7 @@ SCENARIOS = {
             "lanes": []},
     "j10": {"title": "the provider UI: launch, progress, cancel, compare with slices and "
                      "uncertainty", "test_ids": ["EVAL-COMPARE"],
-            "lanes": ["SR-AP10-1"]},
+            "lanes": []},
     "j11": {"title": "a finite-video case reaches the dev endpoint through H1/B1",
             "test_ids": ["EVAL-COMPARE"], "lanes": []},
 }
@@ -145,8 +145,9 @@ REQUIRED = {
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
 #: reason class (a GPU, staging, an external provider; R234 (i) `lab-e2e UI`: kept only for
 #: the recorded 24a7a065 verdict, whose j10 waited NOT RUN[lab-e2e]; R234 (ii) `product WR`:
-#: j10 now runs apps/lab/tests/e2e/evaluate (LAB-E2E, R238) and waits on SR-AP10-1 (the
-#: catalog's listing; WR-AP10C-2), rerun `make lab-e2e` then `--only j10`; WR-B4-2/WR-LAB2-2/
+#: `SR-AP10-1` is kept only for the recorded 8cb7baa3 verdict, whose j10 waited NOT RUN[SR-AP10-1]
+#: (the catalog's listing; WR-AP10C-2) - j10 runs apps/lab/tests/e2e/evaluate (LAB-E2E, R238) and
+#: is bound since lab-catalog-carry (merge #100: WR-UXVF-1/2, every port carried) and PASSes; WR-B4-2/WR-LAB2-2/
 #: WR-B3-1 are kept only for the recorded verdicts that named them; `L3` is kept only for the recorded 24a7a065 verdict, whose j11 waited
 #: NOT RUN[L3] on WR-E6L-J11 - j11 is bound since lab-eval-media (R239) and PASSes). The gate
 #: is re-run when the dependency lands and the cell must then PASS.

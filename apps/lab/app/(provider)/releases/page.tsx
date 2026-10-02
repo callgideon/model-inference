@@ -11,10 +11,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ServiceState } from "@/components/ui/service-state";
 import { PreviewNote } from "@/components/preview-note";
 import s from "../operate.module.css";
+import { PURPOSE } from "./purpose";
 
 export const metadata = { title: "Releases · infrx Lab" };
 
-export const PURPOSE = "Controlled releases and publication requests, with the evidence each decision rests on. An infrx operator launches every release and decides every request made here.";
 const DENIED = "Your role in this workspace does not allow reading these records.";
 
 // UX-10 (L-11): controlled releases from R4's records and publication requests from AP-06's, each beside

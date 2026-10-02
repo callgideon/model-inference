@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { ServiceState } from "@/components/ui/service-state";
-import { PURPOSE } from "./page";
+import { PURPOSE } from "./purpose";
 
 export default function Loading() {
   return (
