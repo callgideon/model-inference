@@ -17,6 +17,7 @@ const C = {
   a02: "V1M-A02 refusals map to denied, not_found or unavailable, and no token sends nothing",
   a03: "V1M-A03 only the route's named fields are kept: a metadata row never carries an organization, key, size or content",
   a04: "V1M-A04 an answer that is not the route's shape is unavailable, never a partial record",
+  a05: "V1M-A05 the list's filters are the route's: each one set is sent by name, an unset one is not sent, and the cursor rides along",
   w01: "V1M-W01 the detail page's trace port is the Lab adapter, reading with the session's access token",
   w02: "V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent",
   q01: "V1M-Q01 the route's cursor passes through exactly; every other name is ignored and reported, sorted",
@@ -55,6 +56,15 @@ const MUTANTS = [
   m("V1M-X27", "a malformed next cursor is accepted", PORT, '!(body.next_cursor === null || typeof body.next_cursor === "string")', "false", [C.a04]),
   m("V1M-X28", "a malformed row is dropped silently", PORT, "      if (items.some((x) => x === null)) return UNAVAILABLE;\n", "", [C.a04]),
   m("V1M-X29", "an unconfigured service answers empty", PORT, "return { list: async () => UNAVAILABLE,", "return { list: async () => ({ ok: true, value: { items: [], next_cursor: null } }) as const,", [C.a02]),
+  // WR-UX05-1 (AP-07c): filters on the wire, inline content on a granted detail only, the new fields typed
+  m("V1M-X74", "the filter is not sent", PORT, "...narrowed, ", "", [C.a05]),
+  m("V1M-X75", "an unset filter is sent as null", PORT, ".filter(([, value]) => value !== null)", ".filter(() => true)", [C.a05]),
+  m("V1M-X76", "a granted detail drops its inline content", PORT, "listRow ? GRANTED : GRANTED_DETAIL", "GRANTED", [C.a03]),
+  m("V1M-X77", "a list row must carry content", PORT, "listRow ? GRANTED : GRANTED_DETAIL", "GRANTED_DETAIL", [C.a01, C.a03]),
+  m("V1M-X78", "the access state is dropped", PORT, "access_state: S, ", "", [C.a01, C.a03]),
+  m("V1M-X79", "elapsed_ms may be text", PORT, "elapsed_ms: NN,", 'elapsed_ms: ["number", "null", "string"],', [C.a04]),
+  m("V1M-X80", "the request schema version may be text", PORT, "request_schema_version: N,", 'request_schema_version: ["number", "string"],', [C.a04]),
+  m("V1M-X81", "a granted detail may carry non-text content", PORT, "{ ...GRANTED, content: SN }", '{ ...GRANTED, content: ["string", "null", "object"] }', [C.a04]),
   // the server composition and the WR-V2-1 wiring
   m("V1M-X30", "an unset base URL still reads", SERVER, "if (!baseUrl || config === null) return offlineTraces();\n  return httpTraces({ baseUrl,", "if (config === null) return offlineTraces();\n  return httpTraces({ baseUrl: baseUrl ?? \"\",", [C.w02]),
   m("V1M-X31", "a session without a token still sends", SESSION, "access_token ?? null", "access_token ?? \"eyJ0.x.y\"", [C.w01]),

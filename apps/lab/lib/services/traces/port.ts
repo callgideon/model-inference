@@ -1,16 +1,17 @@
 // WR-LAB-API-5: the Lab's adapter over lab-api's provider trace read (R176, gateway/routes/lab_traces.py):
-//   GET /lab/v1/traces?provider_org_id=&limit=&cursor=   -> { data: [item], next_cursor }
-//   GET /lab/v1/traces/{request_id}?provider_org_id=      -> item
+//   GET /lab/v1/traces?provider_org_id=&limit=&cursor=[&model_id=][&serving_version_id=] -> { data: [item], next_cursor }
+//   GET /lab/v1/traces/{request_id}?provider_org_id=      -> item (+ content, inline, when granted)
+// WR-UX05-1 (AP-07c): every item's access_state, elapsed_ms and pins; the list's server-side filters.
 // The credential is the signed-in user's own session token (lab_auth.py) and the provider is always the
 // session workspace; the route decides every tenancy question. Only the route's named fields are kept.
-import type { Actor, Result, TraceDetail, TraceReadPort, TraceRefusal } from "../../../components/traces/detail/port.ts";
+import type { Actor, Result, TraceDetail, TraceFilter, TraceReadPort, TraceRefusal } from "../../../components/traces/detail/port.ts";
 
 /** The route's default page (1..200); the list asks for exactly this many. */
 export const LIST_LIMIT = 50;
 /** One page of the route's list: `next_cursor` is null on the last page. */
 export type TracePage = { items: TraceDetail[]; next_cursor: string | null };
 export interface TraceService extends TraceReadPort {
-  list(actor: Actor, cursor: string | null): Promise<Result<TracePage, TraceRefusal>>;
+  list(actor: Actor, cursor: string | null, filter?: TraceFilter): Promise<Result<TracePage, TraceRefusal>>;
 }
 
 const STATUS: Record<number, TraceRefusal> = { 401: "denied", 403: "denied", 404: "not_found" };
@@ -19,12 +20,15 @@ const UNAVAILABLE = refuse("unavailable");
 
 /** Field -> the JSON types it may hold (`typeof`, or "null"). Anything unnamed is dropped. */
 type Spec = Record<string, readonly string[]>;
-const S = ["string"], SN = ["string", "null"];
+const S = ["string"], SN = ["string", "null"], N = ["number"], NN = ["number", "null"];
 const METADATA: Spec = {
   request_id: S, started_at: S, completed_at: SN, mode: S, loss_reason: S, serving_version_id: S,
   model_revision: S, rate_card_version: SN, policy_version: SN, model_id: S,
+  price_version: S, request_schema_version: N, access_state: S, elapsed_ms: NN,
 };
 const GRANTED: Spec = { grantor_org_id: S, grant_ref: S, content_complete: ["boolean"], content_bytes: ["number"], content_available: ["boolean"] };
+/** A granted detail carries its content inline (text, null when unreadable); a list row never does. */
+const GRANTED_DETAIL: Spec = { ...GRANTED, content: SN };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -45,7 +49,7 @@ function item(raw: unknown, listRow: boolean): TraceDetail | null {
   if (meta === null) return null;
   if (raw.access === "metadata") return { ...meta, access: "metadata" } as TraceDetail;
   if (raw.access !== "content") return null;
-  const granted = pick(listRow && raw.grant_ref === undefined ? { ...raw, grant_ref: "" } : raw, GRANTED);
+  const granted = pick(listRow && raw.grant_ref === undefined ? { ...raw, grant_ref: "" } : raw, listRow ? GRANTED : GRANTED_DETAIL);
   return granted === null ? null : ({ ...meta, ...granted, access: "content" } as TraceDetail);
 }
 
@@ -70,8 +74,9 @@ export function httpTraces({ baseUrl, token, fetch: send = fetch }: HttpOptions)
     }
   }
   return {
-    async list(actor, cursor) {
-      const answer = await get("", { provider_org_id: actor.providerId, limit: String(LIST_LIMIT), ...(cursor === null ? {} : { cursor }) });
+    async list(actor, cursor, filter) {
+      const narrowed = Object.fromEntries(Object.entries(filter ?? {}).filter(([, value]) => value !== null)) as Record<string, string>;
+      const answer = await get("", { provider_org_id: actor.providerId, limit: String(LIST_LIMIT), ...narrowed, ...(cursor === null ? {} : { cursor }) });
       if (!answer.ok) return answer;
       const body = answer.value;
       if (!isObj(body) || !Array.isArray(body.data) || !(body.next_cursor === null || typeof body.next_cursor === "string")) return UNAVAILABLE;

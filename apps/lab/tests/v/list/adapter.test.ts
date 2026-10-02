@@ -14,8 +14,9 @@ const actor: Actor = { providerId: A, role: "developer" };
 const meta = {
   request_id: REQ, started_at: "2026-09-27T10:00:00+00:00", completed_at: null, mode: "full", loss_reason: "none",
   serving_version_id: "sv-1", model_revision: "acme-7b@r2", rate_card_version: "rc-3", policy_version: null, model_id: "acme-7b", access: "metadata",
+  price_version: "pv-1", request_schema_version: 2, access_state: "metadata", elapsed_ms: null,
 };
-const granted = { ...meta, access: "content", grantor_org_id: ORG, grant_ref: "grant-1", content_complete: true, content_bytes: 812, content_available: true };
+const granted = { ...meta, access: "content", access_state: "content", grantor_org_id: ORG, grant_ref: "grant-1", content_complete: true, content_bytes: 812, content_available: true };
 
 type Call = { url: string; init: RequestInit };
 function server(status: number, body: unknown, token: string | null = "eyJ0.tok.sig") {
@@ -69,7 +70,11 @@ test("V1M-A03 only the route's named fields are kept: a metadata row never carri
   assert.ok(page.ok);
   assert.deepEqual(page.value.items, [meta, granted]);
   const one = server(200, { ...granted, content: "text", extra: 1 });
-  assert.deepEqual(await one.port.detail(actor, REQ), { ok: true, value: granted });
+  assert.deepEqual(await one.port.detail(actor, REQ), { ok: true, value: { ...granted, content: "text" } }, "a granted detail carries its content inline");
+  const unread = server(200, { ...granted, content: null });
+  assert.deepEqual(await unread.port.detail(actor, REQ), { ok: true, value: { ...granted, content: null } });
+  const ungranted = server(200, { ...meta, content: "secret prompt" });
+  assert.deepEqual(await ungranted.port.detail(actor, REQ), { ok: true, value: meta }, "a metadata detail never carries content");
 });
 
 test("V1M-A04 an answer that is not the route's shape is unavailable, never a partial record", async () => {
@@ -78,17 +83,34 @@ test("V1M-A04 an answer that is not the route's shape is unavailable, never a pa
     { data: [{ ...meta, model_id: null }], next_cursor: null },
     { data: [{ ...meta, started_at: 1 }], next_cursor: null }, { data: [{ ...meta, completed_at: undefined }], next_cursor: null },
     { data: [{ ...granted, content_bytes: "812" }], next_cursor: null }, { data: [{ ...meta, rate_card_version: 3 }], next_cursor: null },
+    { data: [{ ...meta, access_state: 1 }], next_cursor: null }, { data: [{ ...meta, elapsed_ms: "12" }], next_cursor: null },
+    { data: [{ ...meta, request_schema_version: "2" }], next_cursor: null }, { data: [{ ...meta, price_version: null }], next_cursor: null },
   ];
   for (const body of bad) {
     const answer = await server(200, body).port.list(actor, null).catch(() => "threw");
     assert.deepEqual(answer, { ok: false, reason: "unavailable" }, JSON.stringify(body));
   }
   // A granted detail must name the grant it was read under (WR-LAB-API-6): C2 binds its content ref to it.
-  const unnamed: Record<string, unknown> = { ...granted };
+  const unnamed: Record<string, unknown> = { ...granted, content: "text" }; // with its content: only the missing ref fails it
   delete unnamed.grant_ref;
   assert.deepEqual(await server(200, unnamed).port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
   assert.deepEqual(await server(200, "not json").port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
+  // A granted detail without its inline content (or with a non-text one) is not the route's shape.
+  assert.deepEqual(await server(200, granted).port.detail(actor, REQ), { ok: false, reason: "unavailable" });
+  assert.deepEqual(await server(200, { ...granted, content: { prompt: "x" } }).port.detail(actor, REQ), { ok: false, reason: "unavailable" });
   // The list reads no content, so a granted row without the ref still lists (the ref is never used there).
   const listed = await server(200, { data: [unnamed], next_cursor: null }).port.list(actor, null);
   assert.ok(listed.ok && listed.value.items[0].access === "content" && (listed.value.items[0] as { grant_ref: string }).grant_ref === "");
+});
+
+test("V1M-A05 the list's filters are the route's: each one set is sent by name, an unset one is not sent, and the cursor rides along", async () => {
+  const s = server(200, { data: [], next_cursor: null });
+  await s.port.list(actor, null, { model_id: "m 1", serving_version_id: null });
+  await s.port.list(actor, "WyJ4Il0.0f1e", { model_id: null, serving_version_id: "sv-1" });
+  await s.port.list(actor, null, { model_id: null, serving_version_id: null });
+  assert.deepEqual(s.calls.map((c) => c.url), [
+    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}&model_id=m+1`,
+    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}&serving_version_id=sv-1&cursor=WyJ4Il0.0f1e`,
+    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}`,
+  ]);
 });
