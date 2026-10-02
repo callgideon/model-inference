@@ -1,0 +1,30 @@
+{
+  "task": "AP-09",
+  "lane": "lab-judge-runs",
+  "slice": "09c follow-up (register row 98, WR-AP09L-3 consumed): lib/services/judge/runs.ts maps GET /lab/v1/traces/{request_id}/judge-runs (ListPage[TraceJudgeRun] -> V3 JudgeRun: live, typed scores, PROVIDER_USD exact strings, stored calibration; fail closed); J3L-R01..R04 + J3L-X01..X19",
+  "activity": "review",
+  "at": "2026-10-02T09:23:00Z",
+  "head": "a7fa671c",
+  "base": "49114933",
+  "worktree": ".claude/worktrees/codex-w7-lab-judge-runs",
+  "branch": "codex/w7-lab-judge-runs",
+  "owned_paths": [
+    "apps/lab/lib/services/judge/runs.ts",
+    "apps/lab/tests/c/judge/",
+    "apps/lab/app/(provider)/judge/",
+    "apps/lab/tests/ux/evaluations/",
+    "research/plan/evidence/w7/lab-judge-runs-a7fa671.md"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/c/judge/runs.test.ts (before slice 1)", "exit": 1, "summary": "red: J3L-R01, J3L-R03 fail against the unavailable stub"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "370: 360 pass, 0 fail, 10 skipped (real-service gates, NOT RUN)"},
+    {"cmd": "make lab-lint / lab-typecheck / lab-build", "exit": 0, "summary": "clean / clean / built"},
+    {"cmd": "node tests/ux/evaluations/run-mutants.mjs", "exit": 0, "summary": "47 mutants, 47 killed; 20 cases all named"},
+    {"cmd": "node tests/c/judge/run-mutants.mjs", "exit": 0, "summary": "74 mutants, 74 killed; 19 cases all named"},
+    {"cmd": "node tests/v/judge/run-mutants.mjs", "exit": 0, "summary": "36 mutants, 36 killed; 8 cases all named"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "high", "basis": "both slices green; remaining = review + merge check", "at": "2026-10-02T09:23:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/w7/lab-judge-runs-a7fa671.md"]
+}
