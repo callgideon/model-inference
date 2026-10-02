@@ -193,7 +193,9 @@ MUTANTS: tuple[Mutant, ...] = (
        M, '"claim_signup_grant": account.verified and account.grant_amount is None',
        '"claim_signup_grant": account.grant_amount is None', CONSOLE_CAPS),
     _m("switch_ignored", "a feature's availability is its switch's",
-       M, "if getattr(deployment, switch) else", "if True else", CONSOLE_CAPS, LAB_CAPS),
+       M, "if getattr(deployment, switch) else", "if True else", CONSOLE_CAPS),
+    _m("lab_feature_by_switch_alone", "a Lab feature is configured only where its routes are",
+       W, "if path in paths else", "if True else", LAB_CAPS),
     # --- 01c: Lab workspaces and members -------------------------------------------------------
     _m("every_role_is_administrator", "the capability set is the role's (ROLE_CAPABILITIES)",
        W, "ROLE_CAPABILITIES[ProviderRole(role)]",

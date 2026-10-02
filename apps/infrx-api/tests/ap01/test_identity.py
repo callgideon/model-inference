@@ -54,7 +54,7 @@ class Keys:
                             key_id="c3c3c3c3-0000-4000-8000-000000000001", user_id=self.user_id)
 
 
-def api(world, *, keys=None, idp=None, **switches) -> httpx.AsyncClient:
+def api(world, *, keys=None, idp=None, mounted=(), **switches) -> httpx.AsyncClient:
     gotrue = httpx.AsyncClient(base_url="http://gotrue.test",
                                transport=idp or httpx.ASGITransport(world.stub.app))
     rt = SimpleNamespace(
@@ -63,6 +63,8 @@ def api(world, *, keys=None, idp=None, **switches) -> httpx.AsyncClient:
         identity=world.identity, lab_access=world.access,
         settings=Settings(deployment=dataclasses.replace(DEPLOYMENT_DEFAULTS, **switches)))
     app = FastAPI()
+    for path in mounted:                   # another Lab family's route, as its module mounts it
+        app.add_api_route(path, lambda: None)
     for module in (console_me, lab_workspaces, operator_providers):
         module.register(app, rt)
     return httpx.AsyncClient(base_url="http://api.test", transport=httpx.ASGITransport(app))
@@ -203,9 +205,10 @@ def test_identity__workspaces_are_current_memberships_with_their_capabilities(wo
 def test_identity__lab_capabilities_are_the_members_own(world):
     """Oracle: forged provider - capabilities for the member's own workspace only; another
     provider, a consumer, or a made-up id is the same 404 (nothing confirmed); each Lab
-    feature's availability is its switch's."""
+    feature is `configured` when this process serves its routes - the gateway's switches and
+    the Lab unit's forced families alike - never by a switch alone."""
     async def go():
-        async with api(world, lab_control=True) as c:
+        async with api(world, mounted=("/lab/v1/control/models",), lab_traces=True) as c:
             own = await c.get("/lab/v1/capabilities", params={"provider_org_id": A},
                               headers=as_(world, DEV_A))
             refused = [code(await c.get("/lab/v1/capabilities",
@@ -219,7 +222,8 @@ def test_identity__lab_capabilities_are_the_members_own(world):
     assert (body["provider_org_id"], body["role"], body["capabilities"]) == (
         A, "developer", caps("developer"))
     assert body["features"]["control"]["state"] == "configured"
-    assert body["features"]["traces"] == {**body["features"]["traces"], "state": "disabled"}
+    assert (body["features"]["traces"]["state"], body["features"]["traces"]["reason"]) == (
+        "disabled", "not_mounted")                   # its switch on, its routes absent
     assert refused == [(404, "not_found")] * 4
 
 
