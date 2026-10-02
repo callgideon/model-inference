@@ -96,7 +96,7 @@ def test_operator__unknown_usage_and_drift(db, seeded):
     assert [u["request_id"] for u in held] == [seeded.unknown]
     assert held[0]["hold"]["unit"] == "CREDIT" and held[0]["reconcile_after"]
     assert _walk(http, "/operator/v1/wallet-drift") == []
-    wallets = sorted(cc.wallet_of(conn, user) for user in (seeded.me, seeded.them))
+    wallets = sorted(str(cc.wallet_of(conn, user)) for user in (seeded.me, seeded.them))
     conn.execute("alter table infrx.credit_wallets disable trigger user")
     conn.execute("update infrx.credit_wallets set ledger_total = ledger_total + 1 "
                  "where wallet_id = any(%s::uuid[])", (wallets,))

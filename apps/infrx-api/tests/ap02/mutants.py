@@ -16,7 +16,7 @@ from ..contracts.mutants import API_DIR, Mutant, Runner
 C, R, ROUTES = "console/cursor.py", "console/reads.py", "gateway/routes/console_reads.py"
 FILES = ("tests/ap02/test_cursor.py", "tests/ap02/test_units.py",
          "tests/ap02/test_credits_pg.py", "tests/ap02/test_requests_pg.py",
-         "tests/ap02/test_projections_pg.py")
+         "tests/ap02/test_projections_pg.py", "tests/ap02/test_parity_pg.py")
 
 
 def _layout(root: pathlib.Path) -> pathlib.Path:
@@ -50,6 +50,8 @@ AUTHORITY = "test_operator__needs_authority_from_the_actor_and_the_database"
 ACCOUNTS = "test_operator__accounts_are_exact_and_paged"
 UNKNOWN_DRIFT = "test_operator__unknown_usage_and_drift"
 AUDIT = "test_operator__audit_newest_first"
+DOCS = "test_units__every_route_is_documented_for_the_openapi_export"
+PARITY = "test_parity__the_apps_adapters_and_the_api_read_the_same"
 FOREIGN_CURSOR = "test_credit_ledger__a_cursor_from_another_actor_is_refused"
 
 #: The cursor's own decisions, killed by the unit cases (no PostgreSQL).
@@ -108,6 +110,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "        key_id = key_id.lower()\n", "", FILTERS),
     _m("ap02_filter_model_unbounded", "model is 1..200 characters", R,
        "if model is not None and not 0 < len(model) <= 200:", "if False:", FILTERS),
+    _m("ap02_route_undocumented_model", "each route declares its response model (R270)",
+       ROUTES, 'response_model=r.Credits, responses=ERRORS,', "responses=ERRORS,", DOCS),
+    _m("ap02_route_undocumented_errors", "each list route documents the error envelope",
+       ROUTES, "response_model=api.ListPage[item], responses=ERRORS,",
+       "response_model=api.ListPage[item],", DOCS),
 )
 
 #: Killed through the routes on the ap2 PostgreSQL (`PG_RUNNER`): run in a process of their own
@@ -140,7 +147,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     # ---------------------------------------------------------------- credits (02a)
     _m("ap02_spent_sign", "spent = what came in - what is left", R,
        "str(came_in - _credit(row, \"ledger_total\"))", "str(_credit(row, \"ledger_total\") - came_in)",
-       "test_credits__are_the_individuals_exact_wallet"),
+       "test_credits__are_the_individuals_exact_wallet", PARITY),
     _m("ap02_spent_without_a_wallet", "no wallet: spent is not computed (null, never a zero)", R,
        'if row["wallet_id"] is not None and len(ins) <= CREDITS_IN_BOUND:',
        "if len(ins) <= CREDITS_IN_BOUND:", "test_credits__no_wallet_reads_zero_and_no_spent"),
@@ -182,7 +189,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("ap02_request_hold_relabelled", "money is in the request's own unit", R,
        'hold=_opt_money(row["hold"], unit)', 'hold=_opt_money(row["hold"], "CREDIT")', LIST),
     _m("ap02_request_states_merged", "execution and settlement are separate fields", R,
-       "settlement_state=settlement,", "settlement_state=state,", LIST),
+       "settlement_state=settlement,", "settlement_state=state,", LIST, PARITY),
     _m("ap02_result_gate_skipped", "content is served only for an available result", R,
        'if job.result_access != "available":', "if False:", RESULT),
     _m("ap02_result_pending_as_missing", "a result not ready is 409, not 404", R,
@@ -221,7 +228,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        AUTHORITY),
     _m("ap02_accounts_total_is_reserved", "an account's figures are its own fields", R,
        'ledger_total=_money(r["ledger_total"], "CREDIT"),',
-       'ledger_total=_money(r["reserved_total"], "CREDIT"),', ACCOUNTS),
+       'ledger_total=_money(r["reserved_total"], "CREDIT"),', ACCOUNTS, PARITY),
     _m("ap02_accounts_oldest_first", "accounts are most recently moved first", R,
        "order by w.updated_at desc, w.wallet_id desc", "order by w.updated_at, w.wallet_id",
        ACCOUNTS),

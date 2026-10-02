@@ -51,3 +51,25 @@ def test_units__request_filters_are_validated_and_canonical():
         args = {"model": None, "key_id": None, "from_": None, "to": None} | kw
         with pytest.raises(errors.InvalidRequest):
             reads.request_filters(**args)
+
+
+def test_units__every_route_is_documented_for_the_openapi_export():
+    """R270: each route names its operation, its response model and the error envelope, so
+    AP-00's export documents the whole family (12 GET routes, nothing else)."""
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+
+    from infrx.gateway.routes import console_reads
+
+    async def never():
+        raise AssertionError("no read happens while documenting")
+    app = FastAPI()
+    console_reads.register(app, SimpleNamespace(
+        actors=None, console_reads=reads.ConsoleReads(never, b"ap02-console-cursor-secret")))
+    paths = app.openapi()["paths"]
+    assert len(paths) == 12 and all(set(ops) == {"get"} for ops in paths.values()), paths
+    for path, ops in paths.items():
+        op = ops["get"]
+        assert op["operationId"] and "$ref" in str(op["responses"]["200"]), path
+        assert "ErrorEnvelope" in str(op["responses"].get("503")), path
