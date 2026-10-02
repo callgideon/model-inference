@@ -9,8 +9,9 @@ actions to the coordinator session.
 
 ## 0. Preconditions (all four, in this order)
 
-1. **Hosted schema at 0068.** The R151 window applied 0060–0068 (`infra/runbooks/r151-0060-0068.md`,
-   prepared by the r151-prep lane; its branch merges only inside the window). Hosted migrate's
+1. **Hosted schema at 0068.** The R151 window applied 0060–0068 (`infra/runbooks/r151-0060-0068.md`
+   on branch `codex/w7-r151-prep` at c211b9e6, register row 106; the branch merges only inside the
+   window; the plan digest the install then needs is 450c9a1e…). Hosted migrate's
    post-check PASS is in the window log. Until then every `/console/v1/*`, `/auth/v1/*` and new
    `/lab/v1/*` family answers 503 `dependency_unavailable` by design.
 2. **Hosted compute on Medium** (operator, 2026-10-02) — Large after the v1 launch is tested.
