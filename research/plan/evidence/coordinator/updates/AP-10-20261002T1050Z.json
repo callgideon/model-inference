@@ -1,0 +1,89 @@
+{
+  "task": "AP-10",
+  "slice": "follow-up WR-UXVF-1 (Catalog.catalog over 0066)",
+  "activity": "review",
+  "head": "56f5041f",
+  "worktree": ".claude/worktrees/codex-w7-lab-catalog-carry",
+  "branch": "codex/w7-lab-catalog-carry",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/evaluation/__init__.py (Catalog.catalog)",
+    "apps/infrx-api/infrx/state/lab_data.py (PgLabDataStore.eval_catalog)",
+    "apps/infrx-api/tests/ap10/",
+    "apps/lab/tests/e2e/evaluate/**"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/ap10/test_evaluation_ports.py (before the implementation)",
+      "exit": 1,
+      "summary": "2 failed (red: catalog 503)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10/test_evaluation_ports_pg.py",
+      "exit": 0,
+      "summary": "4 passed (red with the implementation reversed: 503 == 200)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap10/test_mutants.py",
+      "exit": 0,
+      "summary": "39 passed; 2 catalog mutants killed; every-case green"
+    },
+    {
+      "cmd": "INFRX_D_TASK=l4 make lab-e2e",
+      "exit": 0,
+      "summary": "24/24 pass, 0 todo (E02-E05 PASS over carried ports)"
+    },
+    {
+      "cmd": "make lab-test",
+      "exit": 0,
+      "summary": "390 tests, 380 pass, 0 fail, 10 skipped"
+    },
+    {
+      "cmd": "make lab-lint / lab-typecheck",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "cd apps/lab && node tests/e2e/run-mutants.mjs",
+      "exit": 0,
+      "summary": "17/17 killed"
+    },
+    {
+      "cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs --only E2E-S13..S17,E2E-S25 (WR-LCC-1+2 transient)",
+      "exit": 0,
+      "summary": "6/6 killed"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 457 (baseline 458)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 3,
+    "confidence": "medium",
+    "basis": "both slices green and measured on l4/ap10; remaining = merge with WR-LCC-1, WR-LCC-2, the stack.test.ts conflict with ux-verify-final, E6L j10 and matrix reruns",
+    "at": "2026-10-02T10:50Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-LCC-1",
+    "WR-LCC-2"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/lab-catalog-carry-56f5041.md",
+    "research/plan/evidence/w7/lab-catalog-carry-56f5041-WR-LCC-1.patch",
+    "research/plan/evidence/w7/lab-catalog-carry-56f5041-WR-LCC-2.patch"
+  ]
+}
