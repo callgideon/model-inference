@@ -39,9 +39,11 @@ vacuously (contracts README, "four things the fakes cannot tell you", note 1).
 from __future__ import annotations
 
 import atexit
+import contextlib
 import fcntl
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import time
@@ -346,6 +348,37 @@ def _sb(database: str, statement: str, *, check: bool = True):
         raise AssertionError(f"supabase_admin could not run `{statement[:50]}…`: "
                              f"{done.stderr.strip()[-300:]}")
     return done
+
+
+def become(conn, role: str) -> None:
+    """`set local role <role>` for the harness login on BOTH images (inside the caller's
+    transaction). Replaces a bare `set local role` of a migration-created role: on the
+    Supabase image `postgres` is no superuser and holds such a role only WITH ADMIN
+    (PostgreSQL 16+: no SET), so the switch itself is refused 42501 and a refusal probe
+    passes vacuously. The login first takes SET on the role, INHERIT false (its own
+    privileges do not change), in the same transaction - rolled back with it."""
+    conn.execute(f"grant {role} to current_user with inherit false, set true")
+    conn.execute(f"set local role {role}")
+
+
+@contextlib.contextmanager
+def login(role: str, database: str = DATABASE):
+    """The DSN of a session that LOGS IN as `role` - what `set session authorization` stood
+    for, which needs a superuser (Supabase's `postgres` is none, so it was 42501 there). Its
+    session user is the role itself, so a `set role service_role` from it is refused as in
+    production. The role gets LOGIN and a one-off password in this run's own container and
+    is put back (its LOGIN bit as found, no password) on exit: roles are cluster-wide, and
+    other checks pin `infrx_runtime`'s NOLOGIN."""
+    password = secrets.token_urlsafe(18)
+    with connect("postgres") as admin:
+        could = admin.execute("select rolcanlogin from pg_roles where rolname = %s",
+                              (role,)).fetchone()[0]
+        admin.execute(f"alter role {role} login password '{password}'")
+    try:
+        yield dsn(database).replace(f"postgres:{PASSWORD}@", f"{role}:{password}@", 1)
+    finally:
+        with connect("postgres") as admin:
+            admin.execute(f"alter role {role} {'login' if could else 'nologin'} password null")
 
 
 def apply(database: str, files: tuple[tuple[str, str], ...]) -> None:

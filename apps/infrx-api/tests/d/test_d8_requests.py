@@ -112,7 +112,7 @@ def as_runtime(conn, sql: str, params=()):
     """(SQLSTATE or None, rows) of `sql` as infrx_runtime; writes stay in the check."""
     try:
         with conn.transaction():
-            conn.execute("set local role infrx_runtime")
+            pgharness.become(conn, "infrx_runtime")
             rows = conn.execute(sql, params).fetchall()
             conn.execute("reset role")
     except psycopg.Error as refused:
@@ -652,15 +652,13 @@ def check_assignments_are_recorded_once_for_the_runtime(conn) -> str:
     return "once per request; offered servings only; provider's own"
 
 
-def as_control_login(dbname: str):
+def as_control_login(dsn: str):
     """The control service's `Connect` on its own login (the factory's
     `connector(INFRX_LAB_DATABASE_URL, set_role=False)`, WR-I2L-4b): no `set role
-    service_role`, only what the login itself holds."""
+    service_role`, only what the login itself holds. `dsn` is `pgharness.login`'s."""
     async def connect():
-        c = await psycopg.AsyncConnection.connect(pgharness.dsn(dbname), autocommit=True,
-                                                  prepare_threshold=None)
-        await c.execute("set session authorization infrx_lab_control")
-        return c
+        return await psycopg.AsyncConnection.connect(dsn, autocommit=True,
+                                                     prepare_threshold=None)
     return connect
 
 
@@ -671,19 +669,25 @@ def check_the_control_login_is_bounded_and_lab_only(conn) -> str:
     provider, the serving revision, the price, memberships, the control events) answer on
     it, and it reaches neither service_role, the consumer's consent writes, the content
     service's refs, another Lab RPC, nor the App's RPCs and tables."""
+    # read before `pgharness.login`, which gives the role LOGIN for the check's sessions
+    row = conn.execute("select rolcanlogin, rolconnlimit, rolbypassrls, rolsuper from pg_roles "
+                       "where rolname = 'infrx_lab_control'").fetchone()
+    assert row is not None and row[0] and 0 < row[1] <= 10 and not row[2] and not row[3], row
+    with pgharness.login("infrx_lab_control", conn.info.dbname) as dsn:
+        return _bounded_and_lab_only(conn, dsn, row[1])
+
+
+def _bounded_and_lab_only(conn, dsn: str, limit: int) -> str:
     import asyncio
 
     from infrx.state.catalog import PgCatalogDirectory
     from infrx.state.lab_access import PgAccessStore
     from infrx.state.lab_control import PgControlStore
-    row = conn.execute("select rolcanlogin, rolconnlimit, rolbypassrls, rolsuper from pg_roles "
-                       "where rolname = 'infrx_lab_control'").fetchone()
-    assert row is not None and row[0] and 0 < row[1] <= 10 and not row[2] and not row[3], row
     model, provider, serving = conn.execute(
         "select m.model_uuid::text, m.provider_org_id::text, s.serving_version_id::text "
         "from infrx.serving_versions s join public.models m on m.model_uuid = s.model_id "
         "limit 1").fetchone()
-    login = as_control_login(conn.info.dbname)
+    login = as_control_login(dsn)
     store, catalog, access = PgControlStore(login), PgCatalogDirectory(login), PgAccessStore(login)
 
     async def attempt(coro, answer=lambda got: got):
@@ -711,10 +715,8 @@ def check_the_control_login_is_bounded_and_lab_only(conn) -> str:
 
     def as_control(sql: str) -> str | None:
         try:
-            with conn.transaction():
-                conn.execute("set local session authorization infrx_lab_control")
-                conn.execute(sql)
-                raise psycopg.Rollback()
+            with psycopg.connect(dsn) as control, control.transaction(force_rollback=True):
+                control.execute(sql)
         except psycopg.Error as refused:
             return refused.sqlstate
         return None
@@ -734,7 +736,7 @@ def check_the_control_login_is_bounded_and_lab_only(conn) -> str:
                "registry_update": "update infrx.serving_versions set revision_label = 'x'"}
     got = {k: as_control(v) for k, v in refused.items()}
     assert got == dict.fromkeys(refused, "42501"), got
-    return f"login, limit {row[1]}; the factory's calls answer; nothing else"
+    return f"login, limit {limit}; the factory's calls answer; nothing else"
 
 
 CHECKS = {c.__name__: c for c in (

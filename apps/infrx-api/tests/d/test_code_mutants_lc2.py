@@ -66,7 +66,7 @@ def opt_in(conn, key: str, mode: str | None) -> None:
 def read_as(conn, role: str, org: str, key: str, sql: str = READ):
     """`trace_consent` as `role` (a stand-in for its login: `set local role`)."""
     with conn.transaction():
-        conn.execute(f"set local role {role}")
+        pgharness.become(conn, role)
         rows = conn.execute(sql, (org, key)).fetchall()
         raise psycopg.Rollback()
     return rows
