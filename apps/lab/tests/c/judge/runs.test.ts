@@ -12,7 +12,7 @@ import { judgeRunsPort } from "../../../lib/services/judge/runs.ts";
 const A = "a0000000-0000-4000-8000-00000000000a";
 const REQ = "c0000000-0000-4000-8000-0000000000c1";
 const RUN = "e0000000-0000-4000-8000-00000000000e";
-const dev = { providerId: A, role: "developer" };
+const dev = { providerId: A, role: "developer" as const };
 const ERR = (code: string) => ({ error: { code, message: "m", request_id: "q", retryable: false } });
 const CAL = { state: "insufficient", labels: 3, required: 30, agreement: null, interval: null };
 const WIRE = {
@@ -44,7 +44,7 @@ test("J3L-R01 a developer reads this request's runs for the guarded workspace on
   const open = { ...WIRE, state: "submitted", actual: null, scores: [], overall_pass: null, media: false, calibration: { ...CAL, state: "calibrated", labels: 42, agreement: 0.82, interval: [0.71, 0.9] } };
   const { overall_pass: _, ...noVerdict } = open; // an absent optional reads as null, as the schema says
   for (const wire of [open, noVerdict])
-    assert.deepEqual(await judgeRunsPort(server({ body: { data: [wire] } }).api).runs({ providerId: A, role: "administrator" }, REQ), {
+    assert.deepEqual(await judgeRunsPort(server({ body: { data: [wire] } }).api).runs({ providerId: A, role: "administrator" as const }, REQ), {
       ok: true,
       value: [{ ...MAPPED, state: "submitted", actualUsd: null, scores: [], overallPass: null, media: false, calibration: open.calibration }],
     });
@@ -53,7 +53,7 @@ test("J3L-R01 a developer reads this request's runs for the guarded workspace on
 
 test("J3L-R02 a viewer is denied and a misconfigured Lab is unavailable, before any call", async () => {
   const s = server();
-  assert.deepEqual(await judgeRunsPort(s.api).runs({ providerId: A, role: "viewer" }, REQ), { ok: false, reason: "denied" });
+  assert.deepEqual(await judgeRunsPort(s.api).runs({ providerId: A, role: "viewer" as const }, REQ), { ok: false, reason: "denied" });
   assert.deepEqual(await judgeRunsPort(null).runs(dev, REQ), { ok: false, reason: "unavailable" });
   assert.equal(s.sent.length, 0);
 });

@@ -104,7 +104,7 @@ const MUTANTS = [
   // --- WR-C3L-2: the judge page ------------------------------------------------------------------
   m("C3P-X01", "the page skips the provider guard", PAGE, "  const workspace = await requireProviderWorkspace();\n", '  const workspace = { role: "administrator" as string };\n', [C.p1, C.guard]),
   m("C3P-X02", "the run form mints its own id", PAGE, "hidden={{ run_id: runId }}", "hidden={{ run_id: crypto.randomUUID() }}", [C.p1]),
-  m("C3P-X03", "the browser mints a run id per submit", FORM, "{Object.entries(hidden).map(", "{Object.entries({ ...hidden, run_id: crypto.randomUUID() }).map(", [C.p1]),
+  m("C3P-X03", "the browser mints a run id per submit", FORM, "{Object.entries(values).map(", "{Object.entries({ ...values, run_id: crypto.randomUUID() }).map(", [C.p1]),
   m("C3P-X04", "the run request carries no run id", PAGE, "        hidden={{ run_id: runId }}\n", "", [C.p1]),
   m("C3P-X05", "a form carries the provider", PAGE, '{ name: "grantor_org_id", label: "Grantor organization id" },', '{ name: "provider_org_id", label: "Provider" },\n          { name: "grantor_org_id", label: "Grantor organization id" },', [C.p2]),
   m("C3P-X06", "a form posts the wrong action", PAGE, "action={judgeCalibrationPage}", "action={requestJudgeRun}", [C.p2]),
