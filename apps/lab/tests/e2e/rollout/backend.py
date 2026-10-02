@@ -42,7 +42,6 @@ def main() -> None:
 
     from infrx.contracts import errors
     from infrx.contracts.lab import records as lab
-    from infrx.gateway import pilot
     from infrx.lab.workers import __main__ as lab_workers
     from infrx.media.store import InMemoryObjectStore
     from infrx.rollouts import control as r2
@@ -68,9 +67,12 @@ def main() -> None:
     candidate = ref_of(conn, cc.DEV_DEPLOYMENT)            # ready_private: R247's healthy arm
     sock, url = stack.listen()
     # the Lab objects of the control unit's composition and of `rollout launch|decide`, in
-    # process; R2's stop converges the release's own alias (the d9 world lists no endpoint)
+    # process; R2's stop converges the release's own alias (the d9 world lists no endpoint).
+    # `rollout decide` resolves `control_serving` in lab.workers' own namespace (merge #84 moved
+    # it to infrx.lab.compose and imports it there; patching `pilot`'s re-export reached nothing,
+    # so R04's approval met the real L3 alias: "no listed alias on this endpoint")
     objects, serving = InMemoryObjectStore(), [None]
-    pilot.control_serving = lambda connect, principal: serving[0]
+    lab_workers.control_serving = lambda connect, principal: serving[0]
     app, unit = stack.unit_app(dsn, url, "lab_releases", objects)
     users = {"admin": l2.ADMIN, "dev": l2.DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH,
              "consumer": l2.C1}
