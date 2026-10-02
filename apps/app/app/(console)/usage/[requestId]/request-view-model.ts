@@ -331,6 +331,20 @@ export function watchExpiry(expiresAt: string, now: () => number, schedule: Sche
   return () => cancel();
 }
 
+/**
+ * One clipboard write. A refusal, or no clipboard API at all (an insecure origin), is "failed": the
+ * control then says so instead of claiming the text was copied.
+ */
+export async function copyText(text: string, clipboard: Pick<Clipboard, "writeText"> | undefined): Promise<"copied" | "failed"> {
+  try {
+    if (clipboard === undefined) return "failed";
+    await clipboard.writeText(text);
+    return "copied";
+  } catch {
+    return "failed";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Retry guidance: the page never resubmits
 // ---------------------------------------------------------------------------
