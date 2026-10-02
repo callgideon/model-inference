@@ -118,6 +118,7 @@ const MUTANTS = [
   m("OP-X48", "a running operation offers no re-check", NEW_PAGE, "{!view.terminal && back(", "{false && back(", [C.p07]),
   m("OP-X49", "an unsupported artifact is offered serving setup", NEW_PAGE, "{a.compatibility.supported ? (", "{true ? (", [C.p08]),
   m("OP-X50", "a project of another workspace falls back to the first", NEW_PAGE, "const project = projects.data.data.find((p) => p.project_id === q.project);", "const project = projects.data.data.find((p) => p.project_id === q.project) ?? projects.data.data[0];", [C.p06]),
+  m("OP-X64", "Try again names an absent id as 'undefined'", NEW_PAGE, ".filter((e): e is [string, string] => e[1] !== undefined)", "", [C.p07]),
   m("OP-X51", "a created revision claims to serve", NEW_PAGE, "title=\"Serving readiness can't be verified here yet\"", 'title="Ready to serve"', [C.p08]),
   // deployments (L-04)
   m("OP-X52", "a dev smoke is offered before AP-05", VIEW, 'row.actions.filter((a) => a !== "smoke")', "row.actions", [C.v06]),

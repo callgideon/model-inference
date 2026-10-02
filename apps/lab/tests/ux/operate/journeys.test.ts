@@ -94,7 +94,8 @@ test("OP-J02 UX-T08 registration: errors keep the input, the receipt is the reco
   assert.match(page, new RegExp(`${record.deploymentRevisionId}`));
   assert.match(page, /No smoke result is recorded/);
   await fake.smoke(as("developer"), record.deploymentRevisionId); // a recorded result from the old path
-  page = mainOf(await at("deployments/page.tsx", "/deployments", "administrator"));
+  const before = await at("deployments/page.tsx", "/deployments", "administrator");
+  page = mainOf(before);
   assert.match(page, /Recorded smoke result: passed\. The record names no engine/);
   assert.doesNotMatch(page, /Ready|Healthy|Live\b/);
   as("administrator");
@@ -102,8 +103,8 @@ test("OP-J02 UX-T08 registration: errors keep the input, the receipt is the reco
   const after = await at("deployments/page.tsx", "/deployments", "administrator");
   assert.match(mainOf(after), /Awaiting operator decision/);
   assert.doesNotMatch(mainOf(after), /Published|Approved by an operator/);
-  // By keyboard at phone width: the request opens in place and its confirmation is reachable.
-  const p = await open(after, VIEWPORTS[0]);
+  // By keyboard at phone width (the page before the request): it opens in place and its confirmation is reachable.
+  const p = await open(before, VIEWPORTS[0]);
   await tabTo(p, /^Request publication$/);
   await p.keyboard.press("Enter");
   const next = await tabTo(p, /^Confirm publication request$/);

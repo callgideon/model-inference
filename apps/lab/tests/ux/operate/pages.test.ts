@@ -116,6 +116,7 @@ const port = { call: async (_a: unknown, method: string, path: string, init: { p
   answers.get(`${method} ${path} ${JSON.stringify(init.params ?? {})}`) ?? { ok: false, requestId: "", error: { kind: "unavailable", status: null, reason: "network" } } };
 const PROJECT = { project_id: "proj-1", slug: "alpha", name: "Synthetic Alpha", description: "", created_at: "2026-10-01T10:00:00Z" };
 const wizardAt = (role: Role, query: Record<string, string>) => at("models/new/page.tsx", "/models/new", role, P, query);
+answers.set(`get /lab/v1/control/model-projects {}`, ok({ data: [PROJECT], next_cursor: null }));
 
 test("OP-P05 add model: without the import service, or for a viewer, no form is offered - only the actual prerequisite", async () => {
   G.__operateArtifacts = null;
@@ -124,7 +125,6 @@ test("OP-P05 add model: without the import service, or for a viewer, no form is 
   assert.match(off, /Model import isn't available here yet/);
   assert.doesNotMatch(mainOf(off), /<form/i, "no form that cannot succeed");
   G.__operateArtifacts = port;
-  answers.set(`get /lab/v1/control/model-projects {}`, ok({ data: [PROJECT], next_cursor: null }));
   const viewer = await wizardAt("viewer", {});
   assert.match(viewer, /data-state="denied"/);
   assert.doesNotMatch(mainOf(viewer), /<form/i);
@@ -172,6 +172,7 @@ test("OP-P07 add model: verification shows the operation's own state; only a suc
   const lost = await wizardAt("developer", { project: "proj-1", operation: "op-1" });
   assert.match(lost, /data-state="unavailable"/);
   assert.doesNotMatch(lost, /Verification failed|Artifact verified/, "an unread operation is neither outcome");
+  assert.match(lost, /href="\/models\/new\?project=proj-1&amp;operation=op-1"[^>]*>Try again</, "Try again re-reads the same step, naming only the ids it has");
 });
 
 test("OP-P08 add model: serving setup only for a compatible verified artifact; a created revision is not a deployment and no readiness is claimed", async () => {

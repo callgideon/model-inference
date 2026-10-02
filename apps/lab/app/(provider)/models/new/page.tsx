@@ -49,9 +49,10 @@ export default async function AddModel({ searchParams }: PageProps<"/models/new"
   if (api === null)
     return <>{header}<ServiceState state="unavailable" title="Model import isn't available here yet" explanation="This Lab deployment does not offer the model import service yet, so a first model cannot be added from the Lab. An imported model's new revisions are on Models." action={back("/models", "Back to models")} /></>;
 
+  // ponytail: the first 100 projects (and below, revisions); follow next_cursor when a workspace holds more.
   const projects = await api.call(workspace, "get", "/lab/v1/control/model-projects", { query: { limit: 100 } });
   const unread = (r: { ok: false; error: Parameters<typeof problem>[0] }, what: string) => (
-    <ServiceState state={r.error.status === 403 || r.error.status === 401 ? "denied" : "unavailable"} title={`We couldn't read ${what}`} explanation={problem(r.error, false).message} action={back(`/models/new?${new URLSearchParams(q as Record<string, string>)}`, "Try again")} />
+    <ServiceState state={r.error.status === 403 || r.error.status === 401 ? "denied" : "unavailable"} title={`We couldn't read ${what}`} explanation={problem(r.error, false).message} action={back(`/models/new?${new URLSearchParams(Object.entries(q).filter((e): e is [string, string] => e[1] !== undefined))}`, "Try again")} />
   );
   let body: React.ReactNode;
   if (!projects.ok) body = unread(projects, "model projects");
