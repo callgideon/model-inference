@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.responses import JSONResponse
@@ -33,8 +33,7 @@ from ..d import pgharness
 from ..l.access.conftest import CASE
 from ..t.capture.test_capture import ANSWER
 from .test_data_use import client, grant_body, session
-from .test_trace_stack import STACK, admitted, answered, bucket, clickhouse, consented  # noqa: F401
-from .test_trace_stack import run, shipped_rows, stack  # noqa: F401
+from .test_trace_stack import STACK, admitted, answered, consented, run, shipped_rows
 
 pytestmark = [pytest.mark.pg, pytest.mark.skipif(
     not STACK, reason="AP-07's stack needs INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 and its containers")]
@@ -65,7 +64,7 @@ def reader(s) -> TraceEligible:
 
 def row(s, request_id: str | None = None, **change) -> ship.TraceRow:
     """One full, stored trace of C1 on the model's serving version, a minute old (wall clock)."""
-    at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    at = datetime.now(UTC) - timedelta(minutes=1)
     base = ship.TraceRow(
         org_id=s.w.C1, trace_id=f"seg-{uuid.uuid4().hex}:0", request_id=request_id
         or str(uuid.uuid4()), key_id=ca.C1_KEY, mode="full", started_at=at, completed_at=at,
@@ -103,7 +102,7 @@ def test_eligible__only_full_stored_content_of_that_model_and_grantor_newest_fir
     T3's content bound are never offered; a request with two records is offered once."""
     s = stack
     judging(s)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     newest, older = projected(s, row(s, started_at=now - timedelta(seconds=5)),
                               row(s, started_at=now - timedelta(minutes=5)))
     projected(s, row(s, newest, started_at=now - timedelta(seconds=6)))   # a second record
