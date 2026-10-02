@@ -72,6 +72,11 @@ test("an account with an active key is offered it and is not pushed to create an
     const box = (await offer.boundingBox())!;
     assert.ok(box !== null && box.y + box.height <= 720, "the existing-key step is below the fold");
     assert.equal(await page.getByText(KEY.prefix).count(), 1, "the key is not listed by name and prefix");
+    // The prefix is metadata only: no code block on the page carries it, and each reads INFRX_API_KEY.
+    for (const code of await page.locator("pre").allTextContents()) {
+      assert.ok(!code.includes(KEY.prefix) && !code.includes("…"), "a code block carries the key prefix");
+      assert.match(code, /INFRX_API_KEY/);
+    }
   } finally {
     await page.close();
   }

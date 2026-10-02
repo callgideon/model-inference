@@ -1,0 +1,369 @@
+{
+  "_comment": "UX-04 (R32): one single-edit mutant per decision the first-call cases claim; node tests/ux/first-call/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion. `create` writes a new file instead of editing one.",
+  "mutants": [
+    {
+      "id": "EX-CURL-KEY-FALLBACK",
+      "what": "curl falls back to a key placeholder in the credential position",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const CURL_ENV = `: \"\\${INFRX_API_KEY:?${KEY_MISSING}}\"",
+      "replace": "const CURL_ENV = `export INFRX_API_KEY=\"\\${INFRX_API_KEY:-sk-infrx-YOUR_KEY}\"",
+      "cases": [
+        "no example carries a credential: each reads INFRX_API_KEY and stops before any request without it"
+      ]
+    },
+    {
+      "id": "EX-PY-NO-KEY-CHECK",
+      "what": "Python sends a request with no key set",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if not KEY:\n    raise SystemExit(\"${KEY_MISSING}\")\n",
+      "replace": "",
+      "cases": [
+        "no example carries a credential: each reads INFRX_API_KEY and stops before any request without it"
+      ]
+    },
+    {
+      "id": "EX-JS-NO-KEY-CHECK",
+      "what": "JavaScript sends a request with no key set",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if (!KEY) throw new Error(\"${KEY_MISSING}\");\n",
+      "replace": "",
+      "cases": [
+        "no example carries a credential: each reads INFRX_API_KEY and stops before any request without it"
+      ]
+    },
+    {
+      "id": "EX-TEXT-LABEL",
+      "what": "the text call is not labelled a connectivity check",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "title: \"Connectivity check (text)\",",
+      "replace": "title: \"Authenticated text request\",",
+      "cases": [
+        "the connectivity check is a text request, labelled as a connectivity check and not a video test"
+      ]
+    },
+    {
+      "id": "EX-DEMO-URL",
+      "what": "the video examples carry a runnable-looking demo URL",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const video = inputs.videoUrl ?? VIDEO_URL_PLACEHOLDER;",
+      "replace": "const video = inputs.videoUrl ?? \"https://example.com/clip.mp4\";",
+      "cases": [
+        "without a supplied URL every video example shows the visible placeholder, and the API refuses it"
+      ]
+    },
+    {
+      "id": "EX-SHELL-UNQUOTED",
+      "what": "the URL is spliced into shell without escaping its quotes",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const shellQuote = (text: string) => `'${text.replaceAll(\"'\", `'\\\\''`)}'`;",
+      "replace": "const shellQuote = (text: string) => `'${text}'`;",
+      "cases": [
+        "a supplied URL is escaped into each language and reaches the API byte-for-byte"
+      ]
+    },
+    {
+      "id": "EX-PY-SPLICED",
+      "what": "the URL is spliced into a Python string without escaping",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "const pyVideo = `VIDEO_URL = ${JSON.stringify(video)}  # ${VIDEO_NOTE}`;",
+      "replace": "const pyVideo = `VIDEO_URL = \"${video}\"  # ${VIDEO_NOTE}`;",
+      "cases": [
+        "a supplied URL is escaped into each language and reaches the API byte-for-byte"
+      ]
+    },
+    {
+      "id": "EX-URL-HTTP",
+      "what": "the URL field accepts plain http",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if (url.protocol !== \"https:\") return",
+      "replace": "if (!url.protocol.startsWith(\"http\")) return",
+      "cases": [
+        "the video URL field accepts only an https URL, locally and without fetching it"
+      ]
+    },
+    {
+      "id": "EX-URL-CREDS",
+      "what": "the URL field accepts a URL with credentials",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if (url.username || url.password) return",
+      "replace": "if (false) return",
+      "cases": [
+        "the video URL field accepts only an https URL, locally and without fetching it"
+      ]
+    },
+    {
+      "id": "EX-CURL-NO-WAIT",
+      "what": "curl polls without waiting the 202's Retry-After",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "  sleep \"\\${WAIT:-2}\"",
+      "replace": "  sleep 0",
+      "cases": [
+        "async waits the Retry-After hints, never reads a result after a failure, and says why it stopped"
+      ]
+    },
+    {
+      "id": "EX-CURL-503-HINT",
+      "what": "curl ignores a 503's own Retry-After",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "429|503) WAIT=$(retry_after); continue ;;",
+      "replace": "429|503) continue ;;",
+      "cases": [
+        "async waits the Retry-After hints, never reads a result after a failure, and says why it stopped"
+      ]
+    },
+    {
+      "id": "EX-PY-503-HINT",
+      "what": "Python ignores a 503's own Retry-After",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "        wait = int(headers.get(\"Retry-After\") or wait)",
+      "replace": "        pass",
+      "cases": [
+        "async waits the Retry-After hints, never reads a result after a failure, and says why it stopped"
+      ]
+    },
+    {
+      "id": "EX-PY-RESULT-AFTER-FAIL",
+      "what": "Python reads a result after the job failed",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if state != \"succeeded\":\n    raise SystemExit",
+      "replace": "if False:\n    raise SystemExit",
+      "cases": [
+        "async waits the Retry-After hints, never reads a result after a failure, and says why it stopped"
+      ]
+    },
+    {
+      "id": "EX-JS-UNBOUNDED",
+      "what": "JavaScript polls without a bound",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "for (let poll = 0; poll < MAX_POLLS; poll++) {",
+      "replace": "for (let poll = 0; ; poll++) {",
+      "cases": [
+        "async stops at its poll bound when the job never finishes, without reading a result"
+      ]
+    },
+    {
+      "id": "EX-JS-NEVER-RESULT",
+      "what": "JavaScript never reads the result of a succeeded job",
+      "file": "app/(console)/docs/examples.ts",
+      "find": "if (state !== \"succeeded\") {",
+      "replace": "if (state !== \"succeeded\" || true) {",
+      "cases": [
+        "async reads the result once the job succeeds"
+      ]
+    },
+    {
+      "id": "FC-NEVER-NEW",
+      "what": "a new account is never told it has no request yet",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "const none = read !== null && done === null && read.next_cursor === null;",
+      "replace": "const none = false;",
+      "cases": [
+        "a brand-new account gets the first-request guide with Create key as step one",
+        "an account with an active key is offered it and not forced to create another"
+      ]
+    },
+    {
+      "id": "FC-REVOKED",
+      "what": "a revoked key counts as an active key",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "rows.filter((row) => row.revoked === null)",
+      "replace": "rows.filter(() => true)",
+      "cases": [
+        "a revoked key is not an active key: the account is asked to create one"
+      ]
+    },
+    {
+      "id": "FC-ANY-STATE",
+      "what": "completion from a request that did not succeed",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "row.state === \"succeeded\"",
+      "replace": "row.state !== \"queued\"",
+      "cases": [
+        "a request that has not succeeded is not completion",
+        "completion is a persisted succeeded request in the account's own read, linked by its id"
+      ]
+    },
+    {
+      "id": "FC-OPEN",
+      "what": "the dominant guide stays open after a success",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "open: done === null",
+      "replace": "open: true",
+      "cases": [
+        "completion is a persisted succeeded request in the account's own read, linked by its id"
+      ]
+    },
+    {
+      "id": "FC-CURSOR",
+      "what": "a bounded page without a success claims there is no request",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "&& read.next_cursor === null;",
+      "replace": ";",
+      "cases": [
+        "a bounded page without a success claims nothing: Quickstart, open, no completion"
+      ]
+    },
+    {
+      "id": "FC-READ-FAILED",
+      "what": "a failed request read is taken as an empty account",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "const read = requests !== null && requests.ok ? requests.value : null;",
+      "replace": "const read = requests !== null && requests.ok ? requests.value : { items: [], next_cursor: null };",
+      "cases": [
+        "an unavailable read claims nothing either way"
+      ]
+    },
+    {
+      "id": "FC-KEYS-DOWN",
+      "what": "a failed key read is taken as no keys",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "else if (keys.list.kind === \"unavailable\") key = { kind: \"unavailable\" };",
+      "replace": "else if (false) key = { kind: \"unavailable\" };",
+      "cases": [
+        "an unavailable read claims nothing either way"
+      ]
+    },
+    {
+      "id": "FC-CAN-CREATE",
+      "what": "an account that may not create a key gets the button",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "const canCreate = keys.create.allowed;",
+      "replace": "const canCreate = true;",
+      "cases": [
+        "an account that may not create a key is told why, not shown a button"
+      ]
+    },
+    {
+      "id": "FC-REFUSED",
+      "what": "a refused account is not told why",
+      "file": "app/(console)/models/first-call.ts",
+      "find": "if (!keys.create.allowed) key = { kind: \"refused\", reason: keys.create.reason };",
+      "replace": "if (false) key = { kind: \"refused\", reason: \"\" };",
+      "cases": [
+        "an account that may not create a key is told why, not shown a button"
+      ]
+    },
+    {
+      "id": "PANEL-NO-BUTTON",
+      "what": "step one drops the key dialog",
+      "file": "app/(console)/models/first-call-panel.tsx",
+      "find": "                {createKey}\n",
+      "replace": "",
+      "cases": [
+        "the first-call guide renders before any model card, with the key dialog as step one",
+        "a brand-new account sees Create key above the fold at 1280x720"
+      ]
+    },
+    {
+      "id": "PANEL-COLLAPSED",
+      "what": "the guide renders collapsed for a new account",
+      "file": "app/(console)/models/first-call-panel.tsx",
+      "find": "<details open={guide.open} className=\"space-y-4\">",
+      "replace": "<details open={false} className=\"space-y-4\">",
+      "cases": [
+        "a brand-new account sees Create key above the fold at 1280x720"
+      ]
+    },
+    {
+      "id": "PANEL-PUSH-EXISTING",
+      "what": "an existing-key account is pushed to create another",
+      "file": "app/(console)/models/first-call-panel.tsx",
+      "find": "<Link href=\"/api-keys\" className={link}>\n                  Manage keys",
+      "replace": "{createKey}<Link href=\"/api-keys\" className={link}>\n                  Manage keys",
+      "cases": [
+        "an account with an active key is offered it and is not pushed to create another"
+      ]
+    },
+    {
+      "id": "SN-ELLIPSIS",
+      "what": "the code puts a truncated key in the credential position",
+      "file": "components/snippet.tsx",
+      "find": "return (snippets[l] ?? \"\").replaceAll(\"{{BASE_URL}}\", baseUrl);",
+      "replace": "return (snippets[l] ?? \"\").replaceAll(\"{{BASE_URL}}\", baseUrl).replaceAll(\"$INFRX_API_KEY\", \"YOUR_KEY…\");",
+      "cases": [
+        "an account with an active key is offered it and is not pushed to create another"
+      ]
+    },
+    {
+      "id": "PG-DIALOG-ALWAYS",
+      "what": "the page offers Create key whatever the account may do",
+      "file": "app/(console)/models/page.tsx",
+      "find": "createKey={guide.canCreate ? <CreateKeyDialog /> : null}",
+      "replace": "createKey={<CreateKeyDialog />}",
+      "cases": [
+        "Create key is offered only to an account that may create a key, through the existing dialog"
+      ]
+    },
+    {
+      "id": "PG-TABLE-READ",
+      "what": "the Models page reads a product table",
+      "file": "app/(console)/models/page.tsx",
+      "find": "  const { context, reads } = await consumerSession();",
+      "replace": "  await (await createClient()).from(\"api_keys\").select(\"id\");\n  const { context, reads } = await consumerSession();",
+      "cases": [
+        "these pages read no product table and fetch nothing but the published catalog"
+      ]
+    },
+    {
+      "id": "DLG-STORAGE",
+      "what": "the key dialog keeps the secret in browser storage",
+      "file": "app/(console)/api-keys/create-key-dialog.tsx",
+      "find": "if (outcome.kind === \"secret\") setSecret(outcome.secret);",
+      "replace": "if (outcome.kind === \"secret\") { setSecret(outcome.secret); sessionStorage.setItem(\"infrx-key\", outcome.secret); }",
+      "cases": [
+        "nothing in the App writes to browser storage, and no secret enters URL state"
+      ]
+    },
+    {
+      "id": "DLG-URL",
+      "what": "the key dialog moves to URL state",
+      "file": "app/(console)/api-keys/create-key-dialog.tsx",
+      "find": "      router.refresh();",
+      "replace": "      router.push(\"/models?created=1\");",
+      "cases": [
+        "nothing in the App writes to browser storage, and no secret enters URL state"
+      ]
+    },
+    {
+      "id": "ROUTE-INFER",
+      "what": "a new route handler proxies inference from the UI",
+      "file": "app/(console)/models/try/route.ts",
+      "create": true,
+      "replace": "export async function POST(request: Request) {\n  return fetch(`${process.env.INFRX_API_BASE_URL}/v1/chat/completions`, { method: \"POST\", body: await request.text() });\n}\n",
+      "cases": [
+        "no new route handler: the console adds no UI inference endpoint"
+      ]
+    },
+    {
+      "id": "DOCS-ANCHOR",
+      "what": "the retention anchor Settings links to is renamed",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "<Section title=\"What we store\" id=\"retention\">",
+      "replace": "<Section title=\"What we store\" id=\"stored\">",
+      "cases": [
+        "every /docs anchor link in the App, Settings included, lands on a Docs section",
+        "Contents follows C-06's order and each entry is a section, in that order on the page"
+      ]
+    },
+    {
+      "id": "DOCS-ORDER",
+      "what": "Contents leaves C-06's order",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "  [\"video\", \"Video input\"],\n  [\"async\", \"Async and many clips\"],",
+      "replace": "  [\"async\", \"Async and many clips\"],\n  [\"video\", \"Video input\"],",
+      "cases": [
+        "Contents follows C-06's order and each entry is a section, in that order on the page"
+      ]
+    },
+    {
+      "id": "DOCS-NO-MOBILE",
+      "what": "Docs has no mobile Contents disclosure",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "<details className=\"mb-4 rounded-lg border p-3 lg:hidden\">",
+      "replace": "<details className=\"mb-4 rounded-lg border p-3\">",
+      "cases": [
+        "Contents follows C-06's order and each entry is a section, in that order on the page"
+      ]
+    }
+  ]
+}

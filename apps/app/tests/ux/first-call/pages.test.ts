@@ -87,7 +87,7 @@ const EXAMPLE_IDS = buildExamples(parsePublishedModel(JSON.parse(readFileSync(PU
 // The example sections take their ids from the generator; every other anchor is written in the page.
 const DOC_IDS = new Set([...[...DOCS.matchAll(/ id="([a-z-]+)"/g)].map((m) => m[1]), ...EXAMPLE_IDS]);
 
-test("every /docs# link in the App, Settings included, lands on a Docs section", () => {
+test("every /docs anchor link in the App, Settings included, lands on a Docs section", () => {
   const links = sources().flatMap((path) => [...read(path).matchAll(/\/docs#([a-z-]+)/g)].map((m) => ({ path, id: m[1] })));
   assert.ok(links.some((l) => l.path.startsWith("app/(console)/settings/")), "Settings no longer links into Docs");
   for (const { path, id } of links) assert.ok(DOC_IDS.has(id), `${path} links to /docs#${id}, which is not a section`);

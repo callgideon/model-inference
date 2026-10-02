@@ -218,8 +218,8 @@
       "id": "EX-TOOLS",
       "what": "an example sends an unsupported parameter",
       "file": "app/(console)/docs/examples.ts",
-      "find": "-d '${chatBody(model, null, \"In one sentence, what is dense video captioning?\").json()}'",
-      "replace": "-d '${chatBody(model, null, \"In one sentence, what is dense video captioning?\").json(', \"tools\": []')}'",
+      "find": "-d '${textBody(model, \"In one sentence, what is dense video captioning?\")}'",
+      "replace": "-d '${textBody(model, \"In one sentence, what is dense video captioning?\").slice(0, -1) + ', \"tools\": []}'}'",
       "cases": [
         "every example runs as written in curl, Python and JavaScript and prints its answer",
         "the three languages make exactly the same requests for each example",
@@ -230,8 +230,8 @@
       "id": "EX-HEADER",
       "what": "an example sends a header outside the API vocabulary",
       "file": "app/(console)/docs/examples.ts",
-      "find": "  -H \"Idempotency-Key: $KEY_ID\" \\\\\n",
-      "replace": "  -H \"X-Idempotency-Key: $KEY_ID\" \\\\\n",
+      "find": "  -H \"Idempotency-Key: $ITEM_ID\" \\\\\n",
+      "replace": "  -H \"X-Idempotency-Key: $ITEM_ID\" \\\\\n",
       "cases": [
         "every example runs as written in curl, Python and JavaScript and prints its answer",
         "the three languages make exactly the same requests for each example",

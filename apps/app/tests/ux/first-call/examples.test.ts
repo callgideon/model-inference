@@ -187,7 +187,8 @@ function asyncSource(lang: Language, maxPolls: number): string {
 
 test("async waits the Retry-After hints, never reads a result after a failure, and says why it stopped", async () => {
   for (const lang of LANGUAGES) {
-    const jobs = await scriptedJobs([{ status: 503, retryAfter: "1" }, { status: 200, state: "running" }, { status: 200, state: "failed" }], "1");
+    // The 503's hint (2 s) differs from the 202's (1 s), so honouring the wrong one is visible.
+    const jobs = await scriptedJobs([{ status: 503, retryAfter: "2" }, { status: 200, state: "failed" }], "1");
     const dir = mkdtempSync(join(tmpdir(), "ux-first-call-"));
     try {
       const out = await execute(asyncSource(lang, 10), lang, jobs.baseUrl, dir, KEY);
@@ -195,10 +196,10 @@ test("async waits the Retry-After hints, never reads a result after a failure, a
       assert.match(out.stdout + out.stderr, /failed/, `${lang} did not report the terminal state`);
       assert.ok(!jobs.seen.some((r) => r.path.endsWith("/result")), `${lang} read a result after a failure`);
       const polls = jobs.seen.filter((r) => r.method === "GET");
-      assert.equal(polls.length, 3, `${lang} polled ${polls.length} times`);
+      assert.equal(polls.length, 2, `${lang} polled ${polls.length} times`);
       const accepted = jobs.seen[0].at;
       assert.ok(polls[0].at - accepted >= 900, `${lang} polled before the 202's Retry-After`);
-      assert.ok(polls[1].at - polls[0].at >= 900, `${lang} retried before the 503's Retry-After`);
+      assert.ok(polls[1].at - polls[0].at >= 1900, `${lang} retried before the 503's Retry-After`);
     } finally {
       await jobs.close();
       rmSync(dir, { recursive: true, force: true });
