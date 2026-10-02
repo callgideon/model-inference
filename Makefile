@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -99,6 +99,10 @@ console-lint:
 # never ran next dev/build/typegen fails without them.
 console-typecheck:
 	cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
+
+# WR-UXV-1: the UX-11 journey matrix; outside check (exits 3 BLOCKED while batch-2/3 suites are open).
+ux-matrix:
+	node apps/app/tests/ux/matrix/run-matrix.mjs $(UX_MATRIX_ARGS)
 
 # R32/R36: exported console conformance must kill every declared mutant.
 # Track runners join here as their task merges (V1, U1, C1, A2, A3). Each exits non-zero on a survivor.
