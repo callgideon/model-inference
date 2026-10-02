@@ -8,7 +8,8 @@
 //   - a failed case or a non-zero exit is FAIL;
 //   - a dirty tree is INVALID (the run would not be the SHA's); a fixture reference that no longer
 //     resolves is FAIL;
-//   - a case its suite reports NOT RUN (TODO/SKIP) keeps its reason in the cell.
+//   - a case its suite reports NOT RUN (TODO/SKIP) keeps its reason in the cell; a TODO "FAIL[<WR>]" (a
+//     reported product defect kept off the app's default test exit) is a failure.
 // By default it runs only the apps' own fixture suites: no Docker, no network service, no screenshots.
 // A `real` part (the Lab's real-route stack suites: lab-e2e on l4, the V1M stack on lab-v1m + t2i's
 // ClickHouse) runs only with --real, after its `prepare` (once per app), with its env and one test file
@@ -51,10 +52,14 @@ export function judgePart(part, run) {
   if (run.missing.length > 0) return { status: "BLOCKED", cause: `${part.lane} has not merged ${run.missing.join(", ")}` };
   const match = part.match ? new RegExp(part.match) : null;
   const cases = run.cases.filter((c) => match === null || match.test(c.name));
-  const skipped = cases.filter((c) => c.skipped).length;
-  const failed = cases.filter((c) => !c.ok && !c.skipped).length;
+  // A TODO "FAIL[<WR>]" is a reported product defect kept off the default suite's exit: it fails here
+  // while it fails, and counts as passed once its fix lands (node reports it "ok # TODO").
+  const flagged = (c) => c.skipped && /^FAIL\[/.test(run.reasons?.get(c.name) ?? "");
+  const known = cases.filter((c) => flagged(c) && !c.ok);
+  const skipped = cases.filter((c) => c.skipped && !flagged(c)).length;
+  const failed = cases.filter((c) => !c.ok && !c.skipped).length + known.length;
   const counts = { passed: cases.length - skipped - failed, failed, skipped };
-  if (failed > 0 || run.code !== 0) return { status: "FAIL", cause: `${failed} failed, exit ${run.code}`, ...counts };
+  if (failed > 0 || run.code !== 0) return { status: "FAIL", cause: `${failed} failed, exit ${run.code}${known.map((c) => `; ${run.reasons.get(c.name)}`).join("")}`, ...counts };
   const why = [...new Set(cases.filter((c) => c.skipped).map((c) => run.reasons?.get(c.name)).filter(Boolean))];
   if (counts.passed === 0) return { status: "BLOCKED", cause: `no case ran (${skipped} skipped${why.length ? `: ${why.join("; ")}` : ""}; owner ${part.lane})`, ...counts };
   return { status: "PASS", ...counts };
@@ -80,7 +85,7 @@ const git = (...args) => spawnSync("git", ["-C", repo, ...args], { encoding: "ut
 const listening = (port) =>
   spawnSync(process.execPath, ["-e", `require("net").connect(${port}, "127.0.0.1").on("connect", () => process.exit(0)).on("error", () => process.exit(1))`]).status === 0;
 
-function execute(part, cache, wantReal) {
+export function execute(part, cache, wantReal) {
   if (part.blocked) return { cases: [], code: 0, missing: [] };
   const cwd = join(repo, "apps", part.app);
   const missing = part.paths.filter((p) => !existsSync(join(cwd, p)));

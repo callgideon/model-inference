@@ -15,7 +15,10 @@
       "parts": [
         { "name": "App drawer", "app": "app", "paths": ["tests/ux/shell/navigation.test.ts"], "lane": "ux-foundations (UX-02)" },
         { "name": "Lab dialog/drawer primitives", "app": "lab", "paths": ["tests/ux/foundations.test.ts"], "match": "^UX00-K0[12] ", "lane": "ux-foundations (UX-00)" },
-        { "name": "Lab provider shell", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)", "match": "^OP-S0[12] " }
+        { "name": "Lab provider shell", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)", "match": "^OP-S0[12] " },
+        { "name": "App accessibility pass: 200% zoom, focus stops, names, AA contrast, reduced motion (shell)", "app": "app", "paths": ["tests/ux/matrix/a11y.check.ts"], "match": "^UXV-A0[1-4] ", "lane": "ux-verify-final (UX-11)" },
+        { "name": "App dialog and menu popups under reduced motion", "app": "app", "paths": ["tests/ux/matrix/a11y.check.ts"], "match": "^UXV-A05 ", "lane": "coordinator: WR-UXVF-3 (app/globals.css, UX-00's file)" },
+        { "name": "Lab accessibility pass: 200% zoom, focus stops, overlays, names, AA contrast, reduced motion", "app": "lab", "paths": ["tests/ux/matrix/a11y.check.ts"], "match": "^UXV-L0[1-4] ", "lane": "ux-verify-final (UX-11)" }
       ]
     },
     {
@@ -151,9 +154,9 @@
     { "dimension": "Presentation", "case": "320px reflow", "path": "apps/lab/tests/ux/foundations.test.ts", "contains": "UX00-K06 at 320px" },
     { "dimension": "Presentation", "case": "390px mobile", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-01 at 390px" },
     { "dimension": "Presentation", "case": "768px tablet / 1440px desktop", "path": "apps/lab/tests/ux/improve/wizard.test.ts", "contains": "{ width: 768, height: 1024 }" },
-    { "dimension": "Presentation", "case": "200% zoom", "gap": "ux-verify-final (UX-11)" },
+    { "dimension": "Presentation", "case": "200% zoom", "path": "apps/app/tests/ux/matrix/a11y.check.ts", "contains": "UXV-A02 at 200% zoom" },
     { "dimension": "Presentation", "case": "long names/IDs", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-06 a long email" },
-    { "dimension": "Presentation", "case": "reduced motion", "gap": "ux-verify-final (UX-11)" },
+    { "dimension": "Presentation", "case": "reduced motion", "path": "apps/lab/tests/ux/matrix/a11y.check.ts", "contains": "UXV-L04 reduced motion" },
     { "dimension": "Presentation", "case": "keyboard-only", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-02 the open menu is a modal" }
   ]
 }

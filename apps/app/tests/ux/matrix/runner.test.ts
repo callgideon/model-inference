@@ -4,27 +4,35 @@
 // reason in the cell; a lane still in flight stays BLOCKED until its suite is on the tree.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { directives, judgePart as judgeAny, readMatrix } from "./run-matrix.mjs";
+import { directives, execute, judgePart as judgeAny, readMatrix } from "./run-matrix.mjs";
 
 type Verdict = { status: string; cause?: string; passed?: number; skipped?: number };
 const judgePart = (p: object, r: object) => judgeAny(p, r) as Verdict;
 const real = { name: "server authorization", app: "lab", paths: ["tests/e2e/x/stack.test.ts"], lane: "ux-verify-final (UX-11)", real: { env: { INFRX_D_TASK: "l4" }, needs: "Docker, key l4" } };
+/** A real part on a path that exists (this file): what execute decides before any suite is spawned. */
+const here = { ...real, app: "app", paths: ["tests/ux/matrix/runner.test.ts"] };
 const ok = (name: string) => ({ name, ok: true, skipped: false });
 const todo = (name: string) => ({ name, ok: true, skipped: true });
 
-test("UXV-M01 a real part not requested is BLOCKED naming --real and what it needs, whatever its cases say", () => {
-  const v = judgePart(real, { cases: [ok("E2E-O01 a")], code: 0, missing: [], blocked: "real gate not requested: rerun with --real (needs Docker, key l4)" });
+test("UXV-M01 a real part not requested is BLOCKED naming --real and what it needs, and nothing is run", () => {
+  const cache = new Map();
+  const run = execute(here, cache, false);
+  const v = judgePart(here, run);
   assert.equal(v.status, "BLOCKED");
   assert.match(v.cause ?? "", /--real/);
   assert.match(v.cause ?? "", /Docker, key l4/);
   assert.match(v.cause ?? "", /ux-verify-final \(UX-11\)/);
+  assert.equal(cache.size, 0, "no suite was spawned");
 });
 
-test("UXV-M02 a real part whose prerequisite is absent is BLOCKED, not FAIL, even with a failed run", () => {
-  const v = judgePart(real, { cases: [{ name: "x", ok: false, skipped: false }], code: 1, missing: [], blocked: "nothing listens on 127.0.0.1:57540" });
+test("UXV-M02 a requested real part whose port is closed is BLOCKED naming it, not run and never FAIL; a reachable one is judged by its cases", () => {
+  const cache = new Map();
+  const v = judgePart(here, execute({ ...here, real: { ...here.real, ports: [9] } }, cache, true));
   assert.equal(v.status, "BLOCKED");
-  assert.match(v.cause ?? "", /57540/);
-  assert.equal(judgePart(real, { cases: [ok("y")], code: 0, missing: [] }).status, "PASS", "a requested, reachable real part is judged by its cases");
+  assert.match(v.cause ?? "", /nothing listens on 127\.0\.0\.1:9/);
+  assert.equal(cache.size, 0, "no suite was spawned");
+  assert.equal(judgePart(real, { cases: [ok("y")], code: 0, missing: [] }).status, "PASS");
+  assert.equal(judgePart(real, { cases: [ok("y")], code: 0, missing: [], blocked: "x" }).status, "BLOCKED", "a blocked run is never judged by its cases");
 });
 
 test("UXV-M03 a part whose every case is NOT RUN is BLOCKED with the cases' own reasons, once each; one ran case is judged", () => {
@@ -61,4 +69,15 @@ test("UXV-M05 the final matrix: UX-10 and row 98 stay BLOCKED until they merge; 
     assert.ok(p.paths!.every((x) => !x.startsWith("tests/e2e") || p.app === "lab"), `${p.name} never runs the App's E3A suite`);
   }
   for (const p of parts.filter((x) => x.paths && /^tests\/ux\/(operate|improve|evaluations|requests)$|^tests\/ux\/usage$/.test(x.paths.join()))) assert.ok(p.match, `${p.name}: a directory part is narrowed to its journey's cases`);
+});
+
+test("UXV-M06 a case its suite marks TODO FAIL[...] is a known product defect: FAIL with its reason while it fails, PASS once fixed, never BLOCKED", () => {
+  const reasons = new Map([["UXV-A05 popups", "FAIL[WR-UXVF-3]: no reduced-motion rule"], ["E2E-E02 launch", "NOT RUN[SR-AP10-1]"]]);
+  // node reports a failing TODO case "not ok ... # TODO": skipped, and not ok.
+  const v = judgePart({ ...real, real: undefined }, { cases: [ok("UXV-A04 menu"), { name: "UXV-A05 popups", ok: false, skipped: true }], code: 0, missing: [], reasons });
+  assert.equal(v.status, "FAIL");
+  assert.match(v.cause ?? "", /WR-UXVF-3/);
+  assert.equal(judgePart({ ...real, real: undefined }, { cases: [ok("UXV-A04 menu"), todo("E2E-E02 launch")], code: 0, missing: [], reasons }).status, "PASS", "a NOT RUN beside a pass is not a failure");
+  const fixed = judgePart({ ...real, real: undefined }, { cases: [{ name: "UXV-A05 popups", ok: true, skipped: true }], code: 0, missing: [], reasons });
+  assert.deepEqual([fixed.status, fixed.passed], ["PASS", 1], "once its fix lands the case passes");
 });
