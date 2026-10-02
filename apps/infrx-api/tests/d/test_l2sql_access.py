@@ -131,10 +131,11 @@ def check_browser_roles_reach_nothing(conn) -> str:
         acl = conn.execute("select coalesce(proacl::text, '') from pg_proc where oid = "
                            "%s::regprocedure", (f"infrx.{name}(jsonb)",)).fetchone()[0]
         grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
-        # (0043, WR-I2L-4: the Lab control service's login reads; it never writes consent)
+        # (0043, WR-I2L-4: the Lab control service's login reads; it never writes consent;
+        # 0068 SR-AP10C-1: nor does the datasets worker's role, which reads the same two)
         allowed = {"postgres", "service_role"} | (
             set() if name in ("lab_put_access_grant", "lab_revoke_access_grant")
-            else {"infrx_lab_control"})
+            else {"infrx_lab_control", "infrx_lab_datasets"})
         assert grantees <= allowed and "service_role" in grantees, f"infrx.{name}: {acl}"
     return f"{len(cc.BROWSER)} browser sessions x {len(probes)} probes refused; service reads"
 
