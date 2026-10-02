@@ -1390,6 +1390,20 @@
       ],
       "envelope": "refusal",
       "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/from-traces",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
       "path": "/lab/v1/providers/{provider}/datasets/imports",
       "request_schema": "raw",
       "response_schema": "none"

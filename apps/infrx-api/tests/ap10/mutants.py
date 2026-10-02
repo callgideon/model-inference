@@ -21,7 +21,7 @@ from tests.contracts import mutants as shared  # noqa: E402
 from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
 SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
-          "tests/ap10/test_from_traces.py")
+          "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -43,6 +43,9 @@ KEYREUSE = "test_ap10_a_key_reused_with_another_body_conflicts_even_after_a_cras
 RESUME = "test_ap10_a_crash_mid_materialisation_resumes_to_the_same_refs_once"
 CANCEL = "test_ap10_a_cancelled_operation_publishes_nothing"
 C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
+RT = "gateway/routes/lab_datasets.py"
+RT_START = "test_ap10_route_a_session_starts_one_operation_and_a_replay_is_the_same"
+RT_REFUSED = "test_ap10_route_refusals_are_r270_envelopes"
 #: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
 PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
 BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
@@ -160,6 +163,19 @@ MUTANTS: tuple[Mutant, ...] = (
       "purpose=DataPurpose.training)", "purpose=DataPurpose.provider_sharing)", C2, file=FT),
     m("j10_catalog_presence_is_carried", "a catalog answering 503 is not carried (j10 NOT RUN)",
       '    if got["catalog"]:\n', "    if False:\n", J10, file=BACKEND),
+    # --- row 92: the R270 from-traces route (WR-AP10C-4)
+    m("rt_session_not_scoped", "a web session acts in the path's workspace",
+      'if actor.audience == "session" and actor.provider_org_id is None:', "if False:",
+      RT_START, file=RT),
+    m("rt_foreign_workspace", "an actor of another workspace never starts in its own",
+      "elif actor.provider_org_id != provider:", "elif False:", RT_REFUSED, file=RT),
+    m("rt_ops_unwired_crashes", "no composed ControlOps is a 503, never a 500",
+      "if x.ops is None or actors is None:", "if actors is None:", RT_REFUSED, file=RT),
+    m("rt_actors_unwired_crashes", "no session actors is a 503, never a 500",
+      "if x.ops is None or actors is None:", "if x.ops is None:", RT_REFUSED, file=RT),
+    m("rt_start_is_200", "a start is 202 + Location at the operation",
+      'return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")',
+      "return control.ok(doc)", RT_START, file=RT),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),

@@ -4502,6 +4502,77 @@
         "title": "Signal",
         "type": "object"
       },
+      "TraceDataset": {
+        "additionalProperties": false,
+        "description": "POST body. The provider and the user are the actor's, never a field.",
+        "properties": {
+          "dataset_id": {
+            "format": "uuid",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "grantor_org_id": {
+            "format": "uuid",
+            "title": "Grantor Org Id",
+            "type": "string"
+          },
+          "model_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "training",
+              "annotation"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "request_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Request Ids",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "train_bp": {
+            "default": 8000,
+            "minimum": 0.0,
+            "title": "Train Bp",
+            "type": "integer"
+          },
+          "validation_bp": {
+            "default": 1000,
+            "minimum": 0.0,
+            "title": "Validation Bp",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grantor_org_id",
+          "model_id",
+          "request_ids",
+          "dataset_id",
+          "version",
+          "purpose",
+          "seed"
+        ],
+        "title": "TraceDataset",
+        "type": "object"
+      },
       "TraceJudgeRun": {
         "additionalProperties": false,
         "description": "One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its\njudging grant is current): criterion scores only, never a rationale.",
@@ -10328,6 +10399,141 @@
           }
         ],
         "summary": "Part"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/from-traces": {
+      "post": {
+        "operationId": "postLabV1ProvidersByProviderDatasetsFromTraces",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraceDataset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "From Traces Start"
       }
     },
     "/lab/v1/providers/{provider}/datasets/imports": {

@@ -14,6 +14,11 @@ backend's `{detail, report?, leaks?}` shape the Lab's `httpDatasets` port reads.
 Stores: D7 (`PgLabDataStore`), L2 (`LabAccess` over `PgAccessStore`) and the Lab objects -
 the media store under `lab/<provider>/` (R182). Mounted only when the composition put a
 `LabDatasets` on `rt.lab_datasets` (LAB_DATASETS, off).
+
+`POST .../from-traces` (WR-AP10C-4, AP-10 row 92) is the one R270 route here: 202 + 0060's
+OperationDoc for `from_traces.start` (Location: AP-04's `GET /lab/v1/operations/{id}`). The
+actor is `rt.actors`' scoped to the path's workspace; without a composed `ops` (0060's
+`PgControlOps`) or session actors it answers 503.
 """
 from __future__ import annotations
 
@@ -29,11 +34,14 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.routing import APIRoute
 
+from ...contracts import api as wire
 from ...contracts import errors
 from ...datasets import acting_provider, imports, lineage, versions
+from ...lab.datasets import from_traces
 from ...lab.time import iso_z
-from .. import lab_auth
+from .. import control, lab_auth
 from . import intake
+from .lab_artifacts import ERRORS, IdempotencyKey
 
 if TYPE_CHECKING:
     from ...lab.access import LabAccess
@@ -54,6 +62,7 @@ class LabDatasets:
     store: object                           # D7: PgLabDataStore
     objects: object                         # the Lab objects (the media store, lab/<p>/)
     jobs: object = None                     # 0051's import-job queue: PgLabImportJobs
+    ops: object = None                      # 0060's ControlOps: the trace-dataset operations
 
 
 def refusal(error: Exception) -> JSONResponse:
@@ -244,4 +253,25 @@ def register(app: FastAPI, rt: Any, datasets: LabDatasets | None = None
                  user_of=lambda request: lab_auth.authenticate(request, x.sessions))
     for route in cast("list[APIRoute]", api.routes):   # on the app's table, as every router
         app.add_api_route(route.path, route.endpoint, methods=list(route.methods))
+    app.include_router(traced(x, getattr(rt, "actors", None)))
     return x
+
+
+def traced(x: LabDatasets, actors: control.ActorSource | None) -> APIRouter:
+    """WR-AP10C-4: the R270 trace -> dataset start."""
+    r270 = APIRouter(route_class=control.R270Route, responses=ERRORS)
+
+    @r270.post(PREFIX + "/from-traces", status_code=202, response_model=wire.OperationDoc,
+               operation_id="startTraceDataset")
+    async def from_traces_start(request: Request, provider: str,
+                                body: from_traces.TraceDataset, key: IdempotencyKey):
+        if x.ops is None or actors is None:
+            raise errors.DependencyUnavailable("trace datasets are not composed")
+        actor = await actors.actor(request)
+        if actor.audience == "session" and actor.provider_org_id is None:
+            actor = actor.model_copy(update={"provider_org_id": provider})   # a claim: start
+        elif actor.provider_org_id != provider:                            # checks membership
+            raise errors.NotFound("no such provider workspace")
+        doc = (await from_traces.start(x.ops, x.access, x.objects, actor, key, body)).operation.doc()
+        return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")
+    return r270
