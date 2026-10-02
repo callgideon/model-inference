@@ -22,8 +22,9 @@ writes it the way its readers already read it.
 The grantor is always the actor's own organization and the actor must be its owner, in a
 verified web session: no body field names an organization (`api.Wire` refuses extras), so a
 provider member - administrator or not - cannot grant itself a customer's content, and the SQL
-writers check the owner again. A suspended organization writes nothing (0027 refuses its
-grants and revocations alike; R33).
+writers check the owner again. A suspended organization writes nothing (R33) but one thing:
+it may still WITHDRAW a grant - a revocation goes through 0066's revoke-only door
+`infrx.lab_withdraw_access_grant`, the owner check without 0027's suspension refusal.
 
 ponytail: direct statements on the platform pool (`service_role`, as `PgAccessStore` and
 `PgTenantStore`); a dedicated `infrx_runtime` login needs SECURITY DEFINER writers (0063).
@@ -40,6 +41,7 @@ from ..contracts import api, errors
 from ..contracts.v2.records import AccessGrant, DataCategory, DataPurpose
 from ..gateway.capture import effective
 from ..state import rpc
+from ..state.jobstore import domain_error
 from ..state.lab_access import PgAccessStore
 
 Mode = Literal["off", "minimal", "full"]
@@ -246,7 +248,7 @@ class DataUse:
         return grant_doc(written, await self.store.db_now()), True
 
     async def revoke_grant(self, actor: api.Actor, grant_id: str) -> Grant:
-        org, user = await self._grantor(actor, write=True)
+        org, user = await self._grantor(actor)          # suspended or not: a withdrawal
         try:
             uuid.UUID(grant_id)
         except ValueError:
@@ -259,5 +261,8 @@ class DataUse:
             raise errors.NotFound("no such grant")
         current = await self.store.current_grant(org, row[0])
         if current is None or current.revoked_at is None:
-            current = await self.store.revoke_grant(user, org, row[0])
+            current = AccessGrant.model_validate(await rpc.call(
+                self.connect, "lab_withdraw_access_grant", {
+                    "actor_user_id": user, "grantor_org_id": org,
+                    "recipient_provider_org_id": row[0]}, error=domain_error))
         return grant_doc(current, await self.store.db_now())

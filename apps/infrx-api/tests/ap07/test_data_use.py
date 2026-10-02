@@ -276,6 +276,22 @@ def test_data_use__a_suspended_organization_decides_nothing(pg_world):
     assert consent_rows(w, w.C1) == []
 
 
+
+def test_data_use__a_suspended_organization_still_withdraws_its_grant(pg_world):
+    """Oracle (0066's revoke-only door, `lab_withdraw_access_grant`): the owner of a suspended
+    organization revokes its sharing grant - the very next content check is refused - and
+    still grants nothing (R33 holds for every write but the withdrawal)."""
+    w = pg_world
+    c = owner(w)
+    [grant] = c.get(routes.GRANTS_PATH).json()["data"]
+    w.conn.execute("update public.organizations set suspended = true, suspended_at = infrx.now(), "
+                   "suspension_reason = 'abuse' where id = %s", (w.C1,))
+    answer = c.delete(f"{routes.GRANTS_PATH}/{grant['grant_id']}")
+    assert answer.status_code == 200, answer.text
+    assert (answer.json()["version"], answer.json()["state"]) == (2, "revoked")
+    assert not may_read(w, v2.DataPurpose.provider_sharing)
+    assert c.post(routes.GRANTS_PATH, json=grant_body(w, grant_version=2)).status_code == 403
+
 # --- purpose grants --------------------------------------------------------------------------
 def test_data_use__grants_are_purpose_specific_versions(pg_world):
     """Oracle: a grant for external_judging is the pair's next version and permits that

@@ -130,6 +130,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("revoke_another_grantors", "another grantor's grant is not found", D,
        '"infrx.lab_access_grants where grant_id = %s and grantor_org_id = %s "',
        '"infrx.lab_access_grants where grant_id = %s and %s::uuid is not null "', REVOKE),
+    _m("suspended_cannot_withdraw", "a suspended organization still withdraws a grant", D,
+       "org, user = await self._grantor(actor)          # suspended or not",
+       "org, user = await self._grantor(actor, write=True)  # suspended or not",
+       U + "a_suspended_organization_still_withdraws_its_grant"),
+    _m("withdraw_through_0027", "a withdrawal is 0066's revoke-only door, not 0027's revoke", D,
+       '"lab_withdraw_access_grant", {', '"lab_revoke_access_grant", {',
+       U + "a_suspended_organization_still_withdraws_its_grant"),
     _m("revoke_replay_rewrites", "a second DELETE answers the revoked grant", D,
        "if current is None or current.revoked_at is None:", "if True:", REVOKE),
     # --- the Lab projection: one access state per reason (AP-07c) ------------------------------
