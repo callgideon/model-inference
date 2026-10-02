@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "0bbf1a37 (= claude/consumer-v1 tip)",
- "integration_head": "0bbf1a37",
+ "main": "cd6b9da3 (= claude/consumer-v1 tip)",
+ "integration_head": "cd6b9da3",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,11 +40,11 @@
    }
   ]
  },
- "revision": 405,
- "updated": "2026-10-02T04:04:03Z",
+ "revision": 406,
+ "updated": "2026-10-02T04:26:15Z",
  "agent_slots": {
   "total": 18,
-  "active": 15,
+  "active": 10,
   "reserved": 1,
   "note": "Wave 7 batch 2: seventeen Opus lanes dispatched 2026-10-02 from b05eb6f4 (lane-w7.js, batch 'Batch 2'); seven lanes on task-local PG keys, ten fake-only."
  },
@@ -12104,17 +12104,17 @@
    "branch": "codex/w7-api-publication",
    "worktree": ".claude/worktrees/codex-w7-api-publication",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "8de139fd",
    "isolation": {
     "ports": "tasklocal key ap6",
     "prefix": "infrx-ap6-*",
     "db": "infrx_ap6"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #92 (chained, running)",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -12123,7 +12123,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-publication-5be6dbb.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/gateway/routes/lab_control.py",
@@ -12181,17 +12183,17 @@
    "branch": "codex/w7-api-artifacts-2",
    "worktree": ".claude/worktrees/codex-w7-api-artifacts-2",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "be4f9846",
    "isolation": {
     "ports": "tasklocal key ap4",
     "prefix": "infrx-ap4-*",
     "db": "infrx_ap4"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #92 (chained, running)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -12200,7 +12202,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-artifacts-2-4a5a257.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/lab/artifacts/compose.py",
@@ -12300,9 +12304,9 @@
    },
    "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T04:04:03Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "merge #91 (chained)",
+   "next_action": "merge #92 (chained, running)",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -12452,17 +12456,17 @@
    "branch": "codex/w7-ux-lab-requests",
    "worktree": ".claude/worktrees/codex-w7-ux-lab-requests",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "bde57778",
    "isolation": {
     "ports": "none (fake-only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #92 (chained, running)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -12471,7 +12475,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-lab-requests-ebcdb6f.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/(provider)/requests/",
@@ -12564,17 +12570,17 @@
    "branch": "codex/w7-ux-lab-improve",
    "worktree": ".claude/worktrees/codex-w7-ux-lab-improve",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "a0cec5ea",
    "isolation": {
     "ports": "none (fake-only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #92 (chained, running)",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 9,
@@ -12583,7 +12589,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-lab-improve-07bf1b6.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/(provider)/datasets/",
@@ -12631,7 +12639,7 @@
   {
    "id": "W7-ux-verify",
    "task": "UX-11",
-   "slice": "fixtures, T01–T13 matrix runner, acceptance-report skeleton (wf_d3015eca-433)",
+   "slice": "fixtures, T01–T13 matrix runner, acceptance-report skeleton (wf_d3015eca-433); merge #91 integrated (cd6b9da3)",
    "agent": "opus",
    "branch": "codex/w7-ux-verify",
    "worktree": ".claude/worktrees/codex-w7-ux-verify",
@@ -12642,11 +12650,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T04:04:03Z",
+   "updated": "2026-10-02T04:26:15Z",
    "blocker": null,
-   "next_action": "merge #91 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -16236,6 +16244,12 @@
    "by": "implementation coordinator (session 03)",
    "what": "rev 405: merge #90 (ux-lab-evaluations) integrated at 0bbf1a37; the Lab e2e harness fixed (dead since #84) and the gate recorded RED-known (row 90) with its three causes; lane lab-e2e-fix opened; ux-verify + api-improve-2 → merge #91.",
    "source": "research/plan/consumer-v1/10-carried-work-register.md row 90"
+  },
+  {
+   "at": "2026-10-02T04:26:15Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 406: merge #91 (ux-verify) integrated at cd6b9da3; merge #92 chained (api-improve-2, api-publication, ux-lab-improve, api-artifacts-2, ux-lab-requests). Late schema requests for the 0066 follow-up: SR-AP06-1 (dev-key/wallet doors), SR-AP10C-1 (datasets worker grants), the artifacts role grants if it gets its own login.",
+   "source": "research/plan/evidence/w7/"
   }
  ],
  "history": {
