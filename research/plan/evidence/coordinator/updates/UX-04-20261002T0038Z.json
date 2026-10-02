@@ -1,0 +1,37 @@
+{
+  "task": "UX-04",
+  "lane": "ux-app",
+  "slice": "UX-04 complete (examples safety, first-call guide, compact card, Docs contents, UX-T03 fixture half, mutants)",
+  "activity": "review",
+  "at": "2026-10-02T00:38:00Z",
+  "head": "919de8e7",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-ux-app",
+  "branch": "codex/w7-ux-app",
+  "owned_paths": [
+    "apps/app/app/(console)/models/",
+    "apps/app/components/snippet.tsx",
+    "apps/app/app/(console)/docs/page.tsx",
+    "apps/app/app/(console)/docs/examples.ts",
+    "apps/app/tests/a/examples.test.ts",
+    "apps/app/tests/a/catalog-mutants.json",
+    "apps/app/tests/ux/first-call/",
+    "research/plan/evidence/w7/ux-app-919de8e.md",
+    "research/plan/evidence/coordinator/updates/UX-04-20261002T0038Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/first-call/examples.test.ts (before slice 1)", "exit": 1, "summary": "red: missing export VIDEO_URL_PLACEHOLDER"},
+    {"cmd": "node --test tests/ux/first-call/first-call.test.ts (before slice 2)", "exit": 1, "summary": "red: ERR_MODULE_NOT_FOUND models/first-call.ts"},
+    {"cmd": "make console-test", "exit": 0, "summary": "675 tests, 618 pass, 0 fail, 57 skipped (base 650/591/0/59)"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-built", "exit": 0, "summary": "build OK, i2a 22 pass"},
+    {"cmd": "node tests/ux/first-call/run-mutants.mjs", "exit": 0, "summary": "36 mutants, 36 killed; 2/2 self-checks; every case declared"},
+    {"cmd": "make console-mutants", "exit": 0, "summary": "212+217+195+47+46+21 killed, 0 survivors"},
+    {"cmd": "uv run --frozen pytest -q tests/g/test_app_examples.py", "exit": 0, "summary": "1 passed; example-calls.json unchanged"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "all slices green; remaining = review findings + merge reconciliation with ux-foundations (content.ts / catalog-mutants.json)", "at": "2026-10-02T00:38:00Z"},
+  "blockers": [],
+  "wiring_requests": ["Makefile console-mutants: append `cd apps/app && node tests/ux/first-call/run-mutants.mjs` (composed: make console-mutants exits 0, '36 mutants, 36 killed')"],
+  "evidence": ["research/plan/evidence/w7/ux-app-919de8e.md"]
+}
