@@ -97,11 +97,19 @@ def routes(app: FastAPI) -> list[APIRoute]:
     return [r for r in app.routes if isinstance(r, APIRoute)]
 
 
+BODY_METHODS = {"POST", "PUT", "PATCH"}
+
+
 def legacy(apps: dict[str, FastAPI]) -> dict[str, list[str]]:
-    """Per composition, the routes without a declared body (raw `Request`) or response."""
+    """Per composition, the routes that lack a declared response, or carry a body method
+    without a typed body. An R270 handler reads the raw `Request` for its request id and
+    actor; with a declared response that is documented, not legacy - unless a body method
+    parses that raw request by hand (no typed body)."""
+    def undocumented(route: APIRoute, method: str) -> bool:
+        request, response = shape(route)
+        return response == "none" or (method in BODY_METHODS and request == "raw")
     return {name: sorted(f"{method} {route.path_format}" for route in routes(app)
-                         for method in route.methods or () if "raw" in shape(route)
-                         or shape(route)[1] == "none")
+                         for method in route.methods or () if undocumented(route, method))
             for name, app in apps.items()}
 
 

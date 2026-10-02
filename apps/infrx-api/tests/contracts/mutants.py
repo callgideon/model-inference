@@ -1881,6 +1881,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_the_lab_tracks_develop_against_fakes",
        dies_by=("ValueError",)),          # the defect IS the raise: `unknown track`
     # R270 (wave 7): the shared control-route wire contract (infrx/contracts/api.py).
+    _m("ap00_a_raw_request_read_is_legacy", "a documented GET may read the raw Request",
+       "contracts/openapi/export.py", 'return response == "none" or (method in BODY_METHODS and request == "raw")',
+       'return response == "none" or request == "raw"',
+       "test_ap00_a_get_reading_the_request_with_a_declared_response_is_documented"),
     _m("r270_subclass_status_after_its_base", "a subclass's status row precedes its base class's",
        "contracts/api.py", '    (errors.OrgSuspended, 403, "suspended", False),\n', "",
        "test_r270_status_mapping_puts_subclasses_first"),

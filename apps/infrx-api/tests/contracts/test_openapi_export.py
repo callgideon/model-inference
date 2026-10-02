@@ -157,6 +157,14 @@ def test_ap00_the_baseline_is_exact_and_only_shrinks(apps):
     assert sum(len(entries) for entries in baseline.values()) <= BASELINE_ENTRIES
 
 
+def test_ap00_a_get_reading_the_request_with_a_declared_response_is_documented(apps):
+    """Oracle: an R270 read (raw `Request` for the request id + actor, `response_model`
+    declared) is not legacy; a body method with a raw body still is."""
+    legacy = export.legacy(exported(apps))
+    assert "GET /console/v1/credits" not in legacy["consumer"]
+    assert any(entry.startswith("POST ") for entry in legacy["consumer"])
+
+
 def test_ap00_lab_control_documents_its_bodies_responses_and_refusals(apps):
     """Oracle (the worked example): the control family's operations carry their pydantic
     request and response schemas, the provider query parameter and the `{refusal}` answers -
