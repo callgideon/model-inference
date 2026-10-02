@@ -280,7 +280,7 @@ test("U3-R03 each section fails on its own: a refusal, an outage or an unreadabl
     "/operator/v1/unknown-usage": answer(403, envelope("forbidden", "permission denied for relation")),
     "/operator/v1/wallet-drift": answer(503, envelope("dependency_unavailable", "relation not found")),
     "/operator/v1/audit": new Response("<html>", { status: 502 }),
-  }).view;
+  }).view.catch(() => assert.fail("one failed section took the whole page down"));
   assert.equal(view.accounts.ok, true);
   for (const section of [view.unknownUsage, view.drift, view.audit]) {
     assert.equal(section.ok, false);

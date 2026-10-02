@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// R32 for track C1: the read half's own mutation run.
+// R32 for track C (C0/C3A over infrx-api, AP-09): the App's read and action adapters' own mutation run.
 //
 // Same runner pattern as `tests/contracts/run-mutants.mjs` (F2's), pointed at C1's adapter instead of
 // the fake, because a mutant has to be judged by the cases C1 actually runs: the EXPORTED console
@@ -30,23 +30,17 @@ const jobs = Math.max(1, Number(flag("--jobs", "4")) || 4);
 const timeoutMs = Math.max(1000, Number(flag("--timeout", "120000")) || 120000);
 const keep = args.includes("--keep");
 
-/** What C1 runs: the exported conformance functions against the real services, and this track's tests. */
+/** What C0/C3A run over infrx-api (AP-09): this track's tests and the App's API-BOUNDARY inventory. */
 const SUITE = [
-  "tests/c/conformance/console-services.conformance.ts",
-  "tests/c/query-boundary.test.ts",
-  "tests/c/cursor.test.ts",
-  "tests/c/read-services.test.ts",
-  "tests/c/projection.test.ts",
-  "tests/c/credits.test.ts",
-  "tests/c/client-boundary.test.ts",
-  // C0: the consumer context and read port (the real-PostgREST twin skips without its stack).
   "tests/c/consumer.test.ts",
-  // C3A: the trusted consumer actions (the real-PostgREST twin skips without its stack).
   "tests/c/actions.test.ts",
+  "tests/c/client-boundary.test.ts",
   // S1-fix B2: the production preview gate is a module-level constant, so its case lives with the module.
   "app/(console)/usage/preview-context.test.ts",
-  // E3A F-2: the provider-route guard and its wiring in /dedicated, /teams (/traces moved to the Lab, V1M).
+  // E3A F-2: the provider-route guard and its wiring in /dedicated, /teams.
   "tests/c/provider-routes.test.ts",
+  // AP-09 API-BOUNDARY: the static inventory the gate reads.
+  "tests/boundary/api-boundary.test.ts",
 ];
 
 function prepareCopy() {
@@ -216,52 +210,27 @@ function classify(mutant, run, baselinePassing) {
  * The runner's own claims (R40's discipline, in the small): the three classifications a reviewer
  * asked for, checked against edits whose outcome is known. Run with `--self-test`.
  */
+const SELF_CASE = "a refusal keeps its contract code with fixed text; a stale cursor is invalid_cursor; an outage is dependency_unavailable";
 const SELF_TESTS = [
   {
     name: "a syntax error is a runner error, not a survival",
-    mutant: {
-      id: "SELF-SYNTAX",
-      file: "lib/services/cursor.ts",
-      find: "const MAX_CURSOR_CHARS = 512;",
-      replace: "const MAX_CURSOR_CHARS = ;",
-      cases: ["rejects a cursor it did not issue for this query"],
-    },
+    mutant: { id: "SELF-SYNTAX", file: "lib/api/result.ts", find: 'export const INEXACT = "Account data could not be read exactly.";', replace: "export const INEXACT = ;", cases: [SELF_CASE] },
     expect: "runner-error",
   },
   {
     name: "a no-op edit survives",
     mutant: {
       id: "SELF-NOOP",
-      file: "lib/services/cursor.ts",
-      find: "const MAX_CURSOR_CHARS = 512;",
-      replace: "const MAX_CURSOR_CHARS = 512; // self-test no-op",
-      cases: ["rejects a cursor it did not issue for this query"],
+      file: "lib/api/result.ts",
+      find: 'export const INEXACT = "Account data could not be read exactly.";',
+      replace: 'export const INEXACT = "Account data could not be read exactly."; // self-test no-op',
+      cases: [SELF_CASE],
     },
     expect: "survived",
   },
   {
-    name: "a kill that only the boundary guard produced is a runner error unless declared",
-    mutant: {
-      id: "SELF-GUARD",
-      file: "lib/services/console.ts",
-      // Nothing about the wallet identity: the read simply throws, and `guarded()` reports
-      // `internal_error`, which would otherwise read as a kill of whatever case asserted a read.
-      find: "async function walletFor(orgId: string): Promise<WalletBalance | null> {",
-      replace:
-        "async function walletFor(orgId: string): Promise<WalletBalance | null> {\n    throw new Error(\"self-test\");",
-      cases: ["balance is the ledger total minus reservations, and holds reduce what is available"],
-    },
-    expect: "runner-error",
-  },
-  {
     name: "a stale find is stale",
-    mutant: {
-      id: "SELF-STALE",
-      file: "lib/services/cursor.ts",
-      find: "const MAX_CURSOR_CHARS = 999999;",
-      replace: "const MAX_CURSOR_CHARS = 512;",
-      cases: ["rejects a cursor it did not issue for this query"],
-    },
+    mutant: { id: "SELF-STALE", file: "lib/api/result.ts", find: "export const INEXACT = 42;", replace: "export const INEXACT = 43;", cases: [SELF_CASE] },
     expect: "stale",
   },
 ];
@@ -317,7 +286,7 @@ try {
   }
   console.log(
     `baseline: ${baselinePassing.size} cases pass unmutated, ${baselineFailing.length} fail ` +
-      `(C2/C3 operations this task does not implement); ${mutants.length} mutants, ${jobs} at a time\n`,
+      `; ${mutants.length} mutants, ${jobs} at a time\n`,
   );
   for (let i = 1; i < jobs; i += 1) workers.push(prepareCopy());
 

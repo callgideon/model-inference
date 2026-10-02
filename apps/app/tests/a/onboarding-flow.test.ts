@@ -105,7 +105,7 @@ test("A2-CB-02 a callback the facade cannot answer is an invalid link, not a cra
     assert.deepEqual([calls.stored, calls.claims], [[], []]);
   }
   const { ports: thrown } = ports({ land: async () => { throw new Error("network"); } });
-  assert.equal(await completeCallback(q("code=c"), thrown), "/login?error=link_invalid");
+  assert.equal(await completeCallback(q("code=c"), thrown).catch(() => "threw"), "/login?error=link_invalid");
 });
 
 test("A2-CB-03 a verified callback stores the facade's session and claims the grant ONCE, as that session", async () => {

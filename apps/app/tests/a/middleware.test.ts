@@ -91,3 +91,16 @@ test("AP09-MW-05 facadeRefresh: 200 is the new session, only 401 is ended, anyth
   assert.equal(await facadeRefresh("r-1", answer(503, envelope("unavailable"))), "unavailable");
   assert.equal(await facadeRefresh("r-1", (async () => { throw new Error("down"); }) as unknown as typeof fetch), "unavailable");
 });
+
+test("AP09-MW-06 a cookie that is not exactly a session (no refresh token, no expiry, not ours) is signed out", async () => {
+  const bad = [
+    btoa(JSON.stringify({ access: "eyJ.a.b", refresh: "", expiresAt: now() + 3600 })),
+    btoa(JSON.stringify({ access: "eyJ.a.b", refresh: "r", expiresAt: "soon" })),
+    "not-base64-json",
+  ];
+  for (const value of bad) {
+    assert.equal(decodeSession(value), null, value);
+    const response = await updateSession(withCookie("/usage", value), async () => assert.fail("no refresh for a non-session"));
+    assert.match(response.headers.get("location") ?? "", /\/login\?next=%2Fusage$/, value);
+  }
+});

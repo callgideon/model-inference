@@ -143,11 +143,8 @@ export function claimOutcome(answer: ApiResult<S["GrantClaim"]>): OnboardingStat
  * `POST /console/v1/signup-grant/claim`, idempotent per individual, R71). Never throws.
  */
 export async function claimGrant(api: ConsumerApi): Promise<OnboardingState> {
-  try {
-    return claimOutcome(await api.call("post", "/console/v1/signup-grant/claim"));
-  } catch {
-    return { kind: "unavailable" };
-  }
+  // The transport answers every failure as a Result (never a throw): `claimOutcome` maps it.
+  return claimOutcome(await api.call("post", "/console/v1/signup-grant/claim"));
 }
 
 /**
@@ -205,13 +202,9 @@ export function walletBalance(answer: ApiResult<S["Credits"]>): WalletView {
   }
 }
 
-/** /welcome's read: `walletBalance`, and a throw is `unavailable`. */
+/** /welcome's read: `walletBalance` of one `GET /console/v1/credits` (a transport failure is a Result). */
 export async function welcomeWallet(api: ConsumerApi): Promise<WalletView> {
-  try {
-    return walletBalance(await api.call("get", "/console/v1/credits"));
-  } catch {
-    return { kind: "unavailable" };
-  }
+  return walletBalance(await api.call("get", "/console/v1/credits"));
 }
 
 // ------------------------------------------------------------------------ the callback ---
@@ -274,11 +267,7 @@ const extras = (e: EmailExtras) => ({
 });
 
 async function settle(call: () => Promise<ApiResult<unknown>>): Promise<"sent" | AuthFailure> {
-  try {
-    return settled(await call());
-  } catch {
-    return "unavailable";
-  }
+  return settled(await call());
 }
 
 export function requestSignup(api: ConsumerApi, email: string, password: string, origin: string, more: EmailExtras = {}) {

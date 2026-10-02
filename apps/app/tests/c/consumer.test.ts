@@ -227,7 +227,8 @@ test("U1R-AUTH-02 onceGets: one network call per GET url, every caller a fresh b
     return new Response('{"n":1}', { status: 200 });
   }) as unknown as typeof fetch);
   const [a, b] = await Promise.all([once("http://x/console/v1/me"), once("http://x/console/v1/me")]);
-  assert.deepEqual([await a.json(), await b.json()], [{ n: 1 }, { n: 1 }]);
+  const bodies = await Promise.all([a, b].map((r) => r.json().catch(() => "body already read")));
+  assert.deepEqual(bodies, [{ n: 1 }, { n: 1 }], "every caller reads its own body");
   assert.equal(calls, 1);
   await once("http://x/console/v1/me", { method: "POST" });
   await once("http://x/console/v1/me", { method: "POST" });

@@ -3,7 +3,7 @@
 // credential, no API-key minting and no credit arithmetic. Failure oracle: any such line added to
 // the App's source names its file, line and rule here.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -59,4 +59,24 @@ test("API-BOUNDARY: the App's deploy environment holds no service credential and
   const env = readFileSync(join(appRoot, "lib/deploy/env.ts"), "utf8");
   assert.doesNotMatch(env, /SUPABASE_SERVICE_ROLE_KEY|CONSOLE_CURSOR_SECRET/);
   assert.match(env, /INFRX_API_BASE_URL/);
+});
+
+test("AP09-E01 every API call the App makes is a documented operation of the consumer OpenAPI artifact", () => {
+  // Failure oracle: a page calling a route the API does not document (a typo, a Lab path, a route
+  // not yet exported) - the action would 404 in production while the typecheck of a cast passes.
+  // The artifact the linked client was generated from (packages/api-client/../../apps/infrx-api/openapi).
+  const client = realpathSync(join(appRoot, "node_modules/@infrx/api-client"));
+  const spec = JSON.parse(readFileSync(join(client, "../../apps/infrx-api/openapi/consumer.json"), "utf8")) as { paths: Record<string, Record<string, unknown>> };
+  const calls: string[] = [];
+  for (const file of productFiles(appRoot)) {
+    for (const m of readFileSync(join(appRoot, file), "utf8").matchAll(/\.call\(\s*"(get|post|put|delete|patch)",\s*"([^"]+)"/g)) {
+      calls.push(`${m[1]} ${m[2]} (${file})`);
+    }
+  }
+  assert.ok(calls.length >= 20, `the scan found ${calls.length} calls; it would prove nothing`);
+  const undocumented = calls.filter((call) => {
+    const [method, path] = call.split(" ");
+    return spec.paths[path]?.[method] === undefined;
+  });
+  assert.deepEqual(undocumented, []);
 });

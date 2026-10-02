@@ -109,6 +109,8 @@ test(T.ledgerScope, async () => {
   assert.ok(second.ok, "the second ledger page");
   assert.deepEqual(sent.map((s) => s.path), ["/console/v1/credit-ledger?limit=2", "/console/v1/credit-ledger?limit=2&cursor=opaque-2"]);
   assert.equal(second.value.next_cursor, null);
+  const usd = await apiCreditReads(scripted({ "/console/v1/credit-ledger": [answer(200, { data: [{ ...entry(1), amount: { amount: "-1.00000000", unit: "USD" } }] })] }).api).ledger({ limit: 2, cursor: null });
+  assert.equal(usd.ok ? null : usd.error.code, "internal_error", "a CREDIT ledger entry in another unit is refused, never relabelled");
   const stale = await apiCreditReads(scripted({ "/console/v1/credit-ledger": [answer(400, envelope("invalid_cursor"))] }).api).ledger({ limit: 2, cursor: "x),or(wallet_id.neq.0" });
   assert.equal(stale.ok ? null : stale.error.code, "invalid_cursor");
 });
