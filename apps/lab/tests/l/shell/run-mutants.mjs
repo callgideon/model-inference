@@ -163,7 +163,8 @@ const MUTANTS = [
   m("L1-X140", "the membership read is an RPC again", MEMBERS, 'const answer = await api.call("get", "/lab/v1/workspaces");',
     'const answer = await (api as unknown as { rpc(n: string): ReturnType<LabApi["call"]> }).rpc("lab_provider_memberships");', [C.t01]),
   m("L1-X141", "the review reads a table", REVIEW, "const KEYS = [", 'export const table = (c: { from(t: string): unknown }) => c.from("lab_trace_reviews");\nconst KEYS = [', [C.t01]),
-  m("L1-X142", "the guard loads a Supabase client", GUARD, 'import { cache } from "react";', 'import { cache } from "react";\nimport "@supabase/ssr";', [C.t01]),
+  // WR-AP09L-5 removed the package: a lazy import keeps the suites loading, so only the boundary scan can kill it.
+  m("L1-X142", "the guard loads a Supabase client", GUARD, 'import { cache } from "react";', 'import { cache } from "react";\nexport const supabase = () => import("@supabase/ssr");', [C.t01]),
   m("L1-X143", "the config names a Supabase setting", CONFIG, 'export const WORKSPACE_COOKIE = "infrx-lab-workspace";', 'export const WORKSPACE_COOKIE = "infrx-lab-workspace";\nexport const PROJECT = () => process.env.NEXT_PUBLIC_SUPABASE_URL;', [C.t01]),
   m("L1-X144", "the Lab calls an undocumented route", MEMBERS, '"/lab/v1/capabilities", { query', '"/lab/v1/capability", { query', [C.t02, C.m05]),
   m("L1-X145", "a hand-typed shell route drifts from the gateway's", PORT, '"/auth/v1/refresh": { post:', '"/auth/v1/refresh-token": { post:', [C.t03]),

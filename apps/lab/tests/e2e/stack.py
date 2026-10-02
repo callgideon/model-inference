@@ -69,7 +69,11 @@ def control_app(dsn: str, url: str):
     """R186's factory on its own INFRX_LAB_* settings, its session verifier pointed here."""
     from infrx.lab.control import app as control
     os.environ.update({control.DATABASE_URL: dsn, control.SUPABASE_URL: url,
-                       control.SUPABASE_KEY: "anon"})
+                       control.SUPABASE_KEY: "anon",
+                       # AP-09 09c: the Lab web signs in at the unit's auth facade and reads its
+                       # memberships/capabilities from the unit's identity routes (WR-AP09L-2,
+                       # WR-AP01-2); the review page's judge/review family needs LAB_JUDGE_API.
+                       "AUTH_FACADE": "1", "IDENTITY_API": "1", "LAB_JUDGE_API": "1"})
     for name in ("CLICKHOUSE_URL", "S3_TRACE_BUCKET"):
         os.environ.pop(name, None)
     return control.create_app()
