@@ -435,6 +435,9 @@ def test_ap11_a_dry_run_judge_is_labelled_and_never_a_judge_result(files, gatewa
         assert (stage(verdict, sid)["label"] or "").startswith("dry-run"), sid
     assert not [s for s in verdict["stages"] if s["label"] and s["id"] not in ("14", "15")]
     assert "dry run: no result is ever scored" in checks(stage(verdict, "14"))
+    edit(files[0], traces=False)                     # 14 cannot run: no label on a BLOCKED
+    _, verdict = run(files, gateway, "--state", str(files[2].with_name("other.json")))
+    assert stage(verdict, "14")["status"] == "BLOCKED" and stage(verdict, "14")["label"] is None
 
 
 def test_ap11_without_a_judge_the_judge_stages_are_blocked_on_p10(files, gateway):

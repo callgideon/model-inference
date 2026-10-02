@@ -298,8 +298,16 @@ MUTANTS: tuple[Mutant, ...] = (
        '                     label=evidence.get("label"))', "                     label=None)", DRY),
     _m("cleanup_stops_at_one_row", "one row's missing credential never stops the others", R,
        '                outcome = f"failed: {why}"', "                raise", CLEANUP),
+    _m("label_before_outputs", "a stage BLOCKED on its predecessor carries no label", L,
+       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n'
+       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
+       '        ctx.label(DRY_RUN)\n',
+       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
+       '        ctx.label(DRY_RUN)\n'
+       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n', DRY),
     _m("dry_run_unlabelled", "14's dry run is labelled", L,
-       "    if mode == \"dry_run\":\n        ctx.label(DRY_RUN)", "    if False:\n        ctx.label(DRY_RUN)",
+       "    if mode == \"dry_run\":                  # only a stage that runs carries the label\n"
+       "        ctx.label(DRY_RUN)", "    if False:\n        ctx.label(DRY_RUN)",
        DRY),
     _m("judge_without_p10", "14 is BLOCKED on P-10 without a live judge or a dry run", L,
        '    if mode not in ("dry_run", "live"):', "    if False:", NO_JUDGE),

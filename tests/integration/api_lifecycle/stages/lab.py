@@ -232,9 +232,9 @@ def s14(ctx) -> None:
     if mode not in ("dry_run", "live"):
         raise Blocked("BLOCKED[P-10] an approved media-capable judge, its secret reference, "
                       "payer and spend limit (config `judge`: live), or an isolated dry run")
-    if mode == "dry_run":
-        ctx.label(DRY_RUN)
     q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]
+    if mode == "dry_run":                  # only a stage that runs carries the label
+        ctx.label(DRY_RUN)
     if ctx.composed("AP-02"):
         ctx.publish(credits_before=_json(ctx.call("GET", "/console/v1/credits",
                                                   actor="consumer_a_web")))
