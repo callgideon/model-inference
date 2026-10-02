@@ -357,6 +357,24 @@ class Engine:
                    "the generation did not end normally"))
         return observed, [_smoke(name, why) for name, ok, why in checks if not ok]
 
+    async def in_flight(self, allocation: Allocation) -> int:
+        """vLLM's `vllm:num_requests_running` (summed over its labels); 0 when the engine no
+        longer answers - a dead engine has nothing left to finish."""
+        try:
+            async with self.client(allocation, 5.0) as c:
+                answer = await c.get("/metrics")
+        except httpx.HTTPError:
+            return 0
+        total = 0.0
+        for line in answer.text.splitlines():
+            name, _, value = line.rpartition(" ")
+            if name.startswith("vllm:num_requests_running"):
+                try:
+                    total += float(value)
+                except ValueError:
+                    continue
+        return int(total)
+
     async def models(self, allocation: Allocation) -> list[str] | None:
         """The model ids it serves, or None while it does not answer."""
         try:

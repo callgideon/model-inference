@@ -21,14 +21,15 @@ import shutil
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from ...contracts import api, errors
 from ...contracts.api import FieldError
 from ...contracts.v2.records import DeploymentState, ServingRevision
 from ...state.control_ops import Operation, input_hash
 from . import KINDS, PROFILE, LabHosting, Target, gaps, latest
-from .engine import Engine, InstallRefused, Launcher, Runtime, install, measure, mismatches, \
-    options_digest
+from .engine import (BoxLauncher, Engine, InstallRefused, Launcher, Runtime, install, measure,
+                     mismatches, options_digest)
 from .store import Allocation, Hold, Receipt, tag
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ DEADLINE_S = 7200                 # a create or smoke operation ends within this
 VALIDATION_WINDOW_S = 3600        # a draft/validating deployment not ready by then is retired
 IDENTITY_TTL_S = SMOKE_TTL_S = 86400
 HEALTH_EVERY_S, HEALTH_TTL_S = 60, 180
+DRAIN_S = 300                     # a retire waits this long (from its request) for in-flight work
 SMOKE_TIMEOUT_S = 120.0           # one finite clip <= 72 s answers in ~2-14 s measured (c=1..16)
 
 
@@ -108,8 +110,7 @@ class Controller:
         return int(finished)
 
     async def _late(self, op: Operation) -> bool:
-        created = datetime.fromisoformat(op.created_at.replace("Z", "+00:00"))
-        return await self.store.db_now() - created > timedelta(seconds=DEADLINE_S)
+        return await self.store.db_now() - _at(op.created_at) > timedelta(seconds=DEADLINE_S)
 
     # --- shared ----------------------------------------------------------------------
     async def _deployment(self, deployment_id: str):
@@ -318,8 +319,15 @@ class Controller:
         if others:
             await self.ops.advance(op.operation_id, hold.fence, "waiting", retry_after_s=5)
             return False
-        await self.ops.advance(op.operation_id, hold.fence, "drain")
-        await self._retired(hold, "retired")
+        await self.ops.advance(op.operation_id, hold.fence, "drain", retry_after_s=2)
+        await self._retired(hold, "retired")                   # nothing new resolves to it
+        self.boundary("retired")
+        allocation = await self.store.allocation(deployment_id)
+        if (allocation is not None and allocation.state == "launched"
+                and await self.engine.in_flight(allocation)
+                and await self.store.db_now() < _at(op.created_at)
+                + timedelta(seconds=DRAIN_S)):
+            return False                       # its in-flight requests finish first (bounded)
         await self.ops.advance(op.operation_id, hold.fence, "teardown")
         await self._teardown(hold)
         await self.ops.finish(op.operation_id, hold.fence, "succeeded")
@@ -327,6 +335,9 @@ class Controller:
 
     # --- reconciliation ------------------------------------------------------------------
     async def _reconcile(self) -> None:
+        """Every live deployment no operation holds: retire it when it expired, was left a
+        draft, stayed validating past its window, or is retired with resources left; else
+        observe a launched engine's health (runtime identity + served name) every minute."""
         now = await self.store.db_now()
         for hosting in await self.store.live():
             deployment_id = hosting.deployment_revision_id
@@ -340,7 +351,71 @@ class Controller:
                                      f"reconcile:{deployment_id}",
                                      input_hash({"retire": deployment_id}),
                                      resource_kind="deployment", resource_id=deployment_id)
+                continue
+            allocation = await self.store.allocation(deployment_id)
+            if allocation is None or allocation.state != "launched":
+                continue
+            health = latest(await self.store.receipts(deployment_id), allocation).get("health")
+            if health is None or now >= health.checked_at + timedelta(seconds=HEALTH_EVERY_S):
+                await self._health(allocation, await self._serving(deployment_id))
+
+    async def _health(self, allocation: Allocation, serving: ServingRevision) -> Receipt:
+        runtime = await self.launcher.inspect(allocation)
+        models = await self.engine.models(allocation)
+        reasons = mismatches(serving, runtime, models, self._dir(allocation),
+                             served_model=PROFILE.served_model_name, harness=HARNESS)
+        return await self._receipt(None, allocation, "health", {
+            "served_models": models, **_runtime(runtime)}, reasons, HEALTH_TTL_S)
+
+
+def _at(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
 
 
 def op_now(op: Operation) -> datetime:
-    return datetime.fromisoformat(op.updated_at.replace("Z", "+00:00"))
+    return _at(op.updated_at)
+
+
+# --- the `hosting` worker role (WR-AP05-3: `python -m infrx.lab.workers hosting`) -----------
+PASS_S = 2.0
+NEEDS = ("HOSTING_SLOT", "HOSTING_PORT", "HOSTING_MODEL_ROOT", "HOSTING_SOURCE_DIR",
+         "HOSTING_SMOKE_VIDEO")
+
+
+def target_from(env) -> Target | None:
+    """The configured slot (infra/lab/hosting/README.md step 3), or None: this deployment of
+    the platform hosts nothing and the profile reads `unavailable`. A candidate port is
+    8100-8199: never the serving engine's 8000."""
+    if not env.get("HOSTING_SLOT"):
+        return None
+    port = env["HOSTING_PORT"]
+    if not (port.isdigit() and 8100 <= int(port) <= 8199):
+        raise ValueError("HOSTING_PORT must be a candidate port 8100-8199")
+    return Target(slot=env["HOSTING_SLOT"], port=int(port),
+                  model_root=Path(env["HOSTING_MODEL_ROOT"]),
+                  source_dir=Path(env["HOSTING_SOURCE_DIR"]),
+                  smoke_video=Path(env["HOSTING_SMOKE_VIDEO"]))
+
+
+def launcher_from(env) -> Launcher:
+    """The one approved host's launcher (LocalLauncher is the isolated proofs' only)."""
+    return BoxLauncher(Path(env.get("HOSTING_ENV_DIR", "/etc/infrx-lab/hosting")))
+
+
+def tasks(env, connect, *, owner: str) -> dict:
+    """The role's one pass over the Lab database (the control login's grants: 0060-0062)."""
+    from ...state.control_ops import PgControlOps
+    from ...state.lab_access import PgAccessStore
+    from ...worker.__main__ import every
+    from ..access import LabAccess
+    from ..artifacts.store import PgArtifactStore
+    from ..compose import lab_control
+    from .store import PgHostingStore
+    target = target_from(env)
+    if target is None:
+        raise ValueError("HOSTING_SLOT: the hosting role needs its slot")
+    access = LabAccess(PgAccessStore(connect))
+    hosting = LabHosting(access, lab_control(connect, access), PgArtifactStore(connect),
+                         PgControlOps(connect), PgHostingStore(connect), target)
+    controller = Controller(hosting, launcher_from(env), target, owner=owner)
+    return {"hosting": lambda: every(PASS_S, controller.run_once, "hosting pass")}

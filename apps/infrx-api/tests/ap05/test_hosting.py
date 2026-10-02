@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import pathlib
 import signal
 import subprocess
 import sys
+import time
+import types
 import uuid
 from datetime import UTC, datetime
 
@@ -205,35 +208,6 @@ def test_ap05__a_taken_slot_is_capacity_unavailable_never_an_eviction(world):
     world.drive()
     assert world.op(third_op).state == "succeeded"
     assert list(world.launcher.running) == [f"infrx-hosting-{third}"]
-
-
-@pytest.mark.pg
-@pytest.mark.parametrize("boundary", BOUNDARIES)
-def test_ap05__a_controller_process_killed_at_each_boundary_resumes_once(pg_world, boundary):
-    """SIGKILL, not an exception: the dead holder's lease, engine and half-done work remain;
-    the next holder finds the engine by its tag (no second start), re-uses what it recorded,
-    and the dead holder's fence writes nothing."""
-    w = pg_world
-    operation, deployment = w.deployed()
-    died = subprocess.run((sys.executable, str(PROC), w.service_dsn, w.dsn, str(w.tmp),
-                           "doomed", boundary), timeout=240, capture_output=True)
-    assert died.returncode == -signal.SIGKILL, died.stderr.decode()[-2000:]
-    dead = run(w.ops.get(operation, w.actors["dev_a"]))
-    assert (dead.state, dead.lease_owner) == ("running", "doomed")
-    already = len(w.launcher.running)
-    assert already == (1 if boundary in ("launched", "identity") else 0)
-    w.advance(120)                                         # the dead holder's lease expires
-    w.drive(w.controller(owner="resumer"))
-    doc = w.op(operation)
-    assert (doc.state, doc.error) == ("succeeded", None), doc
-    assert w.state(deployment) == "validating"
-    assert len(w.launcher.running) == 1                    # exactly one engine, ever
-    assert w.launcher.starts == ([] if already else [f"infrx-hosting-{deployment}"])
-    identities = [r for r in run(w.store.receipts(deployment)) if r.kind == "identity"]
-    assert len(identities) == 1 and identities[0].passed
-    with pytest.raises(errors.Conflict):                   # the dead holder's fence
-        run(w.store.transition(Hold(operation, dead.fence, deployment), deployment, w.A,
-                               "validating", "retired", "a dead controller"))
 
 
 @pytest.mark.pg
@@ -574,3 +548,214 @@ def test_ap05__a_controller_stopped_mid_smoke_never_smokes_twice(fake_world, bou
     assert len(w.engine.seen) == 1
     mine = [r for r in run(w.store.receipts(deployment)) if r.operation_id == operation]
     assert sorted(r.kind for r in mine) == ["identity", "smoke"]
+
+
+# ============================== 05e: health, expiry, retirement, drain, restarts ===
+def ready(world) -> str:
+    _, deployment = created(world)
+    smoked(world, deployment)
+    world.drive()
+    assert world.state(deployment) == "ready_private"
+    return deployment
+
+
+def kill_engine(world, deployment: str) -> None:
+    """The engine process dies (outside the controller)."""
+    if world.real:
+        held = types.SimpleNamespace(resource_tag=f"infrx-hosting-{deployment}")
+        pid = json.loads((world.launcher.inner.state_dir / f"{held.resource_tag}.json")
+                         .read_text())["pid"]
+        os.killpg(pid, signal.SIGKILL)
+        for _ in range(100):
+            if run(world.launcher.inspect(held)) is None:
+                return
+            time.sleep(0.05)
+    else:
+        world.launcher.running.pop(f"infrx-hosting-{deployment}")
+        world.engine.up = False
+
+
+def test_ap05__a_lost_engine_or_a_stale_check_makes_a_ready_deployment_unavailable(world):
+    deployment = ready(world)
+    status = world.readiness(deployment)
+    assert status["ready"] and status["reasons"] == [] and status["health"]["passed"]
+    assert world.detail(deployment)["ready"]
+    world.advance(200)                                    # no observation for > its TTL
+    assert world.readiness(deployment)["reasons"] == ["health_expired"]
+    world.drive()                                         # a restarted controller re-observes
+    assert world.readiness(deployment)["ready"]
+    kill_engine(world, deployment)
+    world.advance(61)
+    world.drive()
+    status = world.readiness(deployment)
+    assert not status["ready"] and status["reasons"] == ["health_failed"]
+    assert status["health"]["reasons"][0]["field"] == "runtime"
+    assert world.state(deployment) == "ready_private"     # the domain state is not readiness
+
+
+def test_ap05__expired_stuck_and_abandoned_deployments_are_retired(fake_world):
+    w = fake_world
+    deployment = ready(w)
+    w.advance(7201)                                       # its own expire_after_s
+    w.drive()
+    assert w.state(deployment) == "retired" and w.launcher.running == {}
+    assert w.detail(deployment)["allocation"]["state"] == "released"
+    _, stuck = created(w)                                 # validating, never smoked
+    w.advance(3601)
+    w.drive()
+    assert w.state(stuck) == "retired" and w.launcher.running == {}
+
+
+def test_ap05__an_engine_that_never_answers_or_a_late_operation_fails_terminally(fake_world):
+    w = fake_world
+    w.engine.up = False
+    operation, deployment = w.deployed()
+    w.drive()
+    assert w.op(operation).state == "running"             # still within its launch window
+    w.advance(901)
+    w.drive()
+    doc = w.op(operation)
+    assert (doc.state, doc.error.code) == ("failed", "engine_timeout")
+    assert w.state(deployment) == "retired" and w.launcher.running == {}
+    w.engine.up = True
+    late, stale = w.deployed()                            # no controller ran for 2 h
+    w.advance(7201)
+    w.drive()
+    assert w.op(late).error.code == "deadline_exceeded" and w.state(stale) == "retired"
+
+
+def test_ap05__retire_waits_for_running_work_and_in_flight_requests(fake_world):
+    w = fake_world
+    operation, deployment = w.deployed()
+
+    def stop(name):
+        if name == "launched":
+            raise KeyboardInterrupt(name)
+    with pytest.raises(KeyboardInterrupt):
+        w.drive(w.controller(owner="first", boundary=stop))
+    retire = w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key()).json()
+    w.drive()                                             # the create's holder is still live
+    assert w.op(retire["operation_id"]).phase == "waiting"
+    assert w.op(operation).state == "cancel_requested"
+    w.advance(120)
+    w.drive()
+    assert w.op(operation).state == "cancelled"           # the create stopped first
+    assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
+    again = w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key())
+    assert again.status_code == 202
+    w.drive()
+    assert w.op(again.json()["operation_id"]).state == "succeeded"   # a retired one at once
+    served = ready(w)
+    retire = w.call("POST", f"{DEPLOYMENTS}/{served}/retire", key=w.key()).json()
+    w.engine.running = 2                                  # two requests in flight
+    controller = w.controller()                           # one holder throughout
+    w.drive(controller)
+    doc = w.op(retire["operation_id"])
+    assert (doc.state, doc.phase) == ("running", "drain")
+    assert w.state(served) == "retired"                   # nothing new is admitted
+    assert len(w.launcher.running) == 1                   # but it still answers its two
+    w.engine.running = 0
+    w.drive(controller)
+    assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
+
+
+@pytest.mark.pg
+def test_ap05__a_real_in_flight_request_finishes_before_its_engine_stops(pg_world):
+    import threading
+
+    import httpx
+    w = pg_world
+    deployment = ready(w)
+    httpx.post(f"http://127.0.0.1:{ENGINE_PORT}/_control", json={"delta_gap_s": 0.4},
+               timeout=5)
+    answer: dict = {}
+
+    def stream():
+        with httpx.stream("POST", f"http://127.0.0.1:{ENGINE_PORT}/v1/chat/completions",
+                          json={"model": PROFILE.served_model_name, "stream": True,
+                                "messages": [{"role": "user", "content": "hi"}]},
+                          timeout=60) as r:
+            answer["body"] = b"".join(r.iter_bytes())
+    client = threading.Thread(target=stream)
+    client.start()
+    time.sleep(0.5)
+    retire = w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key()).json()
+    w.drive()
+    client.join(30)
+    assert answer["body"].rstrip().endswith(b"data: [DONE]")    # not cut by the teardown
+    assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
+
+
+KILLS = (*(("create", b) for b in BOUNDARIES), *(("smoke", b) for b in SMOKE_BOUNDARIES),
+         *(("retire", b) for b in ("retired", "stopped", "released")))
+
+
+@pytest.mark.pg
+@pytest.mark.parametrize("phase,boundary", KILLS, ids=[f"{p}-{b}" for p, b in KILLS])
+def test_ap05__a_controller_process_killed_at_each_boundary_resumes_once(pg_world, phase,
+                                                                        boundary):
+    """SIGKILL at every durable boundary of every operation, not an exception: the dead
+    holder's lease, engine and half-done work remain; the next holder finds the engine by its
+    tag (no second start), re-uses what the operation recorded (no second smoke request),
+    finishes it once, and the dead holder's fence writes nothing."""
+    w = pg_world
+    if phase == "create":
+        operation, deployment = w.deployed()
+    else:
+        _, deployment = created(w)
+        operation = smoked(w, deployment) if phase == "smoke" else w.call(
+            "POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key()).json()["operation_id"]
+    starts = len(w.launcher.starts)
+    died = subprocess.run((sys.executable, str(PROC), w.service_dsn, w.dsn, str(w.tmp),
+                           "doomed", boundary), timeout=240, capture_output=True)
+    assert died.returncode == -signal.SIGKILL, died.stderr.decode()[-2000:]
+    dead = run(w.ops.get(operation, w.actors["dev_a"]))
+    assert (dead.state, dead.lease_owner) == ("running", "doomed")
+    survived = len(w.launcher.running)
+    w.advance(120)                                         # the dead holder's lease expires
+    w.drive(w.controller(owner="resumer"))
+    doc = w.op(operation)
+    assert (doc.state, doc.error) == ("succeeded", None), doc
+    with pytest.raises(errors.Conflict):                   # the dead holder's fence
+        run(w.store.record(Hold(operation, dead.fence, deployment), run(
+            w.store.receipts(deployment))[0].model_copy(update={"receipt_id": str(uuid.uuid4())})))
+    mine = [r for r in run(w.store.receipts(deployment)) if r.operation_id == operation]
+    if phase == "create":
+        assert survived == (1 if boundary in ("launched", "identity") else 0)
+        assert w.state(deployment) == "validating" and len(w.launcher.running) == 1
+        assert len(w.launcher.starts) == starts + (0 if survived else 1)   # one engine, ever
+        assert [r.kind for r in mine] == ["identity"] and mine[0].passed
+    elif phase == "smoke":
+        assert w.state(deployment) == "ready_private" and len(w.launcher.running) == 1
+        assert len(engine_requests(w)) == 1                # one smoke request, ever
+        assert sorted(r.kind for r in mine) == ["identity", "smoke"]
+        assert all(r.passed for r in mine)
+    else:
+        assert w.state(deployment) == "retired" and w.launcher.running == {}
+        assert w.detail(deployment)["allocation"]["state"] == "released"
+        assert not any(w.target.model_root.iterdir())
+        assert len(w.launcher.starts) == starts           # nothing was started again
+
+
+def test_ap05__the_hosting_role_hosts_only_its_configured_slot_on_the_box_launcher(tmp_path):
+    from infrx.lab.hosting.controller import NEEDS, launcher_from, target_from, tasks
+    from infrx.lab.hosting.engine import BoxLauncher
+    env = {"HOSTING_SLOT": "pilot-l40s/candidate-0", "HOSTING_PORT": "8100",
+           "HOSTING_MODEL_ROOT": "/opt/dlami/nvme/hosting",
+           "HOSTING_SOURCE_DIR": "/opt/dlami/nvme/marlin2b",
+           "HOSTING_SMOKE_VIDEO": "/opt/dlami/nvme/corpus/c001.mp4",
+           "HOSTING_ENV_DIR": str(tmp_path)}
+    assert set(NEEDS) <= set(env)
+    target = target_from(env)
+    assert (target.slot, target.port, str(target.source_dir)) == \
+        ("pilot-l40s/candidate-0", 8100, "/opt/dlami/nvme/marlin2b")
+    assert target_from({}) is None                         # no slot: hosting unavailable
+    launcher = launcher_from(env)
+    assert isinstance(launcher, BoxLauncher) and launcher.env_dir == tmp_path
+    for port in ("8000", "80", "x"):                       # never the serving engine's port
+        with pytest.raises(ValueError):
+            target_from({**env, "HOSTING_PORT": port})
+
+    async def connect():
+        raise AssertionError("composing connects to nothing")
+    assert set(tasks(env, connect, owner="lab-hosting-1")) == {"hosting"}

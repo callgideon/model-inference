@@ -356,7 +356,7 @@ class PgHostingStore:
         r = receipt.model_dump(mode="json")
         sql = ("insert into infrx.hosting_receipts (receipt_id, deployment_revision_id, "
                "allocation_id, kind, passed, observed, reasons, operation_id, checked_at, "
-               "expires_at) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+               "expires_at) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning receipt_id")
         params = (r["receipt_id"], r["deployment_revision_id"], r["allocation_id"], r["kind"],
                   r["passed"], Jsonb(r["observed"]), Jsonb(r["reasons"]), r["operation_id"],
                   receipt.checked_at, receipt.expires_at)
