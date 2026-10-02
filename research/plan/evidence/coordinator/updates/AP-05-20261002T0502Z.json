@@ -1,0 +1,28 @@
+{
+  "task": "AP-05",
+  "lane": "api-hosting",
+  "slice": "05a-05e (local, fake engine; the real L40S smoke is a coordinator window)",
+  "activity": "review",
+  "at": "2026-10-02T05:02:58Z",
+  "head": "be7e3795",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-hosting",
+  "branch": "codex/w7-api-hosting",
+  "owned_paths": ["apps/app/supabase/migrations/0062_deployments_hosting.sql", "apps/infrx-api/infrx/lab/hosting/", "apps/infrx-api/infrx/gateway/routes/lab_deployments.py", "infra/lab/hosting/", "apps/infrx-api/tests/ap05/", "apps/infrx-api/tests/d/test_upgrade_0062_mutants.py", "tests/integration/lab_hosting/"],
+  "commands": [
+    {"cmd": "pytest -q tests/ap05 (before each slice's code)", "exit": 1, "summary": "red per slice: 05a ImportError, 05b 1 failed, 05c 5 failed, 05d 11 failed, 05e 3 failed"},
+    {"cmd": "INFRX_D_TASK=ap5 pytest -q tests/ap05", "exit": 0, "summary": "82 passed, 1 skipped"},
+    {"cmd": "INFRX_D_TASK=ap5 INFRX_D1_IMAGE=supabase pytest -q tests/ap05/test_hosting.py -m pg", "exit": 0, "summary": "30 passed"},
+    {"cmd": "INFRX_D_TASK=ap5 pytest -q tests/d -k 0062 (plain and supabase image)", "exit": 0, "summary": "33 passed each; 8 checks, upgrade+rerun+rollback+forward, 22 SQL mutants killed"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/ap05/test_mutants.py -k 'not pg_mutant'", "exit": 0, "summary": "79 passed; 73 fake mutants (5 on the bash box step) killed, 0 survivors, every case (32) covered"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap5 pytest -q tests/ap05/test_mutants.py -k pg_mutant", "exit": 0, "summary": "5 PostgreSQL/real-process mutants killed (real_in_flight_ignored after its case was lengthened: rerun 1 passed)"},
+    {"cmd": "python tests/integration/lab_hosting/runner.py --out <dir>", "exit": 0, "summary": "gate PASS g01-g04 (verdict research/plan/evidence/w7/api-hosting-be7e379-gate-verdict.json)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "pyright (make api-typecheck count)", "exit": 0, "summary": "458 errors (baseline 458), none in lane files"},
+    {"cmd": "WR patch applied: test_makefile_mutant_lists + test_harness; INFRX_D_TASK=ap5 test_upgrade_lab, test_migrate, test_control_ops*", "exit": 1, "summary": "all green except 2 pre-existing base failures (api-lifecycle.sh AWS name: AP-11; test_control_ops_upgrade 0060-only: api-schema-2)"}
+  ],
+  "estimate": {"optimistic_h": 4, "likely_h": 7, "pessimistic_h": 12, "confidence": "medium", "basis": "every local oracle green on ap5 (both images), real-process kill + gate pass; remaining = 4 composition patches, the gateway dev-endpoint routing hop (AP-06/coordinator), one box window (vLLM load + serving-engine restore)", "at": "2026-10-02T05:02:58Z"},
+  "blockers": ["real candidate smoke: coordinator GPU window on the pilot L40S (infra/lab/hosting/README.md) + AP-04 adoption of the production Marlin artifact", "private admission path through the gateway: dev-endpoint -> candidate routing + provider_dev key (AP-06/coordinator)", "0062 hosted: an R151 window"],
+  "wiring_requests": ["WR-AP05-1 app.py ROUTERS += lab_deployments (+ OpenAPI/api-client regen)", "WR-AP05-2 LAB_HOSTING switch + rt.lab_hosting in lab/control/app.py; lab_control.py stand-in smoke route not mounted when lab_hosting is set", "WR-AP05-3 workers role hosting (controller.tasks, NEEDS)", "WR-AP05-4 Makefile api-mutants (0062 SQL list, tests/ap05) + lab-hosting target", "WR-AP05-5 test_harness.py migration list += 0062", "WR-AP05-6 test_upgrade_lab.py NEW_TABLES += 0062 tables", "WR-AP05-7 AP-04 GET /lab/v1/operations/{id} must read 0060", "WR-AP05-8 api_lifecycle stage 04/05 run over AP-05 routes"],
+  "evidence": ["research/plan/evidence/w7/api-hosting-be7e379.md", "research/plan/evidence/w7/api-hosting-be7e379-WR.patch", "research/plan/evidence/w7/api-hosting-be7e379-gate-verdict.json"]
+}

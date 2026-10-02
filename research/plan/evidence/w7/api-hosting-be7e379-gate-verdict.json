@@ -1,0 +1,42 @@
+{
+  "task": "AP-05",
+  "gate": "LAB-HOSTING",
+  "verdict": "PASS",
+  "exit": 0,
+  "label": "isolated: ap5 PostgreSQL, fake vLLM as a real process, controller processes; no GPU, no real model, declared engine image, no gateway private admission path",
+  "head": "be7e3795bbee548101fc73f91c760ac0189094a0",
+  "key": "ap5",
+  "ports": {
+    "postgres": 57556,
+    "engine": 57557
+  },
+  "started": "2026-10-02T05:01:15+00:00",
+  "seconds": 15.1,
+  "scenarios": {
+    "g01": {
+      "title": "the private lifecycle through the API: deploy, identity, smoke, ready, retire",
+      "status": "PASS",
+      "reasons": []
+    },
+    "g02": {
+      "title": "one slot, one candidate: a second deployment is capacity_unavailable",
+      "status": "PASS",
+      "reasons": []
+    },
+    "g03": {
+      "title": "a controller process killed mid-create is replaced; its engine adopted, once",
+      "status": "PASS",
+      "reasons": []
+    },
+    "g04": {
+      "title": "a wrong runtime never becomes ready; its resources are torn down",
+      "status": "PASS",
+      "reasons": []
+    }
+  },
+  "evidence": {
+    "junit": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/ap05/gate/scenarios.xml",
+    "log": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/ap05/gate/scenarios.log"
+  },
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/lab_hosting/runner.py --out <dir>"
+}
