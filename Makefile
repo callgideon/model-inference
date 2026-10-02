@@ -70,6 +70,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py
 	# 0058's SQL list (lab-sql LW9: WR-LW7-3a, WR-C7-TALLY): needs Docker, skips visibly without it; task-local key l3
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw9.py
+	# 0060's SQL list + control_ops.py's Python list (api-schema, AP-00 00d, R271): the SQL needs Docker, skips visibly without it; task-local key ap0
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
