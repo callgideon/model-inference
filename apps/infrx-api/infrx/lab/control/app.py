@@ -84,7 +84,8 @@ def _compose(lab: dict[str, str], store):
                                                 timeout=httpx.Timeout(5, connect=2)),
                               lab[SUPABASE_KEY])
     access = LabAccess(PgAccessStore(connect))
-    control = Routes(sessions, access, lab_operations(connect, access))
+    operations = lab_operations(connect, access)
+    control = Routes(sessions, access, operations)
     pilot = settings.pilot
     traces = lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
@@ -106,7 +107,7 @@ def _compose(lab: dict[str, str], store):
                                        "actors on the unit (not composed)")
         from ...gateway.routes.operator_publication import Publication
         from ...state.control_ops import PgControlOps
-        publication = Publication(control.operations, PgControlOps(connect))
+        publication = Publication(operations, PgControlOps(connect))
     return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
                            lab_publication=publication,
                            **_families(settings, lab, connect)), control, traces
