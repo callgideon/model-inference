@@ -1,0 +1,103 @@
+{
+  "task": "AP-00",
+  "lane": "api-schema-2",
+  "slice": "00d remainder (0065 SR-AP01-1; 0066 SR-AP10-1/2/3, AP-07 withdraw door, 0060 cancel; pins 0060..0066; row 88; whole-set re-proof)",
+  "activity": "review",
+  "at": "2026-10-02T04:56:00Z",
+  "head": "4c65973",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-schema-2",
+  "branch": "codex/w7-api-schema-2",
+  "owned_paths": [
+    "apps/app/supabase/migrations/0065_identity_functions.sql",
+    "apps/app/supabase/migrations/0066_wave7_grants_and_reads.sql",
+    "apps/app/supabase/migrations/README.md",
+    "apps/infrx-api/infrx/state/control_ops.py",
+    "apps/infrx-api/tests/d/test_upgrade_0065_mutants.py",
+    "apps/infrx-api/tests/d/test_upgrade_0066_mutants.py",
+    "apps/infrx-api/tests/d/test_control_ops_units.py",
+    "apps/infrx-api/tests/d/test_control_ops_mutants.py",
+    "apps/infrx-api/tests/d/test_control_ops_upgrade.py",
+    "apps/infrx-api/tests/d/test_upgrade_lab.py",
+    "apps/infrx-api/tests/i/test_known_good_proof.py",
+    "apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py",
+    "tests/integration/test_harness.py",
+    "research/plan/evidence/w7/api-schema-2-4c65973.md",
+    "research/plan/evidence/w7/api-schema-2-4c65973-WR-AS2.patch",
+    "research/plan/evidence/coordinator/updates/AP-00-20261002T0456Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap0 pytest -q tests/d/test_upgrade_0065_0066_mutants.py -k checks (before 0065/0066)",
+      "exit": 1,
+      "summary": "seam red: 4 failed UndefinedFunction; 0066 checks 5 failed"
+    },
+    {
+      "cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap0 pytest -q tests/d/test_upgrade_lab.py -k lw4_reads (base)",
+      "exit": 1,
+      "summary": "row 88 reproduced; root cause: postgres not superuser + ADMIN-only membership (no grant missing); fixed in the test"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap0 pytest -q tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py",
+      "exit": 0,
+      "summary": "0065 15/15, 0066 21/21 killed after fixes; guards green"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap0 pytest -q tests/d/test_control_ops_mutants.py",
+      "exit": 0,
+      "summary": "104 passed: 59 SQL + 42 Python killed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap0 pytest -q <non-mutant tests/d> tests/l3sql tests/i/test_migrate.py",
+      "exit": 1,
+      "summary": "791 passed; 2 failed: d8 control-login probe (WR-AS2-2), test_operations_pg (pre-existing)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap0 pytest -q <lane proofs + rehearsal + mutants>",
+      "exit": 0,
+      "summary": "149 passed on the Supabase image"
+    },
+    {
+      "cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap0 pytest -q <non-mutant tests/d> tests/l3sql tests/i/test_migrate.py",
+      "exit": 1,
+      "summary": "785 passed; 8 failed, identical without 0065/0066 (pre-existing: row-88-class role switch + operations_pg)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k hosted_migrate_*; tests/i/lab/test_mutants.py -k r151_post_check_file_name",
+      "exit": 0,
+      "summary": "pin mutants killed (5 + 3 passed)"
+    },
+    {
+      "cmd": "make api-lint; make api-typecheck",
+      "exit": 0,
+      "summary": "clean; pyright 458 (baseline 458)"
+    },
+    {
+      "cmd": "tests/integration/test_makefile_mutant_lists.py with WR-AS2-1 (transient)",
+      "exit": 0,
+      "summary": "7 passed (7 failed without)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "0065/0066, pins, row 88 and the both-image re-proof done at 4c65973 (~6 h of 5/8/14); left: WR-AS2-1/2 at merge, one review round, a rehearsal rerun if 0062 merges first (~5 min per image)",
+    "at": "2026-10-02T04:56:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-AS2-1 Makefile api-mutants: ap0 line for tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py",
+    "WR-AS2-2 tests/d/test_code_mutants_lw8.py GRANTED + nine SR-AP10-3 names; tests/d/code_mutants_d8.py drop q_experiment_any_report/q_experiments_unscoped, q_role_other_lab -> lab_tombstone_samples; tests/d/test_d8_requests.py other_lab probe -> lab_tombstone_samples"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-schema-2-4c65973.md",
+    "research/plan/evidence/w7/api-schema-2-4c65973-WR-AS2.patch"
+  ]
+}

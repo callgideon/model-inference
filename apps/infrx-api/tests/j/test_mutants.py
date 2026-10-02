@@ -135,7 +135,8 @@ def test_every_judge_module_is_covered():
     judge = SUITE_DIR.parents[1] / "infrx" / "judge"
     modules = {str(path.relative_to(judge)) for path in judge.rglob("*.py")
                if path.name != "__init__.py"}       # J3: subpackages count too
-    covered = {str(pathlib.Path(m.file).relative_to("judge")) for m in ALL
+    from tests.ap08 import mutants as ap08   # AP-08's lists mutate judge/ too (start, goldset)
+    covered = {str(pathlib.Path(m.file).relative_to("judge")) for m in (*ALL, *ap08.MUTANTS)
                if m.file.startswith("judge/")}
     assert modules <= covered, f"no mutant touches {sorted(modules - covered)}"
 

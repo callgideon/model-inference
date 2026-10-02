@@ -1,0 +1,32 @@
+[Unit]
+# AP-05: one private candidate engine on 127.0.0.1:%i (a Lab deployment's; never public).
+# Started and stopped ONLY by the hosting controller's BoxLauncher
+# (apps/infrx-api/infrx/lab/hosting/engine.py), which writes /etc/infrx-lab/hosting/%i.env
+# (INFRX_HOSTING_TAG = the deployment's resource tag, WEIGHTS = its installed, verified model
+# directory) first. serve.sh is the pinned launch (image by digest, the W3 flags, loopback,
+# /model read-only), so the candidate runs exactly the profile's engine options; its
+# container is marlin2b-%i. The L40S holds one engine at --gpu-memory-utilization 0.90: a
+# candidate runs only in a coordinator window that has paused marlin2b-vllm.service
+# (infra/lab/hosting/README.md). Port 8000 is the serving engine's and is refused.
+Description=AP-05 candidate engine (docker, 127.0.0.1:%i; never public)
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/etc/infrx-lab/hosting/%i.env
+
+[Service]
+User=ubuntu
+Environment=PORT=%i
+Environment=GPU=0
+Environment=WEIGHTS_ROOT=/opt/dlami/nvme
+Environment=HOME=/home/ubuntu
+# the profile's two settings (ENGINE_MAX_NUM_SEQS, PROCESSING_CACHE_DIR) from their one
+# source, as marlin2b-vllm.service reads them; then the deployment's own file (WEIGHTS)
+EnvironmentFile=/etc/marlin2b-gateway.env
+EnvironmentFile=/etc/infrx-lab/hosting/%i.env
+ExecStartPre=/bin/sh -c 'test "%i" != 8000'
+ExecStartPre=-/usr/bin/docker rm -f marlin2b-%i
+ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh
+ExecStop=/usr/bin/docker stop -t 30 marlin2b-%i
+TimeoutStopSec=60
+TimeoutStartSec=900
+Restart=no

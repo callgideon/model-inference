@@ -8,8 +8,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, MIN_PASSWORD_LENGTH as MIN_LENGTH, authFailure, type AuthFailure } from "../flow";
+import { updatePassword } from "../auth-actions";
+import { FAILURE_COPY, MIN_PASSWORD_LENGTH as MIN_LENGTH } from "../flow";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -28,13 +28,10 @@ export default function UpdatePasswordPage() {
     setPending(true);
     setError(null);
 
-    const { error } = await createClient()
-      .auth.updateUser({ password })
-      .catch(() => ({ error: { status: 0 } }));
-    if (error) {
-      const failure: AuthFailure = authFailure(error);
-      setExpired(failure === "link_expired");
-      setError(FAILURE_COPY[failure]);
+    const outcome = await updatePassword(password).catch(() => "unavailable" as const);
+    if (outcome !== "updated") {
+      setExpired(outcome === "link_expired");
+      setError(FAILURE_COPY[outcome]);
       setPending(false);
       return;
     }

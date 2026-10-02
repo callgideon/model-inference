@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/v1/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend */
+        post: operations["postAuthV1Resend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/v1/sign-in": {
         parameters: {
             query?: never;
@@ -1185,8 +1202,7 @@ export interface components {
         };
         /** AuthAvailability */
         AuthAvailability: {
-            /** Captcha Required */
-            captcha_required: boolean;
+            captcha: components["schemas"]["Captcha"];
             recovery: components["schemas"]["Availability"];
             sign_in: components["schemas"]["Availability"];
             sign_up: components["schemas"]["Availability"];
@@ -1207,6 +1223,19 @@ export interface components {
             state: "configured" | "disabled" | "unavailable" | "unknown";
             /** Verified At */
             verified_at?: string | null;
+        };
+        /**
+         * Captcha
+         * @description LR-02: whether the password doors need a challenge, and the widget a form renders.
+         */
+        Captcha: {
+            /** Provider */
+            provider?: string | null;
+            /** Required */
+            required: boolean;
+            /** Site Key */
+            site_key?: string | null;
+            state: components["schemas"]["Availability"];
         };
         /**
          * CaptureRequest
@@ -1737,6 +1766,8 @@ export interface components {
         /** Me */
         Me: {
             actor: components["schemas"]["Actor"];
+            /** Email */
+            email?: string | null;
             signup_grant: components["schemas"]["GrantStatus"];
             /**
              * State
@@ -1927,7 +1958,7 @@ export interface components {
         };
         /** ProviderCreated */
         ProviderCreated: {
-            administrator?: components["schemas"]["infrx__console__session__Member"] | null;
+            administrator?: components["schemas"]["infrx__state__identity__Member"] | null;
             provider: components["schemas"]["Provider"];
         };
         /** ProviderRequest */
@@ -2010,6 +2041,20 @@ export interface components {
             /** Usage Certainty */
             usage_certainty: string | null;
         };
+        /**
+         * Resend
+         * @description WR-AP09-RESEND: a new sign-up verification link for this address.
+         */
+        Resend: {
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /** Code Challenge */
+            code_challenge?: string | null;
+            /** Email */
+            email: string;
+            /** Redirect To */
+            redirect_to?: string | null;
+        };
         /** RevisionDoc */
         RevisionDoc: {
             /** Artifact Id */
@@ -2088,6 +2133,8 @@ export interface components {
         };
         /** SignIn */
         SignIn: {
+            /** Captcha Token */
+            captcha_token?: string | null;
             /** Email */
             email: string;
             /**
@@ -2254,8 +2301,22 @@ export interface components {
             /** User Id */
             user_id: string;
         };
+        /** ListPage[Member] */
+        infrx__contracts__api__ListPage_Member___1: {
+            /** Data */
+            data: components["schemas"]["infrx__state__identity__Member"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[Member] */
+        infrx__contracts__api__ListPage_Member___2: {
+            /** Data */
+            data: components["schemas"]["infrx__console__reads__Member"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Member */
-        infrx__console__session__Member: {
+        infrx__state__identity__Member: {
             /** Email */
             email: string;
             /**
@@ -2271,20 +2332,6 @@ export interface components {
             role: string;
             /** User Id */
             user_id: string;
-        };
-        /** ListPage[Member] */
-        infrx__contracts__api__ListPage_Member___1: {
-            /** Data */
-            data: components["schemas"]["infrx__console__session__Member"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-        };
-        /** ListPage[Member] */
-        infrx__contracts__api__ListPage_Member___2: {
-            /** Data */
-            data: components["schemas"]["infrx__console__reads__Member"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
         };
     };
     responses: never;
@@ -2437,6 +2484,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1Resend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Resend"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sent"];
                 };
             };
             /** @description Validation Error */
@@ -4660,7 +4740,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["infrx__console__session__Member"];
+                    "application/json": components["schemas"]["infrx__state__identity__Member"];
                 };
             };
             /** @description Validation Error */
@@ -4692,7 +4772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["infrx__console__session__Member"];
+                    "application/json": components["schemas"]["infrx__state__identity__Member"];
                 };
             };
             /** @description Validation Error */

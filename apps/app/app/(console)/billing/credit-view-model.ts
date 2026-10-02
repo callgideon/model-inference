@@ -19,7 +19,6 @@ import {
 } from "../../../lib/contracts/v2/money-units.ts";
 import type { Page, Result } from "../../../lib/contracts/types.ts";
 import {
-  spentCredit,
   type CreditLedgerEntry,
   type CreditWallet,
   type LegacyUsd,
@@ -67,13 +66,13 @@ const UNAVAILABLE = "Unavailable";
 export function creditFigures(wallet: CreditWallet, spent: Credit | null): CreditFigure[] {
   return [
     {
-      label: "Available",
+      label: "Available to use",
       value: credits(wallet.available),
       hint: "Spendable now: your balance minus what running requests hold.",
       emphasis: true,
     },
     {
-      label: "Reserved",
+      label: "Reserved for requests",
       value: credits(wallet.reservedTotal),
       hint: "Held for requests in progress or awaiting reconciliation. Charged or released when they settle; not spent.",
       emphasis: false,
@@ -140,10 +139,12 @@ export function creditAccountState(wallet: CreditWallet | null): CreditAccountSt
   return { kind: "funded" };
 }
 
+const GRANT = "10,000 promotional credits, granted once after verification.";
+
 export function grantLine(wallet: CreditWallet): string {
   return wallet.signupGrantedAt === null
-    ? "One-time 10,000 credit signup grant: not received yet."
-    : `One-time signup grant of 10,000 credits, received ${instantLabel(wallet.signupGrantedAt)}.`;
+    ? `${GRANT} Not received yet.`
+    : `${GRANT} Received ${instantLabel(wallet.signupGrantedAt)}.`;
 }
 
 /**
@@ -166,18 +167,15 @@ export type CreditCardModel = {
 };
 
 /**
- * The card as a state. `creditsIn` is null when it was not read; its failure only makes "Spent"
- * unavailable, because available and reserved come from the wallet row itself.
+ * The card as a state. "Spent" is the API's own figure; when it cannot say (null), only "Spent" is
+ * unavailable, because available and reserved are stated on the wallet itself.
  */
-export function creditCardState(
-  wallet: Result<CreditWallet | null>,
-  creditsIn: Result<Credit | null> | null,
-): ViewState<CreditCardModel> {
+export function creditCardState(wallet: Result<CreditWallet | null>): ViewState<CreditCardModel> {
   return mapState(viewStateOf(wallet, () => false), (found) => {
     if (found === null) {
       return { figures: [], grant: "", state: creditAccountState(null), reconciles: true, notice: CREDITS_NOTICE };
     }
-    const spent = creditsIn !== null && creditsIn.ok ? spentCredit(found, creditsIn.value) : null;
+    const spent = found.spent;
     return {
       figures: creditFigures(found, spent),
       grant: grantLine(found),
@@ -193,7 +191,7 @@ export function creditCardState(
 // ---------------------------------------------------------------------------
 
 const KIND_LABELS: Record<string, string> = {
-  signup_grant: "One-time signup grant",
+  signup_grant: "Promotional credit grant",
   operator_adjustment: "Adjustment",
   operator_allocation: "Allocation",
   inference_debit: "Request charge",
@@ -202,7 +200,10 @@ const KIND_LABELS: Record<string, string> = {
 export type LedgerEntryView = {
   id: string;
   when: string;
+  /** The fixed label for the event, "Other" for one this page does not know. */
   kind: string;
+  /** The ledger's own event code, shown beside the label. */
+  code: string;
   reason: string;
   amount: string;
   detailHref: string | null;
@@ -213,6 +214,7 @@ export function ledgerEntryView(entry: CreditLedgerEntry): LedgerEntryView {
     id: entry.id,
     when: instantLabel(entry.createdAt),
     kind: Object.hasOwn(KIND_LABELS, entry.kind) ? KIND_LABELS[entry.kind] : "Other",
+    code: entry.kind,
     reason: entry.reason === "" ? "—" : entry.reason,
     amount: signedAmount(entry.amount, "CREDIT"),
     detailHref: entry.requestId === null ? null : requestDetailHref(entry.requestId),
@@ -265,7 +267,6 @@ export type CreditsPageModel = {
 export function creditsPageModel(input: {
   state: PageCursor;
   wallet: Result<CreditWallet | null>;
-  creditsIn: Result<Credit | null> | null;
   /** null when not read: there is no wallet to read it for. */
   ledger: Result<Page<CreditLedgerEntry>> | null;
   legacy: Result<LegacyUsd> | null;
@@ -275,7 +276,7 @@ export function creditsPageModel(input: {
   return {
     here: ledgerHref(state),
     firstHref,
-    card: creditCardState(input.wallet, input.creditsIn),
+    card: creditCardState(input.wallet),
     ledger:
       input.ledger === null
         ? // Not read. With no wallet that is "no entries"; after a failed wallet read it is that error.

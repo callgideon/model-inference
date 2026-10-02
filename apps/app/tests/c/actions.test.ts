@@ -1,60 +1,40 @@
 // node --test "tests/**/*.test.ts"
 //
-// C3A: the trusted consumer actions (CONSOLE-FLOWS, DUR-RLS, CREDIT-SPEND's "no optimistic success").
-//
-// The decisions under test, each with the defect it catches:
-// - the tenant, the creator, the audience and the grant's individual come from the server-resolved
-//   consumer context, never from the input: a smuggled org/role/audience/amount/actor is refused;
-// - only a verified individual with a granted wallet may mint a key; a suspended one may still revoke;
-// - the key plaintext exists only in the first response; a replay (double-click, retry) never mints a
-//   second key and never shows a secret; a lost response is revoke-and-recreate, not redisplay;
-// - revocation is idempotent and tenant-scoped (another tenant's key is `not_found`, not revoked);
-// - the server actions (`app/actions.ts` -> `consoleActions`) refuse a cross-site request before
-//   resolving anyone, and revalidate only after an acknowledged change;
-// - the DB's own error text never reaches a caller; a write whose outcome is unknown says so;
-// - operator actions need operator authority, a reason and an idempotency key, and the audit actor is
-//   the session, never the form.
-//
-// The same actions run against real PostgREST in `actions-postgrest.test.ts`.
+// C3A over infrx-api (AP-09 09b): the trusted consumer actions (CONSOLE-FLOWS, CREDIT-SPEND's "no
+// optimistic success"). Each case names the defect it catches:
+// - an input with a smuggled org/role/audience/amount/actor is refused before any call;
+// - a key is minted by the API (one POST /console/v1/keys with the dialog's Idempotency-Key): the
+//   App holds no generator, no hash and no replay memory; the plaintext only on the first answer, a
+//   replay (`secret_returned: false`) is "created, revoke and create another", never a secret;
+// - revocation is DELETE /console/v1/keys/{id}; another tenant's key is the API's 404;
+// - the server actions refuse a cross-site request before anything, and revalidate only after an
+//   acknowledged change; the API's own text never reaches a caller; an unknown outcome says so;
+// - operator actions need operator authority, a reason and an idempotency key; the actor is the session.
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
+import { answer, envelope, recordingApi, type Sent } from "../../lib/fake-api.ts";
 import type { Result } from "../../lib/contracts/types.ts";
-import type { ConsumerAccount, ConsumerContext } from "../../lib/services/console.ts";
 import {
   consoleActions,
-  createConsumerActions,
+  createKey,
+  CREATE_UNKNOWN,
   operatorCommand,
+  revokeKey,
   runOperatorCommand,
   sameOrigin,
-  supabaseKeyStore,
   type ActionDeps,
-  type KeyClient,
-  type KeyStore,
   type OperatorPort,
 } from "../../lib/services/actions.ts";
 
 const ME = "c1000000-0000-4000-8000-000000000001";
 const OTHER = "c1000000-0000-4000-8000-000000000002";
 const MY_ORG = "0e000000-0000-4000-8000-000000000001";
-const MY_WALLET = "aaaaaaaa-0000-4000-8000-000000000001";
 const KEY = "c7000000-0000-4000-8000-000000000001";
-const AT = "2026-09-25T12:00:00.000Z";
-/** `keyOf` projects every timestamp to six fractional digits. */
+const AT = "2026-09-25T12:00:00Z";
 const AT6 = "2026-09-25T12:00:00.000000Z";
-
-const account: ConsumerAccount = { userId: ME, email: "me@example.com", walletId: MY_WALLET, orgId: MY_ORG, suspended: false };
-const ready: ConsumerContext = { state: "ready", account };
-const suspended: ConsumerContext = { state: "ready", account: { ...account, suspended: true } };
-const onboarding: ConsumerContext = { state: "onboarding", userId: ME, email: "me@example.com" };
-const unverified: ConsumerContext = { state: "unverified", userId: ME, email: "me@example.com" };
-const NOT_READY: [string, ConsumerContext, string][] = [
-  ["signed out", { state: "signed_out" }, "forbidden"],
-  ["unverified", unverified, "forbidden"],
-  ["onboarding", onboarding, "forbidden"],
-  ["unavailable", { state: "unavailable" }, "dependency_unavailable"],
-];
+const API_KEY = { key_id: KEY, name: "ci", prefix: "sk-infrx-abcd1234", created_at: AT, revoked_at: null };
+const CREATED = { key: API_KEY, secret: "sk-infrx-" + "s".repeat(40), secret_returned: true, replayed: false };
 
 function valueOf<T>(result: Result<T>, what: string): T {
   if (!result.ok) assert.fail(`${what}: expected success, got ${result.error.code} (${result.error.message})`);
@@ -65,214 +45,80 @@ function codeOf(result: Result<unknown>): string {
   return result.ok ? "ok" : result.error.code;
 }
 
-type Answer = { data: unknown; error: { code?: string; message?: string } | null };
-type StoredKey = { id: string; org_id: string; created_by: string; name: string; prefix: string; key_hash: string; revoked_at: string | null };
-
-/** A key table that behaves like `public.api_keys` under the owner's JWT for the three calls used. */
-function memoryStore(options: { failInsert?: Answer["error"]; failRevoke?: Answer["error"]; slow?: boolean; rlsFiltersRevoke?: boolean } = {}) {
-  const rows: StoredKey[] = [
-    { id: "c7000000-0000-4000-8000-0000000000f2", org_id: "0e000000-0000-4000-8000-000000000002", created_by: OTHER, name: "theirs", prefix: "sk-infrx-theirs00", key_hash: "x", revoked_at: null },
-  ];
-  const calls: string[] = [];
-  let next = 0;
-  const view = (row: StoredKey) => ({
-    id: row.id, name: row.name, prefix: row.prefix, created_at: AT, last_used_at: null, revoked_at: row.revoked_at, trace_mode: null,
-  });
-  const store: KeyStore = {
-    async insert(row) {
-      calls.push("insert");
-      if (options.slow) await new Promise((resolve) => setTimeout(resolve, 5));
-      if (options.failInsert) return { data: null, error: options.failInsert };
-      const id = next === 0 ? KEY : `c7000000-0000-4000-8000-${String(next).padStart(12, "0")}`;
-      next += 1;
-      const stored = { id, revoked_at: null, ...row };
-      rows.push(stored);
-      return { data: [view(stored)], error: null };
-    },
-    async revoke(orgId, keyId, at) {
-      calls.push("revoke");
-      if (options.failRevoke) return { data: null, error: options.failRevoke };
-      // A non-owner's update that RLS filters out: no error, no rows, nothing changed.
-      if (options.rlsFiltersRevoke) return { data: [], error: null };
-      const hit = rows.filter((row) => row.id === keyId && row.org_id === orgId && row.revoked_at === null);
-      for (const row of hit) row.revoked_at = at;
-      return { data: hit.map(view), error: null };
-    },
-    async find(orgId, keyId) {
-      calls.push("find");
-      return { data: rows.filter((row) => row.id === keyId && row.org_id === orgId).map(view), error: null };
-    },
-  };
-  return { store, rows, calls };
-}
-
-const actions = () => createConsumerActions({ now: () => new Date(AT) });
+const calls = (sent: Sent[]) => sent.map((s) => `${s.method} ${s.path}`);
 
 // ------------------------------------------------------------------------------------ key create
 
-test("key create: minted server-side for the context's own org and user, secret once, hash stored", async () => {
-  const { store, rows } = memoryStore();
-  const created = valueOf(await actions().createKey(ready, store, { name: "  laptop  " }), "create");
-  assert.equal(created.replayed, false);
-  assert.match(created.secret ?? "", /^sk-infrx-[A-Za-z0-9]{40}$/);
-  const stored = rows[rows.length - 1];
-  assert.equal(stored.org_id, MY_ORG);
-  assert.equal(stored.created_by, ME);
-  assert.equal(stored.name, "laptop");
-  assert.equal(stored.prefix, (created.secret ?? "").slice(0, 17));
-  assert.equal(stored.key_hash, createHash("sha256").update(created.secret ?? "").digest("hex"));
-  assert.ok(!JSON.stringify(stored).includes(created.secret ?? "?"), "the plaintext is never stored");
-  assert.deepEqual(Object.keys(stored).sort(), ["created_by", "id", "key_hash", "name", "org_id", "prefix", "revoked_at"]);
+test("key create: one POST /console/v1/keys with the name and the dialog's idempotency key; the secret once", async () => {
+  const { api, sent } = recordingApi(() => answer(201, CREATED));
+  const created = valueOf(await createKey(api, { name: "  ci  ", idempotency_key: "dialog-1" }), "create");
+  assert.deepEqual(sent.map((s) => [s.method, s.path, s.body, s.idempotencyKey]), [["POST", "/console/v1/keys", { name: "ci" }, "dialog-1"]]);
+  assert.deepEqual(created, { id: KEY, name: "ci", prefix: "sk-infrx-abcd1234", created_at: AT6, last_used_at: null, revoked_at: null, trace_mode: null, secret: CREATED.secret, replayed: false });
+  const anonymous = recordingApi(() => answer(201, CREATED));
+  await createKey(anonymous.api, { name: "ci" });
+  assert.match(anonymous.sent[0].idempotencyKey ?? "", /^[0-9a-f-]{36}$/, "no dialog key: a fresh one, so the API still dedupes this call");
 });
 
-test("key create: a smuggled org, role, audience, amount or unknown field is refused before any write", async () => {
-  for (const smuggled of [
-    { name: "k", org_id: OTHER },
-    { name: "k", role: "owner" },
-    { name: "k", audience: "operator" },
-    { name: "k", amount: "10000" },
-    { name: "k", created_by: OTHER },
-    null,
-    "k",
+test("key create: a smuggled org, role, audience, amount or unknown field is refused before any call", async () => {
+  const { api, sent } = recordingApi(() => answer(201, CREATED));
+  for (const field of ["org_id", "role", "audience", "amount", "created_by", "key_hash", "secret"]) {
+    assert.equal(codeOf(await createKey(api, { name: "k", [field]: "x" })), "invalid_request", field);
+  }
+  assert.equal(codeOf(await createKey(api, null)), "invalid_request");
+  assert.equal(codeOf(await createKey(api, ["k"])), "invalid_request");
+  assert.deepEqual(sent, []);
+});
+
+test("key create: name, idempotency key and capture validation (capture is not offered to consumers)", async () => {
+  const { api, sent } = recordingApi(() => answer(201, CREATED));
+  for (const name of ["", "   ", "x".repeat(201), 7]) assert.equal(codeOf(await createKey(api, { name })), "invalid_request", String(name));
+  assert.equal(codeOf(await createKey(api, { name: "k", trace_mode: "full" })), "unsupported_parameter");
+  for (const key of ["", 5, "k".repeat(201)]) assert.equal(codeOf(await createKey(api, { name: "k", idempotency_key: key })), "invalid_request");
+  assert.deepEqual(sent, []);
+  valueOf(await createKey(api, { name: "k", trace_mode: "off" }), "off is allowed");
+});
+
+test("key create: a replay (secret_returned false) is never a secret, however the answer reads", async () => {
+  for (const body of [
+    { ...CREATED, secret: null, secret_returned: false, replayed: true },
+    { ...CREATED, secret_returned: false },
+    { ...CREATED, replayed: true },
   ]) {
-    const { store, calls } = memoryStore();
-    const result = await actions().createKey(ready, store, smuggled);
-    assert.equal(codeOf(result), "invalid_request", JSON.stringify(smuggled));
-    assert.deepEqual(calls, [], "nothing is written for a refused input");
+    const created = valueOf(await createKey(recordingApi(() => answer(200, body)).api, { name: "ci", idempotency_key: "dialog-1" }), "replay");
+    assert.deepEqual([created.secret, created.replayed], [null, true], JSON.stringify(body));
   }
 });
 
-test("key create: name and capture validation (capture is not offered to consumers)", async () => {
-  for (const [input, code] of [
-    [{ name: "" }, "invalid_request"],
-    [{ name: "   " }, "invalid_request"],
-    [{ name: 7 }, "invalid_request"],
-    [{ name: "x".repeat(201) }, "invalid_request"],
-    [{ name: "k", trace_mode: "full" }, "unsupported_parameter"],
-    [{ name: "k", trace_mode: "minimal" }, "unsupported_parameter"],
-    [{ name: "k", idempotency_key: 5 }, "invalid_request"],
-    [{ name: "k", idempotency_key: "" }, "invalid_request"],
-  ] as const) {
-    const { store, calls } = memoryStore();
-    assert.equal(codeOf(await actions().createKey(ready, store, input)), code, JSON.stringify(input));
-    assert.deepEqual(calls, []);
+test("key create: the API's refusals keep their code with fixed text; a lost answer says what to do if it committed", async () => {
+  const refusal = async (status: number, code: string) => createKey(recordingApi(() => answer(status, envelope(code))).api, { name: "k", idempotency_key: "d" });
+  const suspended = await refusal(403, "org_suspended");
+  assert.equal(codeOf(suspended), "org_suspended");
+  assert.match(suspended.ok ? "" : suspended.error.message, /revoked but not created/);
+  assert.equal(codeOf(await refusal(409, "idempotency_conflict")), "idempotency_conflict");
+  assert.equal(codeOf(await refusal(401, "invalid_api_key")), "forbidden", "a dead session is 'sign in again'");
+  for (const lost of [await refusal(503, "dependency_unavailable"), await createKey(recordingApi(() => { throw new Error("socket hang up"); }).api, { name: "k" })]) {
+    assert.equal(codeOf(lost), "dependency_unavailable");
+    assert.equal(lost.ok ? "" : lost.error.message, CREATE_UNKNOWN);
   }
-  const { store } = memoryStore();
-  valueOf(await actions().createKey(ready, store, { name: "x".repeat(200), trace_mode: "off" }), "200 chars, capture off");
-});
-
-test("key create: only a ready, unsuspended individual may mint a key", async () => {
-  for (const [label, context, code] of NOT_READY) {
-    const { store, calls } = memoryStore();
-    assert.equal(codeOf(await actions().createKey(context, store, { name: "k" })), code, label);
-    assert.deepEqual(calls, [], label);
-  }
-  const { store, calls } = memoryStore();
-  assert.equal(codeOf(await actions().createKey(suspended, store, { name: "k" })), "org_suspended");
-  assert.deepEqual(calls, []);
-});
-
-test("key create: a replay under the same idempotency key never mints twice and never shows a secret", async () => {
-  const { store, calls } = memoryStore();
-  const act = actions();
-  const first = valueOf(await act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-1" }), "first");
-  const again = valueOf(await act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-1" }), "replay");
-  assert.equal(first.replayed, false);
-  assert.ok(first.secret !== null);
-  assert.equal(again.replayed, true);
-  assert.equal(again.secret, null);
-  assert.equal(again.id, first.id);
-  assert.equal(calls.filter((call) => call === "insert").length, 1);
-  // A replay reads the key's CURRENT state: a revocation since is visible, not the first answer.
-  valueOf(await act.revokeKey(ready, store, first.id), "revoke");
-  const late = valueOf(await act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-1" }), "late replay");
-  assert.equal(late.revoked_at, AT6);
-  assert.equal(late.secret, null);
-});
-
-test("key create: a double-click (concurrent calls) mints one key; only one response carries the secret", async () => {
-  const { store, calls } = memoryStore({ slow: true });
-  const act = actions();
-  const both = await Promise.all([
-    act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-2" }),
-    act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-2" }),
-  ]);
-  const values = both.map((result, i) => valueOf(result, `click ${i}`));
-  assert.equal(calls.filter((call) => call === "insert").length, 1);
-  assert.equal(values.filter((value) => value.secret !== null).length, 1);
-  assert.equal(values[0].id, values[1].id);
-});
-
-test("key create: an idempotency key is per individual and per payload", async () => {
-  const { store, calls } = memoryStore();
-  const act = actions();
-  valueOf(await act.createKey(ready, store, { name: "ci", idempotency_key: "shared" }), "mine");
-  assert.equal(codeOf(await act.createKey(ready, store, { name: "other", idempotency_key: "shared" })), "idempotency_conflict");
-  const otherAccount: ConsumerContext = { state: "ready", account: { ...account, userId: OTHER, orgId: "0e000000-0000-4000-8000-000000000002" } };
-  const theirs = valueOf(await act.createKey(otherAccount, store, { name: "ci", idempotency_key: "shared" }), "theirs");
-  assert.ok(theirs.secret !== null, "another individual's identical key is not a replay of mine");
-  assert.equal(calls.filter((call) => call === "insert").length, 2);
-});
-
-test("key create: a failed write shows fixed text (never the DB's) and says what to do if it committed", async () => {
-  const leak = { code: "23505", message: 'duplicate key value violates unique constraint "api_keys_key_hash_key" (org 0e00...)' };
-  const { store } = memoryStore({ failInsert: leak });
-  const failed = await actions().createKey(ready, store, { name: "k" });
-  assert.equal(codeOf(failed), "dependency_unavailable");
-  assert.ok(!failed.ok && !failed.error.message.includes("api_keys"), "no DB text");
-  assert.ok(!failed.ok && /revoke/i.test(failed.error.message), "a possibly-committed key is revoked, not redisplayed");
-  const { store: denied } = memoryStore({ failInsert: { code: "42501", message: "new row violates row-level security policy for table api_keys" } });
-  const refused = await actions().createKey(ready, denied, { name: "k" });
-  assert.equal(codeOf(refused), "forbidden");
-  assert.ok(!refused.ok && !refused.error.message.includes("api_keys"));
-  // A failed attempt is not remembered: the retry under the same key mints (the first wrote nothing).
-  const { store: flaky, calls } = memoryStore({ failInsert: leak });
-  const act = actions();
-  await act.createKey(ready, flaky, { name: "k", idempotency_key: "retry" });
-  await act.createKey(ready, flaky, { name: "k", idempotency_key: "retry" });
-  assert.equal(calls.filter((call) => call === "insert").length, 2);
+  for (const r of [suspended]) assert.ok(!r.ok && !r.error.message.includes("SECRET"));
 });
 
 // ------------------------------------------------------------------------------------ key revoke
 
-test("key revoke: tenant-scoped, idempotent, and allowed while suspended", async () => {
-  const { store, rows } = memoryStore();
-  const act = actions();
-  const created = valueOf(await act.createKey(ready, store, { name: "k" }), "create");
-  const revoked = valueOf(await act.revokeKey(suspended, store, created.id), "revoke while suspended");
+test("key revoke: DELETE /console/v1/keys/{id}; idempotent and allowed while suspended (the API's rule)", async () => {
+  const { api, sent } = recordingApi(() => answer(200, { ...API_KEY, revoked_at: AT }));
+  const revoked = valueOf(await revokeKey(api, KEY), "revoke");
   assert.equal(revoked.revoked_at, AT6);
-  const again = valueOf(await act.revokeKey(ready, store, created.id), "revoke again");
-  assert.equal(again.revoked_at, AT6, "a second revoke answers the first revocation");
-  const theirs = rows[0];
-  assert.equal(codeOf(await act.revokeKey(ready, store, theirs.id)), "not_found");
-  assert.equal(theirs.revoked_at, null, "another tenant's key is untouched");
-  assert.equal(codeOf(await act.revokeKey(ready, store, "c7000000-0000-4000-8000-00000000dead")), "not_found");
+  assert.deepEqual(calls(sent), [`DELETE /console/v1/keys/${KEY}`]);
 });
 
-test("key revoke: a malformed id or an unready context never reaches the store", async () => {
-  for (const id of ["", "not-a-uuid", 5, null, `${KEY}' or 1=1`]) {
-    const { store, calls } = memoryStore();
-    assert.equal(codeOf(await actions().revokeKey(ready, store, id)), "not_found", String(id));
-    assert.deepEqual(calls, []);
-  }
-  for (const [label, context, code] of NOT_READY) {
-    const { store, calls } = memoryStore();
-    assert.equal(codeOf(await actions().revokeKey(context, store, KEY)), code, label);
-    assert.deepEqual(calls, []);
-  }
-  const { store } = memoryStore({ failRevoke: { code: "08006", message: "connection to 10.0.0.5 lost" } });
-  const failed = await actions().revokeKey(ready, store, KEY);
-  assert.equal(codeOf(failed), "dependency_unavailable");
-  assert.ok(!failed.ok && !failed.error.message.includes("10.0.0.5"));
-});
-
-test("key revoke: a revoke that changed nothing is ok only when the key really is revoked", async () => {
-  // RLS filters a non-owner member's update to zero rows without an error; the key is still active.
-  const { store, rows } = memoryStore({ rlsFiltersRevoke: true });
-  const act = actions();
-  const created = valueOf(await act.createKey(ready, store, { name: "still-active" }), "create");
-  assert.equal(codeOf(await act.revokeKey(ready, store, created.id)), "not_found", "an active key is never reported revoked");
-  assert.equal(rows[rows.length - 1].revoked_at, null);
+test("key revoke: a malformed id never reaches the API; another tenant's key is not_found", async () => {
+  const { api, sent } = recordingApi(() => answer(404, envelope("not_found")));
+  for (const bad of ["nope", "../keys", 7, null]) assert.equal(codeOf(await revokeKey(api, bad)), "not_found");
+  assert.deepEqual(sent, []);
+  assert.equal(codeOf(await revokeKey(api, "c7000000-0000-4000-8000-0000000000f2")), "not_found");
+  const lost = await revokeKey(recordingApi(() => { throw new Error("down"); }).api, KEY);
+  assert.equal(codeOf(lost), "dependency_unavailable");
 });
 
 // ------------------------------------------------------------------------------- cross-site guard
@@ -345,30 +191,32 @@ test("operator: no deployed port is an explicit unavailable state, never a silen
 const SAME = new Headers({ origin: "https://app.callbill.ai", host: "app.callbill.ai" });
 const CROSS = new Headers({ origin: "https://evil.example", host: "app.callbill.ai" });
 
-/** `consoleActions` over recording deps: which request APIs, clients and refreshes each action used. */
-function seam(options: { headers: Headers; context?: ConsumerContext; session?: { userId: string; isOperator: boolean }; store?: KeyStore }) {
+/** `consoleActions` over recording deps: which request APIs, calls and refreshes each action used. */
+function seam(options: { headers: Headers; session?: { userId: string; isOperator: boolean }; reply?: (s: Sent) => Response; operator?: OperatorPort }) {
   const used: string[] = [];
+  const { api, sent } = recordingApi(options.reply ?? ((s) => (s.method === "DELETE" ? answer(200, { ...API_KEY, revoked_at: AT }) : answer(201, CREATED))));
   const deps: ActionDeps = {
     headers: async () => (used.push("headers"), options.headers),
-    context: async () => (used.push("context"), options.context ?? ready),
-    keys: async () => (used.push("keys"), options.store ?? memoryStore().store),
+    api: async () => (used.push("api"), api),
     session: async () => (used.push("session"), options.session ?? operator),
     endSession: async () => void used.push("endSession"),
     revalidate: (path) => void used.push(`revalidate ${path}`),
+    ...(options.operator ? { operator: options.operator } : {}),
   };
-  return { act: consoleActions({ ...deps, actions: actions() }), used };
+  return { act: consoleActions(deps), used, sent };
 }
 
-test("action seam: a cross-site request is refused before any session, store or refresh", async () => {
-  const calls: [string, (act: ReturnType<typeof consoleActions>) => Promise<Result<unknown>>][] = [
+test("action seam: a cross-site request is refused before any session, call or refresh", async () => {
+  const actions: [string, (act: ReturnType<typeof consoleActions>) => Promise<Result<unknown>>][] = [
     ["create", (act) => act.createKey({ name: "k" })],
     ["revoke", (act) => act.revokeKey(KEY)],
     ["operator", (act) => act.operator(ADJUST)],
+    ["feedback", (act) => act.submitFeedback({ request_id: KEY, name: "thumb", value: true, idempotency_key: "f" })],
   ];
-  for (const [label, call] of calls) {
-    const { act, used } = seam({ headers: CROSS });
+  for (const [label, call] of actions) {
+    const { act, used, sent } = seam({ headers: CROSS });
     assert.equal(codeOf(await call(act)), "forbidden", label);
-    assert.deepEqual(used, ["headers"], `${label}: nothing past the Origin check`);
+    assert.deepEqual([used, sent], [["headers"], []], `${label}: nothing past the Origin check`);
   }
   const { act, used } = seam({ headers: CROSS });
   await act.signOut();
@@ -379,24 +227,17 @@ test("action seam: a cross-site request is refused before any session, store or 
 });
 
 test("action seam: the read model is refreshed only after an acknowledged change", async () => {
-  const { store } = memoryStore();
-  const { act, used } = seam({ headers: SAME, store });
-  const created = valueOf(await act.createKey({ name: "k" }), "create");
-  assert.deepEqual(used, ["headers", "context", "keys", "revalidate /api-keys"]);
+  const { act, used } = seam({ headers: SAME });
+  valueOf(await act.createKey({ name: "k" }), "create");
+  assert.deepEqual(used, ["headers", "api", "revalidate /api-keys"]);
   used.length = 0;
-  valueOf(await act.revokeKey(created.id), "revoke");
-  assert.deepEqual(used, ["headers", "context", "keys", "revalidate /api-keys"]);
-  for (const [label, run] of [
-    ["refused create", () => seam({ headers: SAME, context: unverified })],
-    ["failed create", () => seam({ headers: SAME, store: memoryStore({ failInsert: { code: "08006", message: "lost" } }).store })],
-  ] as const) {
-    const { act: failing, used: seen } = run();
-    assert.equal((await failing.createKey({ name: "k" })).ok, false, label);
-    assert.ok(!seen.some((call) => call.startsWith("revalidate")), `${label}: no refresh`);
+  valueOf(await act.revokeKey(KEY), "revoke");
+  assert.deepEqual(used, ["headers", "api", "revalidate /api-keys"]);
+  for (const [label, status, code] of [["refused create", 403, "forbidden"], ["failed create", 503, "dependency_unavailable"]] as const) {
+    const failing = seam({ headers: SAME, reply: () => answer(status, envelope(code)) });
+    assert.equal((await failing.act.createKey({ name: "k" })).ok, false, label);
+    assert.ok(!failing.used.some((call) => call.startsWith("revalidate")), `${label}: no refresh`);
   }
-  const unknown = seam({ headers: SAME });
-  assert.equal(codeOf(await unknown.act.revokeKey("c7000000-0000-4000-8000-00000000dead")), "not_found");
-  assert.ok(!unknown.used.some((call) => call.startsWith("revalidate")), "a failed revoke refreshes nothing");
 });
 
 test("action seam: the operator action is the session's, and with no port it is unavailable", async () => {
@@ -405,40 +246,4 @@ test("action seam: the operator action is the session's, and with no port it is 
   assert.deepEqual(used, ["headers", "session"], "authority is re-read from the session; nothing is refreshed");
   const consumer = seam({ headers: SAME, session: { userId: ME, isOperator: false } });
   assert.equal(codeOf(await consumer.act.operator(ADJUST)), "forbidden");
-});
-
-// --------------------------------------------------------------------------------- the real store
-
-test("the supabase key store scopes revoke/find to the org, the consumer audience and (revoke) active keys", async () => {
-  const calls: string[] = [];
-  const chain = (): Record<string, unknown> => {
-    const node: Record<string, unknown> = {
-      then: (resolve: (answer: Answer) => void) => resolve({ data: [], error: null }),
-    };
-    for (const method of ["eq", "is", "select", "insert", "update"]) {
-      node[method] = (...args: unknown[]) => {
-        calls.push(`${method}(${args.map((arg) => JSON.stringify(arg)).join(",")})`);
-        return node;
-      };
-    }
-    return node;
-  };
-  const client = { from: (relation: string) => (calls.push(`from(${relation})`), chain()) } as unknown as KeyClient;
-  const store = supabaseKeyStore(client);
-  await store.revoke(MY_ORG, KEY, AT);
-  assert.deepEqual(calls, [
-    "from(api_keys)",
-    `update({"revoked_at":"${AT}"})`,
-    `eq("id","${KEY}")`,
-    `eq("org_id","${MY_ORG}")`,
-    'eq("audience","consumer")',
-    'is("revoked_at",null)',
-    'select("id,name,prefix,created_at,last_used_at,revoked_at,trace_mode")',
-  ]);
-  calls.length = 0;
-  await store.find(MY_ORG, KEY);
-  assert.deepEqual(calls.slice(2), [`eq("id","${KEY}")`, `eq("org_id","${MY_ORG}")`, 'eq("audience","consumer")']);
-  calls.length = 0;
-  await store.insert({ org_id: MY_ORG, created_by: ME, name: "k", prefix: "p", key_hash: "h" });
-  assert.deepEqual(calls[1], `insert(${JSON.stringify({ org_id: MY_ORG, created_by: ME, name: "k", prefix: "p", key_hash: "h" })})`, "no audience, trace mode or id is written");
 });

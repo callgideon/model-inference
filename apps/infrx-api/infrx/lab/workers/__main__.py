@@ -31,8 +31,13 @@ never runs in a consumer process.
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
                and T3's retention; its passes move silent `submitting` runs to `ambiguous`
                and reconcile/collect the ambiguous/submitted runs of every provider with such
-               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS);
-               `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
+               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS), each graded with the
+               rubric its configuration pins (SR-AP08-1); `jobs["judge_report"]` is J3's report
+               on the same ledger (WR-J3-D8-C). AP-08: the START pass turns queued requests
+               into J2's `submit` over AP-07's eligible read
+               (`judge.start.eligible_read`); JUDGE_PROVIDER_ALLOWLIST names the https hosts
+               honoured in live mode only (P-10; loopback otherwise); JUDGE_GOLD_SET names the
+               operator's reviewed reference set, graded after each collect pass.
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half), and N1's
                imports from 0051's durable job queue (WR-N4-3).
@@ -52,6 +57,9 @@ never runs in a consumer process.
                may name, e.g. `ssm:/model-inference/hf_token`): AP-04's `ArtifactWorker` over
                0060's operations and 0061 (`lab.artifacts.compose.role`, WR-AP04-2) - upload
                verification, pinned imports and the expired-session sweep every 5 s.
+* `hosting`    HOSTING_SLOT, HOSTING_PORT (8100-8199), HOSTING_MODEL_ROOT, HOSTING_SOURCE_DIR,
+               HOSTING_SMOKE_VIDEO (+ HOSTING_ENV_DIR): AP-05's controller for its one
+               configured slot on the box launcher (`lab.hosting.controller.tasks`, WR-AP05-3).
 """
 from __future__ import annotations
 
@@ -81,12 +89,13 @@ from ...worker import __main__ as worker_main
 from ...worker.__main__ import every
 from ..compose import (  # noqa: F401 - A1: shared with the gateway, re-exported
     control_serving, plan_key, release_live, release_report, teacher_wiring)
+from ..hosting import controller as hosting_controller
 from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
 ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets",
-         "artifacts")
+         "artifacts", "hosting")
 REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
@@ -94,7 +103,8 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
          "rollout": (BUCKET, "LAB_OPERATOR_ID"),
-         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,)}
+         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,),
+         "hosting": hosting_controller.NEEDS}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
 LAB_PREFIX = "infrx/"
@@ -312,25 +322,46 @@ def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deploy
 
 
 def _judge(mode, env, connect, objects, worker_id, **_):
+    from ...judge import start
+    from ...judge.calibration import goldset
     from ...judge.cost import APPROVED_RATES
-    from ...judge.submit import HttpJudgeProvider, JudgeWiring
+    from ...judge.submit import HttpJudgeProvider, JudgeWiring, egress_hosts
     from ...lab.access import LabAccess
     from ...state.lab_access import PgAccessStore
     from ...state.lab_consent import PgJudgeLedger
+    limits, retention = _traces(mode, env)
     try:
-        provider = HttpJudgeProvider(env["JUDGE_PROVIDER_URL"])
+        provider = HttpJudgeProvider(env["JUDGE_PROVIDER_URL"], allowed_hosts=egress_hosts(
+            limits.judge_mode, env.get("JUDGE_PROVIDER_ALLOWLIST", "")))
     except errors.DomainError:
         raise RuntimeMisconfigured(mode, detail="JUDGE_PROVIDER_URL: judge egress is the "
-                                                "local fake until P-10") from None
-    limits, retention = _traces(mode, env)
+                                   "local fake, or in live mode an https host "
+                                   "JUDGE_PROVIDER_ALLOWLIST names (P-10)") from None
+    try:
+        gold = goldset.load(env["JUDGE_GOLD_SET"]) if env.get("JUDGE_GOLD_SET") else None
+    except (OSError, ValueError) as unreadable:
+        raise RuntimeMisconfigured(mode, detail=f"JUDGE_GOLD_SET is not a reviewed reference "
+                                   f"set ({type(unreadable).__name__})") from None
     ledger = PgJudgeLedger(connect)
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
-                         settings=limits)
-    return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
+                         settings=limits, rubric_of=start.pg_rubric_of(connect))
+
+    async def collected(wiring, providers) -> dict[str, int]:
+        """The collect pass, then (a reviewed reference set configured) its calibration."""
+        done = await judge_pass(wiring, providers)
+        if gold is not None:
+            await goldset.calibrate(ledger, goldset.pg_results_of(connect), gold)
+        return done
+
+    jobs = {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
                                          "judge sweep"),
-            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
-                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}, wiring
+            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: collected(
+                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}
+    eligible = start.eligible_read(connect, retention)
+    jobs["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
+        start.pg_queued(connect), wiring, eligible), "judge start")
+    return jobs, wiring
 
 
 async def judge_pass(wiring, providers) -> dict[str, int]:
@@ -550,9 +581,14 @@ def _artifacts(mode, env, connect, objects, worker_id, **sources):
     return role(mode, env, connect, objects, worker_id, **sources)
 
 
+def _hosting(mode, env, connect, objects, worker_id, **_):
+    """WR-AP05-3: AP-05's controller over 0060-0062 on the Lab login, its one slot."""
+    return hosting_controller.tasks(env, connect, owner=worker_id), None
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
-         "datasets": _datasets, "artifacts": _artifacts}
+         "datasets": _datasets, "artifacts": _artifacts, "hosting": _hosting}
 
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:

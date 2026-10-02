@@ -1,0 +1,416 @@
+{
+  "_comment": "UX-07 (R32): one single-edit mutant per decision the UXU cases claim; node tests/ux/usage/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
+  "mutants": [
+    {
+      "id": "UXU-X01",
+      "what": "the readable result's note claims its content is removed at expiry (WR-UXF-4)",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "After that the result is no longer available;",
+      "replace": "After that the content is removed;",
+      "cases": [
+        "UXU-01 result notes say when the result stops being readable, never that content is removed or deleted"
+      ]
+    },
+    {
+      "id": "UXU-X02",
+      "what": "the expired result's note claims its content was removed (WR-UXF-4)",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "return `The result stopped being available at ${at}. Request status and usage remain available.`;",
+      "replace": "return `The result expired at ${at} and its content was removed.`;",
+      "cases": [
+        "UXU-01 result notes say when the result stops being readable, never that content is removed or deleted"
+      ]
+    },
+    {
+      "id": "UXU-X03",
+      "what": "Settings promises deletion after the retention periods (WR-UXF-5)",
+      "file": "app/(console)/settings/view-model.ts",
+      "find": "for limited periods, after which it can no longer be read.",
+      "replace": "for limited periods, then delete it.",
+      "cases": [
+        "UXU-02 Settings' serving retention says stored content stops being readable, with no deletion promise"
+      ]
+    },
+    {
+      "id": "UXU-X04",
+      "what": "the result section is dropped from the detail (C-04 order: result before charge)",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "      <Card>\n        <CardHeader>\n          <CardTitle>Result</CardTitle>\n        </CardHeader>\n        <CardContent className=\"space-y-3\">\n          <p className=\"text-sm text-muted-foreground\">{result.note}</p>\n          {result.access === \"available\" && result.expiresAt !== null ? (\n            <ResultPanel requestId={detail.requestId} expiresAt={result.expiresAt} />\n          ) : null}\n        </CardContent>\n      </Card>\n\n",
+      "replace": "",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X05",
+      "what": "an expired or unfinished result still mounts the content fetch",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "{result.access === \"available\" && result.expiresAt !== null ? (",
+      "replace": "{result.expiresAt !== null || result.access === \"pending\" ? (",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X06",
+      "what": "a finished request still says its status is being checked",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "{detail.poll ? (",
+      "replace": "{true ? (",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X07",
+      "what": "the last-checked time drops its seconds",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "checkedAt.slice(11, 19)",
+      "replace": "checkedAt.slice(11, 16)",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X08",
+      "what": "a failed request read renders nothing instead of its error and retry",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "  if (model.kind === \"error\") {",
+      "replace": "  if (false) {",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X09",
+      "what": "the hold is shown in the Charged cell",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "<Item label=\"Charged\">{charge.amount ?? \"—\"}</Item>",
+      "replace": "<Item label=\"Charged\">{charge.amount ?? charge.held ?? \"—\"}</Item>",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge"
+      ]
+    },
+    {
+      "id": "UXU-X10",
+      "what": "the detail drops Copy request ID",
+      "file": "app/(console)/usage/[requestId]/request-detail.tsx",
+      "find": "          <CopyButton text={detail.requestId} label=\"Copy request ID\" />\n",
+      "replace": "",
+      "cases": [
+        "UXU-03 the request detail renders the ready, running, failed, expired, not-found and unavailable fixtures, result before charge",
+        "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
+      ]
+    },
+    {
+      "id": "UXU-X11",
+      "what": "Retry resubmits the request before reading",
+      "file": "app/(console)/usage/[requestId]/result-panel.tsx",
+      "find": "            readResult(requestId).then((read) => {",
+      "replace": "            fetch(\"/v1/chat/completions\", { method: \"POST\" }).then(() => readResult(requestId)).then((read) => {",
+      "cases": [
+        "UXU-04 UX-T05: a transient read failure, Retry, success, then expiry and a back/forward restore: only reads, never a new inference"
+      ]
+    },
+    {
+      "id": "UXU-X12",
+      "what": "the unavailable result offers no retry by name",
+      "file": "app/(console)/usage/[requestId]/result-panel.tsx",
+      "find": "          Retry loading result",
+      "replace": "          Load the result again",
+      "cases": [
+        "UXU-04 UX-T05: a transient read failure, Retry, success, then expiry and a back/forward restore: only reads, never a new inference"
+      ]
+    },
+    {
+      "id": "UXU-X13",
+      "what": "a rejected clipboard write is reported as copied",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "  } catch {\n    return \"failed\";\n  }\n}",
+      "replace": "  } catch {\n    return \"copied\";\n  }\n}",
+      "cases": [
+        "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
+      ]
+    },
+    {
+      "id": "UXU-X14",
+      "what": "no clipboard API is reported as copied",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "if (clipboard === undefined) return \"failed\";",
+      "replace": "if (clipboard === undefined) return \"copied\";",
+      "cases": [
+        "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
+      ]
+    },
+    {
+      "id": "UXU-X15",
+      "what": "the blocked-clipboard message claims success",
+      "file": "app/(console)/usage/[requestId]/copy-button.tsx",
+      "find": "failed: \"Copying was blocked. Select the text and copy it by hand.\"",
+      "replace": "failed: \"Copied to the clipboard.\"",
+      "cases": [
+        "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
+      ]
+    },
+    {
+      "id": "UXU-X16",
+      "what": "the result panel keeps its old unlabeled copy instead of Copy result",
+      "file": "app/(console)/usage/[requestId]/result-panel.tsx",
+      "find": "<CopyButton text={text} label=\"Copy result\" />",
+      "replace": "<CopyButton text={text} label=\"Copy\" />",
+      "cases": [
+        "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
+      ]
+    },
+    {
+      "id": "UXU-X17",
+      "what": "Usage keeps the old subtitle",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "subtitle=\"Requests, results and credit charges.\"",
+      "replace": "subtitle=\"Your requests, newest first, with what each one charged or holds.\"",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X18",
+      "what": "the credit summary comes before the requests",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "      <h2 className=\"mb-3 font-heading text-base font-medium\">Requests</h2>",
+      "replace": "      <CreditSummary card={card} href={model.here} />\n      <h2 className=\"mb-3 font-heading text-base font-medium\">Requests</h2>",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X19",
+      "what": "a failed wallet read renders nothing instead of 'Credits unavailable'",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "  if (card.kind === \"error\") {",
+      "replace": "  if (false) {",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X20",
+      "what": "a failed wallet read offers no retry",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "{card.recovery === \"retry\" ? (",
+      "replace": "{false ? (",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X21",
+      "what": "a failed wallet read loses the way to Credits",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "        {credits}\n      </p>\n    );",
+      "replace": "      </p>\n    );",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X22",
+      "what": "a window-only filter reads as an empty account",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": "filters.keyId !== null || filters.range !== DEFAULT_JOB_RANGE",
+      "replace": "filters.keyId !== null",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X23",
+      "what": "the empty page drops its way forward",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "          <Link className=\"mt-2 inline-block underline underline-offset-4\" href={model.emptyAction.href}>\n            {model.emptyAction.label}\n          </Link>\n",
+      "replace": "",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X24",
+      "what": "the failed request list keeps the old title",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "title=\"We couldn’t load usage\"",
+      "replace": "title=\"Your requests could not be loaded\"",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X25",
+      "what": "the status cell carries the money state again",
+      "file": "app/(console)/usage/requests-table.tsx",
+      "find": "<Badge variant=\"outline\">{row.status}</Badge>",
+      "replace": "<Badge variant=\"outline\">{row.charge.label}</Badge> {row.status}",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X26",
+      "what": "a hold fills the Charged cell",
+      "file": "app/(console)/usage/requests-table.tsx",
+      "find": "{row.charge.amount ?? \"—\"}",
+      "replace": "{row.charge.amount ?? row.charge.held ?? \"—\"}",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X27",
+      "what": "an unknown state reads 'Unknown state' instead of C-04's 'Unknown status'",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": ": \"Unknown status\";",
+      "replace": ": \"Unknown state\";",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X28",
+      "what": "a settled charge is rounded to cents (a tiny debit reads as zero)",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": ": amount(job.charged, job.unit),",
+      "replace": ": amount(Number(job.charged).toFixed(2), job.unit),",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X29",
+      "what": "the primary figure keeps the old label",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "label: \"Available to use\",",
+      "replace": "label: \"Available\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X30",
+      "what": "the reserve is not said to be for requests",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "label: \"Reserved for requests\",",
+      "replace": "label: \"Reserved\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X31",
+      "what": "a grant not yet received says nothing about it",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "? `${GRANT} Not received yet.`",
+      "replace": "? GRANT",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X32",
+      "what": "the grant reads as recurring",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "\"10,000 promotional credits, granted once after verification.\"",
+      "replace": "\"10,000 promotional credits, granted monthly after verification.\"",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X33",
+      "what": "the grant event keeps the old label",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "signup_grant: \"Promotional credit grant\",",
+      "replace": "signup_grant: \"One-time signup grant\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X34",
+      "what": "the ledger row loses its raw event code",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "    code: entry.kind,\n",
+      "replace": "    code: \"\",\n",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X35",
+      "what": "the Credits page does not show the raw event code",
+      "file": "app/(console)/billing/page.tsx",
+      "find": "                      <span className=\"block font-mono text-xs text-muted-foreground\">{row.code}</span>\n",
+      "replace": "",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X36",
+      "what": "an unknown event is shown as a known one",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "KIND_LABELS[entry.kind] : \"Other\",",
+      "replace": "KIND_LABELS[entry.kind] : \"Request charge\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X37",
+      "what": "an empty list also puts Create key in the header",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "model.create.allowed && model.list.kind !== \"empty\" ?",
+      "replace": "model.create.allowed ?",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X38",
+      "what": "the empty card has no Create key",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "              {model.create.allowed ? <CreateKeyDialog /> : null}\n",
+      "replace": "",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X39",
+      "what": "a suspended account is invited to create a key",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "{model.create.allowed ? \" Create a key to call Marlin from your code.\" : \"\"}",
+      "replace": "{\" Create a key to call Marlin from your code.\"}",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X40",
+      "what": "an active key carries no status label",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "<Badge variant=\"outline\">Active</Badge>",
+      "replace": "null",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X41",
+      "what": "a revoked key is labelled active",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "{k.revoked === null ? (",
+      "replace": "{true ? (",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    }
+  ]
+}

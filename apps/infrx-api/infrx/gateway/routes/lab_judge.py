@@ -4,7 +4,7 @@ the session user).
 
     GET  models  rubrics  configs  configs/{id}  budgets  runs  runs/{id}  runs/{id}/results
          calibration?config_id=
-    POST configs (201)  estimates  runs (202 + Location)  runs/{id}/cancel
+    POST rubrics (201)  configs (201)  estimates  runs (202 + Location)  runs/{id}/cancel
     PUT  budgets/{payer_ref}
 
 Every request names its workspace (`?provider_org_id=`); the doors check the session user's
@@ -54,8 +54,15 @@ def register(app: FastAPI, rt: Any) -> None:
 
     @r.get("/rubrics", response_model=api.ListPage[rubric.RubricDoc])
     async def rubrics(request: Request, provider_org_id: str = Query()):
-        await session_user(rt, request)
-        return control.ok(api.ListPage[rubric.RubricDoc](data=rubric.rubrics()))
+        user = await session_user(rt, request)
+        return control.ok(await judge.rubrics(user, provider_org_id))
+
+    @r.post("/rubrics", status_code=201, response_model=rubric.RubricDoc)
+    async def create_rubric(request: Request, body: rubric.RubricBody,
+                            provider_org_id: str = Query(), idempotency_key: str = KEY):
+        user = await session_user(rt, request)
+        return control.ok(await judge.create_rubric(user, provider_org_id, idempotency_key,
+                                                    body), 201)
 
     @r.get("/configs", response_model=api.ListPage[s.ConfigDoc])
     async def configs(request: Request, provider_org_id: str = Query(),

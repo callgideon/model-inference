@@ -26,16 +26,12 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
 
   const wallet = await reads.wallet();
   const found = wallet.ok ? wallet.value : null;
-  const [creditsIn, ledger, legacy] =
+  const [ledger, legacy] =
     found === null
-      ? [null, null, null]
-      : await Promise.all([
-          reads.creditsIn(found.walletId),
-          reads.ledger({ limit: LEDGER_PAGE_SIZE, cursor: state.cursor }),
-          reads.legacyUsd(found.orgId),
-        ]);
+      ? [null, null]
+      : await Promise.all([reads.ledger({ limit: LEDGER_PAGE_SIZE, cursor: state.cursor }), reads.legacyUsd()]);
 
-  const model = creditsPageModel({ state, wallet, creditsIn, ledger, legacy });
+  const model = creditsPageModel({ state, wallet, ledger, legacy });
 
   return (
     <>
@@ -100,6 +96,7 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
                           {row.kind}
                         </Link>
                       )}
+                      <span className="block font-mono text-xs text-muted-foreground">{row.code}</span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{row.reason}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.amount}</TableCell>

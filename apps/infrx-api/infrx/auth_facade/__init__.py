@@ -6,8 +6,9 @@ Kept from `apps/app/app/(auth)/flow.ts` (A2), the behaviour the forms have today
 - every failure is one of the App's fixed `AuthFailure` codes (`failure`: the IdP's
   `error_code` table, a bare 429 is rate limited, anything else `unavailable`) with the App's
   own copy; the IdP's text never leaves;
-- enumeration-safe outcomes: signup of an existing address and recovery of an unknown one
-  read `sent`, and a wrong password reads like an unknown address;
+- enumeration-safe outcomes: signup of an existing address, recovery of an unknown one and a
+  resent verification for an unknown or already confirmed one read `sent`, and a wrong
+  password reads like an unknown address;
 - the email-link callback: an IdP `error_code` is read only as a fixed code, recovery lands on
   `/update-password`, `next` only as a same-site path.
 
@@ -30,13 +31,15 @@ from fastapi.responses import JSONResponse
 from ..contracts import api, errors
 
 #: reason -> (HTTP status, retryable). The App's `AuthFailure` set plus the callback's
-#: `link_invalid` and a dead session's `unauthenticated`.
+#: `link_invalid`, a dead session's `unauthenticated` and a failed challenge's
+#: `captcha_failed` (LR-02: the App's forms gain it with the widget, AP-09).
 FAILURES: dict[str, tuple[int, bool]] = {
     "invalid_credentials": (401, False), "email_not_confirmed": (403, False),
     "rate_limited": (429, True), "weak_password": (422, False), "same_password": (422, False),
     "invalid_email": (422, False), "signup_closed": (403, False),
     "email_unavailable": (422, False), "link_expired": (410, False),
     "link_invalid": (422, False), "unauthenticated": (401, False), "unavailable": (503, True),
+    "captcha_failed": (422, False),
 }
 #: flow.ts FAILURE_COPY (and its link notice), word for word.
 MESSAGES: dict[str, str] = {
@@ -54,6 +57,7 @@ MESSAGES: dict[str, str] = {
     "link_invalid": "This link is not valid. Sign in, or request a new link.",
     "unauthenticated": "Your session has ended. Sign in again.",
     "unavailable": "Something went wrong on our side. Try again in a moment.",
+    "captcha_failed": "Complete the verification challenge, then try again.",
 }
 #: flow.ts BY_CODE: the IdP `error_code` -> the App's failure.
 BY_CODE: dict[str, str] = {
@@ -66,7 +70,10 @@ BY_CODE: dict[str, str] = {
     "email_address_not_authorized": "email_unavailable", "otp_expired": "link_expired",
     "flow_state_expired": "link_expired", "flow_state_not_found": "link_expired",
     "session_not_found": "link_expired", "session_expired": "link_expired",
+    "captcha_failed": "captcha_failed",
 }
+#: The hosted auth server's CAPTCHA providers (its bot-protection setting).
+CAPTCHA_PROVIDERS = ("hcaptcha", "turnstile")
 EXISTING = ("user_already_exists", "email_exists")
 EMAIL_LINK_TYPES = ("signup", "email", "magiclink", "recovery", "invite", "email_change")
 AFTER_VERIFY = "/welcome"
@@ -151,13 +158,21 @@ def _link(answer: httpx.Response) -> AuthRefused:
 class AuthFacade:
     """The IdP's REST calls. `apikey` is the project's publishable (anon) key: the facade acts
     for an end user, so the service-role key - which the IdP treats as an administrator and
-    lets past its CAPTCHA - is never sent here."""
+    lets past its CAPTCHA - is never sent here.
+
+    `captcha_required` is the hosted bot-protection policy (on, the auth server checks a token
+    at password sign-in, sign-up and recovery); `captcha_provider` + `captcha_site_key` are
+    its public half, the widget a form renders. Neither is readable from the auth server's
+    public settings, so the deployment states them (LR-02)."""
 
     def __init__(self, client: httpx.AsyncClient, apikey: str, *, origins: tuple[str, ...] = (),
-                 captcha_required: bool = False) -> None:
+                 captcha_required: bool = False, captcha_provider: str = "",
+                 captcha_site_key: str = "") -> None:
         self.client, self.apikey = client, apikey
         self.origins = tuple(origin.rstrip("/") for origin in origins)
         self.captcha_required = captcha_required
+        ready = captcha_provider in CAPTCHA_PROVIDERS and bool(captcha_site_key.strip())
+        self.captcha_widget = (captcha_provider, captcha_site_key.strip()) if ready else None
 
     async def _send(self, method: str, path: str, *, token: str | None = None,
                     params: dict[str, str] | None = None,
@@ -199,9 +214,10 @@ class AuthFacade:
         return extras
 
     # --- operations ---------------------------------------------------------------------------
-    async def sign_in(self, email: str, password: str) -> Session:
-        answer = await self._send("POST", TOKEN, params={"grant_type": "password"},
-                                  body={"email": email, "password": password})
+    async def sign_in(self, email: str, password: str, *,
+                      captcha_token: str | None = None) -> Session:
+        answer = await self._send("POST", TOKEN, params={"grant_type": "password"}, body={
+            "email": email, "password": password, **self._extras(captcha_token, None)})
         if answer.status_code != 200:
             raise AuthRefused(failure(_code(answer), answer.status_code))
         return _session(answer)
@@ -225,6 +241,18 @@ class AuthFacade:
             reason = failure(_code(answer), answer.status_code)
             if reason != "invalid_credentials":
                 raise AuthRefused(reason)
+
+    async def resend(self, email: str, *, captcha_token: str | None = None,
+                     redirect_to: str | None = None, code_challenge: str | None = None) -> None:
+        """WR-AP09-RESEND: a new sign-up verification link. Like recovery, an unknown or an
+        already confirmed address reads `sent` (no enumeration)."""
+        params = self.redirect(redirect_to)
+        answer = await self._send("POST", "/auth/v1/resend", params=params, body={
+            "type": "signup", "email": email, **self._extras(captcha_token, code_challenge)})
+        code = _code(answer)
+        unknown = failure(code, answer.status_code) == "invalid_credentials"
+        if answer.status_code != 200 and code not in EXISTING and not unknown:
+            raise AuthRefused(failure(code, answer.status_code))
 
     async def refresh(self, refresh_token: str) -> Session:
         answer = await self._send("POST", TOKEN, params={"grant_type": "refresh_token"},

@@ -69,7 +69,7 @@ def test_ap00_inventory_joins_web_actions_to_target_operations(apps):
     assert targets["GET /v1/models"]["state"] == "existing"
     assert targets["GET /lab/v1/traces/{id}"]["state"] == "existing"     # {request_id} mounted
     assert targets["POST /console/v1/keys"]["state"] == "existing"           # AP-03 mounted (merge #88)
-    assert targets["POST /lab/v1/control/deployments"]["state"] == "target"  # AP-05, batch 2
+    assert targets["POST /lab/v1/control/deployments"]["state"] == "existing"  # AP-05 (merge #96)
     flagged = {a["action"] for a in doc["web_actions"] if a["flag"]}
     assert {"createConsumerKey", "claimSignupGrant"} <= flagged
 
@@ -201,7 +201,8 @@ def test_ap00_lab_control_documents_its_bodies_responses_and_refusals(apps):
                for op in item.values()]
     # L3's eight + AP-06's four dev-key/dev-wallet operations (WR-AP06-3, LAB_PUBLICATION)
     # + AP-04's four model-project/revision operations (WR-AP04-2, LAB_ARTIFACTS)
-    assert len(control) == 16 and "HTTPValidationError" not in json.dumps(control)
+    # + AP-05's five deployment operations, whose smoke replaces L3's stand-in (WR-AP05-2)
+    assert len(control) == 20 and "HTTPValidationError" not in json.dumps(control)
     models = paths["/lab/v1/control/models"]["get"]["responses"]["200"]
     listed = models["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[1]
     assert schemas[listed]["properties"]["data"]["items"] == {"$ref": "#/components/schemas/Model"}

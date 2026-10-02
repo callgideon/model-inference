@@ -30,6 +30,7 @@ class GrantStatus(api.Wire):
 
 class Me(api.Wire):
     actor: api.Actor
+    email: str | None = None                 # WR-AP09-ME-EMAIL: the auth server's, display only
     state: Literal["unverified", "onboarding", "ready"]
     suspended: bool
     signup_grant: GrantStatus
@@ -77,7 +78,8 @@ def register(app, rt) -> None:
         grant = GrantStatus(state="not_granted") if account.grant_amount is None else \
             GrantStatus(state="granted", granted_at=account.granted_at,
                         amount=api.Money(amount=account.grant_amount, unit="CREDIT"))
-        return control.ok(Me(actor=actor, state=state_of(account), suspended=account.suspended,
+        return control.ok(Me(actor=actor, email=await rt.actors.email(request),
+                             state=state_of(account), suspended=account.suspended,
                              signup_grant=grant))
 
     @router.get("/console/v1/capabilities", response_model=ConsoleCapabilities,

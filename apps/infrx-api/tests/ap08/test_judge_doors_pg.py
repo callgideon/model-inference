@@ -236,6 +236,10 @@ def check_the_http_family_composes_on_the_lab_login(conn) -> None:
     assert (review.json()["provenance"], review.json()["reviewer"]) == ("human", DEV)
     shown = dev.get(f"{path}/feedback", params=q).json()
     assert [r["review_id"] for r in shown["reviews"]] == [review.json()["review_id"]]
+    # WR-AP09L-3: 0043's per-request read on the Lab login (0067's EXECUTE), developer+
+    sent = dev.get(f"{path}/judge-runs", params=q)
+    assert sent.status_code == 200 and sent.json() == {"data": [], "next_cursor": None}, sent.text
+    assert client(VIEWER).get(f"{path}/judge-runs", params=q).status_code == 403
 
 
 CHECKS = {c.__name__: c for c in (

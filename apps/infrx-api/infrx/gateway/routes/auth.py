@@ -28,10 +28,10 @@ CHALLENGE = Field(default=None, pattern=r"^[A-Za-z0-9_-]{43,128}$")
 class SignIn(api.Wire):
     email: str = EMAIL
     password: SecretStr = SECRET
+    captcha_token: str | None = CAPTCHA       # the hosted policy checks sign-in too (LR-02)
 
 
 class SignUp(SignIn):
-    captcha_token: str | None = CAPTCHA
     redirect_to: str | None = REDIRECT
     code_challenge: str | None = CHALLENGE
 
@@ -41,6 +41,10 @@ class Recovery(api.Wire):
     captcha_token: str | None = CAPTCHA
     redirect_to: str | None = REDIRECT
     code_challenge: str | None = CHALLENGE
+
+
+class Resend(Recovery):
+    """WR-AP09-RESEND: a new sign-up verification link for this address."""
 
 
 class Refresh(api.Wire):
@@ -60,12 +64,21 @@ class Landing(api.Wire):
     redirect: str
 
 
+class Captcha(api.Wire):
+    """LR-02: whether the password doors need a challenge, and the widget a form renders."""
+
+    required: bool
+    provider: str | None = None              # `auth_facade.CAPTCHA_PROVIDERS`
+    site_key: str | None = None
+    state: api.Availability
+
+
 class AuthAvailability(api.Wire):
     sign_in: api.Availability
     sign_up: api.Availability
     recovery: api.Availability
     signup_grant: api.Availability
-    captcha_required: bool
+    captcha: Captcha
 
 
 def bearer(request: Request) -> str:
@@ -79,23 +92,40 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def availability(idp: dict[str, Any] | None, grant: bool | None,
-                 captcha: bool) -> AuthAvailability:
-    """The IdP's settings and the grant flag as R270 availability: a read that failed is
-    `unknown`, never `disabled`."""
+def availability(idp: dict[str, Any] | None, grant: bool | None, required: bool,
+                 widget: tuple[str, str] | None) -> AuthAvailability:
+    """The IdP's settings, the grant flag and the CAPTCHA policy as R270 availability: a read
+    that failed is `unknown`, never `disabled`; a required challenge with no widget to render
+    makes every password door `unavailable` (no form could pass it)."""
     at = _now()
 
     def state(on: bool | None, reason: str) -> api.Availability:
         if on is None:
             return api.Availability(state="unknown", reason="unreachable", verified_at=at)
+        if on and required and widget is None:
+            return api.Availability(state="unavailable", reason="captcha_unconfigured",
+                                    verified_at=at)
         return api.Availability(state="configured" if on else "disabled",
                                 reason=None if on else reason, verified_at=at)
     email = None if idp is None else bool((idp.get("external") or {}).get("email"))
     signup = None if idp is None else email and idp.get("disable_signup") is False
-    return AuthAvailability(sign_in=state(email, "email_provider_disabled"),
-                            sign_up=state(signup, "signup_closed"),
-                            recovery=state(email, "email_provider_disabled"),
-                            signup_grant=state(grant, "flag_off"), captcha_required=captcha)
+    if widget is not None:
+        challenge = api.Availability(state="configured", verified_at=at)
+    elif required:
+        challenge = api.Availability(state="unavailable", reason="site_key_missing",
+                                     verified_at=at)
+    else:
+        challenge = api.Availability(state="disabled", reason="not_required", verified_at=at)
+    provider, site_key = widget or (None, None)
+    return AuthAvailability(
+        sign_in=state(email, "email_provider_disabled"), sign_up=state(signup, "signup_closed"),
+        recovery=state(email, "email_provider_disabled"),
+        signup_grant=api.Availability(state="unknown", reason="unreachable", verified_at=at)
+        if grant is None else api.Availability(state="configured" if grant else "disabled",
+                                               reason=None if grant else "flag_off",
+                                               verified_at=at),
+        captcha=Captcha(required=required, provider=provider, site_key=site_key,
+                        state=challenge))
 
 
 def register(app, rt) -> None:
@@ -107,7 +137,8 @@ def register(app, rt) -> None:
     @router.post("/auth/v1/sign-in", response_model=Session, operation_id="auth_sign_in")
     async def sign_in(body: SignIn, request: Request):
         facade.check_origin(request.headers.get("origin"))
-        return control.ok(await facade.sign_in(body.email, body.password.get_secret_value()))
+        return control.ok(await facade.sign_in(body.email, body.password.get_secret_value(),
+                                               captcha_token=body.captcha_token))
 
     @router.post("/auth/v1/sign-up", response_model=Sent, operation_id="auth_sign_up")
     async def sign_up(body: SignUp, request: Request):
@@ -122,6 +153,13 @@ def register(app, rt) -> None:
         facade.check_origin(request.headers.get("origin"))
         await facade.recover(body.email, captcha_token=body.captcha_token,
                              redirect_to=body.redirect_to, code_challenge=body.code_challenge)
+        return control.ok(Sent())
+
+    @router.post("/auth/v1/resend", response_model=Sent, operation_id="auth_resend")
+    async def resend(body: Resend, request: Request):
+        facade.check_origin(request.headers.get("origin"))
+        await facade.resend(body.email, captcha_token=body.captcha_token,
+                            redirect_to=body.redirect_to, code_challenge=body.code_challenge)
         return control.ok(Sent())
 
     @router.post("/auth/v1/refresh", response_model=Session, operation_id="auth_refresh")
@@ -160,6 +198,7 @@ def register(app, rt) -> None:
             grant = await identity.signup_grant_enabled() if identity is not None else None
         except Exception:                         # noqa: BLE001 - unknown, never disabled
             grant = None
-        return control.ok(availability(await facade.settings(), grant, facade.captcha_required))
+        return control.ok(availability(await facade.settings(), grant, facade.captcha_required,
+                                       facade.captcha_widget))
 
     app.router.routes.extend(router.routes)     # the app's own table, as every router (lab_datasets)

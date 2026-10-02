@@ -32,6 +32,7 @@ from infrx.state.jobstore import connector
 
 from ..d import checks_admission as ca
 from ..d import checks_credit as cc
+from ..ap03 import racer
 from ..d import pgharness
 from ..l.access.conftest import CASE
 
@@ -206,6 +207,26 @@ def test_data_use__a_replay_writes_nothing_and_a_stale_view_conflicts(pg_world):
     assert gateway_mode(w, w.C1, key) is TraceMode.full
 
 
+def test_data_use__capture_runs_on_the_gateway_pools_connection(pg_world):
+    """Oracle (SR-AP11C-1): the gateway's pool hands out `pilot._Pooled` - execute and close,
+    no `transaction()` - and takes each connection back only outside a transaction. A
+    decision commits on it, a stale one (409) rolls back on it; neither returns a connection
+    mid-transaction (`ExecuteOnly.close` asserts that)."""
+    w = pg_world
+    app = FastAPI()
+    routes.register(app, SimpleNamespace(
+        data_use=data_use.DataUse(racer.pooled(pgharness.dsn(CASE))),
+        actors=control.StaticActors(session(w.BOTH, w.C1))))
+    c = TestClient(app, raise_server_exceptions=False)
+    key = keys_of(w, w.C1)[0]
+    answer = put_capture(c, key, "full", 0)
+    assert answer.status_code == 200, answer.text
+    stale = put_capture(c, key, "minimal", 0)
+    assert stale.status_code == 409, stale.text
+    assert [row[:2] for row in consent_rows(w, w.C1)] == [(1, "full")]
+    assert gateway_mode(w, w.C1, key) is TraceMode.full
+
+
 def test_data_use__evaluation_consent_needs_full_capture(pg_world):
     """Oracle (0003: no inferred evaluation consent): evaluation consent with less than full
     capture is a 422 envelope naming the field, and nothing is written."""
@@ -218,9 +239,29 @@ def test_data_use__evaluation_consent_needs_full_capture(pg_world):
     assert consent_rows(w, w.C1) == []
 
 
+
+def test_data_use__a_failure_is_an_envelope_never_a_trace():
+    """Oracle (R270, `control.R270Route`): a service that breaks answers 500 in the envelope,
+    no-store, with the request id echoed and no exception text; a refused actor is 401."""
+    class Broken:
+        async def read(self, actor):
+            raise RuntimeError("secret-internal-detail")
+    app = FastAPI()
+    routes.register(app, SimpleNamespace(data_use=Broken(),
+                                         actors=control.StaticActors(session("u", "o"))))
+    answer = TestClient(app, raise_server_exceptions=False).get(
+        routes.DATA_USE_PATH, headers={"X-Request-Id": "rid-ap7"})
+    assert answer.status_code == 500 and answer.headers.get("cache-control") == "no-store"
+    assert answer.json()["error"]["request_id"] == "rid-ap7"
+    assert "secret-internal-detail" not in answer.text
+    assert client(None).get(routes.DATA_USE_PATH).status_code == 401
+    # R272: a valid API key of any audience at the web door is unauthenticated (401), never a
+    # disclosed 403 - the door takes no credential; the repository's own 403 stays behind it.
+    assert client(session("u", "o", "consumer")).get(routes.DATA_USE_PATH).status_code == 401
+
 # --- who decides -----------------------------------------------------------------------------
 def test_data_use__only_the_grantors_owner_decides(pg_world):
-    """Oracle: no session 401; a key session (any audience but a verified web session) 403;
+    """Oracle: no session 401; a key session (any audience but a verified web session) 401 (R272);
     a member who is not the organization's owner 403; another organization's key 404; a body
     naming a grantor 422 - and nothing is written by any of them."""
     w = pg_world
@@ -229,7 +270,7 @@ def test_data_use__only_the_grantors_owner_decides(pg_world):
     shared_key = add_key(w, shared, cc.SHARED)
     assert client(None).get(routes.DATA_USE_PATH).status_code == 401
     for actor, target, status in (
-            (session(w.BOTH, w.C1, "consumer"), key, 403),
+            (session(w.BOTH, w.C1, "consumer"), key, 401),   # R272: the web door takes no key
             (session(w.DEV_A, w.C1), key, 403),        # a provider developer, not C1's owner
             (session(cc.CONSUMER_2, shared), shared_key, 403),
             (session(w.CONSUMER_ONLY, w.C2), key, 404)):
@@ -258,6 +299,22 @@ def test_data_use__a_suspended_organization_decides_nothing(pg_world):
     assert c.post(routes.GRANTS_PATH, json=grant_body(w)).status_code == 403
     assert consent_rows(w, w.C1) == []
 
+
+
+def test_data_use__a_suspended_organization_still_withdraws_its_grant(pg_world):
+    """Oracle (0066's revoke-only door, `lab_withdraw_access_grant`): the owner of a suspended
+    organization revokes its sharing grant - the very next content check is refused - and
+    still grants nothing (R33 holds for every write but the withdrawal)."""
+    w = pg_world
+    c = owner(w)
+    [grant] = c.get(routes.GRANTS_PATH).json()["data"]
+    w.conn.execute("update public.organizations set suspended = true, suspended_at = infrx.now(), "
+                   "suspension_reason = 'abuse' where id = %s", (w.C1,))
+    answer = c.delete(f"{routes.GRANTS_PATH}/{grant['grant_id']}")
+    assert answer.status_code == 200, answer.text
+    assert (answer.json()["version"], answer.json()["state"]) == (2, "revoked")
+    assert not may_read(w, v2.DataPurpose.provider_sharing)
+    assert c.post(routes.GRANTS_PATH, json=grant_body(w, grant_version=2)).status_code == 403
 
 # --- purpose grants --------------------------------------------------------------------------
 def test_data_use__grants_are_purpose_specific_versions(pg_world):

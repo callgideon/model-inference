@@ -54,7 +54,10 @@ NEW_TABLES = {"infrx.lab_access_grants",                                    # 00
               "infrx.control_operations", "infrx.control_idempotency",      # 0060 (R271)
               "infrx.lab_judge_cancellations", "infrx.lab_trace_reviews",    # 0064 (R271)
               *(f"infrx.{t}" for t in ("model_projects", "artifacts", "artifact_uploads",
-                                       "artifact_imports", "model_project_revisions"))}  # 0061 (R271)
+                                       "artifact_imports", "model_project_revisions")),  # 0061 (R271)
+              *(f"infrx.{t}" for t in ("hosting_deployments", "hosting_allocations",
+                                       "hosting_receipts")),                 # 0062 (R271)
+              "infrx.lab_judge_rubrics"}                                    # 0067 (R271)
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 
@@ -212,9 +215,13 @@ def test_the_lw4_reads_keep_the_listings_already_written() -> None:
     rows = "select row_to_json(l)::jsonb from infrx.catalog_listings l order by version"
 
     def as_control() -> str | list:
+        # Register row 88: Supabase's `postgres` is no superuser (no SET SESSION AUTHORIZATION:
+        # 42501 before AND after 0044, so the case proved nothing there) and holds 0043's role
+        # only WITH ADMIN (PostgreSQL 16+); it takes SET on the role for this rolled-back read.
         try:
-            with conn.transaction():
-                conn.execute("set local session authorization infrx_lab_control")
+            with conn.transaction(force_rollback=True):
+                conn.execute("grant infrx_lab_control to current_user with inherit false, set true")
+                conn.execute("set local role infrx_lab_control")
                 return conn.execute(rows).fetchall()
         except psycopg.Error as refused:
             return refused.sqlstate

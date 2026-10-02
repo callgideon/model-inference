@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-pg console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix lab-hosting
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -76,6 +76,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py
 	# 0060's SQL list + control_ops.py's Python list (api-schema, AP-00 00d, R271): the SQL needs Docker, skips visibly without it; task-local key ap0
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
+	# 0065's and 0066's SQL lists (api-schema-2, AP-00 00d remainder, R271): need Docker, skip visibly without it; task-local key ap0
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py
 	# AP-02's console reads (wave 7): PostgreSQL half needs Docker, skips visibly without it; task-local key ap2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
 	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7
@@ -88,6 +90,10 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/d/test_upgrade_0061_mutants.py
 	# AP-04's list: fake world, then its PostgreSQL + MinIO half in its own process (the copy starts the D harness); task-local key ap4
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
+	# 0062's SQL list (api-hosting, AP-05, R271): needs Docker, skips visibly without it; task-local key ap5
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap5 uv run --frozen pytest -q tests/d/test_upgrade_0062_mutants.py
+	# AP-05's list: fake world (+ the box step), then its PostgreSQL + real-engine half in its own process; task-local key ap5
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap5 uv run --frozen pytest -q tests/ap05/test_mutants.py
 	# AP-06's list: fake world, then its PostgreSQL half (two-process race) in its own process; task-local key ap6
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap6 uv run --frozen pytest -q tests/ap06/test_mutants.py
 
@@ -118,31 +124,18 @@ console-mutants:
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
 	cd apps/app && node tests/ux/run-mutants.mjs
 	cd apps/app && node tests/ux/first-call/run-mutants.mjs
+	cd apps/app && node tests/ux/usage/run-mutants.mjs
 
-# C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
-# Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
-console-c0-real:
-	cd $(API) && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py
-
-# C3A DUR-RLS / CONSOLE-FLOWS: the trusted actions through real Supabase PostgreSQL + PostgREST
-# (Docker; fails visibly without it). Gate for C3A / APP-M1 and E4.
-console-c3a-real:
-	cd $(API) && INFRX_D_TASK=app-c3a INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/actions_stack.py
-
-# U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS: operator console over real Supabase PostgreSQL + PostgREST (Docker).
-console-u3-real:
-	cd $(API) && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py
-
-# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors over real Supabase PostgreSQL + PostgREST,
+# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors as the browser roles on real Supabase PostgreSQL
+# (no PostgREST stage: neither app calls the doors through it since AP-09),
 # then the SQL mutants of the doors (Docker; fails visibly without it). Not part of check.
 console-c3f-real:
 	cd $(API) && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py --mutants
 
-# U1R/U4: the App's read adapters against real PostgreSQL as the browser principal, each on its
-# own task-local instance (D harness). A missing Docker prints SKIP and exits 0, as tests/d does.
+# AP-09 (WR-AP09-MAKE): the App holds no database client, so its real-DB gate is the composed parity:
+# the App's shipped read adapters against infrx-api's routes on a seeded PostgreSQL (tests/ap02, key ap2).
 console-pg:
-	cd $(API) && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py
-	cd $(API) && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py
+	cd $(API) && INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_parity_pg.py
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.
@@ -208,6 +201,7 @@ lab-mutants:
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
 	cd apps/lab && node tests/ux/run-mutants.mjs && node tests/ux/improve/run-mutants.mjs
+	cd apps/lab && node tests/ux/operate/run-mutants.mjs
 	cd apps/lab && node tests/ux/requests/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
 
@@ -263,7 +257,9 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/w/test_worker_traces_pg.py
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/t/capture/test_capture_stack.py
 	# AP-07b/07d: the composed trace proof on the ap7 block (PG + ClickHouse + MinIO; containers per the file's header)
-	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py
+	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py tests/ap07/test_eligible.py
+	# AP-07 eligible mutants (WR-AP07B-2): need ClickHouse + MinIO; the api-mutants line skips them visibly
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_AP7_STACK=1 uv run --frozen pytest -q tests/ap07/test_mutants.py -k "el_ or well_formed or every_case"
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:
@@ -297,3 +293,7 @@ lab-local:
 # Its 0700 state dir is under $TMPDIR; verdict.json lands in the evidence dir.
 api-lifecycle:
 	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $(CURDIR)/research/plan/evidence/w7/AP11-raw-$(shell git rev-parse --short HEAD)
+
+# AP-05: the LAB-HOSTING gate (tests/integration/lab_hosting, key ap5); not in check.
+lab-hosting:
+	$(API)/.venv/bin/python tests/integration/lab_hosting/runner.py --out $(CURDIR)/research/plan/evidence/w7/AP05-hosting-raw-$(shell git rev-parse --short HEAD)

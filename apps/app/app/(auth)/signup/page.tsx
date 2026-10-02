@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { consumerApi } from "@/lib/api/index";
+import { apiBaseUrl } from "../../(console)/models/catalog";
+import { captchaGate } from "../flow";
 import { SignupForm } from "./signup-form";
 
 export const metadata = { title: "Create an account · infrx" };
 
-export default function SignupPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SignupPage() {
+  // LR-02: the auth service's own CAPTCHA requirement (a public read, no session).
+  const facade = consumerApi({ baseUrl: apiBaseUrl(process.env) ?? "" });
+  const gate = captchaGate(await facade.call("get", "/auth/v1/availability").catch(() => null));
   return (
     <>
       <div className="space-y-2 text-center">
@@ -13,7 +21,7 @@ export default function SignupPage() {
           per person and is not refilled.
         </p>
       </div>
-      <SignupForm />
+      <SignupForm gate={gate} />
       <p className="text-center text-xs text-muted-foreground">
         Already have an account?{" "}
         <Link href="/login" className="underline underline-offset-4 hover:text-foreground">

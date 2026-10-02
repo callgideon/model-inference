@@ -28,7 +28,7 @@ export default async function ApiKeysPage() {
       <PageHeader
         title="API Keys"
         subtitle="Send a key as Authorization: Bearer <key>. Each key is shown once, when you create it."
-        action={model.create.allowed ? <CreateKeyDialog /> : null}
+        action={model.create.allowed && model.list.kind !== "empty" ? <CreateKeyDialog /> : null}
       />
 
       {model.create.allowed ? null : (
@@ -49,9 +49,10 @@ export default async function ApiKeysPage() {
               ) : null}
             </div>
           ) : model.list.kind === "empty" ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">
-              No keys yet.{model.create.allowed ? " Create one to start calling the API." : ""}
-            </p>
+            <div className="space-y-3 p-6 text-center text-sm text-muted-foreground">
+              <p>No keys yet.{model.create.allowed ? " Create a key to call Marlin from your code." : ""}</p>
+              {model.create.allowed ? <CreateKeyDialog /> : null}
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -60,6 +61,7 @@ export default async function ApiKeysPage() {
                   <TableHead>Key</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last used</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="w-10">
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -71,14 +73,18 @@ export default async function ApiKeysPage() {
                     <TableCell className="font-medium">{k.name}</TableCell>
                     <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
                       {k.prefix}
-                      {k.revoked === null ? null : (
-                        <Badge variant="destructive" className="ml-2" title={`Revoked ${k.revoked}`}>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{k.created}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{k.lastUsed}</TableCell>
+                    <TableCell>
+                      {k.revoked === null ? (
+                        <Badge variant="outline">Active</Badge>
+                      ) : (
+                        <Badge variant="destructive" title={`Revoked ${k.revoked}`}>
                           Revoked
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{k.created}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{k.lastUsed}</TableCell>
                     <TableCell>{k.revocable ? <RevokeButton id={k.id} name={k.name} /> : null}</TableCell>
                   </TableRow>
                 ))}

@@ -47,5 +47,5 @@ test("development previews require explicit opt-in and use a deterministic fixtu
   const second = consoleContext({ NODE_ENV: "test", INFRX_CONSOLE_PREVIEW: "1" });
   assert.ok(first && second);
   assert.equal(first.now.toISOString(), second.now.toISOString());
-  assert.notEqual(first.services, second.services);
+  assert.notEqual(first.api, second.api, "a fresh client fake per request");
 });

@@ -319,9 +319,8 @@
       "AuthAvailability": {
         "additionalProperties": false,
         "properties": {
-          "captcha_required": {
-            "title": "Captcha Required",
-            "type": "boolean"
+          "captcha": {
+            "$ref": "#/components/schemas/Captcha"
           },
           "recovery": {
             "$ref": "#/components/schemas/Availability"
@@ -341,7 +340,7 @@
           "sign_up",
           "recovery",
           "signup_grant",
-          "captcha_required"
+          "captcha"
         ],
         "title": "AuthAvailability",
         "type": "object"
@@ -387,6 +386,47 @@
           "state"
         ],
         "title": "Availability",
+        "type": "object"
+      },
+      "Captcha": {
+        "additionalProperties": false,
+        "description": "LR-02: whether the password doors need a challenge, and the widget a form renders.",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "site_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Key"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Availability"
+          }
+        },
+        "required": [
+          "required",
+          "state"
+        ],
+        "title": "Captcha",
         "type": "object"
       },
       "CaptureRequest": {
@@ -1921,6 +1961,17 @@
           "actor": {
             "$ref": "#/components/schemas/Actor"
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
           "signup_grant": {
             "$ref": "#/components/schemas/GrantStatus"
           },
@@ -2407,7 +2458,7 @@
           "administrator": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/infrx__console__session__Member"
+                "$ref": "#/components/schemas/infrx__state__identity__Member"
               },
               {
                 "type": "null"
@@ -2725,6 +2776,59 @@
         "title": "RequestSummary",
         "type": "object"
       },
+      "Resend": {
+        "additionalProperties": false,
+        "description": "WR-AP09-RESEND: a new sign-up verification link for this address.",
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "Resend",
+        "type": "object"
+      },
       "RevisionDoc": {
         "additionalProperties": false,
         "properties": {
@@ -2877,6 +2981,18 @@
       "SignIn": {
         "additionalProperties": false,
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "email": {
             "maxLength": 320,
             "minLength": 3,
@@ -3340,59 +3456,12 @@
         "title": "Member",
         "type": "object"
       },
-      "infrx__console__session__Member": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "title": "Email",
-            "type": "string"
-          },
-          "granted_at": {
-            "format": "date-time",
-            "title": "Granted At",
-            "type": "string"
-          },
-          "granted_by": {
-            "title": "Granted By",
-            "type": "string"
-          },
-          "revoked_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revoked At"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "email",
-          "role",
-          "granted_by",
-          "granted_at"
-        ],
-        "title": "Member",
-        "type": "object"
-      },
       "infrx__contracts__api__ListPage_Member___1": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/infrx__console__session__Member"
+              "$ref": "#/components/schemas/infrx__state__identity__Member"
             },
             "title": "Data",
             "type": "array"
@@ -3441,6 +3510,53 @@
           "data"
         ],
         "title": "ListPage[Member]",
+        "type": "object"
+      },
+      "infrx__state__identity__Member": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "granted_by": {
+            "title": "Granted By",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "role",
+          "granted_by",
+          "granted_at"
+        ],
+        "title": "Member",
         "type": "object"
       }
     },
@@ -3751,6 +3867,45 @@
         },
         "security": [],
         "summary": "Refresh"
+      }
+    },
+    "/auth/v1/resend": {
+      "post": {
+        "operationId": "postAuthV1Resend",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Resend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Resend"
       }
     },
     "/auth/v1/sign-in": {
@@ -6746,7 +6901,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/infrx__console__session__Member"
+                  "$ref": "#/components/schemas/infrx__state__identity__Member"
                 }
               }
             },
@@ -6800,7 +6955,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/infrx__console__session__Member"
+                  "$ref": "#/components/schemas/infrx__state__identity__Member"
                 }
               }
             },

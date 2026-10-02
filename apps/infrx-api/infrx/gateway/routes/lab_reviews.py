@@ -2,6 +2,8 @@
 
     GET  /lab/v1/traces/{request_id}/feedback   the customer's shared signals (0038's door)
                                                 beside the provider's human reviews (0064)
+    GET  /lab/v1/traces/{request_id}/judge-runs the provider's judge runs that sent the
+                                                request (0043's door; WR-AP09L-3)
     POST /lab/v1/traces/{request_id}/reviews    one human review (201), keyed by
                                                 `Idempotency-Key`; provenance `human` and the
                                                 reviewer are the server's
@@ -15,6 +17,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Query, Request
 
+from ...contracts import api
 from ...lab.judge_api import service as s
 from .. import control
 from ..control import R270Route
@@ -33,6 +36,11 @@ def register(app: FastAPI, rt: Any) -> None:
     async def feedback(request: Request, request_id: str, provider_org_id: str = Query()):
         user = await session_user(rt, request)
         return control.ok(await judge.feedback(user, provider_org_id, request_id))
+
+    @r.get("/{request_id}/judge-runs", response_model=api.ListPage[s.TraceJudgeRun])
+    async def judge_runs(request: Request, request_id: str, provider_org_id: str = Query()):
+        user = await session_user(rt, request)
+        return control.ok(await judge.trace_runs(user, provider_org_id, request_id))
 
     @r.post("/{request_id}/reviews", status_code=201, response_model=s.ReviewDoc)
     async def review(request: Request, request_id: str, body: s.ReviewBody,

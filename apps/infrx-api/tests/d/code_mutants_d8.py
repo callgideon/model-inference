@@ -357,12 +357,8 @@ REQUESTS = (
     _q("q_experiment_rewritten", "      perform infrx.refuse('idempotency_conflict', 'this "
        "experiment id holds another launch');", "      null;", Q_EXPERIMENTS,
        "a changed resubmit answers as the stored launch"),
-    _q("q_experiment_any_report", "                    and p.protocol_digest = "
-       "e.protocol_digest\n", "", Q_EXPERIMENTS,
-       "a report under another protocol is shown as this experiment's"),
-    _q("q_experiments_unscoped", "    from infrx.lab_experiments e where e.provider_org_id::text "
-       "= p_args->>'provider_org_id'", "    from infrx.lab_experiments e where true", Q_EXPERIMENTS,
-       "a provider lists another's experiments"),
+    # q_experiment_any_report / q_experiments_unscoped moved to 0066's list (api-schema-2:
+    # 0066 re-creates lab_experiments; ap0066_experiment_any_report / _experiments_unscoped)
     _q("q_listing_leaks_evaluator", "      'subscription', s.body - 'evaluator' - "
        "'owner_user_id',", "      'subscription', s.body,", Q_LISTING,
        "the listing exposes the evaluator spec and the subscriber's identity"),
@@ -493,7 +489,7 @@ REQUESTS = (
        "the Lab redeems content refs meant for the content service only"),
     _q("q_role_other_lab", "  infrx.lab_deployment_aggregates(jsonb) to "
        "infrx_lab_control;", "  infrx.lab_deployment_aggregates(jsonb), "
-       "infrx.lab_list_datasets(jsonb) to infrx_lab_control;", Q_ROLE,
+       "infrx.lab_tombstone_samples(jsonb) to infrx_lab_control;", Q_ROLE,
        "the control login reaches Lab RPCs its factory never calls"),
     _q("q_role_service_member", "grant usage on schema infrx to infrx_lab_control;",
        "grant usage on schema infrx to infrx_lab_control;\ngrant service_role to "

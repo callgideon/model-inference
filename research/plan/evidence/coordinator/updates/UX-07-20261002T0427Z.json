@@ -1,0 +1,43 @@
+{
+  "task": "UX-07",
+  "lane": "ux-app-2",
+  "slice": "UX-07 (+ WR-UXF-4/5): request detail C-04 order + UX-T05, Usage list requests-first with compact credit summary and honest empty/filtered/failed states, Credits C-05 labels/grant/ledger codes, API keys empty state + Active/Revoked; data-use controls blocked on the generated client + transport",
+  "activity": "review",
+  "at": "2026-10-02T04:27:00Z",
+  "head": "d21a14ef",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-ux-app-2",
+  "branch": "codex/w7-ux-app-2",
+  "owned_paths": [
+    "apps/app/app/(console)/usage/",
+    "apps/app/app/(console)/billing/credit-view-model.ts",
+    "apps/app/app/(console)/billing/page.tsx",
+    "apps/app/app/(console)/settings/view-model.ts",
+    "apps/app/app/(console)/api-keys/page.tsx",
+    "apps/app/tests/ux/usage/",
+    "research/plan/evidence/w7/ux-app-2-d21a14e.md",
+    "research/plan/evidence/coordinator/updates/UX-07-20261002T0427Z.json"
+  ],
+  "outside_owned_test_pins": [
+    "apps/app/tests/u/request-detail.test.ts (WR-UXF-4 names it)",
+    "apps/app/tests/u/usage-credits-view-model.test.ts",
+    "apps/app/tests/u/credits-view-model.test.ts",
+    "apps/app/tests/u/credit-pg.test.ts",
+    "apps/app/tests/e2e/journey.e2e.ts (not run: Docker gate)"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/usage/usage.test.ts (before each of slices 1-5)", "exit": 1, "summary": "red each time: 0/2, module-load (copyText), 5/8, 8/9, 9/10"},
+    {"cmd": "make console-test", "exit": 0, "summary": "702 tests, 643 pass, 0 fail, 59 skipped (base 692/633/0/59)"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-built", "exit": 0, "summary": "build OK; i2a 22/22"},
+    {"cmd": "node tests/ux/usage/run-mutants.mjs", "exit": 0, "summary": "41 mutants, 41 killed; 2/2 self-checks; every case declared"},
+    {"cmd": "make console-mutants", "exit": 0, "summary": "212+217+195+47+46+21+26+36 killed, 0 survivors"},
+    {"cmd": "uv run --frozen pytest -q tests/integration/test_makefile_mutant_lists.py (with WR-UX07-1 applied, then reverted)", "exit": 0, "summary": "7 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "every slice green with mutants; remaining = review round, WR-UX07-1 at merge, test-pin overlap with api-frontends-app; the live data-use controls (~2-4 h) wait for /console/v1/data-use in packages/api-client and the App transport", "at": "2026-10-02T04:27:00Z"},
+  "blockers": ["Settings data-use controls live: /console/v1/data-use{,/grants} absent from the OpenAPI export / packages/api-client (console routers unmounted) and api-frontends-app's transport not on the base"],
+  "wiring_requests": ["WR-UX07-1 Makefile console-mutants: append `\\tcd apps/app && node tests/ux/usage/run-mutants.mjs` after the first-call line (composed: make console-mutants exit 0 with '41 mutants, 41 killed'; tests/integration/test_makefile_mutant_lists.py 7 passed)"],
+  "evidence": ["research/plan/evidence/w7/ux-app-2-d21a14e.md"]
+}

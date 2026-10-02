@@ -188,9 +188,13 @@ async def cancel_from_each_state(env) -> str:
     assert ended.state == "cancelled" and ended.lease_owner is None
     for final in ("succeeded", "failed"):
         _, op = await leased(env, who=a)
-        await ops.finish(op.operation_id, op.fence, final, FAILURE if final == "failed" else None)
-        await refused(errors.Conflict, ops.cancel(op.operation_id, a))
-    return "queued->cancelled, running->cancel_requested->cancelled, finished refused"
+        done = await ops.finish(op.operation_id, op.fence, final,
+                                FAILURE if final == "failed" else None)
+        # 0066 (api-artifacts' request): a cancel that loses the race to the finish answers
+        # the finished operation as it is - never an error, never a change
+        assert (await ops.cancel(op.operation_id, a)) == done == \
+            await ops.get(op.operation_id, a), "a finished operation answers a cancel as it is"
+    return "queued->cancelled, running->cancel_requested->cancelled, finished answered as is"
 
 
 async def reads_belong_to_the_owning_tenant_or_an_operator(env) -> str:

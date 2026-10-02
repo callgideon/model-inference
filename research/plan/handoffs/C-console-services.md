@@ -18,7 +18,7 @@ Publish typed service interfaces/fixture DTOs first. U/V call these actions; the
 ## Critical Files
 
 - [apps/app/lib/session.ts](../../../apps/app/lib/session.ts)
-- [apps/app/lib/credits.ts](../../../apps/app/lib/credits.ts)
+- apps/app/lib/credits.ts (deleted by AP-09: the API states balances)
 - [apps/app/app/actions.ts](../../../apps/app/app/actions.ts)
 - `apps/app/app/(console)/admin/actions.ts` (deleted by U3 under WR-C3A-2; operator changes go through `app/actions.ts` `operatorAction`)
 - [research/traces/07-console-spec.md](../../../research/traces/07-console-spec.md)

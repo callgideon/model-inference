@@ -89,14 +89,14 @@ def _compose(lab: dict[str, str], store):
     pilot = settings.pilot
     traces = lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
-    # WR-1 (AP-08): the judge/review family on the unit's login, only with LAB_JUDGE_API; `actors`
-    # stays None until AP-01's SessionActors is composed here (the routes answer 503 meanwhile).
+    # WR-1 (AP-08): the judge/review family on the unit's login, only with LAB_JUDGE_API; its
+    # doors are `_actors` (the routes answer 503 while IDENTITY_API is off).
     judge = None
     if settings.deployment is not None and settings.deployment.lab_judge_api:
         from ..judge_api.doors import SessionDoors
         from ..judge_api.service import JudgeApi
         judge = JudgeApi(SessionDoors(connect))
-    actors = _actors(connect)
+    actors = _actors(settings, sessions, connect)
     # WR-AP06-2 (AP-06): the publication door, only with LAB_PUBLICATION, over L3's operations
     # and 0060's receipts on the unit's login (its `lab_control_*`/`control_op_*` grants).
     # Readiness is AP-05's adapter and the dev credentials SR-AP06-1's: 503 until composed.
@@ -104,7 +104,7 @@ def _compose(lab: dict[str, str], store):
     if settings.deployment is not None and settings.deployment.lab_publication:
         if actors is None:
             raise RuntimeMisconfigured(MODE, detail="LAB_PUBLICATION needs AP-01's session "
-                                       "actors on the unit (not composed)")
+                                       "actors on the unit (IDENTITY_API)")
         from ...gateway.routes.operator_publication import Publication
         from ...state.control_ops import PgControlOps
         publication = Publication(operations, PgControlOps(connect))
@@ -115,15 +115,58 @@ def _compose(lab: dict[str, str], store):
         from ..artifacts.compose import surface
         from ..workers.__main__ import lab_objects
         artifacts = surface(connect, lab_objects(MODE, os.environ))
+    # WR-AP05-2 (AP-05): private deployments on the unit's login (0060-0062), only with
+    # LAB_HOSTING; without a configured slot (`HOSTING_*`) the profile reads `unavailable`.
+    hosting = None
+    if settings.deployment is not None and settings.deployment.lab_hosting:
+        from ...state.control_ops import PgControlOps
+        from ..artifacts.store import PgArtifactStore
+        from ..compose import lab_control
+        from ..hosting import LabHosting
+        from ..hosting.controller import target_from
+        from ..hosting.store import PgHostingStore
+        hosting = LabHosting(access, lab_control(connect, access), PgArtifactStore(connect),
+                             PgControlOps(connect), PgHostingStore(connect),
+                             target_from(os.environ))
     return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
+                           identity=actors and actors.identity,
+                           lab_access=access if actors else None,
                            lab_publication=publication, lab_artifacts=artifacts,
+                           lab_hosting=hosting, auth_facade=_auth_facade(settings, lab),
                            **_families(settings, lab, connect)), control, traces
 
 
-def _actors(connect):
-    """AP-01's `SessionActors` on the unit: not composed yet (api-identity-2's Lab-unit
-    wiring), so the judge family answers 503 and LAB_PUBLICATION refuses startup."""
-    return None
+def _auth_facade(settings, lab: dict[str, str]):
+    """WR-AP09L-2 (AP-09 09c): the auth facade `/auth/v1/*` on the unit's own publishable key, only
+    with AUTH_FACADE (default off): the Lab web signs in, refreshes and signs out on LAB_API_URL.
+    WEB_ORIGINS names the Lab's origin (mutations and redirects)."""
+    deployment = settings.deployment
+    if deployment is None or not deployment.auth_facade:
+        return None
+    import httpx
+
+    from ...auth_facade import AuthFacade
+    origins = tuple(o.strip() for o in deployment.web_origins.split(",") if o.strip())
+    return AuthFacade(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
+                                        timeout=httpx.Timeout(10, connect=2)),
+                      lab[SUPABASE_KEY], origins=origins,
+                      captcha_required=deployment.auth_captcha_required,
+                      captcha_provider=deployment.auth_captcha_provider,
+                      captcha_site_key=deployment.auth_captcha_site_key)
+
+
+def _actors(settings, sessions, connect):
+    """WR-AP01-2 (AP-01): the unit's own `SessionActors` over 0065's identity functions
+    (`state.identity.PgIdentity`) on this login, no API-key door, only with IDENTITY_API (default
+    off). One seam: they mount the workspaces, members, capabilities and console account routes
+    and open the judge and publication doors; off, the judge family answers 503 and
+    LAB_PUBLICATION refuses startup."""
+    if settings.deployment is None or not settings.deployment.identity_api:
+        return None
+    from ...console.session import SessionActors
+    from ...state.identity import PgIdentity
+    origins = tuple(o.strip() for o in settings.deployment.web_origins.split(",") if o.strip())
+    return SessionActors(sessions, PgIdentity(connect), origins=origins)
 
 
 def _families(settings, lab: dict[str, str], connect) -> dict:
@@ -156,15 +199,19 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return {"status": "ready"}
 
-    from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
-                                   lab_judge, lab_pipelines, lab_releases, lab_reviews,
-                                   lab_traces, operator_publication)
+    from ...gateway.routes import (auth, console_me, lab_checkpoints, lab_control, lab_datasets,
+                                   lab_evaluations, lab_judge, lab_pipelines, lab_releases,
+                                   lab_reviews, lab_traces, lab_workspaces, operator_publication)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
-                   lab_judge, lab_reviews, operator_publication):
+                   lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication,
+                   auth):
         family.register(app, rt)
-    from ..artifacts.compose import mount          # WR-AP04-2: nothing while it is off
+    from ..artifacts.compose import WorkspaceActors, mount   # WR-AP04-2: nothing while off
     mount(app, rt)
+    from ...gateway.routes import lab_deployments  # WR-AP05-2: nothing while LAB_HOSTING is off
+    lab_deployments.register(app, SimpleNamespace(
+        actors=WorkspaceActors(getattr(rt, "actors", None)), lab_hosting=rt.lab_hosting))
     return app

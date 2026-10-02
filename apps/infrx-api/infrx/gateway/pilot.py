@@ -293,8 +293,8 @@ def _identity(settings, connect) -> dict:
     `IDENTITY_API` is on."""
     if not settings.deployment.identity_api:
         return {}
-    from ..console.session import PgIdentity
     from ..lab.access import LabAccess
+    from ..state.identity import PgIdentity
     from ..state.lab_access import PgAccessStore
     return {"identity": PgIdentity(connect), "lab_access": LabAccess(PgAccessStore(connect))}
 
@@ -334,7 +334,9 @@ def _auth_facade(rt):
     return AuthFacade(httpx.AsyncClient(base_url=rt.settings.supabase_url,
                                         timeout=httpx.Timeout(10, connect=2)),
                       deployment.supabase_anon_key, origins=_web_origins(deployment),
-                      captcha_required=deployment.auth_captcha_required)
+                      captcha_required=deployment.auth_captcha_required,
+                      captcha_provider=deployment.auth_captcha_provider,
+                      captcha_site_key=deployment.auth_captcha_site_key)
 
 
 def _pg_feedback(connect):

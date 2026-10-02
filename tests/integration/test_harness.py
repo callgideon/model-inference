@@ -220,7 +220,8 @@ def test_the_movable_clock_cannot_exist_in_a_deployed_database():
 
 def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     files = pgstate.migration_files()
-    assert [path.name for path in files] == [
+    names = [path.name for path in files]
+    pinned = [
         "0001_init.sql", "0002_seed_models.sql", "0003_pilot_durable_schema.sql",
         "0004_pilot_roles_and_rpcs.sql", "0005_console_read_surface.sql",
         # D1R (additive CREDIT accounting, provider registry, read surface, operator seams)
@@ -286,11 +287,20 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0057_trace_consent_read.sql",
     "0058_lab_variant_identities.sql",
     "0059_lab_control_grants_2.sql",
-    # Wave 7 (LOCAL-ONLY, R271): api-schema 0060, api-artifacts 0061 (merge #89), api-judge 0064
+    # Wave 7 (LOCAL-ONLY, R271): api-schema 0060, api-artifacts 0061 (merge #89), api-judge 0064,
+    # api-schema-2 0065 (SR-AP01-1) and 0066 (the batch's grants and reads)
     "0060_control_operations.sql",
     "0061_model_projects_artifacts.sql",
+    "0062_deployments_hosting.sql",                 # api-hosting (AP-05, merge #96)
     "0064_judge_api.sql",
+    "0065_identity_functions.sql",
+    "0066_wave7_grants_and_reads.sql",
     ]
+    # 0067 (R271's late allocation) is optional until its merge
+    optional = ("0067",)
+    assert names == sorted(names)
+    assert [n for n in names if n[:4] not in optional] == \
+        [n for n in pinned if n[:4] not in optional]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
     assert [name for name, _ in digests] == [path.name for path in files]

@@ -117,9 +117,10 @@ test("a test hidden in a directory named like build output, or behind a dot, is 
 
 test("nested suites and the pre-existing library tests are both discovered", () => {
   const files = testFiles();
-  // The pre-F2 library tests must keep running (F-BASE). lib/utils.test.ts tested the dead
-  // `lib/utils` safeNext and went with it (APP-MINORS-2, WR-A2-3); lib/keys.test.ts remains.
-  assert.ok(files.includes("lib/keys.test.ts"), "lib/keys.test.ts must stay discoverable");
+  // The library tests must keep running (F-BASE). lib/utils.test.ts tested the dead `lib/utils`
+  // safeNext and went with it (APP-MINORS-2, WR-A2-3); lib/keys.test.ts went with the App's key
+  // minting (AP-09: the API mints keys); lib/api/index.test.ts is the library test now.
+  assert.ok(files.includes("lib/api/index.test.ts"), "lib/api/index.test.ts must stay discoverable");
   // This file is itself two directories deep: the old `lib/*.test.ts` glob missed it.
   assert.ok(files.includes("tests/contracts/discovery.test.ts"), "this nested file must be discovered");
   assert.ok(

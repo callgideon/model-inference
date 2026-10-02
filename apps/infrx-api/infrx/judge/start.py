@@ -21,8 +21,8 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from ..contracts import errors
 from .dryrun import MAX_CANDIDATES
-from .rubric import RUBRICS
-from .submit import JudgeJob, JudgeWiring, LedgerRun, submit
+from .rubric import RUBRICS, Rubric, from_definition
+from .submit import JudgeJob, JudgeWiring, LedgerRun, RubricOf, submit
 
 log = logging.getLogger(__name__)
 #: (grantor org, grantor model, limit) -> that model's traces eligible for judging, as
@@ -30,6 +30,11 @@ log = logging.getLogger(__name__)
 Eligible = Callable[[str, str, int], Awaitable[Sequence[tuple[str, bool]]]]
 Queued = Callable[[int], Awaitable[list[dict[str, Any]]]]
 START_BATCH = 20
+
+
+def graded(version: int, definition: dict[str, Any] | None) -> Rubric | None:
+    """The rubric a version names: its stored definition, else the code registry's."""
+    return RUBRICS.get(version) if definition is None else from_definition(definition)
 
 
 def frozen_sample(run_id: str, rows: Sequence[tuple[str, bool]],
@@ -47,8 +52,9 @@ def frozen_sample(run_id: str, rows: Sequence[tuple[str, bool]],
 async def start(request: dict[str, Any], *, wiring: JudgeWiring,
                 eligible: Eligible) -> LedgerRun | None:
     """One queued request -> `submit` (None: nothing eligible yet, it stays queued)."""
-    rubric = RUBRICS.get(request["rubric_version"])
-    if rubric is None:
+    rubric = RUBRICS.get(request["rubric_version"]) if wiring.rubric_of is None else \
+        await wiring.rubric_of(request["run_id"])
+    if rubric is None or rubric.version != request["rubric_version"]:
         raise errors.InvalidRequest("the worker grades no such rubric version")
     rows = await eligible(request["grantor_org_id"], request["model_id"], MAX_CANDIDATES)
     ids, media = frozen_sample(request["run_id"], rows, request["sample_size"])
@@ -79,6 +85,13 @@ async def start_pass(queued: Queued, wiring: JudgeWiring, eligible: Eligible,
     return done
 
 
+def eligible_read(connect, retention) -> Eligible:
+    """AP-07's `infrx.traces.eligible` read (WR-AP08-2b, WR-AP07B-3) for the judge role's start
+    job: the role's own login and T3's retention over the trace projection."""
+    from ..traces.eligible import TraceEligible
+    return TraceEligible(connect, retention)
+
+
 def pg_queued(connect) -> Queued:
     """0064's `infrx.lab_judge_queued` on the worker's login."""
     from ..state import rpc
@@ -89,3 +102,15 @@ def pg_queued(connect) -> Queued:
         return [{k: (str(v) if k.endswith(("_id", "_by", "_org_id")) else v)
                  for k, v in row.items()} for row in rows]
     return queued
+
+
+def pg_rubric_of(connect) -> RubricOf:
+    """SR-AP08-1's `infrx.lab_judge_rubric_of` on the worker's login."""
+    from ..state import rpc
+    from ..state.jobstore import domain_error
+
+    async def rubric_of(run_id: str) -> Rubric | None:
+        row = await rpc.call(connect, "lab_judge_rubric_of", {"run_id": run_id},
+                             error=domain_error)
+        return None if row is None else graded(row["rubric_version"], row["definition"])
+    return rubric_of

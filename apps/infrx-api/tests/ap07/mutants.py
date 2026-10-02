@@ -22,11 +22,13 @@ from ..contracts.mutants import Mutant, Result, Runner
 from ..g.feedback.mutants import _layout
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
-SUITE_FILES = ("tests/ap07/test_data_use.py", "tests/ap07/test_trace_reads.py")
+SUITE_FILES = ("tests/ap07/test_data_use.py", "tests/ap07/test_trace_reads.py",
+               "tests/ap07/test_eligible.py")
 D = "console/data_use.py"
 R = "gateway/routes/console_data_use.py"
 L = "gateway/routes/lab_traces.py"
-FILES = (D, R, L)
+EL = "traces/eligible.py"
+FILES = (D, R, L, EL)
 U = "test_data_use__"
 OWNER = U + "only_the_grantors_owner_decides"
 CAPTURE = U + "capture_is_a_versioned_consent_the_gateway_reads"
@@ -40,6 +42,13 @@ STATES = T + "each_row_states_why_its_content_is_or_is_not_there"
 LAPSED = T + "a_lapsed_grant_is_revoked_not_never_granted"
 BETWEEN = T + "a_revocation_between_list_and_detail_withholds_content"
 FILTERED = T + "filters_run_server_side_and_bind_the_cursor"
+E = "test_eligible__"
+OFFERED = E + "only_full_stored_content_of_that_model_and_grantor_newest_first"
+NO_GRANT = E + "no_current_judging_grant_offers_nothing"
+VIDEO = E + "video_is_the_requests_admitted_video_source"
+DELETED = E + "a_deleted_request_or_content_is_not_offered"
+BOUND = E + "the_bound_is_the_judges"
+END_TO_END = E + "a_captured_request_is_offered_end_to_end"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -52,12 +61,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("mounted_without_data_use", "no rt.data_use (the switch off): no route", R,
        "    if service is None:\n        return None", "    if False:\n        return None",
        U + "nothing_is_mounted_without_data_use"),
-    _m("validation_not_enveloped", "a body that does not validate is the R270 envelope", R,
-       "APIRouter(route_class=EnvelopeRoute)", "APIRouter()",
-       U + "evaluation_consent_needs_full_capture"),
-    _m("field_errors_dropped", "a 422 names the fields that failed", R,
-       'fields = tuple(api.FieldError(', 'fields = () and tuple(api.FieldError(',
-       U + "evaluation_consent_needs_full_capture"),
+    _m("validation_not_enveloped", "every failure is the R270 envelope (control.R270Route)", R,
+       "APIRouter(route_class=control.R270Route)", "APIRouter()",
+       U + "evaluation_consent_needs_full_capture", U + "a_failure_is_an_envelope_never_a_trace"),
     _m("replayed_grant_is_created", "a new version is 201, a replay 200", R,
        "status = 201 if created else 200", "status = 201",
        GRANTS),
@@ -79,6 +85,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("head_is_the_key_mode", "the head is the highest live key mode", D,
        "mode = max((body.mode, *(m for (m,) in others)), key=MODES.index)",
        "mode = body.mode", HEAD),
+    _m("web_door_takes_a_key", "a web door refuses every API key audience with 401 (R272)", R,
+       "        result = await work(web_session(await rt.actors.actor(request)))",
+       "        result = await work(await rt.actors.actor(request))",
+       "test_data_use__a_failure_is_an_envelope_never_a_trace"),
+    _m("capture_needs_transaction", "put_capture runs on the pool's execute-only connection", D,
+       "async with rpc.connection(self.connect) as conn, _transaction(conn):",
+       "async with rpc.connection(self.connect) as conn, conn.transaction():",
+       U + "capture_runs_on_the_gateway_pools_connection"),
+    _m("capture_never_rolls_back", "a refused decision returns its connection idle", D,
+       '        await conn.execute("rollback")\n        raise',
+       "        raise", U + "capture_runs_on_the_gateway_pools_connection"),
     _m("key_mode_not_written", "the key's own mode is set with the consent", D,
        'await conn.execute("update public.api_keys set trace_mode = %s where id = %s",',
        'await conn.execute("select %s::text, %s::uuid",', CAPTURE),
@@ -124,6 +141,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("revoke_another_grantors", "another grantor's grant is not found", D,
        '"infrx.lab_access_grants where grant_id = %s and grantor_org_id = %s "',
        '"infrx.lab_access_grants where grant_id = %s and %s::uuid is not null "', REVOKE),
+    _m("suspended_cannot_withdraw", "a suspended organization still withdraws a grant", D,
+       "org, user = await self._grantor(actor)          # suspended or not",
+       "org, user = await self._grantor(actor, write=True)  # suspended or not",
+       U + "a_suspended_organization_still_withdraws_its_grant"),
+    _m("withdraw_through_0027", "a withdrawal is 0066's revoke-only door, not 0027's revoke", D,
+       '"lab_withdraw_access_grant", {', '"lab_revoke_access_grant", {',
+       U + "a_suspended_organization_still_withdraws_its_grant"),
     _m("revoke_replay_rewrites", "a second DELETE answers the revoked grant", D,
        "if current is None or current.revoked_at is None:", "if True:", REVOKE),
     # --- the Lab projection: one access state per reason (AP-07c) ------------------------------
@@ -178,6 +202,44 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("empty_filter_asks_everything", "a filter outside the provider's own asks nothing", L,
        "rows = await traces.rows.page(tuple(serving), before, limit) if serving else []",
        "rows = await traces.rows.page(tuple(serving), before, limit)", FILTERED),
+    # --- the judge's eligible read (AP-08's start job; the stack: INFRX_AP7_STACK=1) ---------
+    _m("el_any_purpose", "only an external_judging grant opens judging", EL,
+       "purpose=DataPurpose.external_judging)", "purpose=DataPurpose.provider_sharing)",
+       NO_GRANT),
+    _m("el_one_category", "the grant covers request AND response content", EL,
+       "is not None and all(grant.permits(", "is not None and any(grant.permits(", NO_GRANT),
+    _m("el_grant_unchecked", "a grant that permits nothing opens nothing", EL,
+       "if grant is not None and all(", "if grant is not None or all(", NO_GRANT),
+    _m("el_any_mode", "a minimal trace is never offered", EL,
+       "AND mode = 'full' ", "AND mode != '' ", OFFERED),
+    _m("el_mode_misspelled", "the shipper's full traces are what is offered", EL,
+       "AND mode = 'full' ", "AND mode = 'Full' ", OFFERED, END_TO_END),
+    _m("el_content_not_stored", "content that was never stored is never offered", EL,
+       "AND content_stored = 1 ", "", OFFERED),
+    _m("el_any_org", "only the grantor's own traces", EL,
+       "WHERE org_id = {{org:UUID}} ", "WHERE org_id = org_id ", OFFERED),
+    _m("el_any_serving", "only the model's serving versions", EL,
+       "AND serving_version_id IN {serving:Array(UUID)} ",
+       "AND (serving_version_id IN {serving:Array(UUID)} OR 1) ", OFFERED),
+    _m("el_content_bound_ignored", "content past T3's bound is not offered", EL,
+       "since = t3.clock() - timedelta(days=t3.content_days)",
+       "since = t3.clock() - timedelta(days=100 * t3.content_days)", OFFERED),
+    _m("el_oldest_first", "newest first", EL,
+       "ORDER BY started_at DESC, trace_id DESC", "ORDER BY started_at ASC, trace_id DESC",
+       OFFERED),
+    _m("el_limit_ignored", "at most `limit`", EL, '"limit": limit,', '"limit": 200,', OFFERED),
+    _m("el_duplicates", "a request is offered once", EL,
+       "ids = list(dict.fromkeys(str(r) for (r,) in result.result_rows))",
+       "ids = [str(r) for (r,) in result.result_rows]", OFFERED),
+    _m("el_tombstones_ignored", "a deleted request is not offered", EL,
+       "ids = [r for r in ids if not {REQUEST, CONTENT} & set(stones.get((grantor, r), {}))]",
+       "ids = [r for r in ids if True]", DELETED),
+    _m("el_any_medium_is_video", "an image is not a video", EL,
+       "and s.mime like 'video/%%'", "and s.mime is not null", VIDEO),
+    _m("el_video_never", "a video request says so", EL,
+       "return [(r, r in video) for r in ids]", "return [(r, False) for r in ids]", VIDEO),
+    _m("el_unbounded", "the scan bound is the judge's", EL,
+       "limit = scan_bound(limit)", "limit = max(limit, 0)", BOUND),
 )
 
 
@@ -187,10 +249,14 @@ def case_names() -> set[str]:
 
 
 PG = os.environ.get("INFRX_AP7_PG") == "1"
+#: The eligible read's cases need the whole ap7 stack (PostgreSQL, ClickHouse, MinIO).
+STACK = PG and os.environ.get("INFRX_AP7_STACK") == "1"
 #: Every case they name is PostgreSQL's (`test_data_use` is `pg` throughout).
 PG_ONLY = tuple(m.name for m in MUTANTS if all(c.startswith(U) for c in m.cases))
+STACK_ONLY = tuple(m.name for m in MUTANTS if all(c.startswith(E) for c in m.cases))
 RUNNER = Runner(name="ap07", targets=SUITE_FILES, layout=_layout,
-                env=("INFRX_D_TASK", "INFRX_D1_IMAGE") if PG else (),
+                env=(("INFRX_D_TASK", "INFRX_D1_IMAGE") + (("INFRX_AP7_STACK",) if STACK else ()))
+                if PG else (),
                 extra_args=() if PG else ("-m", "not pg"))
 
 

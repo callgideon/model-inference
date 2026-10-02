@@ -289,10 +289,19 @@ NOT_SETTABLE = {
     "CONSOLE_DATA_USE": "mounts the grantor's data-use routes (W1 AP-07a, off by default): "
                         "enabling it needs AP-01's session actors and the E4 regression rerun, "
                         "a deploy change, not a --set",
+    "LAB_ARTIFACTS": "mounts the Lab unit's model-project and artifact routes and composes the "
+                     "artifacts surface (WR-AP04-2 AP-04, off by default, Lab-only): enabling it "
+                     "needs AP-01's session actors on the unit, 0060/0061 applied hosted, the "
+                     "artifact bucket and the E4 regression rerun, a deploy change, not a --set",
     "LAB_JUDGE_API": "mounts the Lab unit's judge and trace-review routes (WR-1 AP-08, off by "
                      "default, Lab-only): enabling it needs AP-01's session actors on the unit, "
                      "0064 applied hosted and the E4 regression rerun, a deploy change, not a "
                      "--set; live judging waits on P-10",
+    "LAB_HOSTING": "mounts the Lab unit's private-deployment routes and composes LabHosting "
+                   "(WR-AP05-2 AP-05, off by default, Lab-only): enabling it needs AP-01's "
+                   "session actors on the unit, 0060-0062 applied hosted, the hosting slot "
+                   "(HOSTING_*), the coordinator's box window and the E4 regression rerun, a "
+                   "deploy change, not a --set",
     "LAB_PUBLICATION": "mounts the Lab unit's publication door - operator proposals, "
                        "approval, rollback, dev keys and dev wallet (WR-AP06-1 AP-06, off by "
                        "default, Lab-only): enabling it needs AP-01's session actors on the "
@@ -309,6 +318,10 @@ NOT_SETTABLE = {
                          "secret store with the deploy change, never an argument",
     "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
                              "decision recorded with the deploy change, not a --set",
+    "AUTH_CAPTCHA_PROVIDER": "the hosted CAPTCHA provider (LR-02, WR-AP01-3), recorded with "
+                             "the deploy change that enables it, not a --set",
+    "AUTH_CAPTCHA_SITE_KEY": "the hosted CAPTCHA's public site key (LR-02, WR-AP01-3), recorded "
+                             "with the deploy change that enables it, not a --set",
 }
 
 

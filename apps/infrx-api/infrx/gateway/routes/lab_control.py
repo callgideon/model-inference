@@ -217,7 +217,8 @@ def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabCon
 
     route("GET", "/aggregates", aggregates, Rows[DeploymentAggregate])
     route("POST", "/register", register_model, Deployment, 201)
-    route("POST", "/deployments/{deployment_revision_id}/smoke", smoke, Deployment)
+    if getattr(rt, "lab_hosting", None) is None:     # WR-AP05-2: AP-05's smoke owns the path
+        route("POST", "/deployments/{deployment_revision_id}/smoke", smoke, Deployment)
     route("POST", "/proposals", propose, Proposal, 201)
     route("POST", "/proposals/{proposal_id}/reject", reject, Proposal)
     return control

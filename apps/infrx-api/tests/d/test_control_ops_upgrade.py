@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""AP-00 slice 00d / R151 rehearsal: `0060_control_operations.sql` applied by the hosted tool
-(`deploy/migrate.py` plan -> apply --expect, the Supabase CLI history table) to a database at
-the hosted level 0059 that holds consumer history changes nothing that existed (row counts,
-money sums, the jobs' identity and money, every ACL of an existing relation, column or
-function), is re-runnable, rolls back to exactly the 0059 state with the file's own ROLLBACK
-lines, and rolls forward again into a working store.
+"""R271 whole-set re-proof / R151 rehearsal (api-schema 00d, api-schema-2's remainder): every
+LOCAL-ONLY wave-7 file (0060-0067 as merged: 0060, 0061, 0062, 0064, 0065, 0066, 0067)
+applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase CLI history
+table) to a database at the hosted level 0059 that holds consumer history:
+nothing that existed changes (row counts, money sums, the jobs' identity and money, every
+ACL of an existing relation or column) except the control login's EXECUTE on 0066's six
+route reads, 0043's per-request judge read (0067) and 0064's three judge/review doors; 0067 adds one table (`lab_judge_rubrics`) and
+its two public doors EXECUTE to the control login only; the set re-runs as a no-op; 0067's, 0066's
+then 0065's own ROLLBACK lines restore the state before them exactly (their functions and 0067's
+table gone, those six grants revoked, the two bodies 0066 re-creates back to 0043's and 0060's); rolling forward again is the same set, and an
+operation starts. 0061/0064 carry prose rollbacks; their lanes' upgrade proofs stand.
 
     INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_upgrade.py
+    INFRX_D_TASK=ap0 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/d/test_control_ops_upgrade.py
 """
 from __future__ import annotations
 
 import asyncio
 import importlib.util
+import re
 import sys
 
 import pytest
@@ -27,11 +34,36 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_control_ops_upgrade"
-FILE = "0060_control_operations.sql"
-NEW_TABLES = {"infrx.control_operations", "infrx.control_idempotency"}
-NEW_FUNCTIONS = {*(f"infrx.control_op_{m}(jsonb)" for m in
-                   ("start", "lease", "advance", "finish", "cancel", "get", "pending", "row")),
-                 "infrx.control_owner(jsonb)", "infrx.control_op_doc(infrx.control_operations)"}
+MINE = ("0067_judge_rubrics.sql", "0066_wave7_grants_and_reads.sql",
+        "0065_identity_functions.sql")                                     # rollback order
+#: The only existing functions whose grants the set changes, each + infrx_lab_control:
+#: 0066's SR-AP10-3 and 0067's per-request judge read (their rollbacks revoke them) and
+#: 0064's judge/review doors (api-judge).
+REGRANTED = {*(f"infrx.{n}(jsonb)" for n in (
+    "lab_put_experiment", "lab_checkpoint_listing", "lab_list_datasets", "lab_evaluator",
+    "lab_checkpoint_subscribe", "lab_checkpoint_decisions")),
+    "lab_judge_runs(uuid,uuid)"}           # 0067 (WR-AP09L-3); its rollback revokes it
+REGRANTED_0064 = {"lab_judge_calibration(uuid,uuid,integer)",
+                  "lab_judge_request_run(uuid,uuid,uuid,text)", "lab_review_feedback(jsonb)"}
+#: (function, the earlier file whose body 0066's rollback restores)
+REDEFINED = (("infrx.lab_experiments(jsonb)", "0043_lab_reads_and_proposals.sql"),
+             ("infrx.control_op_cancel(jsonb)", "0060_control_operations.sql"))
+DROPPED = {*(f"infrx.identity_{n}" for n in ("account", "user_by_email", "members",
+                                             "grant_member", "revoke_member", "create_provider")),
+           *(f"infrx.{n}" for n in ("lab_eval_catalog", "lab_external_runs_of",
+                                    "lab_checkpoint_receipts_of", "lab_withdraw_access_grant")),
+           # 0067 (SR-AP08-1): public doors print unqualified (public is on the search path)
+           "lab_judge_rubric_create", "lab_judge_rubric_list",
+           *(f"infrx.{n}" for n in ("lab_judge_rubric_json", "lab_judge_rubric_of",
+                                    "lab_judge_results_of"))}
+#: 0067's one table and its two public doors (EXECUTE: the control login only, R271)
+TABLE_0067 = "infrx.lab_judge_rubrics"
+DOORS_0067 = ("lab_judge_rubric_create(jsonb)", "lab_judge_rubric_list(uuid)")
+#: 0062's (api-hosting, AP-05) three tables and three doors (EXECUTE: the control login only);
+#: it grants nothing on an existing relation or function. Its own ROLLBACK lines are
+#: tests/d/test_upgrade_0062_mutants.py's; here it stays applied through the rollbacks above.
+TABLES_0062 = {f"infrx.hosting_{t}" for t in ("deployments", "allocations", "receipts")}
+DOORS_0062 = tuple(f"infrx.hosting_{n}(jsonb)" for n in ("request", "fence", "active"))
 
 _spec = importlib.util.spec_from_file_location(
     "infrx_migrate_0060", migrations.DIR.parents[3] / "apps" / "infrx-api" / "deploy" / "migrate.py")
@@ -41,22 +73,44 @@ sys.modules[_spec.name] = migrate
 _spec.loader.exec_module(migrate)
 
 
-def rollback_sql() -> str:
-    """The `-- rollback: ` lines of the file's header, the one source of its rollback."""
+def rollback_sql(name: str) -> str:
+    """The `-- rollback: ` lines of a file's header, the one source of its rollback."""
     lines = [line.removeprefix("-- rollback: ") for line in
-             (migrations.DIR / FILE).read_text().splitlines() if line.startswith("-- rollback: ")]
-    assert len(lines) == 2, lines
+             (migrations.DIR / name).read_text().splitlines() if line.startswith("-- rollback: ")]
+    assert lines, name
     return "\n".join(lines)
 
 
-def test_0060_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monkeypatch,
-                                                                          capsys) -> None:
+def bodies(conn) -> dict[str, str]:
+    """Each function's body, whitespace-normalized (a rollback line holds it on one line)."""
+    return {fn: " ".join(src.split()) for fn, src in conn.execute(
+        "select p.oid::regprocedure::text, p.prosrc from pg_proc p join pg_namespace n "
+        "on n.oid = p.pronamespace where n.nspname in ('public', 'infrx')").fetchall()}
+
+
+def source_body(name: str, fn: str) -> str:
+    """`fn`'s body as `name` writes it, whitespace-normalized."""
+    text = (migrations.DIR / name).read_text()
+    start = text.index("$$", text.index(f"create or replace function {fn.split('(')[0]}("))
+    return " ".join(text[start + 2:text.index("$$", start + 2)].split())
+
+
+def new_tables(files) -> set[str]:
+    return {f"infrx.{t}" for _, sql in files
+            for t in re.findall(r"^create table if not exists infrx\.(\w+)", sql, re.M)}
+
+
+def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monkeypatch,
+                                                                           capsys) -> None:
     everything = migrations.sql_for(shim=pgharness.NEEDS_SHIM)
     number = {label: label[:4] for label, _ in everything if label[:4].isdigit()}
     early = tuple(f for f in everything if number.get(f[0], "0000") < "0027")
     hosted = tuple(f for f in everything if "0027" <= number.get(f[0], "0000") <= "0059")
-    assert [label for label, _ in everything if number.get(label, "") > "0059"] == [FILE], \
-        "0060 is the only file past the hosted level (R271 allocates 0061-0064 to their lanes)"
+    wave7 = tuple(f for f in everything if number.get(f[0], "") > "0059")
+    labels = [label for label, _ in wave7]
+    assert all("0060" <= label[:4] <= "0067" for label in labels) and \
+        {"0060_control_operations.sql", "0062_deployments_hosting.sql", *MINE} <= set(labels), \
+        f"R271: past 0059 only the wave-7 range 0060-0067: {labels}"
     pgharness.ensure()
     pgharness.recreate(DB)
     pgharness.apply(DB, early)
@@ -70,41 +124,63 @@ def test_0060_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monkey
                  "select v, n from unnest(%s::text[], %s::text[]) as h(v, n)",
                  ([number[label] for label, _ in early + hosted if label in number],
                   [label[5:-4] for label, _ in early + hosted if label in number]))
-    before = d10.snapshot(conn)
+    before, at_0059 = d10.snapshot(conn), bodies(conn)
 
     monkeypatch.setenv(migrate.DSN_ENV, pgharness.dsn(DB))
     assert migrate.plan_command(migrations.DIR) == 0
     plan = capsys.readouterr().out
-    assert f"pending: {FILE} " in plan and plan.count("pending:") == 1, plan
+    assert [line.split()[1] for line in plan.splitlines() if line.startswith("pending:")] == \
+        labels, plan
     expect = plan.rsplit("plan digest: ", 1)[1].strip()
     assert migrate.apply_command(migrations.DIR, expect) == 0
     assert conn.execute("select max(version) from supabase_migrations.schema_migrations"
-                        ).fetchall() == [("0060",)]
+                        ).fetchall() == [(labels[-1][:4],)]
     after = d10.snapshot(conn)
 
-    assert set(after["counts"]) - set(before["counts"]) == NEW_TABLES
-    assert {t: after["counts"][t] for t in NEW_TABLES} == dict.fromkeys(NEW_TABLES, 0)
-    assert {t: n for t, n in after["counts"].items() if t not in NEW_TABLES} == \
-        before["counts"], "0060 changed a row count"
+    added = new_tables(wave7)
+    assert TABLE_0067 in added and TABLES_0062 <= added and \
+        set(after["counts"]) - set(before["counts"]) == added
+    for door in (*DOORS_0067, *DOORS_0062):
+        acl = after["fns"][door][0]
+        assert "infrx_lab_control=X" in acl and not any(
+            g in acl for g in ("authenticated=", "anon=", "{=X", ",=X")), (door, acl)
+    assert {t: after["counts"][t] for t in added} == dict.fromkeys(added, 0)
+    assert {t: n for t, n in after["counts"].items() if t not in added} == before["counts"], \
+        "the wave-7 set changed a row count"
     assert (after["sums"], after["jobs"]) == (before["sums"], before["jobs"]), \
-        "0060 changed money or a job"
+        "the wave-7 set changed money or a job"
     assert {k: v for k, v in after["acl"].items() if k in before["acl"]} == before["acl"], \
-        "0060 changed an existing relation's grants"
-    assert after["cols"] == before["cols"]
-    assert {k: v for k, v in after["fns"].items() if k in before["fns"]} == before["fns"], \
-        "0060 changed an existing function's grants"
-    assert set(after["fns"]) - set(before["fns"]) == NEW_FUNCTIONS
+        "the wave-7 set changed an existing relation's grants"
+    # a new table's own column grants (0062's allocation UPDATE columns) are not "existing"
+    assert {c: v for c, v in after["cols"].items() if c.rsplit(".", 1)[0] not in added} == \
+        before["cols"]
+    moved = {k for k, v in after["fns"].items() if k in before["fns"] and v != before["fns"][k]}
+    assert moved == REGRANTED | REGRANTED_0064, f"existing function grants moved: {sorted(moved)}"
+    assert all("infrx_lab_control=X" in after["fns"][k][0] for k in moved)
 
-    pgharness.apply(DB, ((FILE, (migrations.DIR / FILE).read_text()),))
-    assert d10.snapshot(conn) == after, "0060 is not re-runnable"
-    pgharness.apply(DB, (("rollback", rollback_sql()),))
-    assert d10.snapshot(conn) == before, "the ROLLBACK lines do not restore the 0059 state"
-    pgharness.apply(DB, ((FILE, (migrations.DIR / FILE).read_text()),))
-    assert d10.snapshot(conn) == after, "rolling forward again is not the same 0060"
+    pgharness.apply(DB, wave7)
+    assert d10.snapshot(conn) == after, "the wave-7 set is not re-runnable"
+    for name in MINE:
+        pgharness.apply(DB, ((f"rollback {name}", rollback_sql(name)),))
+    back, back_bodies = d10.snapshot(conn), bodies(conn)
+    assert back["counts"] == {t: n for t, n in after["counts"].items() if t != TABLE_0067}
+    assert back["acl"] == {t: v for t, v in after["acl"].items() if t != TABLE_0067}
+    assert {k: v for k, v in back["fns"].items() if k in before["fns"]} == \
+        {k: after["fns"][k] if k in REGRANTED_0064 else v for k, v in before["fns"].items()}, \
+        "the ROLLBACK lines do not restore the existing functions' grants"
+    gone = set(after["fns"]) - set(back["fns"])
+    assert {f.split("(")[0] for f in gone} == DROPPED and set(back["fns"]) < set(after["fns"])
+    for fn, name in REDEFINED:
+        assert back_bodies[fn] == source_body(name, fn), f"{fn}: not {name}'s body"
+    assert back_bodies["infrx.lab_experiments(jsonb)"] == at_0059["infrx.lab_experiments(jsonb)"]
+
+    pgharness.apply(DB, tuple(f for f in wave7 if f[0] in MINE))
+    assert d10.snapshot(conn) == after, "rolling forward again is not the same set"
     who = actor(provider=uid(), user=uid())
     started = asyncio.run(PgControlOps(connector(pgharness.dsn(DB))).start(
         "deployment.create", who, "k", input_hash({"b": 1})))
     assert started.operation.state == "queued" and not started.replayed
     conn.close()
-    print(f"0060 over {len(made)} seeded job states at 0059: {len(before['counts'])} tables "
-          f"unchanged, +{sorted(NEW_TABLES)}; migrate.py plan/apply; re-run, rollback, forward")
+    print(f"{labels} over {len(made)} seeded job states at 0059: {len(before['counts'])} "
+          f"tables unchanged, +{len(added)} tables, {len(REGRANTED)} regrants; migrate.py "
+          f"plan/apply; re-run; 0067+0066+0065 rollback; forward")

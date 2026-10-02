@@ -5,15 +5,16 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, requestResend } from "../flow";
+import { resendVerification } from "../auth-actions";
+import { CAPTCHA_UNAVAILABLE, FAILURE_COPY } from "../flow";
 
 /** The auth service refuses a second verification email to one address within about a minute. */
 const COOLDOWN_MS = 60_000;
 
 /**
- * Resend the verification email. The answer is the same whether or not the address has an account
- * waiting for verification; only rate limits and outages are reported, as fixed copy.
+ * Resend the verification email (`POST /auth/v1/resend` via the server action). The answer is the
+ * same whether or not the address has an account waiting for verification; only rate limits,
+ * outages and an unconfigured challenge are reported, as fixed copy.
  */
 export function ResendForm({ email }: { email?: string }) {
   const [pending, setPending] = useState(false);
@@ -23,18 +24,19 @@ export function ResendForm({ email }: { email?: string }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const address = email ?? String(new FormData(event.currentTarget).get("email"));
+    const form = new FormData(event.currentTarget);
+    if (email) form.set("email", email);
     setPending(true);
     setError(null);
     setNotice(null);
-    const settled = await requestResend(createClient().auth, address, window.location.origin);
+    const settled = await resendVerification(form).catch(() => "unavailable" as const);
     setPending(false);
     if (settled === "sent") {
       setNotice("If that address is waiting for verification, a new link is on its way.");
       setCoolingDown(true);
       setTimeout(() => setCoolingDown(false), COOLDOWN_MS);
     } else {
-      setError(FAILURE_COPY[settled]);
+      setError(settled === "captcha_unconfigured" ? CAPTCHA_UNAVAILABLE : FAILURE_COPY[settled]);
     }
   }
 

@@ -337,7 +337,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
          "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
          "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "auth", "console_me",
-         "lab_workspaces", "operator_providers", "lab_model_projects", "lab_artifacts", "console_reads",
+         "lab_workspaces", "operator_providers", "lab_model_projects", "lab_artifacts", "lab_deployments",
+         "console_reads",
          "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
@@ -479,13 +480,14 @@ LAB_LANE_PORTS = {
     # T lanes: a block, because a TASK_PORTS entry would inherit the track's native 59000
     "t2i": {"clickhouse": 57540, "s3": 57542}, "t2f": {"clickhouse": 57543, "s3": 57545, "postgres": 57549},
     "t3": {"clickhouse": 57546, "s3": 57548},
-    # LW7 (R270): the API-first lifecycle lanes, 57550-57569
+    # LW7 (R270): the API-first lifecycle lanes, 57550-57571
     "ap0": {"postgres": 57550}, "ap1": {"postgres": 57551}, "ap2": {"postgres": 57552},
     "ap3": {"postgres": 57553}, "ap4": {"postgres": 57554, "s3": 57555},
     "ap5": {"postgres": 57556, "engine-fake": 57557}, "ap6": {"postgres": 57558},
     "ap7": {"postgres": 57559, "clickhouse": 57560, "s3": 57562},
     "ap8": {"postgres": 57563, "judge-fake": 57564}, "ap9": {"postgres": 57565},
-    "ap10": {"postgres": 57566}, "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569},
+    "ap10": {"postgres": 57566},
+    "ap11": {"postgres": 57567, "valkey": 57568, "s3": 57569, "clickhouse": 57570},
 }
 
 
@@ -496,9 +498,9 @@ def test_every_lab_lane_port_sits_in_one_band():
         services = tasklocal.local_services(task)
         assert {name: s.host_port for name, s in services.items()} == ports, task
         assert all(s.container == f"infrx-{task}-{s.service}" for s in services.values())
-    for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547), ("ap7", 57561)):
+    for task, native in (("t2i", 57541), ("t2f", 57544), ("t3", 57547), ("ap7", 57561), ("ap11", 57571)):
         assert tasklocal.local_services(task)["clickhouse"].extra_ports == (native,), task
-    used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547, 57561}
+    used = {port for ports in LAB_LANE_PORTS.values() for port in ports.values()} | {57541, 57544, 57547, 57561, 57571}
     reserved = tasklocal.all_host_ports()          # raises on any collision
     assert {port for port in reserved if port in LAB_BAND} == used
     assert used <= set(LAB_BAND)
@@ -592,6 +594,8 @@ DEPLOYMENT_EXPECTED = {
     "LAB_PUBLICATION": False,
     # WR-AP04-2 (AP-04, api-artifacts): the Lab unit's model-project/artifact routes, off
     "LAB_ARTIFACTS": False,
+    # WR-AP05-2 (AP-05, api-hosting): the Lab unit's private-deployment routes, off
+    "LAB_HOSTING": False,
     # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
     # origins and the facade's publishable key (unset)
     "IDENTITY_API": False,
@@ -599,6 +603,9 @@ DEPLOYMENT_EXPECTED = {
     "AUTH_FACADE": False,
     "SUPABASE_ANON_KEY": "",
     "AUTH_CAPTCHA_REQUIRED": False,
+    # WR-AP01-3 (AP-01, LR-02): the CAPTCHA widget's public provider and site key (unset)
+    "AUTH_CAPTCHA_PROVIDER": "",
+    "AUTH_CAPTCHA_SITE_KEY": "",
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

@@ -1,0 +1,34 @@
+{
+  "task": "UX-11",
+  "lane": "lab-e2e-fix",
+  "slice": "register row 90: E2E-R04 harness seam (lab.workers.control_serving), E2E-E01 re-anchored to UX-08's 503 launch + E02-E05 NOT RUN[SR-AP10-1] through carried(), WR-AP10C-3 (N4-J01 on the production datasets route + 0051 queue + datasets pass)",
+  "activity": "review",
+  "at": "2026-10-02T07:00:00Z",
+  "head": "e94034a8",
+  "base": "41456309",
+  "worktree": ".claude/worktrees/codex-w7-lab-e2e-fix",
+  "branch": "codex/w7-lab-e2e-fix",
+  "owned_paths": [
+    "apps/lab/tests/e2e/",
+    "apps/lab/tests/n/journey.test.ts",
+    "apps/lab/tests/n/backend.py",
+    "research/plan/evidence/w7/lab-e2e-fix-e94034a.md",
+    "research/plan/evidence/coordinator/updates/UX-11-20261002T0700Z.json"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=l4 make lab-e2e (base, m90 log)", "exit": 2, "summary": "24: 16 pass, 8 fail"},
+    {"cmd": "INFRX_D_TASK=l4 make lab-e2e", "exit": 0, "summary": "24: 20 pass, 0 fail, 0 skipped, 4 todo (E2E-E02..E05 NOT RUN[SR-AP10-1])"},
+    {"cmd": "node --test tests/e2e/rollout/stack.test.ts (base / head)", "exit": 0, "summary": "base exit 1 (R04 conflict); head 6 pass"},
+    {"cmd": "LAB_N_REAL=1 INFRX_D_TASK=l4 node --test tests/n/journey.test.ts", "exit": 0, "summary": "new journey vs old backend exit 1 (404 pass door); head 1 pass; transient shown() mutant exit 1"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "304: 290 pass, 0 fail, 14 skipped (after apps/app install)"},
+    {"cmd": "make lab-lint / make lab-typecheck", "exit": 0, "summary": "clean / clean"},
+    {"cmd": "node tests/n/run-mutants.mjs", "exit": 0, "summary": "45/45 killed; 27 cases named"},
+    {"cmd": "node tests/e2e/run-mutants.mjs", "exit": 0, "summary": "harness 17/17 killed"},
+    {"cmd": "LAB_E2E_REAL=1 INFRX_D_TASK=l4 node tests/e2e/run-mutants.mjs --only S10,S12-S17", "exit": 0, "summary": "3 killed, 0 not killed, 4 not run (NOT RUN[SR-AP10-1])"},
+    {"cmd": "make api-lint / make api-typecheck", "exit": 0, "summary": "clean / pyright 458 (baseline 458)"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "high", "basis": "all slices green on l4; remaining = merge review + coordinator lab-e2e rerun; un-gating E02-E05 after 0066 is a separate ~2-3 h follow-up", "at": "2026-10-02T07:00:00Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/w7/lab-e2e-fix-e94034a.md"]
+}

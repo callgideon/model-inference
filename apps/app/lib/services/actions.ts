@@ -1,56 +1,38 @@
 /**
- * C3A: the trusted consumer actions, behind narrow ports.
+ * C3A over infrx-api (AP-09 09b): the trusted consumer actions, each one API call as the signed-in
+ * user. The API owns every rule that is not a form's: key minting and hashing, the durable
+ * idempotency of a creation (a retried create under the same key replays the first key, with no
+ * secret), suspension, ownership, the operator's authority and the audit actor. Here: the input
+ * allowlist (a smuggled org, role, audience, amount or actor is `invalid_request`, not quietly
+ * dropped), the Origin check before anything runs, a refresh only after an acknowledged change,
+ * and fixed text for every failure (the API's message never reaches a caller).
  *
- * Every action takes the server-resolved consumer context (C0's `consumerSession()`), never an
- * identity from the caller: the tenant is `account.orgId`, the creator is `account.userId`, the key's
- * audience is the column default (`consumer`, a browser role cannot write it). Inputs are allowlisted, so a smuggled org, role, audience, amount or
- * actor is `invalid_request`, not quietly dropped.
- *
- * Ports:
- * - keys: `public.api_keys` through the individual's OWN JWT (0001's owner insert/update policies and
- *   0004's column grants decide; no service key);
- * - grant: none here. The one App adapter for `public.claim_signup_grant` is A2's
- *   `app/(auth)/grant.ts` (callback, sign-in and the onboarding retry), so there is one campaign
- *   constant and one call site;
- * - operator: `OperatorPort`, which no App-reachable function implements yet (the audited G6B
- *   operations live in the `infrx` schema, which PostgREST does not expose). Without one the action is
- *   an explicit unavailable state.
- *
- * Every failure is a `Result` with fixed text: the DB's message can name relations, constraints or
- * identifiers and never reaches a caller.
- *
- * `consoleActions` is the composition `app/actions.ts` exports: Origin check first, then the
- * session, then the adapter, then a refresh only after an acknowledged change. `app/actions.ts`
- * only hands it Next's request APIs and the clients, so every rule is testable here (R48).
+ * `consoleActions` is the composition `app/actions.ts` exports; `app/actions.ts` only hands it
+ * Next's request APIs and the client, so every rule is testable here (R48).
  */
 
 if (typeof window !== "undefined") throw new Error("lib/services/actions.ts is server-only");
 
+import type { ApiError } from "@infrx/api-client/transport";
+import type { ConsumerApi } from "../api/index.ts";
+import { instant, optionalInstant } from "../api/result.ts";
 import {
   API_KEY_CREATE_FIELDS,
+  FEEDBACK_INPUT_FIELDS,
   MAX_KEY_NAME_CHARS,
   type ApiKeyCreated,
   type ApiKeyCreateInput,
   type ApiKeySummary,
   type ErrorCode,
-  type FeedbackEntry,
   type FeedbackInput,
   type Result,
 } from "../contracts/types.ts";
 import { parseCredit, type Credit } from "../contracts/v2/money-units.ts";
-import { generateKey, hashKey, keyPrefix } from "../keys.ts";
-import { submitOwnFeedback, type FeedbackRpc } from "./feedback.ts";
-import { __testables, keyOf, type ConsumerAccount, type ConsumerContext } from "./console.ts";
-import type { Row } from "./query.ts";
-
-const { badInput } = __testables;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MAX_IDEMPOTENCY_KEY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
-const REPLAY_WINDOW_MS = 10 * 60 * 1000;
-const REPLAY_SLOTS = 1000;
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
@@ -60,197 +42,136 @@ function fail<T>(code: ErrorCode, message: string): Result<T> {
   return { ok: false, error: { code, message } };
 }
 
-type DbError = { code?: string | null; message?: string | null };
-type DbAnswer = { data: unknown; error: DbError | null };
-
-function rowsOf(data: unknown): Row[] {
-  if (!Array.isArray(data)) throw new TypeError("the store did not return rows");
-  return data as Row[];
-}
-
-function refusal<T>(error: DbError, unavailable: string): Result<T> {
-  if (error.code === "42501") return fail("forbidden", "this account cannot make that change");
-  return fail("dependency_unavailable", unavailable);
-}
-
-// ---------------------------------------------------------------------------------------- ports
-
-/** The three `api_keys` calls the actions make, each already scoped by its caller. */
-export type KeyStore = {
-  insert(row: { org_id: string; created_by: string; name: string; prefix: string; key_hash: string }): PromiseLike<DbAnswer>;
-  /** Sets `revoked_at` on the org's still-active consumer key; answers the rows it changed. */
-  revoke(orgId: string, keyId: string, at: string): PromiseLike<DbAnswer>;
-  find(orgId: string, keyId: string): PromiseLike<DbAnswer>;
-};
-
-const KEY_COLUMNS = "id,name,prefix,created_at,last_used_at,revoked_at,trace_mode";
-
-type Filter = PromiseLike<DbAnswer> & {
-  eq(column: string, value: string): Filter;
-  is(column: string, value: null): Filter;
-  select(columns: string): Filter;
-};
-
-/** The part of a supabase-js client `supabaseKeyStore` uses; the cookie client fits. */
-export type KeyClient = {
-  from(relation: "api_keys"): {
-    insert(row: Record<string, string>): Filter;
-    update(row: Record<string, string>): Filter;
-    select(columns: string): Filter;
-  };
-};
-
-/** `public.api_keys` as the signed-in individual. Only consumer-audience keys are revocable here. */
-export function supabaseKeyStore(client: KeyClient): KeyStore {
-  const keys = () => client.from("api_keys");
-  return {
-    insert: (row) => keys().insert(row).select(KEY_COLUMNS),
-    revoke: (orgId, keyId, at) =>
-      keys()
-        .update({ revoked_at: at })
-        .eq("id", keyId)
-        .eq("org_id", orgId)
-        .eq("audience", "consumer")
-        .is("revoked_at", null)
-        .select(KEY_COLUMNS),
-    find: (orgId, keyId) => keys().select(KEY_COLUMNS).eq("id", keyId).eq("org_id", orgId).eq("audience", "consumer"),
-  };
-}
-
-// -------------------------------------------------------------------------------------- context
-
-/** The account an action may act for, or why not. Suspension refuses new work only (R33). */
-function actingAccount<T>(context: ConsumerContext, creating: boolean): ConsumerAccount | Result<T> {
-  switch (context.state) {
-    case "ready":
-      if (creating && context.account.suspended) return fail("org_suspended", "this account is suspended; keys can be revoked but not created");
-      return context.account;
-    case "unverified":
-      return fail("forbidden", "verify your email address first");
-    case "onboarding":
-      return fail("forbidden", "finish setting up your account first");
-    case "signed_out":
-      return fail("forbidden", "sign in first");
-    default:
-      return fail("dependency_unavailable", "your account could not be checked right now; try again");
+/** An object whose every set field is allowlisted, or the refusal. */
+function badInput<T>(input: unknown, allowed: readonly string[]): Result<T> | null {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return fail("invalid_request", "this operation takes an object");
+  for (const [name, value] of Object.entries(input)) {
+    if (value !== undefined && !allowed.includes(name)) return fail("invalid_request", `${name} is not a field of this request`);
   }
+  return null;
 }
 
-function isAccount<T>(value: ConsumerAccount | Result<T>): value is ConsumerAccount {
-  return "walletId" in value;
+/** The API's refusal as one of `known`'s fixed texts; a dead session is "sign in"; else `unknown`. */
+function refused<T>(error: ApiError, known: Partial<Record<string, string>>, unknown: string): Result<T> {
+  if (error.status === 401) return fail("forbidden", "your session has ended; sign in again");
+  const code = error.kind === "error" ? error.code : null;
+  const message = code === null ? undefined : known[code];
+  return message === undefined ? fail("dependency_unavailable", unknown) : fail(code as ErrorCode, message);
 }
 
-// -------------------------------------------------------------------------------------- actions
+// -------------------------------------------------------------------------------------- keys
 
-const CREATE_UNKNOWN =
+export const CREATE_UNKNOWN =
   "the key could not be created right now; try again. If a new key appears in your list, revoke it - its secret cannot be shown again";
+const KEY_REFUSALS: Partial<Record<string, string>> = {
+  org_suspended: "this account is suspended; keys can be revoked but not created",
+  forbidden: "this account cannot create keys yet; finish setting it up first",
+  idempotency_conflict: "this idempotency key was used for a different key",
+  invalid_request: "that key name is not allowed",
+  not_found: "no such key for this account",
+};
 
-export function createConsumerActions(options: { now?: () => Date } = {}) {
-  const now = options.now ?? (() => new Date());
-  // ponytail: per-process replay memory (ids and names only, never a secret). It absorbs a
-  // double-click and an in-process retry; a retry that lands on another instance after a lost
-  // response mints a second key, which the copy tells the individual to revoke. Durable replay needs
-  // an idempotency column or a D10 function (wiring request WR-C3A-3).
-  const replays = new Map<string, { name: string; at: number; outcome: Promise<Result<ApiKeySummary>> }>();
+type ApiKey = { key_id: string; name: string; prefix: string; created_at: string; revoked_at?: string | null };
 
-  async function mint(store: KeyStore, account: ConsumerAccount, name: string, secret: string): Promise<Result<ApiKeySummary>> {
-    const { data, error } = await store.insert({
-      org_id: account.orgId,
-      created_by: account.userId,
-      name,
-      prefix: keyPrefix(secret),
-      key_hash: await hashKey(secret),
-    });
-    if (error !== null) return refusal(error, CREATE_UNKNOWN);
-    const rows = rowsOf(data);
-    if (rows.length !== 1) return fail("internal_error", CREATE_UNKNOWN);
-    return ok(keyOf(rows[0]));
-  }
-
-  async function current(store: KeyStore, account: ConsumerAccount, key: ApiKeySummary): Promise<ApiKeySummary> {
-    const { data, error } = await store.find(account.orgId, key.id);
-    if (error !== null) return key;
-    const rows = rowsOf(data);
-    return rows.length === 1 ? keyOf(rows[0]) : key;
-  }
-
+function summaryOf(key: ApiKey): ApiKeySummary {
   return {
-    /** Mint a consumer key. The plaintext is in this response only; a replay carries `secret: null`. */
-    async createKey(context: ConsumerContext, store: KeyStore, input: unknown): Promise<Result<ApiKeyCreated>> {
-      try {
-        const rejected = badInput<ApiKeyCreated>(input, API_KEY_CREATE_FIELDS);
-        if (rejected !== null) return rejected;
-        const { name, trace_mode, idempotency_key } = input as Record<string, unknown>;
-        if (typeof name !== "string" || name.trim() === "" || name.trim().length > MAX_KEY_NAME_CHARS) {
-          return fail("invalid_request", `name is 1 to ${MAX_KEY_NAME_CHARS} characters`);
-        }
-        // Consumer capture is off (P-09); a key cannot opt into it, and the column is not writable.
-        if (trace_mode !== undefined && trace_mode !== "off") {
-          return fail("unsupported_parameter", "content capture is not available for consumer keys");
-        }
-        if (
-          idempotency_key !== undefined &&
-          (typeof idempotency_key !== "string" || idempotency_key === "" || idempotency_key.length > MAX_IDEMPOTENCY_KEY_CHARS)
-        ) {
-          return fail("invalid_request", "idempotency_key is a non-empty string");
-        }
-        const account = actingAccount<ApiKeyCreated>(context, true);
-        if (!isAccount(account)) return account;
-        const label = name.trim();
-
-        const at = now().getTime();
-        const slot = idempotency_key === undefined ? null : `${account.userId}\u0000${idempotency_key}`;
-        const seen = slot === null ? undefined : replays.get(slot);
-        if (seen !== undefined && at - seen.at < REPLAY_WINDOW_MS) {
-          if (seen.name !== label) return fail("idempotency_conflict", "this idempotency key was used for a different key");
-          const first = await seen.outcome;
-          if (!first.ok) return first;
-          return ok({ ...(await current(store, account, first.value)), secret: null, replayed: true });
-        }
-
-        const secret = generateKey();
-        const outcome = mint(store, account, label, secret);
-        if (slot !== null) {
-          replays.delete(slot);
-          replays.set(slot, { name: label, at, outcome });
-          if (replays.size > REPLAY_SLOTS) replays.delete(replays.keys().next().value as string);
-        }
-        const result = await outcome;
-        if (!result.ok) {
-          if (slot !== null && replays.get(slot)?.outcome === outcome) replays.delete(slot);
-          return result;
-        }
-        return ok({ ...result.value, secret, replayed: false });
-      } catch {
-        return fail("internal_error", CREATE_UNKNOWN);
-      }
-    },
-
-    /** Revoke one of the individual's own consumer keys. Idempotent; allowed while suspended (R33). */
-    async revokeKey(context: ConsumerContext, store: KeyStore, keyId: unknown): Promise<Result<ApiKeySummary>> {
-      try {
-        const account = actingAccount<ApiKeySummary>(context, false);
-        if (!isAccount(account)) return account;
-        if (typeof keyId !== "string" || !UUID.test(keyId)) return fail("not_found", "no such key for this account");
-        const unavailable = "the key could not be revoked right now; try again";
-        const changed = await store.revoke(account.orgId, keyId, now().toISOString());
-        if (changed.error !== null) return refusal(changed.error, unavailable);
-        const rows = rowsOf(changed.data);
-        if (rows.length === 1) return ok(keyOf(rows[0]));
-        // Nothing changed: already revoked (answer that revocation) or not this account's key.
-        const found = await store.find(account.orgId, keyId);
-        if (found.error !== null) return refusal(found.error, unavailable);
-        const existing = rowsOf(found.data);
-        if (existing.length === 1 && keyOf(existing[0]).revoked_at !== null) return ok(keyOf(existing[0]));
-        return fail("not_found", "no such key for this account");
-      } catch {
-        return fail("internal_error", "the key could not be revoked; refresh to see its state");
-      }
-    },
+    id: key.key_id,
+    name: key.name,
+    prefix: key.prefix,
+    created_at: instant(key.created_at),
+    last_used_at: null,
+    revoked_at: optionalInstant(key.revoked_at),
+    trace_mode: null,
   };
 }
 
-export type ConsumerActions = ReturnType<typeof createConsumerActions>;
+/**
+ * Mint a consumer key through the API. The plaintext is in the first answer only; a replay under
+ * the same idempotency key - a double submit, or a retry after a lost answer, on any instance - is
+ * the same key with `secret: null` (the dialog says: revoke it and create another).
+ */
+export async function createKey(api: ConsumerApi, input: unknown): Promise<Result<ApiKeyCreated>> {
+  const rejected = badInput<ApiKeyCreated>(input, API_KEY_CREATE_FIELDS);
+  if (rejected !== null) return rejected;
+  const { name, trace_mode, idempotency_key } = input as Record<string, unknown>;
+  if (typeof name !== "string" || name.trim() === "" || name.trim().length > MAX_KEY_NAME_CHARS) {
+    return fail("invalid_request", `name is 1 to ${MAX_KEY_NAME_CHARS} characters`);
+  }
+  // Consumer capture is off (P-09); a key cannot opt into it here.
+  if (trace_mode !== undefined && trace_mode !== "off") {
+    return fail("unsupported_parameter", "content capture is not available for consumer keys");
+  }
+  if (idempotency_key !== undefined && (typeof idempotency_key !== "string" || idempotency_key === "" || idempotency_key.length > MAX_IDEMPOTENCY_KEY_CHARS)) {
+    return fail("invalid_request", "idempotency_key is a non-empty string");
+  }
+  try {
+    const answer = await api.call("post", "/console/v1/keys", {
+      body: { name: name.trim() },
+      idempotencyKey: (idempotency_key as string | undefined) ?? crypto.randomUUID(),
+    });
+    if (!answer.ok) return refused(answer.error, KEY_REFUSALS, CREATE_UNKNOWN);
+    const { key, secret, secret_returned, replayed } = answer.data;
+    const shown = secret_returned && !replayed && typeof secret === "string" ? secret : null;
+    return ok({ ...summaryOf(key), secret: shown, replayed: replayed || shown === null });
+  } catch {
+    return fail("dependency_unavailable", CREATE_UNKNOWN);
+  }
+}
+
+/** Revoke one of the individual's own consumer keys. Idempotent; allowed while suspended (R33). */
+export async function revokeKey(api: ConsumerApi, keyId: unknown): Promise<Result<ApiKeySummary>> {
+  if (typeof keyId !== "string" || !UUID.test(keyId)) return fail("not_found", "no such key for this account");
+  const unknown = "the key could not be revoked right now; refresh to see its state";
+  try {
+    const answer = await api.call("delete", "/console/v1/keys/{key_id}", { params: { key_id: keyId } });
+    return answer.ok ? ok(summaryOf(answer.data)) : refused(answer.error, KEY_REFUSALS, unknown);
+  } catch {
+    return fail("dependency_unavailable", unknown);
+  }
+}
+
+// ---------------------------------------------------------------------------------- feedback
+
+const FEEDBACK_UNKNOWN = "your feedback could not be confirmed; send it again - the same submission is recorded once";
+const FEEDBACK_REFUSALS: Partial<Record<string, string>> = {
+  not_found: "no such request for this account",
+  invalid_request: "that feedback does not fit the request's signal",
+  idempotency_conflict: "this submission key was already used for different feedback",
+  org_suspended: "this account is suspended; feedback cannot be sent",
+  forbidden: "this account cannot send feedback",
+};
+
+export type FeedbackAck = { id: string; request_id: string; created_at: string; replayed: boolean };
+
+/**
+ * One feedback signal on one of the caller's own requests (C3F). The API derives the org, the
+ * author, the channel and the role, and acknowledges only what it stored; the idempotency key is
+ * required (a retried submit replays the first acceptance).
+ */
+export async function submitFeedback(api: ConsumerApi, input: unknown): Promise<Result<FeedbackAck>> {
+  const rejected = badInput<FeedbackAck>(input, FEEDBACK_INPUT_FIELDS);
+  if (rejected !== null) return rejected;
+  const { request_id, name, value, comment, idempotency_key } = input as Record<string, unknown>;
+  if (typeof request_id !== "string" || !UUID.test(request_id)) return fail("not_found", FEEDBACK_REFUSALS.not_found!);
+  if (typeof idempotency_key !== "string" || idempotency_key === "" || idempotency_key.length > MAX_IDEMPOTENCY_KEY_CHARS) {
+    return fail("invalid_request", "an idempotency key is required");
+  }
+  if (typeof name !== "string" || !["boolean", "number", "string"].includes(typeof value)) return fail("invalid_request", FEEDBACK_REFUSALS.invalid_request!);
+  try {
+    const answer = await api.call("post", "/console/v1/requests/{request_id}/feedback", {
+      params: { request_id },
+      body: { name, value: value as boolean | number | string, comment: typeof comment === "string" ? comment : null },
+      idempotencyKey: idempotency_key,
+    });
+    if (!answer.ok) return refused(answer.error, FEEDBACK_REFUSALS, FEEDBACK_UNKNOWN);
+    const ack = answer.data;
+    if (ack.channel !== "console" || ack.request_id !== request_id) return fail("internal_error", FEEDBACK_UNKNOWN);
+    return ok({ id: ack.feedback_id, request_id: ack.request_id, created_at: instant(ack.created_at), replayed: ack.replayed === true });
+  } catch {
+    // The transport answers every failure as a Result; only an unreadable acknowledgment lands here.
+    return fail("internal_error", FEEDBACK_UNKNOWN);
+  }
+}
 
 // ------------------------------------------------------------------------------ cross-site guard
 
@@ -352,24 +273,19 @@ export async function runOperatorCommand(command: OperatorCommand, port: Operato
 
 // --------------------------------------------------------------------------------- the seam
 
-/** What `app/actions.ts` supplies: Next's request APIs and the clients, resolved per call. */
+/** What `app/actions.ts` supplies: Next's request APIs and the request's client, resolved per call. */
 export type ActionDeps = {
   headers(): Promise<Headers>;
-  context(): Promise<ConsumerContext>;
-  keys(): Promise<KeyStore>;
+  api(): Promise<ConsumerApi>;
   session(): Promise<{ userId: string; isOperator: boolean }>;
   endSession(): Promise<void>;
   revalidate(path: string): void;
-  /** The audited operator port; none is App-reachable yet (WR-C3A-3a). */
+  /** The audited operator port (`app/(console)/admin/operator-port.ts`). */
   operator?: OperatorPort;
-  /** C3F: the individual's own client for `public.submit_feedback` (WR-C3F-2). */
-  feedback?: () => Promise<FeedbackRpc>;
-  actions?: ConsumerActions;
 };
 
 /** The console's server actions, composed: nothing runs for a cross-site request, nothing refreshes a failure. */
 export function consoleActions(deps: ActionDeps) {
-  const actions = deps.actions ?? createConsumerActions();
   async function guarded<T>(run: () => Promise<Result<T>>, refresh?: string): Promise<Result<T>> {
     if (!sameOrigin(await deps.headers())) return fail("forbidden", "this change must be made from the console itself");
     const result = await run();
@@ -380,14 +296,9 @@ export function consoleActions(deps: ActionDeps) {
     async signOut(): Promise<void> {
       if (sameOrigin(await deps.headers())) await deps.endSession();
     },
-    createKey: (input: ApiKeyCreateInput) =>
-      guarded(async () => actions.createKey(await deps.context(), await deps.keys(), input), "/api-keys"),
-    revokeKey: (keyId: string) => guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId), "/api-keys"),
-    submitFeedback: (input: FeedbackInput) =>
-      guarded(async () => {
-        if (deps.feedback === undefined) return fail<FeedbackEntry>("dependency_unavailable", "feedback is not available yet");
-        return submitOwnFeedback(await deps.context(), await deps.feedback(), input);
-      }, "/traces"),
+    createKey: (input: ApiKeyCreateInput) => guarded(async () => createKey(await deps.api(), input), "/api-keys"),
+    revokeKey: (keyId: string) => guarded(async () => revokeKey(await deps.api(), keyId), "/api-keys"),
+    submitFeedback: (input: FeedbackInput) => guarded(async () => submitFeedback(await deps.api(), input)),
     operator: (input: unknown) =>
       guarded(async () => {
         const command = operatorCommand(await deps.session(), input);

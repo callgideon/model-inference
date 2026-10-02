@@ -24,6 +24,7 @@ from pydantic import Field
 from ...contracts import api, errors
 from ...contracts.api import Money, OperationDoc, Wire
 from ...judge.cost import APPROVED_RATES, RateTable, estimate_worst_case
+from ...judge import rubric as j
 from ...judge.dryrun import DEFAULT_CEILINGS
 from . import rubric
 from .doors import SessionDoors
@@ -166,6 +167,41 @@ class FeedbackDoc(Wire):
     reviews: tuple[ReviewDoc, ...]
 
 
+class TraceJudgeScore(Wire):
+    criterion: str
+    score: int
+    max_score: int
+    requires_media: bool
+
+
+class TraceJudgeRun(Wire):
+    """One Lab-requested judge run that SENT this request (0043's `lab_judge_runs`, while its
+    judging grant is current): criterion scores only, never a rationale."""
+
+    run_id: str
+    state: Literal["reserved", "submitted", "ambiguous", "collected", "released"]
+    judge_model: str
+    rubric_version: int
+    media: bool
+    reserved: Money | None = None
+    actual: Money | None = None
+    scores: tuple[TraceJudgeScore, ...]
+    overall_pass: bool | None = None
+    calibration: rubric.CalibrationDoc
+
+
+def trace_run(r: dict[str, Any]) -> TraceJudgeRun:
+    """0043's V3 `JudgeRun` row, typed; its calibration re-checked as every other read's."""
+    return TraceJudgeRun(
+        run_id=str(r["runId"]), state=r["state"], judge_model=r["judgeModel"],
+        rubric_version=r["rubricVersion"], media=r["media"], reserved=_usd(r["reservedUsd"]),
+        actual=_usd(r["actualUsd"]), overall_pass=r["overallPass"],
+        scores=tuple(TraceJudgeScore(criterion=s["criterion"], score=s["score"],
+                                     max_score=s["max"], requires_media=s["requiresMedia"])
+                     for s in r["scores"]),
+        calibration=rubric.calibration(r["calibration"]))
+
+
 class JudgeModelDoc(Wire):
     model: str
     price_version: str
@@ -299,8 +335,40 @@ class JudgeApi:
             state="unavailable", reason="no approved judge rate (P-10)")
         return JudgeModels(data=data, availability=availability)
 
+    async def stored_rubrics(self, user: str, provider: str) -> dict[int, dict[str, Any]]:
+        """SR-AP08-1's stored versions, by version."""
+        rows = await self.doors.call(user, "lab_judge_rubric_list", _uuid(provider, "provider"))
+        return {row["rubric_version"]: row for row in rows}
+
+    async def rubrics(self, user: str, provider: str) -> api.ListPage[rubric.RubricDoc]:
+        return api.ListPage[rubric.RubricDoc](
+            data=rubric.rubrics(await self.stored_rubrics(user, provider)))
+
+    async def create_rubric(self, user: str, provider: str, key: str,
+                            body: rubric.RubricBody) -> rubric.RubricDoc:
+        """A reviewed definition -> a new immutable version (the door: operator only, once
+        per version; the same digest again is the stored row, another one 409)."""
+        scoped_id("judge.rubric", provider, user, key)    # validated; the version is the identity
+        try:
+            r = j.from_definition(body.definition())
+        except ValueError as refused:
+            raise errors.InvalidRequest(str(refused), param="criteria") from None
+        if r.version in rubric.RUBRICS:
+            raise errors.StateConflict(f"rubric version {r.version} is a reviewed code version "
+                                       f"and immutable")
+        row = await self.doors.call(user, "lab_judge_rubric_create", {
+            "rubric_version": r.version, "rubric_id": r.rubric_id,
+            "definition": j.definition(r), "digest": j.digest(r),
+            "review_ref": body.review_ref})
+        return rubric.stored_doc(row)
+
     async def configure(self, user: str, provider: str, key: str, body: ConfigBody) -> ConfigDoc:
-        if body.rubric_version not in rubric.RUBRICS:
+        version = body.rubric_version
+        if version not in rubric.RUBRICS and \
+                version not in await self.stored_rubrics(user, provider):
+            if version in j.PENDING:
+                raise errors.StateConflict(f"rubric version {version} is definition_pending: "
+                                           f"{j.PENDING[version][1]}")
             raise errors.InvalidRequest("no such rubric version", param="rubric_version")
         config = scoped_id("judge.config", provider, user, key)
         row = await self.doors.call(user, "lab_judge_configure_keyed", _uuid(provider, "provider"),
@@ -375,8 +443,12 @@ class JudgeApi:
                                      _uuid(run_id, "judge run"), decode_cursor(cursor),
                                      limit + 1)
         shown, nxt = page(rows, limit, lambda r: r["label_id"])
-        return api.ListPage[rubric.SampleResult](data=tuple(rubric.project(r) for r in shown),
-                                                 next_cursor=nxt)
+        known = dict(rubric.RUBRICS)
+        if any(r["rubric_version"] not in known for r in shown):
+            known.update({v: j.from_definition(row["definition"]) for v, row in
+                          (await self.stored_rubrics(user, provider)).items()})
+        return api.ListPage[rubric.SampleResult](
+            data=tuple(rubric.project(r, known) for r in shown), next_cursor=nxt)
 
     async def cancel(self, user: str, provider: str, run_id: str, key: str) -> RunDoc:
         scoped_id("judge.cancel", provider, user, key)      # validated; a cancel is idempotent
@@ -399,6 +471,12 @@ class JudgeApi:
                                  author_role=s["author_role"], channel=s["channel"],
                                  created_at=str(s["created_at"])) for s in signals),
             reviews=tuple(review_doc(r) for r in reviews))
+
+    async def trace_runs(self, user: str, provider: str,
+                         request_id: str) -> api.ListPage[TraceJudgeRun]:
+        rows = await self.doors.call(user, "lab_judge_runs", _uuid(provider, "provider"),
+                                     _uuid(request_id, "request"))
+        return api.ListPage[TraceJudgeRun](data=tuple(trace_run(r) for r in rows))
 
     async def review(self, user: str, provider: str, request_id: str, key: str,
                      body: ReviewBody) -> ReviewDoc:

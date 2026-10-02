@@ -19,7 +19,7 @@ JobStore, StreamStore, FeedbackService storage operations and JudgeCoordinator. 
 
 - [apps/app/supabase/migrations/0001_init.sql](../../../apps/app/supabase/migrations/0001_init.sql)
 - [apps/app/supabase/migrations/0002_seed_models.sql](../../../apps/app/supabase/migrations/0002_seed_models.sql)
-- [apps/app/lib/credits.ts](../../../apps/app/lib/credits.ts)
+- apps/app/lib/credits.ts (deleted by AP-09: the API states balances)
 - `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
 
 ## Files Modified

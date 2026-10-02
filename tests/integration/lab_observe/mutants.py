@@ -318,6 +318,8 @@ O09_WORKER = "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_eve
 O03_ROUTE = "test_o03_the_lab_traces_route_through_the_real_gateway"
 O04_PG = "test_o04_the_judge_ledger_is_d6js_postgresql_ledger"
 O10 = "test_o10_the_lab_review_panel_renders_the_routes_answer"             # LAB-E2E
+O11 = "test_o11_data_use_decided_on_the_box_reaches_capture_and_the_lab"     # AP-07 W4
+DATA_USE, DATA_USE_ROUTE = "infrx/console/data_use.py", "infrx/gateway/routes/console_data_use.py"
 ROUTE, CONSENT = "infrx/gateway/routes/lab_traces.py", "infrx/state/lab_consent.py"
 J3 = "infrx/judge/calibration/report.py"
 #: Cases that FAIL on this base (a product finding, recorded in the evidence): no mutant can
@@ -328,6 +330,13 @@ J3 = "infrx/judge/calibration/report.py"
 KNOWN_FAIL: dict[str, str] = {}
 
 STACK_MUTANTS: tuple[Mutant, ...] = (
+    _m("st_data_use_unmounted", "CONSOLE_DATA_USE on mounts the grantor's routes on the box",
+       DATA_USE_ROUTE, "    if service is None:\n        return None",
+       "    if True:\n        return None", O11),
+    _m("st_data_use_key_mode_unwritten", "a key's capture decision reaches the gateway's read",
+       DATA_USE, '"update public.api_keys set trace_mode = %s where id = %s"',
+       '"update public.api_keys set trace_mode = trace_mode where %s is not null and id = %s"',
+       O11),
     _m("st_capture_on_in_the_box", "the drill judges capture off with the box at its defaults",
        OWORLD, "    with world.composed(workdir, start=start, **env) as trip:",
        "    with world.composed(workdir, start=start, **{'TRACE_SPOOL_DIR': str(workdir), **env}) "
@@ -419,7 +428,7 @@ STACK_CASES = tuple(sorted({case for m in STACK_MUTANTS for case in m.cases}))
 def unbound_cases() -> set[str]:
     """The scenario cases that skip NOT RUN (named through the layer-1 `UNBOUND` case)."""
     found = set()
-    for path in HERE.glob("scenarios_*.py"):
+    for path in (*HERE.glob("scenarios_*.py"), HERE / "test_ap07_box_variant.py"):
         for name, body in re.findall(r"^def (test_o\d\d_\w+)\(.*?\n((?:    .*\n|\n)*)",
                                      path.read_text(), re.M):
             if "not_run(" in body:
@@ -434,7 +443,7 @@ def case_names() -> set[str]:
 
 
 def stack_case_names() -> set[str]:
-    return {name for path in HERE.glob("scenarios_*.py")
+    return {name for path in (*HERE.glob("scenarios_*.py"), HERE / "test_ap07_box_variant.py")
             for name in re.findall(r"^def (test_o\d\d_\w+)\(", path.read_text(), re.M)} \
         - unbound_cases() - set(KNOWN_FAIL)
 
@@ -477,7 +486,8 @@ STACK_ENV = ("INFRX_E2_NAMESPACE", "INFRX_E2_CHECKOUT", "INFRX_E2_STATE_FILE", "
 STACK_RUNNER = Runner(name="e5l-stack", package="", layout=_stack, env=STACK_ENV,
                       timeout_s=1800,
                       targets=tuple(f"../../tests/integration/lab_observe/{f}" for f in (
-                          "scenarios_trace.py", "scenarios_judge.py")))
+                          "scenarios_trace.py", "scenarios_judge.py",
+                          "test_ap07_box_variant.py")))
 
 
 def claim_the_kept_stack() -> str | None:

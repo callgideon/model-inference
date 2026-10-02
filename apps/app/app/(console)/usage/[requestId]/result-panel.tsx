@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "./copy-button";
 import { browserTimer, readResult, watchExpiry, watchResult, type Shown } from "./request-view-model";
 
 const MESSAGES: Record<Exclude<Shown["state"], "ready" | "signed_out">, string> = {
@@ -23,7 +24,6 @@ const MESSAGES: Record<Exclude<Shown["state"], "ready" | "signed_out">, string> 
  */
 export function ResultPanel({ requestId, expiresAt }: { requestId: string; expiresAt: string }) {
   const [shown, setShown] = useState<Shown>({ state: "loading" });
-  const [copied, setCopied] = useState(false);
 
   // Read on mount and again on a back/forward restore; abort on navigation away.
   useEffect(() => watchResult((signal) => readResult(requestId, signal), setShown, window), [requestId]);
@@ -36,12 +36,6 @@ export function ResultPanel({ requestId, expiresAt }: { requestId: string; expir
 
   if (shown.state === "ready") {
     const text = shown.text;
-    const copy = () => {
-      navigator.clipboard.writeText(text).then(
-        () => setCopied(true),
-        () => setCopied(false),
-      );
-    };
     const download = () => {
       const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
       const link = document.createElement("a");
@@ -56,15 +50,10 @@ export function ResultPanel({ requestId, expiresAt }: { requestId: string; expir
           {text}
         </pre>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={copy}>
-            Copy
-          </Button>
+          <CopyButton text={text} label="Copy result" />
           <Button variant="outline" size="sm" onClick={download}>
             Download
           </Button>
-          <span role="status" className="text-xs text-muted-foreground">
-            {copied ? "Copied to the clipboard." : ""}
-          </span>
         </div>
       </div>
     );
@@ -96,7 +85,7 @@ export function ResultPanel({ requestId, expiresAt }: { requestId: string; expir
             });
           }}
         >
-          Load the result again
+          Retry loading result
         </Button>
       ) : null}
     </div>

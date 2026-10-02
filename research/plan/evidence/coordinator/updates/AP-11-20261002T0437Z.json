@@ -1,0 +1,29 @@
+{
+  "task": "AP-11",
+  "lane": "api-lifecycle-2",
+  "slice": "11c (isolated mode on ap11); 11d/11e are batch 3",
+  "activity": "review",
+  "at": "2026-10-02T04:37:00Z",
+  "head": "7e295a28",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-lifecycle-2",
+  "branch": "codex/w7-api-lifecycle-2",
+  "owned_paths": ["tests/integration/api_lifecycle/stages/", "tests/integration/api_lifecycle/runner.py", "tests/integration/api_lifecycle/world.py", "infra/runbooks/api-lifecycle.md", "tests/integration/api_lifecycle/{conftest,test_runner,mutants,test_mutants}.py (the track's cases and list)", "research/plan/evidence/w7/api-lifecycle-2-7e295a2.md", "research/plan/evidence/w7/AP11-isolated-7e295a2-verdict.json", "research/plan/evidence/w7/AP11-isolated-7e295a2-with-WR-AP11C-1-SR-AP11C-1-verdict.json", "research/plan/evidence/coordinator/updates/AP-11-20261002T0437Z.json"],
+  "commands": [
+    {"cmd": "pytest tests/integration/api_lifecycle/test_runner.py (new cases, base runner/stages)", "exit": 1, "summary": "RED: 65 failed, 21 passed"},
+    {"cmd": "pytest tests/integration/api_lifecycle/", "exit": 0, "summary": "103 passed (37 case functions, 54 product-defect params)"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/integration/api_lifecycle/test_mutants.py", "exit": 0, "summary": "137 passed: 133/133 mutants killed, every-case guard green, self-tests green (first full run: 5 gaps, fixed)"},
+    {"cmd": "runner.py --mode isolated --world ap11 (committed tree)", "exit": 1, "summary": "FAIL: 01, 08-11 PASS; 12 FAIL on AP-07's DataUse.put_capture 500 on the gateway pool (SR-AP11C-1); 13-17 BLOCKED needs 12; 02-07, 18 BLOCKED by name"},
+    {"cmd": "same with WR-AP11C-1 + SR-AP11C-1 applied (reverted)", "exit": 3, "summary": "BLOCKED: 01, 08-17 PASS (14-15 labelled dry-run); 02-03 BLOCKED[AP-04 composition]; 04-07 BLOCKED[AP-05/06]; 18 no runner"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed; ruff 0.15.12 on tests/integration/api_lifecycle clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 458 errors (baseline 458)"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py tests/integration/test_lab_package_isolation.py", "exit": 0, "summary": "9 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 3, "confidence": "medium", "basis": "11c done and evidenced; remaining is review fixes and one isolated re-run once WR-AP11C-1/2 and SR-AP11C-1 merge. 11d/11e (batch 3, live target) separately 8/14/26 h, confidence low: 02-07 body alignment after api-artifacts-2/api-hosting/api-publication merge (~1-2 h per stage) plus live-target setup, P-10, a GPU window and cleanup", "at": "2026-10-02T04:37:00Z"},
+  "blockers": ["stage 12 (and so 13-17) FAILs on the committed tree until SR-AP11C-1 (api-traces-2: DataUse.put_capture's conn.transaction() on the gateway pool)", "stages 12-13 need ClickHouse on ap11 (WR-AP11C-1)", "stages 02-03 wait on api-artifacts-2's LAB_ARTIFACTS composition", "stages 04-07, 18 wait on AP-05/06 and a GPU target", "live judging (P-10)"],
+  "wiring_requests": ["WR-AP11C-1 apps/infrx-api/infrx/contracts/tasklocal.py TASK_BLOCKS: \"ap11\": {\"clickhouse\": (57570, (57571,))}", "WR-AP11C-2 apps/infrx-api/infrx/lab/control/app.py _compose: actors = SessionActors(sessions, PgIdentity(connect)) when LAB_JUDGE_API (api-identity-2's Lab-unit mount; hosted login needs 0065)"],
+  "schema_requests": [],
+  "code_requests": ["SR-AP11C-1 api-traces-2: infrx/console/data_use.py put_capture explicit begin/commit on execute (the gateway pool's _Pooled has no transaction())", "api-judge-2: doors.py maps 55000 (feature off) to 503 'judge store unreachable' before the domain mapping"],
+  "evidence": ["research/plan/evidence/w7/api-lifecycle-2-7e295a2.md", "research/plan/evidence/w7/AP11-isolated-7e295a2-verdict.json", "research/plan/evidence/w7/AP11-isolated-7e295a2-with-WR-AP11C-1-SR-AP11C-1-verdict.json"]
+}

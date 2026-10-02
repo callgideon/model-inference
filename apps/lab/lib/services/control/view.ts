@@ -1,7 +1,8 @@
 // L4: rows and copy derived only from control records. Nothing here remembers what a button did.
 import { fixedCopy } from "../common.ts";
+import { DIGEST_RE } from "../shapes.ts";
 import type { Role } from "../../auth/access.ts";
-import { holds, REFUSALS, type Aggregate, type Deployment, type Proposal, type Refusal } from "./port.ts";
+import { holds, REFUSALS, type Aggregate, type Deployment, type Model, type Proposal, type Refusal, type Result } from "./port.ts";
 
 export type Action = "smoke" | "publish";
 export type DeploymentRow = {
@@ -47,3 +48,172 @@ export const REFUSAL_COPY: Record<Refusal, string> = {
 
 /** `?refused=` is anyone's to write: only a known reason's fixed copy is ever shown (common.ts). */
 export const refusalCopy = fixedCopy(REFUSALS, REFUSAL_COPY);
+
+// ---- UX-03 L-02 Overview: setup stages, record counts and measured traffic, from the records only.
+
+export type StageState = "done" | "todo" | "unknown";
+export type Stage = { title: string; state: StageState; detail: string };
+/** The stage badges; `unknown` is a failed read (never "not started"); nothing here is "Ready". */
+export const STAGE_BADGE: Record<StageState, { tone: "success" | "neutral" | "warning"; label: string }> = {
+  done: { tone: "success", label: "Done" },
+  todo: { tone: "neutral", label: "Not done yet" },
+  unknown: { tone: "warning", label: "Couldn't check" },
+};
+
+/**
+ * The three setup stages (03-lab L-02). A registered model revision completes the first; the second
+ * stays open until serving readiness is readable here (AP-05) - a recorded smoke never completes it;
+ * a publication request completes the third (the operator's decision is a separate fact).
+ */
+export function setupStages(models: Result<Model[]>, proposals: Result<Proposal[]>): Stage[] {
+  const from = <T>(r: Result<T[]>, done: (rows: T[]) => boolean): StageState => (!r.ok ? "unknown" : done(r.value) ? "done" : "todo");
+  return [
+    {
+      title: "Add a model",
+      state: from(models, (rows) => rows.length > 0),
+      detail: "Create its project, import or upload its files and verify the artifact, then create a serving revision.",
+    },
+    {
+      title: "Verify a private deployment",
+      state: "todo",
+      detail: "Serving readiness is not available in this view yet. A recorded smoke result does not qualify a real engine.",
+    },
+    {
+      title: "Request publication",
+      state: from(proposals, (rows) => rows.some((p) => p.kind === "publish")),
+      detail: "An administrator requests it; an infrx operator approves or rejects it.",
+    },
+  ];
+}
+
+export type Count = { label: string; href: string; value: string | null };
+/** The overview's counts; `value` null = the read failed (rendered "Not available", never 0). */
+export function recordCounts(deployments: Result<Deployment[]>, proposals: Result<Proposal[]>): Count[] {
+  const n = <T>(r: Result<T[]>, keep: (row: T) => boolean) => (r.ok ? String(r.value.filter(keep).length) : null);
+  return [
+    { label: "Registered deployment records", href: "/deployments", value: n(deployments, (d) => d.state === "active") },
+    { label: "Public records", href: "/deployments", value: n(deployments, (d) => d.state === "active" && d.visibility === "public") },
+    { label: "Pending publication requests", href: "/deployments#publication", value: n(proposals, (p) => p.state === "proposed") },
+  ];
+}
+
+export type TrafficRow = HealthRow & { measured: boolean };
+/** healthRows with L-02's copy: a window without samples is unmeasured, a missing p95 is not available. */
+export function trafficRows(aggregates: Aggregate[]): TrafficRow[] {
+  return healthRows(aggregates).map((row, i) => ({
+    ...row,
+    measured: aggregates[i].requests > 0,
+    p95: aggregates[i].p95LatencyMs === null ? "Not available" : row.p95,
+  }));
+}
+
+/** The evidence time: the latest window end measured (not when this page loaded). */
+export function observedThrough(aggregates: Aggregate[]): string | null {
+  return aggregates.reduce<string | null>((latest, a) => (latest === null || a.windowEnd > latest ? a.windowEnd : latest), null);
+}
+
+// ---- UX-03 L-03 Models: the list and "New revision of an imported model" (the legacy registration).
+
+export type ModelRow = { name: string; modelId: string; revision: string; runtime: string; registered: string; artifactDigest: string; schemaVersion: string };
+/** A model's display name is its registered name's last segment; no new editable title (L-03). */
+const nameOf = (modelId: string) => modelId.split("/").at(-1) ?? modelId;
+export const modelRows = (models: Model[]): ModelRow[] =>
+  models.map((m) => ({
+    name: nameOf(m.modelId), modelId: m.modelId, revision: m.revisionLabel, runtime: m.runtime, registered: m.registeredAt,
+    artifactDigest: m.artifactDigest, schemaVersion: m.schemaVersion,
+  }));
+/** The names a new revision may target: models already imported into this workspace. */
+export const importedNames = (models: Model[]): string[] => [...new Set(models.map((m) => nameOf(m.modelId)))].sort();
+
+export const REGISTRATION_FIELDS = ["name", "artifactDigest", "schemaVersion", "runtime"] as const;
+export type RegistrationField = (typeof REGISTRATION_FIELDS)[number];
+export type RegistrationValues = Record<RegistrationField, string>;
+// The control actions' rules (actions.ts NAME/IDENT, shapes.ts DIGEST_RE), restated per field so a
+// refusal names its field; ponytail: the IDENT copy goes when actions.ts exports its shapes.
+const RULES: Record<RegistrationField, [RegExp, string]> = {
+  name: [/^[a-z0-9][a-z0-9-]{0,62}$/, "Use lowercase letters, digits and hyphens, starting with a letter or digit, up to 63 characters."],
+  artifactDigest: [DIGEST_RE, "Enter the artifact digest as sha256: followed by 64 lowercase hex characters."],
+  schemaVersion: [/^[A-Za-z0-9._:@/+-]{1,200}$/, "Enter a schema identifier: letters, digits and . _ : @ / + -, no spaces."],
+  runtime: [/^[A-Za-z0-9._:@/+-]{1,200}$/, "Enter a runtime identifier: letters, digits and . _ : @ / + -, no spaces."],
+};
+export function registrationErrors(values: RegistrationValues): Partial<Record<RegistrationField, string>> {
+  return Object.fromEntries(REGISTRATION_FIELDS.filter((f) => !RULES[f][0].test(values[f])).map((f) => [f, RULES[f][1]]));
+}
+
+export type RegistrationOutcome =
+  | { kind: "registered"; deployment: Deployment }
+  | { kind: "refused"; message: string }
+  | { kind: "uncertain"; message: string };
+export type RegistrationState = {
+  values: RegistrationValues;
+  errors: Partial<Record<RegistrationField, string>>;
+  outcome: RegistrationOutcome | null;
+} | null;
+/** The control service's answer as the form shows it. No answer is "not confirmed": registration has no
+ *  replay receipt today (L-03), so the person checks the records before trying again. */
+export function registrationOutcome(result: Result<Deployment>): RegistrationOutcome {
+  if (result.ok) return { kind: "registered", deployment: result.value };
+  if (result.reason === "unavailable")
+    return { kind: "uncertain", message: "Outcome not confirmed: the control service did not answer. Check Models before trying again; the revision may have been registered." };
+  return { kind: "refused", message: REFUSAL_COPY[result.reason] };
+}
+
+// ---- UX-03 L-04 Deployments: record state, readiness stages and the actions offered.
+
+type Tone = "neutral" | "info" | "warning" | "danger" | "success";
+/** A deployment record's own state: "active" is a registered record, never "healthy" or "ready". */
+export const RECORD_STATE: Record<Deployment["state"], { tone: Tone; label: string }> = {
+  active: { tone: "info", label: "Registered · active record" },
+  retired: { tone: "neutral", label: "Retired" },
+};
+
+export type Check = { stage: string; status: string; tone: Tone };
+const NOT_HERE = { status: "Not verified here", tone: "neutral" as const };
+const UNREAD = { status: "Couldn't check", tone: "warning" as const };
+export const DECISION: Record<Proposal["state"], { status: string; tone: Tone }> = {
+  proposed: { status: "Awaiting operator decision", tone: "warning" },
+  approved: { status: "Approved by an operator", tone: "info" },
+  rejected: { status: "Rejected", tone: "danger" },
+};
+/**
+ * L-04's readiness stages for one record, only as far as evidence exists here: the record itself, then
+ * engine evidence and a private smoke on this engine (not readable until AP-05's receipts), then the
+ * latest publication request for it and the operator's decision (`proposals` null = that read failed).
+ */
+export function readiness(d: Deployment, proposals: Proposal[] | null): Check[] {
+  const latest = proposals?.filter((p) => p.deploymentRevisionId === d.deploymentRevisionId).at(-1);
+  return [
+    { stage: "Record registered", status: d.state === "active" ? "Registered" : "Retired", tone: RECORD_STATE[d.state].tone },
+    { stage: "Engine evidence", ...NOT_HERE },
+    { stage: "Private smoke on this engine and revision", ...NOT_HERE },
+    { stage: "Publication requested", ...(proposals === null ? UNREAD : latest ? { status: `Requested ${latest.proposedAt}`, tone: "neutral" as const } : { status: "Not requested", tone: "neutral" as const }) },
+    { stage: "Operator decision", ...(proposals === null ? UNREAD : latest ? DECISION[latest.state] : { status: "No decision", tone: "neutral" as const }) },
+  ];
+}
+
+/** The record's smoke field as what it is: a recorded result with no engine provenance. */
+export function recordedSmoke(d: Deployment): string {
+  return d.smoke === "none"
+    ? "No smoke result is recorded."
+    : `Recorded smoke result: ${d.smoke}. The record names no engine, so it does not verify serving readiness.`;
+}
+
+/** The actions a page offers. ponytail: "smoke" is withheld until AP-05's real, receipted smoke exists -
+ *  the current stand-in can leave a record validating (L-04); return it when that API is mounted. */
+export const operateActions = (row: DeploymentRow): Action[] => row.actions.filter((a) => a !== "smoke");
+
+// ---- UX-03 L-06 Settings: the role in words. Capabilities stay lib/auth/access.ts's table.
+
+export const ROLE_COPY: Record<Role, { label: string; description: string }> = {
+  viewer: { label: "Viewer", description: "Reads this workspace's records and aggregate health." },
+  developer: { label: "Developer", description: "Reads this workspace, registers models and revisions, and manages private deployments and evaluations." },
+  administrator: { label: "Administrator", description: "Everything a developer does, plus requesting publication and managing members." },
+};
+/** The role-held capabilities a person can read; read_customer_content is shown apart (no role holds it). */
+export const CAPABILITY_COPY = {
+  read_aggregate_health: "Read aggregate health",
+  manage_dev_deployment: "Register models and manage private deployments",
+  run_evaluation: "Run evaluations",
+  propose_publication: "Request publication",
+  manage_members: "Manage members",
+} as const;

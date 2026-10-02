@@ -38,6 +38,7 @@ Mutant, Outcome, Result, Runner, _m = (shared.Mutant, shared.Outcome, shared.Res
 
 D = "tests/integration/api_lifecycle/"
 R, S, C, K = D + "runner.py", D + "state.py", D + "stages/consumer.py", D + "stages/__init__.py"
+L, H = D + "stages/lab.py", D + "stages/hosting.py"
 TESTS = D + "test_runner.py"
 
 PRIVATE_FILES = "test_ap11_state_and_secrets_are_separate_private_files"
@@ -65,6 +66,19 @@ ROWS = "test_ap11_the_consumer_stages_prove_their_rows_on_the_mounted_routes"
 DEFECT = "test_ap11_a_product_defect_fails_its_stage"
 EMPTY = "test_ap11_a_stage_that_asserted_nothing_is_never_a_pass"
 OPERATION = "test_ap11_an_operation_is_accepted_only_as_r270_states_it"
+SERVED = "test_ap11_every_served_stage_passes_and_only_ap05_ap06_stay_blocked"
+DRY = "test_ap11_a_dry_run_judge_is_labelled_and_never_a_judge_result"
+NO_JUDGE = "test_ap11_without_a_judge_the_judge_stages_are_blocked_on_p10"
+NO_TRACES = "test_ap11_without_trace_storage_the_capture_half_is_blocked"
+UNCOMPOSED = "test_ap11_a_package_the_target_does_not_compose_blocks_by_name"
+UNMOUNTED = "test_ap11_an_unmounted_route_is_blocked_by_name_never_failed"
+MINTED = "test_ap11_keys_are_minted_through_the_api_and_kept_outside_the_state"
+LOST_KEY = "test_ap11_a_lost_key_acknowledgement_revokes_it_and_mints_once_more"
+PINNED = "test_ap11_a_cas_write_resumes_with_the_version_it_first_read"
+HOSTED = "test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol"
+HOSTING_DEFECT = "test_ap11_a_hosting_defect_fails_its_stage"
+NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail"
+NO_TARGET = "test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite"
 
 MUTANTS: tuple[Mutant, ...] = (
     # ---- 11a: the two private files
@@ -139,7 +153,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("live_fixtures_allowed", "live declares no fixture", R,
        '        if config.get("fixtures"):', "        if False:", LIVE),
     _m("seeded_consumer_key", "a consumer key is API-minted or a declared isolated fixture", R,
-       'if found.get("audience") == "consumer" \\', "if False \\", SEEDED),
+       'if found.get("audience") == "consumer" and not minted and not fixture:', "if False:",
+       SEEDED),
     _m("inspect_selects_mutations", "inspect selects read-only stages only", R,
        "if (s.reads_only or args.mode != \"inspect\")", "if (s.reads_only or True)", INSPECT),
     _m("inspect_sends_a_mutation", "inspect refuses any non-GET before it leaves", R,
@@ -170,12 +185,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("evidence_without_start", "every stage records its UTC start", R,
        'return {"started": utc_now(), "ended": None,', 'return {"started": "", "ended": None,',
        EVIDENCE),
+    _m("refusal_code_dropped", "a refused exchange records its R270 code", R,
+       '"error": error_code(response),', '"error": None,', EVIDENCE),
     _m("route_instead_of_template", "evidence records the route template, never an id", R,
        '"method": method, "route": route, "origin": origin,',
        '"method": method, "route": route.format(**(params or {})), "origin": origin,', EVIDENCE),
     # ---- 11b: stage semantics
     _m("absent_route_unreported", "a missing route is a BLOCKED reason", R,
-       "for owner, routes in stage.missing().items()]", "for owner, routes in {}.items()]",
+       "for owner, routes in stage.missing(composed).items()]", "for owner, routes in {}.items()]",
        NO_API, PARTLY),
     _m("absent_api_is_a_pass", "a stage without its API is BLOCKED, never PASS", R,
        "entry.update(status=BLOCKED, reasons=missing + [",
@@ -189,7 +206,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("predecessor_any_status", "a predecessor's outputs are read only after it PASSED", R,
        'if recorded is None or recorded["status"] != PASS:', "if recorded is None:", DEPENDENT),
     _m("owner_inverted", "the missing routes are the owned (target) ones", K,
-       "            if route.owner is not None:", "            if route.owner is None:",
+       "            if route.owner is not None and route.owner not in composed:",
+       "            if route.owner is None and route.owner not in composed:",
        NO_API, PARTLY),
     _m("a_step_reworded", "the stages are verification.md's rows verbatim", K,
        '"Roll back/retire test listing and candidate through operator/control APIs"',
@@ -217,7 +235,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '              and not {"artifact_id", "manifest"} & set(done["fields"]), done["fields"])',
        '              , done["fields"])', DEFECT),
     _m("foreign_read_unchecked", "10: consumer B cannot read A's job", C,
-       "foreign.status_code == 404,", "foreign.status_code in (200, 404),", DEFECT),
+       "A's job\", foreign.status_code == 404,", "A's job\", foreign.status_code in (200, 404),",
+       DEFECT),
     _m("result_model_unchecked", "10: the result names the model under test", C,
        '(result.get("response") or {}).get("model") == ctx.config["model"],', "True,", DEFECT),
     _m("result_usage_unchecked", "10: the result reports usage", C,
@@ -249,6 +268,196 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("replay_probe_dropped", "09 probes replay and conflict under the job's key", C,
        '    key = {"Idempotency-Key": ctx.key("09.job")}\n',
        '    key = {"Idempotency-Key": "ap11-a-fresh-key"}\n', ROWS),
+    # ---- 11c: composition, minted keys, pinned versions, labels (runner + stage contracts)
+    _m("composed_ignored", "a route the target does not compose is missing", K,
+       "            if route.owner is not None and route.owner not in composed:",
+       "            if route.owner is not None and False:", UNCOMPOSED),
+    _m("unserved_stage_called", "a stage none of whose routes is served is never called", R,
+       "        if stage.run is None or not served:", "        if stage.run is None:",
+       UNCOMPOSED, NO_API),
+    _m("unmounted_ignored", "the framework's own 404/405 is BLOCKED by name", R,
+       "        if contracts.unmounted(response):", "        if False:", UNMOUNTED),
+    _m("any_404_unmounted", "an R270 not-found envelope is a mounted route's answer", K,
+       '    return response.status_code == 404 and isinstance(body, dict) and set(body) == {"detail"}',
+       "    return response.status_code == 404", UNMOUNTED),
+    _m("minted_secret_in_state", "the state holds a minted key's id, never its secret", R,
+       '        state.data["minted"][holder] = name',
+       '        state.data["minted"][holder] = secret', MINTED),
+    _m("minted_file_unwritten", "a minted secret is kept 0600 beside the state", R,
+       "        write_private(minted_file(state.path), minted)\n", "", MINTED),
+    _m("minted_file_exposed", "a readable minted-key file is INVALID", R,
+       "        require_private(path)\n        secrets.values.update",
+       "        secrets.values.update", MINTED),
+    _m("minted_not_reloaded", "a resume reads the minted keys back", R,
+       "        secrets.values.update(json.loads(path.read_text()))", "        pass",
+       ORIGINAL_KEY),
+    _m("minted_reported_as_fixture", "a minted key is never reported as a fixture", R,
+       "        fixture = not minted and secret in", "        fixture = secret in", MINTED),
+    _m("pinned_reread", "a CAS version is read once and pinned for the resume", R,
+       "        if name not in kept:", "        if True:", PINNED),
+    _m("key_check_without_a_key", "01 checks a key only once one resolves", R,
+       "        except Blocked:\n            return False", "        except Blocked:\n            return True",
+       SERVED),
+    _m("label_dropped", "a stand-in's label reaches the verdict", R,
+       '                     label=evidence.get("label"))', "                     label=None)", DRY),
+    _m("cleanup_stops_at_one_row", "one row's missing credential never stops the others", R,
+       '                outcome = f"failed: {why}"', "                raise", CLEANUP),
+    _m("label_before_outputs", "a stage BLOCKED on its predecessor carries no label", L,
+       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n'
+       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
+       '        ctx.label(DRY_RUN)\n',
+       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
+       '        ctx.label(DRY_RUN)\n'
+       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n', DRY),
+    _m("dry_run_unlabelled", "14's dry run is labelled", L,
+       "    if mode == \"dry_run\":                  # only a stage that runs carries the label\n"
+       "        ctx.label(DRY_RUN)", "    if False:\n        ctx.label(DRY_RUN)",
+       DRY),
+    _m("judge_without_p10", "14 is BLOCKED on P-10 without a live judge or a dry run", L,
+       '    if mode not in ("dry_run", "live"):', "    if False:", NO_JUDGE),
+    _m("capture_without_storage", "12 sends no captured request without trace storage", C,
+       '    if not ctx.config.get("traces"):', "    if False:", NO_TRACES),
+    _m("lost_secret_key_reused", "a key whose secret was lost is never used", C,
+       '        if ctx.minted(holder) == made["key_id"]:', "        if True:", LOST_KEY),
+    _m("lost_secret_key_left_live", "a key whose secret was lost is revoked", C,
+       '        ctx.call("DELETE", "/console/v1/keys/{id}", params={"id": made["key_id"]}, actor=web,\n'
+       '                 headers={"Idempotency-Key": ctx.key(attempt) + ".revoke"})\n', "", LOST_KEY),
+    # ---- 11c: the served stages' product assertions (each against a fake defect)
+    _m("inference_id_unchecked", "11: a sync answer names its request", C,
+       'bool(sync["request_id"]), None)', "True, None)", DEFECT),
+    _m("key_shaped_session", "01: a key is never a web session", C,
+       "keyed.status_code == 401,", "keyed.status_code in (200, 401),", DEFECT),
+    _m("consumer_operator_unchecked", "01: no operator console for a consumer", C,
+       '(allowed.get("actions") or {}).get("operator_console") is False', "True", DEFECT),
+    _m("outsider_workspace_unchecked", "01: a non-member holds no workspace", C,
+       'ctx.check(f"{actor} holds no workspace", mine == [], mine)',
+       'ctx.check(f"{actor} holds no workspace", True, mine)', DEFECT),
+    _m("outsider_members_unchecked", "01: an outsider cannot list the members", C,
+       "listed.status_code in (403, 404),", "listed.status_code in (200, 403, 404),", DEFECT),
+    _m("second_grant_unchecked", "08: a second claim replays", C,
+       'again.get("status") == "replayed", again.get("status"))', "True, again.get(\"status\"))",
+       DEFECT),
+    _m("account_grant_unchecked", "08: the grant is on the account", C,
+       '                  me.get("state") == "ready" and grant.get("state") == "granted"\n'
+       '                  and (grant.get("amount") or {}).get("unit") == "CREDIT", grant)',
+       "                  True, grant)", DEFECT),
+    _m("replay_key_unchecked", "08: a retried creation is the same key", C,
+       '              (replay.get("key") or {}).get("key_id") == made["key_id"]\n              and ',
+       "              ", DEFECT),
+    _m("rerevealed_secret_unchecked", "08: a replay never re-reveals the secret", C,
+       '              and replay.get("secret") is None and replay.get("replayed") is True,',
+       '              and replay.get("replayed") is True,', DEFECT),
+    _m("live_keys_unchecked", "08: one live key despite the retried creation", C,
+       '[k.get("id") for k in named] == [made["key_id"]], len(named))', "True, len(named))",
+       DEFECT),
+    _m("held_reserve_unchecked", "10: the reserve is released", C,
+       '              and row.get("hold_state") in SETTLED_HOLDS,', "              and True,", DEFECT),
+    _m("debit_count_unchecked", "10: exactly one ledger debit for the request", C,
+       "              len(debits) == 1 and _amount", "              _amount", DEFECT),
+    _m("console_foreign_unchecked", "10: B's console cannot read A's request", C,
+       "    ctx.check(\"consumer B's console cannot read A's request\", foreign.status_code == 404,",
+       "    ctx.check(\"consumer B's console cannot read A's request\", True,", DEFECT),
+    _m("capture_scope_unchecked", "12: only the test key captures", C,
+       '              and capture["modes"].get(earlier) in ("off", None), capture["modes"])',
+       '              , capture["modes"])', DEFECT),
+    _m("grant_persistence_unchecked", "12: the grant is persisted", C,
+       '              len(listed) == 1 and sorted(listed[0].get("purposes") or ()) == [\n'
+       '                  "external_judging", "provider_sharing"], listed)', "              True, listed)",
+       DEFECT),
+    _m("operation_failure_accepted", "02: the verification operation succeeds", L,
+       'ctx.require("the verification operation succeeds", final.get("state") == "succeeded",',
+       'ctx.require("the verification operation succeeds", True,', DEFECT),
+    _m("operation_replay_unchecked", "02: the operation completes once", L,
+       '              _json(again).get("operation_id") == done["operation_id"]\n              and ',
+       "              ", DEFECT),
+    _m("manifest_unchecked", "03: the manifest covers every uploaded file", L,
+       '              == sorted((f["relative_path"], f["sha256"]) for f in out["manifest"])\n'
+       '              and artifact', "              is not None and artifact", DEFECT),
+    _m("revision_pins_unchecked", "03: the revision pins its profile", L,
+       '              and revision.get("profile"), {k: revision.get(k) for k in (',
+       "              , {k: revision.get(k) for k in (", DEFECT),
+    _m("revision_replay_unchecked", "03: the revision is immutable", L,
+       '              again.get("serving_version_id") == revision.get("serving_version_id"),',
+       "              True,", DEFECT),
+    _m("trace_pins_unchecked", "13: same model pins as the call", L,
+       '              and detail.get("price_version") and detail.get("model_id")\n'
+       '              == ctx.config["model_uuid"], {k',
+       '              and detail.get("price_version"), {k', DEFECT),
+    _m("trace_content_unchecked", "13: the content is the request's real capture", L,
+       '              and TEXT[0]["content"] in str(detail.get("content") or ""),', "              ,",
+       DEFECT),
+    _m("zero_elapsed_accepted", "13: timing is never zero", L,
+       'detail["elapsed_ms"] > 0, detail.get("elapsed_ms"))',
+       'detail["elapsed_ms"] >= 0, detail.get("elapsed_ms"))', DEFECT),
+    _m("uncaptured_unchecked", "13: the uncaptured earlier request has no content", L,
+       '                  before.status_code == 404 or _json(before).get("access_state") == "not_captured",',
+       "                  True,", DEFECT),
+    _m("run_replay_unchecked", "14: a replayed run request is the same run", L,
+       '              and (_json(replay).get("resource_id") or _json(replay).get("operation_id"))\n'
+       '              == run["run_id"], replay.status_code)', "              , replay.status_code)",
+       DEFECT),
+    _m("dry_run_send_unchecked", "14: a dry run sends nothing and spends nothing", L,
+       '                  doc.get("domain_state") in NOT_SCORED and doc.get("sent") == 0\n'
+       '                  and not _money(doc.get("settled")), {k',
+       '                  doc.get("domain_state") in NOT_SCORED, {k', DEFECT),
+    _m("dry_run_score_unchecked", "14: a dry run's result is never scored", L,
+       '                  results is not None and not [r for r in results if r.get("state") == "scored"],',
+       "                  results is not None,", DEFECT),
+    _m("consumer_judge_charge_unchecked", "15: the consumer is not charged for judging", L,
+       "                  all(_money(after.get(k)) == _money(before.get(k)) and _money(after.get(k))\n"
+       "                      is not None for k",
+       "                  all(_money(after.get(k)) is not None for k", DEFECT),
+    _m("dry_run_budget_unchecked", "15: a dry run reserves and settles nothing", L,
+       '                  _money(first.get("reserved")) == 0 and _money(first.get("settled")) == 0,',
+       "                  True,", DEFECT),
+    _m("review_replay_unchecked", "16: the review is immutable", L,
+       '              again.get("review_id") == review["review_id"], again.get("review_id"))',
+       '              True, again.get("review_id"))', DEFECT),
+    _m("review_provenance_unchecked", "16: the review's provenance is human", L,
+       '                and review["provenance"] == "human", review)', "                , review)",
+       DEFECT),
+    _m("calibration_unchecked", "16: an inadequate reference sample is never calibrated", L,
+       '              calibration.get("state") in ("insufficient", "uncalibrated")\n'
+       '              and (calibration.get("labels") or 0) < (calibration.get("required") or 1),',
+       "              True,", DEFECT),
+    _m("revoked_content_unchecked", "17: revoked content is no longer readable", L,
+       '              after.get("request_id") == out["request_id"] and "content" not in after\n'
+       '              and after.get("access") == "metadata" and after.get("access_state") == "revoked",',
+       '              after.get("request_id") == out["request_id"],', DEFECT),
+    _m("grant_without_feedback", "12's grant covers the feedback 16 reviews", C,
+       '        "categories": ["request_content", "response_content", "feedback"],',
+       '        "categories": ["request_content", "response_content"],', SERVED),
+    _m("payer_not_version_4", "14's payer ref is 0029's lab ref (version-4 ids)", L,
+       "payer_id = uuid.UUID(bytes=seed.digest()[:16], version=4)",
+       "payer_id = uuid.uuid5(uuid.NAMESPACE_URL, seed.hexdigest())", SERVED),
+    # ---- 11c by protocol: stages 04-07 (AP-05/06) on the fake
+    _m("readiness_from_record", "04: readiness is the engine's report for this revision", H,
+       '              ready.get("serving_version_id") == revision\n'
+       '              and (ready.get("identity") or {}).get("passed") is True,',
+       '              ready.get("serving_version_id") == revision,',
+       HOSTING_DEFECT),
+    _m("no_target_is_a_fail", "04: no hosting target is the candidate-engine prerequisite", H,
+       '    if availability.get("state") != "configured":', "    if False:", NO_TARGET),
+    _m("no_capacity_is_a_fail", "04: capacity_unavailable is the GPU prerequisite", H,
+       '    if (final.get("error") or {}).get("code") == "capacity_unavailable":', "    if False:",
+       NO_CAPACITY),
+    _m("dev_key_public_unchecked", "06: a dev key cannot spend publicly", H,
+       "public.status_code in (401, 403),", "public.status_code in (200, 401, 403),",
+       HOSTING_DEFECT),
+    _m("private_listing_unchecked", "06: the private model is not in discovery", H,
+       "model not in listed, model)", "True, model)", HOSTING_DEFECT),
+    _m("stale_approval_unchecked", "07: an approval on a stale listing version is a 409", H,
+       "stale.status_code == 409,", "stale.status_code in (200, 409),", HOSTING_DEFECT),
+    _m("consumer_private_unchecked", "08: a consumer key cannot call a private endpoint", C,
+       "refused.status_code in (403, 404),", "refused.status_code in (200, 403, 404),",
+       HOSTING_DEFECT),
+    _m("unimplemented_stage_unexplained", "a stage without a runner names why it is BLOCKED", R,
+       '                + ([] if stage.run else [f"BLOCKED[AP-11] stage {stage.sid} has no runner "\n'
+       '                                         "implementation yet (AP-11 11d/11e)"]))',
+       "                + [])", HOSTED),
+    _m("revoked_judge_unchecked", "17: a follow-up judge run is refused", L,
+       "              follow.status_code in (403, 409, 422), follow.status_code)",
+       "              follow.status_code in (202, 403, 409, 422), follow.status_code)", DEFECT),
 )
 
 

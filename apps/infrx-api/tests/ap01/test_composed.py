@@ -84,17 +84,19 @@ def test_wr_ap01__the_auth_facade_needs_the_publishable_key():
     with pytest.raises(RuntimeMisconfigured, match="SUPABASE_ANON_KEY"):
         composed(auth_facade=True)
     rt = composed(auth_facade=True, supabase_anon_key="anon-publishable",
-                  auth_captcha_required=True, web_origins="https://app.example")
+                  auth_captcha_required=True, web_origins="https://app.example",
+                  auth_captcha_provider="turnstile", auth_captcha_site_key="0x4AAA-site")
     assert isinstance(rt.auth_facade, AuthFacade)
     assert rt.auth_facade.apikey == "anon-publishable" != rt.settings.supabase_key
     assert rt.auth_facade.captcha_required and rt.auth_facade.origins == ("https://app.example",)
+    assert rt.auth_facade.captcha_widget == ("turnstile", "0x4AAA-site")      # WR-AP01-3
     assert {"/auth/v1/sign-in", "/auth/v1/availability"} <= paths(rt)
     assert "anon-publishable" not in repr(rt.settings.deployment)
 
 
 def test_wr_ap01__adapters_from_env_builds_the_identity_store_only_when_enabled():
-    from infrx.console.session import PgIdentity
     from infrx.lab.access import LabAccess
+    from infrx.state.identity import PgIdentity
 
     async def connect():
         raise AssertionError("nothing connects while composing")

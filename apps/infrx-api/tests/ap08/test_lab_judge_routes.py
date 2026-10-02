@@ -47,6 +47,8 @@ class FakeDoors:
         self.calibration = {"state": "uncalibrated", "labels": 0, "required": 30,
                             "agreement": None, "interval": None}
         self.refuse: errors.DomainError | None = None
+        self.rubrics: dict[int, dict] = {}       # SR-AP08-1's store, keyed by version
+        self.trace_runs: list[dict] = []         # 0043's lab_judge_runs answer (V3 JudgeRun)
 
     async def call(self, user, door, *args):
         self.calls.append((user, door, *args))
@@ -80,6 +82,23 @@ class FakeDoors:
                     "created_at": "2026-10-01T00:00:00+00:00", "replayed": False}
         if door in ("lab_review_feedback", "lab_trace_reviews"):
             return []
+        if door == "lab_judge_rubric_create":    # SR-AP08-1: once per version, by digest
+            a = args[0]
+            row = self.rubrics.setdefault(a["rubric_version"], {
+                **a, "created_by": user, "created_at": "2026-10-02T00:00:00+00:00"})
+            if row["digest"] != a["digest"]:
+                raise errors.IdempotencyConflict("this version is stored with another definition")
+            return row
+        if door == "lab_judge_runs":
+            return self.trace_runs
+        if door == "lab_judge_rubric_list":
+            return [self.rubrics[v] for v in sorted(self.rubrics)]
+        if door == "lab_judge_configure_keyed":
+            _, config, grantor, model, judge_model, version, samples = args
+            return {"config_id": config, "grantor_org_id": grantor, "model_id": model,
+                    "judge_model": judge_model, "rubric_version": version,
+                    "sample_size": samples, "created_at": "2026-10-02T00:00:00+00:00",
+                    "calibration": self.calibration}
         raise AssertionError(f"unexpected door {door}")
 
 
@@ -182,7 +201,7 @@ def test_ap08_routes__the_estimate_is_a_report_and_no_unpriced_model_is_offered(
     assert (e["priced"], e["authorizes_spend"], e["worst_case"], e["samples_max"]) == \
         (False, False, None, 20)
     rubrics = c.get(f"{lab_judge.PREFIX}/rubrics", params=Q).json()
-    assert [r["version"] for r in rubrics["data"]] == [1]
+    assert [r["version"] for r in rubrics["data"]] == [1, 2]
 
 
 def test_ap08_routes__a_configuration_names_a_graded_rubric_and_calibration_is_honest():
@@ -240,3 +259,29 @@ def test_ap08_routes__reviews_are_human_and_keyed_and_nothing_mounts_when_off():
 def test_ap08_routes__every_read_takes_the_session(path):
     assert client(actors=control.StaticActors()).get(
         f"{lab_judge.PREFIX}{path}", params=Q).status_code == 401
+
+
+def test_ap08_routes__a_requests_judge_runs_are_typed_scores_with_honest_calibration():
+    """WR-AP09L-3: `GET /lab/v1/traces/{id}/judge-runs` is 0043's door as the session user, a
+    typed ListPage - criterion scores (no rationale), money as PROVIDER_USD, the stored
+    calibration re-checked. Failure oracle: a run shown `calibrated` below its reference
+    threshold, the door's camelCase leaking, a read without the session."""
+    doors = FakeDoors()
+    doors.trace_runs = [{
+        "runId": "7a000000-0000-4000-8000-0000000000a1", "mode": "live", "state": "collected",
+        "judgeModel": "judge-1", "rubricVersion": 1, "media": True, "reservedUsd": "0.40000000",
+        "actualUsd": "0.12000000", "overallPass": True,
+        "scores": [{"criterion": "task_correctness", "score": 4, "max": 5, "requiresMedia": True}],
+        "calibration": {"state": "calibrated", "labels": 12, "required": 30, "agreement": 0.9,
+                        "interval": [0.8, 0.95]}}]
+    c, path = client(doors), f"/lab/v1/traces/{JOB}/judge-runs"
+    got = c.get(path, params=Q)
+    assert got.status_code == 200, got.text
+    (run,) = got.json()["data"]
+    assert got.json()["next_cursor"] is None and run["calibration"]["state"] == "insufficient"
+    assert run["scores"] == [{"criterion": "task_correctness", "score": 4, "max_score": 5,
+                              "requires_media": True}]
+    assert run["actual"] == {"amount": "0.12000000", "unit": "PROVIDER_USD"}
+    assert [a for _, d, *a in doors.calls if d == "lab_judge_runs"] == [[NEMO, JOB]]
+    assert c.get("/lab/v1/traces/not-a-uuid/judge-runs", params=Q).status_code == 404
+    assert client(actors=control.StaticActors()).get(path, params=Q).status_code == 401

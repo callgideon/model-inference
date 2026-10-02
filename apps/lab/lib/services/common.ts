@@ -24,12 +24,12 @@ export const oneOf = <T extends string>(data: FormData, name: string, values: re
 };
 
 /**
- * Where a server action lands: refused here (role, then shape) without asking the service, or the
- * service's answer. A refusal is its fixed reason on `page` (which may already carry a query); success
+ * Where a server action lands: refused here (capability, then shape) without asking the service, or the
+ * service's answer. AP-09: the capability is the workspace's own set as the API states it (holds()). A refusal is its fixed reason on `page` (which may already carry a query); success
  * is where `to` says, by default a plain return to the page, which re-reads the records.
  */
 export async function land<T>(page: string, w: Actor, capability: Capability, valid: boolean, call: () => Promise<Answer<T>>, to: (value: T) => string = () => page): Promise<string> {
-  const refused = !holds(w.role, capability) ? "denied" : !valid ? "invalid" : null;
+  const refused = !holds(w, capability) ? "denied" : !valid ? "invalid" : null;
   const result: Answer<T> = refused === null ? await call() : { ok: false, reason: refused };
   return result.ok ? to(result.value) : `${page}${page.includes("?") ? "&" : "?"}refused=${result.reason}`;
 }

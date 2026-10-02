@@ -1,0 +1,26 @@
+diff --git a/research/plan/handoffs/C-console-services.md b/research/plan/handoffs/C-console-services.md
+index 13be6ed5..bab93f4c 100644
+--- a/research/plan/handoffs/C-console-services.md
++++ b/research/plan/handoffs/C-console-services.md
+@@ -18,7 +18,7 @@ Publish typed service interfaces/fixture DTOs first. U/V call these actions; the
+ ## Critical Files
+ 
+ - [apps/app/lib/session.ts](../../../apps/app/lib/session.ts)
+-- [apps/app/lib/credits.ts](../../../apps/app/lib/credits.ts)
++- apps/app/lib/credits.ts (deleted by AP-09: the API states balances)
+ - [apps/app/app/actions.ts](../../../apps/app/app/actions.ts)
+ - `apps/app/app/(console)/admin/actions.ts` (deleted by U3 under WR-C3A-2; operator changes go through `app/actions.ts` `operatorAction`)
+ - [research/traces/07-console-spec.md](../../../research/traces/07-console-spec.md)
+diff --git a/research/plan/handoffs/D-durable-state.md b/research/plan/handoffs/D-durable-state.md
+index 4ec9eaa8..375bf5e9 100644
+--- a/research/plan/handoffs/D-durable-state.md
++++ b/research/plan/handoffs/D-durable-state.md
+@@ -19,7 +19,7 @@ JobStore, StreamStore, FeedbackService storage operations and JudgeCoordinator.
+ 
+ - [apps/app/supabase/migrations/0001_init.sql](../../../apps/app/supabase/migrations/0001_init.sql)
+ - [apps/app/supabase/migrations/0002_seed_models.sql](../../../apps/app/supabase/migrations/0002_seed_models.sql)
+-- [apps/app/lib/credits.ts](../../../apps/app/lib/credits.ts)
++- apps/app/lib/credits.ts (deleted by AP-09: the API states balances)
+ - `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
+ 
+ ## Files Modified

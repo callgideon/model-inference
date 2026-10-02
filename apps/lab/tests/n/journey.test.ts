@@ -1,14 +1,18 @@
 // N4 journey on the REAL N1/N2/N3 (DATA-IMPORT, DATA-SPLIT, CONSOLE-FLOWS, revoked grants): the server actions' cores
-// and the Lab's HTTP port against `backend.py` - the proposed datasets route over real D7 and L2 on the
-// task-local PostgreSQL. Skipped unless LAB_N_REAL=1 (it needs INFRX_D_TASK=n3 and Docker):
-//   LAB_N_REAL=1 INFRX_D_TASK=n3 node --test tests/n/journey.test.ts
+// and the Lab's HTTP port against `backend.py` - the production datasets route (WR-N4-1) over 0051's durable
+// import queue, the datasets pool's own pass, real D7 and L2 on the task-local PostgreSQL. The import resume is
+// WR-AP10C-3's oracle (tests/ap10/test_import_resume_pg.py is its Python half): an interrupted import is not
+// failed - its lease lapses and the same id resumes; a failed one stays failed (R243), a re-POST answers it,
+// and "Import again" (`requeueImport`) is a new id. Skipped unless LAB_N_REAL=1 (an explicit task-local key
+// and Docker):
+//   LAB_N_REAL=1 INFRX_D_TASK=l4 node --test tests/n/journey.test.ts
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import type { Membership } from "../../lib/auth/access.ts";
-import { deriveVersion, exportVersion, previewImport, startImport } from "../../lib/services/datasets/flows.ts";
+import { deriveVersion, exportVersion, previewImport, requeueImport, startImport } from "../../lib/services/datasets/flows.ts";
 import { httpDatasets, type DatasetsPort, type ImportJob } from "../../lib/services/datasets/port.ts";
 import { importView, leakageWarnings, RESTRICTED_COPY, restrictedCopy, splitSummary } from "../../lib/services/datasets/views.ts";
 
@@ -38,22 +42,26 @@ function form(fields: Record<string, string | Blob>): FormData {
   return f;
 }
 
-async function settled(port: DatasetsPort, provider: string, id: string): Promise<ImportJob> {
-  for (let i = 0; i < 300; i++) {
-    const job = await port.importJob(provider, id);
-    assert.equal(job.ok, true, JSON.stringify(job));
-    if (job.ok && job.value.state !== "running") return job.value;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("the import did not settle");
+async function read(port: DatasetsPort, provider: string, id: string): Promise<ImportJob> {
+  const job = await port.importJob(provider, id);
+  assert.equal(job.ok, true, JSON.stringify(job));
+  return job.ok ? job.value : null!;
 }
+
+/** A test-only door on the backend: the datasets pool's pass, the lease's clock, the grantor. */
+async function door(url: string, path: string, body: object = {}): Promise<Record<string, unknown>> {
+  const r = await fetch(`${url}/_test/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  assert.equal(r.status, 200, `${path}: ${await r.clone().text()}`);
+  return r.json();
+}
+const passed = (succeeded: number, failed: number, retry: number) => ({ succeeded, failed, retry });
 
 test("N4-J01 import, interrupted and resumed, then a frozen version, its splits, an export and a revocation, on real N1/N2", { skip: !REAL && "LAB_N_REAL=1 with a task-local key" }, async () => {
   const { url, world, stop } = await backend();
   try {
     const as = (user: string) => httpDatasets({ baseUrl: url, token: user });
     const port = as(world.dev);
-    const dev: Membership = { providerId: world.provider, providerName: "NemoStation", role: "developer" };
+    const dev: Membership = { providerId: world.provider, providerName: "NemoStation", role: "developer", capabilities: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"] };
     const spec = { ...JSON.parse(readFileSync(resolve(FIXTURES, "benchmark.spec.json"), "utf8")), grant_ref: world.grant_ref };
     const rows = readFileSync(resolve(FIXTURES, "benchmark.jsonl"), "utf8");
     const file = (text: string) => new Blob([text]);
@@ -67,25 +75,40 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits,
     const good = await previewImport(port, dev, form({ spec: JSON.stringify(spec), file: file(rows) }));
     assert.deepEqual(good.status === "ok" && good.value.rows.map((r) => r.line), [1, 2, 3, 4, 6]);
 
-    // an interrupted import (the backend dies mid-staging) fails honestly, then resumes to publish
-    const crashed = await fetch(`${url}/lab/v1/providers/${world.provider}/datasets/imports`, {
-      method: "POST", headers: { authorization: `Bearer ${world.dev}`, "content-type": "application/json" },
-      body: JSON.stringify({ spec, body: rows, accept_rejects: false, _crash_after_puts: 2 }),
-    });
-    assert.equal(crashed.status, 200);
-    const failed = await settled(port, world.provider, spec.import_id);
-    assert.deepEqual([failed.state, importView(failed).tone], ["failed", "error"]);
-    const resumed = await startImport(port, dev, form({ spec: JSON.stringify(spec), file: file(rows) }));
-    assert.equal(resumed.status, "ok");
-    const job = await settled(port, world.provider, spec.import_id);
+    // an interrupted import (the datasets worker dies mid-staging) is not failed: once its lease lapses the
+    // next pass resumes the same id from the staged chunks to published, once
+    const started = await startImport(port, dev, form({ spec: JSON.stringify(spec), file: file(rows) }));
+    assert.deepEqual(started.status === "ok" && [started.value.importId, started.value.state], [spec.import_id, "running"]);
+    assert.deepEqual(await door(url, "pass", { crash_after_puts: 2 }), passed(0, 0, 1));
+    const interrupted = await read(port, world.provider, spec.import_id);
+    assert.deepEqual([interrupted.state, importView(interrupted).again], ["running", false], "an interrupted import is not failed");
+    assert.deepEqual(await door(url, "pass"), passed(0, 0, 0), "nothing is claimed while the lease holds");
+    await door(url, "lapse");
+    assert.deepEqual(await door(url, "pass"), passed(1, 0, 0));
+    const job = await read(port, world.provider, spec.import_id);
     assert.deepEqual([job.state, job.report?.accepted, job.report?.rejected], ["published", 5, []]);
     const imported = job.report!.datasetRef!;
+    const replay = await startImport(port, dev, form({ spec: JSON.stringify(spec), file: file(rows) }));
+    assert.deepEqual(replay.status === "ok" && [replay.value.state, replay.value.report?.datasetRef], ["published", imported], "the same id is the same job");
 
-    // a second import holding a near-duplicate of a holdout question
+    // a second import holding a near-duplicate of a holdout question; its upload is lost before the pool reads
+    // it, so it fails for good (R243): a re-POST of the failed id answers it and resumes nothing, "Import again"
+    // is a new id that publishes, and the failed id stays failed
     const spec2 = { ...spec, import_id: "1a000000-0000-4000-8000-000000000002", dataset_id: "da000000-0000-4000-8000-000000000002", fields: { content: "question", group: "episode" } };
     const rows2 = '{"question": "what is shown in the FIRST frame?", "episode": "x1"}\n{"question": "Where is the exit?", "episode": "x2"}\n';
     await startImport(port, dev, form({ spec: JSON.stringify(spec2), file: file(rows2) }));
-    const second = (await settled(port, world.provider, spec2.import_id)).report!.datasetRef!;
+    assert.deepEqual(await door(url, "pass", { lose: spec2.import_id }), passed(0, 1, 0));
+    const lost = await read(port, world.provider, spec2.import_id);
+    assert.deepEqual([lost.state, importView(lost).tone, importView(lost).again], ["failed", "error", true]);
+    const again = await startImport(port, dev, form({ spec: JSON.stringify(spec2), file: file(rows2) }));
+    assert.deepEqual(again.status === "ok" && [again.value.importId, again.value.state], [spec2.import_id, "failed"], "a re-POST does not resume a failed id");
+    assert.deepEqual(await door(url, "pass"), passed(0, 0, 0), "and queues nothing");
+    const requeued = await requeueImport(port, dev, form({ import_id: spec2.import_id }));
+    const successor = requeued.status === "ok" ? requeued.value.importId : "";
+    assert.ok(successor !== "" && successor !== spec2.import_id, JSON.stringify(requeued));
+    assert.deepEqual(await door(url, "pass"), passed(1, 0, 0));
+    const second = (await read(port, world.provider, successor)).report!.datasetRef!;
+    assert.equal((await read(port, world.provider, spec2.import_id)).state, "failed", "the failed id stays failed");
 
     // freeze a version over the import: the holdout stays, the relative is left out and warned about
     const derived = await deriveVersion(port, dev, form({
@@ -122,7 +145,7 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits,
 
     // revocation (1-DSL4-1): the grantor revokes through L2's real RPC; the export made before it
     // stops serving the revoked items at once, and the version browser explains every sample
-    assert.equal((await fetch(`${url}/_test/revoke`, { method: "POST" })).status, 200);
+    await door(url, "revoke");
     const after = await port.readPart(world.provider, record.exportId, 0);
     assert.deepEqual(after.ok && after.value.trim(), "");
     const revoked = await port.version(world.provider, frozen.datasetRef);

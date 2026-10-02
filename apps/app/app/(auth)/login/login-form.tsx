@@ -7,9 +7,8 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, afterSignIn, authFailure, type AuthFailure } from "../flow";
-import { claimOnboarding } from "../welcome/actions";
+import { signIn } from "../auth-actions";
+import { FAILURE_COPY, type AuthFailure } from "../flow";
 
 export function LoginForm({ next, initialError }: { next: string; initialError: string | null }) {
   const router = useRouter();
@@ -24,22 +23,17 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
     setFailure(null);
     setNotice(null);
 
-    const { error } = await createClient()
-      .auth.signInWithPassword({
-        email: String(form.get("email")),
-        password: String(form.get("password")),
-      })
-      .catch(() => ({ error: { status: 0 } }));
-    if (error) {
-      setFailure(authFailure(error));
+    // One server action: the facade's sign-in, the App's cookie, then the one-time grant claim
+    // (afterSignIn); `next` is already checked to be a same-site path by the page.
+    const outcome = await signIn(String(form.get("email")), String(form.get("password")), next).catch(
+      (): { failure: AuthFailure } => ({ failure: "unavailable" }),
+    );
+    if ("failure" in outcome) {
+      setFailure(outcome.failure);
       setPending(false);
       return;
     }
-
-    // The first-login path (02): an existing verified user, or one whose link was opened on another
-    // device, receives the one-time grant here; anything short of a replayed grant lands on /welcome.
-    // `next` is already checked to be a same-site path by the page.
-    router.push(await afterSignIn(claimOnboarding, next));
+    router.push(outcome.to);
     router.refresh();
   }
 

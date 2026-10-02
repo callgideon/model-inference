@@ -6,7 +6,10 @@ test("U2-W01 the consumer navigation links Settings", () => {
   assert.match(src("components/sidebar.tsx"), /\{ href: "\/settings", label: "Settings", icon: Settings \}/);
 });
 test("U2-W02 no module remembers or recalls a key's plaintext", () => {
-  for (const p of ["lib/keys.ts", "components/snippet.tsx"]) assert.doesNotMatch(src(p), /sessionStorage|rememberKey|recallKey/, p);
+  // AP-09: lib/keys.ts is gone (the API mints keys); the dialog holds the plaintext in component state only.
+  for (const p of ["app/(console)/api-keys/create-key-dialog.tsx", "lib/services/actions.ts", "components/snippet.tsx"]) {
+    assert.doesNotMatch(src(p), /sessionStorage|localStorage|rememberKey|recallKey/, p);
+  }
 });
 
 // WR-U2-3 decided as option (a) at the round-2 merge: the keys page keeps its own copy of the

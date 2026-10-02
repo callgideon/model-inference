@@ -2,7 +2,7 @@
 // gateway's routes/lab_control.py), in the rollouts/http.ts style: the session's own token, the actor's
 // provider, the route's snake_case records renamed to the port's keys only, the fixed refusals, and a
 // record the pages cannot read failing the whole answer closed. controlPort() is this adapter only when
-// LAB_CONTROL_URL is set (and a Lab session can be read); otherwise unavailable, the fake only on its flag.
+// LAB_API_URL is set (and a Lab session can be read); otherwise unavailable, the fake only on its flag.
 import assert from "node:assert/strict";
 import * as nodeModule from "node:module";
 import test from "node:test";
@@ -17,10 +17,10 @@ const { registerHooks } = nodeModule as unknown as {
 };
 const session: { token: string | null } = ((globalThis as unknown as { labSession: { token: string | null } }).labSession = { token: "eyJ0.s.t" });
 const FAKES: Record<string, string> = {
-  "next/headers": `export async function cookies() { return { getAll: () => [{ name: "${AUTH_COOKIE}", value: "c" }] }; }`,
-  "@supabase/ssr": `export function createServerClient() {
+  // AP-09: the session token is the Lab session cookie itself (lib/auth/session.ts).
+  "next/headers": `export async function cookies() {
     const t = globalThis.labSession.token;
-    return { auth: { getSession: async () => ({ data: { session: t === null ? null : { access_token: t } } }) } };
+    return { get: (name) => (name === "${AUTH_COOKIE}" && t !== null ? { name, value: t } : undefined) };
   }`,
 };
 registerHooks({
@@ -123,8 +123,8 @@ test("L4-H04 without a session token, or when reading it fails, nothing is sent 
   }
 });
 
-test("L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a Lab config, carrying the session's own token", async () => {
-  const ENV = { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", LAB_CONTROL_URL: "https://control.example" };
+test("L4-H05 controlPort() is the HTTP adapter only with LAB_API_URL and a Lab config, carrying the session's own token", async () => {
+  const ENV = { LAB_API_URL: "https://control.example" };
   const sent: { url: string; auth: string | null }[] = [];
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     sent.push({ url: String(url), auth: new Headers(init.headers).get("authorization") });
@@ -135,7 +135,7 @@ test("L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a L
   session.token = null;
   assert.deepEqual(await controlPort(ENV).deployments(A), { ok: false, reason: "unavailable" }, "signed out: nothing is sent");
   session.token = "eyJ0.s.t";
-  for (const env of [{ ...ENV, LAB_CONTROL_URL: "" }, { ...ENV, NEXT_PUBLIC_SUPABASE_ANON_KEY: undefined }, drop(ENV, "LAB_CONTROL_URL")])
+  for (const env of [{ ...ENV, LAB_API_URL: "" }, { ...ENV, NODE_ENV: "production" }, drop(ENV, "LAB_API_URL")])
     assert.deepEqual(await controlPort(env).deployments(A), { ok: false, reason: "unavailable" }, JSON.stringify(env));
   assert.equal(sent.length, 1);
   assert.deepEqual(await controlPort({ ...ENV, LAB_CONTROL_PREVIEW: "1" }).deployments(A), { ok: true, value: [] }, "the labelled preview stays on its own flag");

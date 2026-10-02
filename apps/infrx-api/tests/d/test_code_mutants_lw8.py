@@ -49,7 +49,11 @@ GRANTED = frozenset({
     # lab-sql LW9 (0058, merge #65): the identified listing and the releases tally (0054's Live
     # is 0059's grant alone: the lane's duplicate grant was dropped at merge #65)
     "lab_experiments", "lab_import_requeue", "lab_optimization_variant_listing",
-    "lab_optimization_variants", "lab_release_live", "lab_release_tally"})
+    "lab_optimization_variants", "lab_release_live", "lab_release_tally",
+    # SR-AP10-3 (0066, api-schema-2, R251): the evaluation and pipeline route reads on the unit
+    "lab_put_experiment", "lab_checkpoint_listing", "lab_list_datasets", "lab_evaluator",
+    "lab_checkpoint_subscribe", "lab_checkpoint_decisions", "lab_eval_catalog",
+    "lab_external_runs_of", "lab_checkpoint_receipts_of"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 

@@ -1,7 +1,8 @@
 """AP-08's PostgreSQL world on the lane's key (`INFRX_D_TASK=ap8`, PG 57563), the D6J judge
 world (`tests/d/test_d6j_judge.seed`: NEMO's DEV/ADMIN/VIEWER, C1's external_judging grant, the
 `lab_submission` flag, NEMO's 100 PROVIDER_USD payer) plus D6F's request (one CREDIT job of C1
-on NEMO's model, C1's `feedback`/`provider_sharing` grant, the `feedback` flag), with 0064.
+on NEMO's model, C1's `feedback`/`provider_sharing` grant, the `feedback` flag), with 0064 and
+0067 (SR-AP08-1's rubric store).
 
 The doors run on the Lab control unit's own login (0043's `infrx_lab_control`, `set_role=False`
 as `lab/control/app.py` composes it). Skips visibly unless the key is ap8 and Docker answers:

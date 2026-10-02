@@ -3,7 +3,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -15,7 +16,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -27,7 +29,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -39,7 +42,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -51,7 +55,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -63,7 +68,21 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/resend",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -75,7 +94,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -87,7 +107,8 @@
     {
       "audience": "identity transport",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -111,7 +132,8 @@
     {
       "audience": "consumer session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -255,7 +277,8 @@
     {
       "audience": "consumer session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -418,9 +441,12 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
-      "consumers": [],
+      "consumers": [
+        "apps/lab/lib/auth/memberships.ts workspaceFeatures"
+      ],
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/capabilities",
@@ -472,13 +498,59 @@
       "compositions": [
         "lab-control"
       ],
-      "consumers": [
-        "apps/lab/lib/services/control/http.ts smoke"
-      ],
+      "consumers": [],
       "envelope": "refusal",
       "method": "POST",
-      "path": "/lab/v1/control/deployments/{deployment_revision_id}/smoke",
-      "request_schema": "none",
+      "path": "/lab/v1/control/deployments",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{deployment_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{deployment_id}/readiness",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/deployments/{deployment_id}/retire",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/deployments/{deployment_id}/smoke",
+      "request_schema": "raw",
       "response_schema": "typed"
     },
     {
@@ -755,7 +827,7 @@
       "consumers": [],
       "envelope": "refusal",
       "method": "GET",
-      "path": "/lab/v1/judge/budgets",
+      "path": "/lab/v1/hosting-profiles",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -765,6 +837,20 @@
         "lab-control"
       ],
       "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/budgets",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/judge/core.ts setBudget"
+      ],
       "envelope": "refusal",
       "method": "PUT",
       "path": "/lab/v1/judge/budgets/{payer_ref}",
@@ -776,7 +862,9 @@
       "compositions": [
         "lab-control"
       ],
-      "consumers": [],
+      "consumers": [
+        "apps/lab/lib/services/judge/core.ts calibration"
+      ],
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/judge/calibration",
@@ -800,7 +888,9 @@
       "compositions": [
         "lab-control"
       ],
-      "consumers": [],
+      "consumers": [
+        "apps/lab/lib/services/judge/core.ts configure"
+      ],
       "envelope": "refusal",
       "method": "POST",
       "path": "/lab/v1/judge/configs",
@@ -862,6 +952,18 @@
       ],
       "consumers": [],
       "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/rubrics",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/judge/runs",
       "request_schema": "raw",
@@ -872,7 +974,9 @@
       "compositions": [
         "lab-control"
       ],
-      "consumers": [],
+      "consumers": [
+        "apps/lab/lib/services/judge/core.ts requestRun"
+      ],
       "envelope": "refusal",
       "method": "POST",
       "path": "/lab/v1/judge/runs",
@@ -925,6 +1029,18 @@
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/operations/{operation_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/operations/{operation_id}/cancel",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -1424,7 +1540,7 @@
         "lab-control"
       ],
       "consumers": [
-        "apps/lab/lib/services/traces/port.ts"
+        "apps/lab/lib/services/review/index.ts reviewFeedback"
       ],
       "envelope": "refusal",
       "method": "GET",
@@ -1441,6 +1557,20 @@
         "apps/lab/lib/services/traces/port.ts"
       ],
       "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/traces/{request_id}/judge-runs",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/review/index.ts submitReview"
+      ],
+      "envelope": "refusal",
       "method": "POST",
       "path": "/lab/v1/traces/{request_id}/reviews",
       "request_schema": "typed",
@@ -1449,9 +1579,12 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
-      "consumers": [],
+      "consumers": [
+        "apps/lab/lib/auth/memberships.ts readMemberships"
+      ],
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/workspaces",
@@ -1461,7 +1594,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1473,7 +1607,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1485,7 +1620,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1921,6 +2057,12 @@
       "surface": "auth"
     },
     {
+      "method": "POST",
+      "path": "/auth/v1/resend",
+      "state": "existing",
+      "surface": "auth"
+    },
+    {
       "method": "GET",
       "path": "/console/v1/me",
       "state": "existing",
@@ -2169,19 +2311,19 @@
     {
       "method": "POST",
       "path": "/lab/v1/control/deployments",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {
       "method": "GET",
       "path": "/lab/v1/control/deployments/{id}",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {
       "method": "GET",
       "path": "/lab/v1/control/deployments/{id}/readiness",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {
@@ -2305,7 +2447,7 @@
       "source": "app/(auth)/verify-email/resend-form.tsx",
       "surface": "verify-email",
       "targets": [
-        "POST /auth/v1/sign-up"
+        "POST /auth/v1/resend"
       ],
       "transport": "identity-provider"
     },
@@ -2579,7 +2721,7 @@
       "targets": [
         "POST /auth/v1/sign-in"
       ],
-      "transport": "identity-provider"
+      "transport": "api"
     },
     {
       "action": "signOut",
@@ -2590,7 +2732,7 @@
       "targets": [
         "POST /auth/v1/sign-out"
       ],
-      "transport": "identity-provider"
+      "transport": "api"
     },
     {
       "action": "authCallback",
@@ -2601,7 +2743,7 @@
       "targets": [
         "GET /auth/v1/callback"
       ],
-      "transport": "identity-provider"
+      "transport": "api"
     },
     {
       "action": "refreshSession",
@@ -2612,18 +2754,29 @@
       "targets": [
         "POST /auth/v1/refresh"
       ],
-      "transport": "identity-provider"
+      "transport": "api"
     },
     {
       "action": "memberships",
       "app": "lab",
-      "flag": true,
-      "source": "lib/auth/memberships.ts (rpc lab_provider_memberships)",
+      "flag": false,
+      "source": "lib/auth/memberships.ts readMemberships",
       "surface": "shell",
       "targets": [
         "GET /lab/v1/workspaces"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
+    },
+    {
+      "action": "features",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/auth/memberships.ts workspaceFeatures",
+      "surface": "shell",
+      "targets": [
+        "GET /lab/v1/capabilities"
+      ],
+      "transport": "api"
     },
     {
       "action": "control",
@@ -2654,79 +2807,79 @@
     {
       "action": "reviewFeedback",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/review/index.ts (rpc lab_review_feedback)",
+      "flag": false,
+      "source": "lib/services/review/index.ts reviewFeedback",
       "surface": "requests",
       "targets": [
         "GET /lab/v1/traces/{id}/feedback"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "review",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/review/actions.ts (rpc lab_review_feedback)",
+      "flag": false,
+      "source": "lib/services/review/index.ts submitReview",
       "surface": "requests",
       "targets": [
         "POST /lab/v1/traces/{id}/reviews"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "configure",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/judge/core.ts (rpc lab_judge_configure)",
+      "flag": false,
+      "source": "lib/services/judge/core.ts configure",
       "surface": "judge",
       "targets": [
         "POST /lab/v1/judge/configs"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "setBudget",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/judge/core.ts (rpc lab_judge_set_budget)",
+      "flag": false,
+      "source": "lib/services/judge/core.ts setBudget",
       "surface": "judge",
       "targets": [
         "PUT /lab/v1/judge/budgets/{payer_id}"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "requestRun",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/judge/core.ts (rpc lab_judge_request_run)",
+      "flag": false,
+      "source": "lib/services/judge/core.ts requestRun",
       "surface": "judge",
       "targets": [
         "POST /lab/v1/judge/runs"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "calibration",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/judge/core.ts (rpc lab_judge_calibration)",
+      "flag": false,
+      "source": "lib/services/judge/core.ts calibration",
       "surface": "judge",
       "targets": [
         "GET /lab/v1/judge/calibration"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "runs",
       "app": "lab",
-      "flag": true,
-      "source": "lib/services/judge/runs.ts, components/traces/judge/port.ts (rpc lab_judge_runs)",
+      "flag": false,
+      "source": "lib/services/judge/runs.ts (unavailable until WR-AP09L-3)",
       "surface": "judge",
       "targets": [
         "GET /lab/v1/judge/runs"
       ],
-      "transport": "supabase-db"
+      "transport": "api"
     },
     {
       "action": "datasets",
