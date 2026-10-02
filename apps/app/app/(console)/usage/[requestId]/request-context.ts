@@ -1,8 +1,8 @@
-import { accessToken, apiSource } from "@/lib/api/server";
+import { accessToken, apiSource } from "@/lib/request-api";
 import { apiRequestReads, type RequestSource } from "./request-reads";
 
 /**
- * The request detail's data source (U4): infrx-api as the signed-in user (`lib/api/server.ts`;
+ * The request detail's data source (U4): infrx-api as the signed-in user (`lib/request-api.ts`;
  * the client fake in the development preview). `null` when there is no session at all: the page
  * sends the reader to sign in, the result route answers 401.
  */

@@ -13,7 +13,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answer, envelope, recordingApi, type Sent } from "../../lib/api/fake.ts";
+import { answer, envelope, recordingApi, type Sent } from "../../lib/fake-api.ts";
 import type { Result } from "../../lib/contracts/types.ts";
 import {
   consoleActions,

@@ -41,7 +41,7 @@ const READS = "app/(console)/billing/credit-reads.ts";
 const CREDITS = "app/(console)/billing/credit-view-model.ts";
 const JOBS = "app/(console)/usage/credit-view-model.ts";
 const GATE = "app/(console)/usage/fake-console-context.ts";
-const SOURCE = "lib/api/server.ts";
+const SOURCE = "lib/request-api.ts";
 const CONTROLS = "app/(console)/usage/usage-controls.tsx";
 
 // U4: the owned request detail — reads, view model, and the three route files the cases read as

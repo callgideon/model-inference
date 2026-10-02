@@ -9,7 +9,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { cookieOptions, encodeSession, SESSION_COOKIE, VERIFIER_COOKIE, VERIFIER_MAX_AGE_S, type FacadeSession } from "@/lib/api/cookie";
 import { consumerApi, type ConsumerApi } from "@/lib/api/index";
-import { accessToken, apiOrigin } from "@/lib/api/server";
+import { accessToken, apiOrigin } from "@/lib/request-api";
 
 if (typeof window !== "undefined") throw new Error("app/(auth)/session.ts is server-only");
 

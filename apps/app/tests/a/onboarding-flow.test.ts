@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import type { Result as ApiResult } from "@infrx/api-client/transport";
-import { answer, envelope as envelopeOf, recordingApi } from "../../lib/api/fake.ts";
+import { answer, envelope as envelopeOf, recordingApi } from "../../lib/fake-api.ts";
 import {
   AFTER_VERIFY,
   CAPTCHA_UNAVAILABLE,

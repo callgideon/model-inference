@@ -1,8 +1,8 @@
 // `.js`: the package has no exports map, and `node --test` loads this file (tests/a/middleware.test.ts).
 import { NextResponse, type NextRequest } from "next/server.js";
-import { consumerApi } from "./index.ts";
-import { cookieOptions, decodeSession, encodeSession, needsRefresh, SESSION_COOKIE, type FacadeSession } from "./cookie.ts";
-import { apiBaseUrl } from "../../app/(console)/models/catalog.ts";
+import { consumerApi } from "./api/index.ts";
+import { cookieOptions, decodeSession, encodeSession, needsRefresh, SESSION_COOKIE, type FacadeSession } from "./api/cookie.ts";
+import { apiBaseUrl } from "../app/(console)/models/catalog.ts";
 
 const PUBLIC = ["/api/version", "/api/client-errors", "/login", "/signup", "/verify-email", "/forgot-password", "/auth"];
 

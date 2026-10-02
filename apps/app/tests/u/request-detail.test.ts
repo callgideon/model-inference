@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { answer, defaultWorld, envelope, fakeConsoleApi, recordingApi, type Sent } from "../../lib/api/fake.ts";
+import { answer, defaultWorld, envelope, fakeConsoleApi, recordingApi, type Sent } from "../../lib/fake-api.ts";
 import { jobOf, type ConsumerJob } from "../../app/(console)/billing/credit-reads.ts";
 import { apiRequestReads, resultResponse, type ResultRead } from "../../app/(console)/usage/[requestId]/request-reads.ts";
 import {

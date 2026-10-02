@@ -17,7 +17,7 @@ import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, FeedbackInput, Re
 import { consoleActions, type FeedbackAck } from "@/lib/services/actions";
 import { apiOperatorPort } from "@/app/(console)/admin/operator-port";
 import { endSession } from "@/app/(auth)/session";
-import { apiSource } from "@/lib/api/server";
+import { apiSource } from "@/lib/request-api";
 import { getSession } from "@/lib/session";
 
 const api = async () => (await apiSource()).api;

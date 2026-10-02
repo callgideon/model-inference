@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { answer, defaultWorld, envelope, fakeConsoleApi, FAKE_KEY, FAKE_ORG, FAKE_USER, recordingApi } from "../../lib/api/fake.ts";
+import { answer, defaultWorld, envelope, fakeConsoleApi, FAKE_KEY, FAKE_ORG, FAKE_USER, recordingApi } from "../../lib/fake-api.ts";
 import { onceGets } from "../../lib/api/result.ts";
 import { apiConsumerReads, consoleShell, consumerContextFrom, consumerSessionFrom, providerRoute } from "../../lib/services/console.ts";
 
@@ -214,7 +214,7 @@ test("the console shell: a refused session goes to /auth/expired (which clears t
 });
 
 test("U1R-AUTH-01 one answer per GET per request: the layout, the sidebar and the page share it (onceGets)", () => {
-  const server = readFileSync(join(appRoot, "lib", "api", "server.ts"), "utf8");
+  const server = readFileSync(join(appRoot, "lib", "request-api.ts"), "utf8");
   assert.match(server, /fetch: onceGets\(fetch\)/, "the request's client memoises its GETs");
   assert.match(server, /export const apiSource = cache\(/, "one client per request");
   assert.match(readFileSync(join(appRoot, "lib", "services", "server.ts"), "utf8"), /export const consumerSession = cache\(/);

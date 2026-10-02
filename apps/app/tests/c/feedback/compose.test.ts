@@ -2,7 +2,7 @@
 // anything runs and the request's API client; nothing is refreshed (no App page lists feedback).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answer, recordingApi } from "../../../lib/api/fake.ts";
+import { answer, recordingApi } from "../../../lib/fake-api.ts";
 import { consoleActions, type ActionDeps } from "../../../lib/services/actions.ts";
 
 const JOB = "5c000000-0000-4000-8000-0000000000f1";

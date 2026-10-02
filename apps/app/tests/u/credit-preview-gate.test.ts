@@ -1,7 +1,7 @@
 // node --test "tests/**/*.test.ts"
 //
 // U1R: the only seam between a production request and the client fake (a plausible 9,9xx-credit
-// balance). `previewAllowed`/`consoleContext` is the gate and `lib/api/server.ts` `apiSource` the one
+// balance). `previewAllowed`/`consoleContext` is the gate and `lib/request-api.ts` `apiSource` the one
 // place the fake can be chosen; the page glue must route through it. Failure oracle: a gate forced
 // open (U1R-M30), a choice that ignores the gate (U1R-M31), or glue that reaches the fake directly
 // would each let production render fake funds, and each fails a case here.
@@ -13,7 +13,7 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { consoleContext, previewAllowed } from "../../app/(console)/usage/fake-console-context.ts";
-import { FAKE_CLOCK } from "../../lib/api/fake.ts";
+import { FAKE_CLOCK } from "../../lib/fake-api.ts";
 
 const app = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const OPT_IN = { NODE_ENV: "development", INFRX_CONSOLE_PREVIEW: "1" };
@@ -41,7 +41,7 @@ test(T.source, async () => {
   const keys = await preview!.api.call("get", "/console/v1/keys");
   assert.ok(keys.ok && keys.data.data.length === 1, "the preview answers through the generated client");
   // The one place a page's client is chosen: the request's API client unless the gate opens.
-  const server = readFileSync(join(app, "lib/api/server.ts"), "utf8");
+  const server = readFileSync(join(app, "lib/request-api.ts"), "utf8");
   assert.match(server, /const preview = consoleContext\(\);\n  if \(preview !== null\) return \{ \.\.\.preview, preview: true \};/);
   // The page glue has no gate of its own: it can only reach the fake through apiSource.
   for (const glue of ["app/(console)/billing/credit-context.ts", "app/(console)/usage/[requestId]/request-context.ts"]) {

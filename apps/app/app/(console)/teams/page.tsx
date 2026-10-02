@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { providerRoute } from "@/lib/services/console";
-import { apiSource } from "@/lib/api/server";
+import { apiSource } from "@/lib/request-api";
 import { getSession } from "@/lib/session";
 
 export const metadata = { title: "Teams · infrx" };

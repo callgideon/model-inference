@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { apiSource, sessionEmail } from "@/lib/api/server";
+import { apiSource, sessionEmail } from "@/lib/request-api";
 
 export type Session = {
   userId: string;

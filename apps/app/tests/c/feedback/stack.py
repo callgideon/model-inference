@@ -200,7 +200,10 @@ def check_only_signed_in_sessions_reach_the_doors(conn, w) -> str:
         acl = conn.execute("select coalesce(proacl::text, '') from pg_proc where oid = "
                            "%s::regprocedure", (f"public.{door}(jsonb)",)).fetchone()[0]
         grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
-        assert grantees == {"postgres", "authenticated", "service_role"}, f"{door}: {acl}"
+        # 0064 (AP-08 judge API) grants the review door to the Lab control service's own login
+        # (infrx_lab_control, not a browser role); `authenticated` stays the only browser grantee.
+        lab = {"infrx_lab_control"} if door == "lab_review_feedback" else set()
+        assert grantees == {"postgres", "authenticated", "service_role"} | lab, f"{door}: {acl}"
         assert as_user(conn, "service", door, args)[1] == "not_found", door
     return "anon 42501 on both; authenticated only; platform role not_found"
 

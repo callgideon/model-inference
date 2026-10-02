@@ -7,7 +7,7 @@
 // The default world is a wallet mid-flight - settled, pending, unknown, free, absorbed, cancelled and
 // legacy USD requests - whose figures are the API's own (stated, not derived here).
 import type { components } from "@infrx/api-client/consumer";
-import { consumerApi, type ConsumerApi } from "./index.ts";
+import { consumerApi, type ConsumerApi } from "./api/index.ts";
 
 type S = components["schemas"];
 export type FakeWorld = {

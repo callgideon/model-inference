@@ -1,6 +1,6 @@
 "use server";
 
-import { accessToken, apiSource } from "@/lib/api/server";
+import { accessToken, apiSource } from "@/lib/request-api";
 import { claimGrant, onboardingFor, type OnboardingState } from "../flow";
 
 /**

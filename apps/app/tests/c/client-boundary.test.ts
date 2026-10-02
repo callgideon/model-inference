@@ -180,7 +180,7 @@ test("every case in this track asserts success through a helper, never as a bare
 test("the server-only modules carry their run-time guard as well", () => {
   // AP-09: the SQL, cursor and credit modules are gone (the API owns them); what is left server-only
   // is the action adapter and the request's API client (which carries the session cookie).
-  for (const file of [join(SERVER_ONLY, "actions.ts"), join(appRoot, "lib", "api", "server.ts")]) {
+  for (const file of [join(SERVER_ONLY, "actions.ts"), join(appRoot, "lib", "request-api.ts")]) {
     const name = relative(appRoot, file);
     const source = readFileSync(file, "utf8");
     assert.match(

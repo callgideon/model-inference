@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server.js";
 import { decodeSession, encodeSession, SESSION_COOKIE } from "../../lib/api/cookie.ts";
-import { facadeRefresh, redirectFor, updateSession, type Renewal } from "../../lib/api/middleware.ts";
+import { facadeRefresh, redirectFor, updateSession, type Renewal } from "../../lib/session-middleware.ts";
 
 const ORIGIN = "http://localhost:3000";
 const request = (method: string, path: string, action = false) =>

@@ -14,7 +14,7 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUTH = join(appRoot, "app", "(auth)");
 const CALLBACK = join(appRoot, "app", "auth", "callback", "route.ts");
 /** The server-side session: the cookie holding the tokens and the client that forwards them. */
-const SERVER_ONLY = new Set([join(appRoot, "app", "(auth)", "session.ts"), join(appRoot, "lib", "api", "server.ts")]);
+const SERVER_ONLY = new Set([join(appRoot, "app", "(auth)", "session.ts"), join(appRoot, "lib", "request-api.ts")]);
 const SOURCE = [".ts", ".tsx"];
 
 function files(directory: string): string[] {

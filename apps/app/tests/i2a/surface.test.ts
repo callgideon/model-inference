@@ -73,7 +73,7 @@ test("I2A-BUNDLE-01 no client module reaches a file that names a server-only var
   assert.ok(clients.length > 5, "the walk found no client modules; it would prove nothing");
   assert.deepEqual(SERVER_ONLY.sort(), ["INFRX_API_BASE_URL"]);
   // The walker is not vacuous: the server-only edge does reach the API origin's name.
-  assert.ok(reachable(join(appRoot, "lib", "api", "server.ts")).some((f) => /INFRX_API_BASE_URL/.test(read(f))));
+  assert.ok(reachable(join(appRoot, "lib", "request-api.ts")).some((f) => /INFRX_API_BASE_URL/.test(read(f))));
   const offenders: string[] = [];
   for (const client of clients) {
     for (const file of reachable(client)) {

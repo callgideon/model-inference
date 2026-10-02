@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answer, envelope, recordingApi } from "../../../lib/api/fake.ts";
+import { answer, envelope, recordingApi } from "../../../lib/fake-api.ts";
 import { submitFeedback } from "../../../lib/services/actions.ts";
 
 const JOB = "5c000000-0000-4000-8000-0000000000f1";

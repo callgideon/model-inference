@@ -1,10 +1,10 @@
 /**
  * The development preview's data source (INFRX_CONSOLE_PREVIEW=1): the client fake of infrx-api
- * (`lib/api/fake.ts`), answered through the generated client, so a preview renders exactly what the
+ * (`lib/fake-api.ts`), answered through the generated client, so a preview renders exactly what the
  * production adapters make of the documented API.
  */
 import type { ConsumerApi } from "../../../lib/api/index.ts";
-import { FAKE_CLOCK, fakeConsoleApi } from "../../../lib/api/fake.ts";
+import { FAKE_CLOCK, fakeConsoleApi } from "../../../lib/fake-api.ts";
 
 export type ConsoleContext = { api: ConsumerApi; now: Date };
 

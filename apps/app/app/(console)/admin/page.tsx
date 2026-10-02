@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { Result } from "@/lib/contracts/types";
 import { amount, credits, dateTime } from "@/lib/format";
 import { getSession } from "@/lib/session";
-import { apiSource } from "@/lib/api/server";
+import { apiSource } from "@/lib/request-api";
 import { OperatorForms } from "./operator-forms";
 import { ACCOUNT_LIMIT, operatorReads } from "./operator-reads";
 

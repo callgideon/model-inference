@@ -21,7 +21,7 @@ import test from "node:test";
 
 import type { OperatorCommand } from "../../lib/services/actions.ts";
 import type { Credit } from "../../lib/contracts/v2/money-units.ts";
-import { answer, envelope, recordingApi, type Sent } from "../../lib/api/fake.ts";
+import { answer, envelope, recordingApi, type Sent } from "../../lib/fake-api.ts";
 import { apiOperatorPort } from "../../app/(console)/admin/operator-port.ts";
 import { ACCOUNT_LIMIT, AUDIT_LIMIT, DRIFT_LIMIT, UNKNOWN_LIMIT, operatorReads } from "../../app/(console)/admin/operator-reads.ts";
 import { OPERATOR_FORMS, formInput, nextKey, outcomeOf } from "../../app/(console)/admin/operator-form.ts";

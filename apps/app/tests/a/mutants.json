@@ -512,7 +512,7 @@
     {
       "id": "MW-POST",
       "what": "E3A F-1: the signed-in redirect catches the sign-in server action POST again",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "(path === \"/login\" || path === \"/signup\") && (request.method === \"GET\" || request.method === \"HEAD\")",
       "replace": "(path === \"/login\" || path === \"/signup\")",
       "cases": [
@@ -522,7 +522,7 @@
     {
       "id": "MW-NEVER-REFRESH",
       "what": "an expiring session is never refreshed",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "  if (stored !== null && needsRefresh(stored, now)) {",
       "replace": "  if (stored !== null && false) {",
       "cases": [
@@ -532,7 +532,7 @@
     {
       "id": "MW-ALWAYS-REFRESH",
       "what": "every request refreshes (the refresh token is spent per page)",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "  if (stored !== null && needsRefresh(stored, now)) {",
       "replace": "  if (stored !== null) {",
       "cases": [
@@ -542,7 +542,7 @@
     {
       "id": "MW-OUTAGE-SIGNOUT",
       "what": "an outage during refresh signs the visitor out",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "    if (renewed === \"ended\") {",
       "replace": "    if (renewed === \"ended\" || renewed === \"unavailable\") {",
       "cases": [
@@ -552,7 +552,7 @@
     {
       "id": "MW-ENDED-KEPT",
       "what": "a refused refresh keeps the dead session",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "      signedIn = false;\n",
       "replace": "",
       "cases": [
@@ -562,7 +562,7 @@
     {
       "id": "MW-NEW-NOT-SET",
       "what": "a refreshed session is not stored",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "  else if (set !== null) response.cookies.set(SESSION_COOKIE, set.value, cookieOptions(process.env.NODE_ENV === \"production\"));",
       "replace": "  else if (set !== null) void set;",
       "cases": [
@@ -572,7 +572,7 @@
     {
       "id": "MW-ANY-ENDS",
       "what": "any refused refresh (a rate limit) ends the session",
-      "file": "lib/api/middleware.ts",
+      "file": "lib/session-middleware.ts",
       "find": "    return answer.error.status === 401 ? \"ended\" : \"unavailable\";",
       "replace": "    return \"ended\";",
       "cases": [

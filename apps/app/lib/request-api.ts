@@ -9,11 +9,11 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { apiBaseUrl } from "@/app/(console)/models/catalog";
 import { consoleContext } from "@/app/(console)/usage/fake-console-context";
-import { decodeSession, SESSION_COOKIE, tokenEmail } from "./cookie";
-import { consumerApi, type ConsumerApi } from "./index";
-import { onceGets } from "./result";
+import { decodeSession, SESSION_COOKIE, tokenEmail } from "./api/cookie";
+import { consumerApi, type ConsumerApi } from "./api/index";
+import { onceGets } from "./api/result";
 
-if (typeof window !== "undefined") throw new Error("lib/api/server.ts is server-only");
+if (typeof window !== "undefined") throw new Error("lib/request-api.ts is server-only");
 
 export type ApiSource = { api: ConsumerApi; preview: boolean; now: Date };
 

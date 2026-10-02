@@ -2,12 +2,12 @@
 //
 // U1R over infrx-api (AP-09 09a): the consumer CREDIT read adapter (`app/(console)/billing/credit-reads.ts`).
 // The client is the generated one over a recording `fetch`, so each case pins what reaches the API
-// (which route, which query) and what an API answer becomes. `lib/api/fake.ts` serves the same
+// (which route, which query) and what an API answer becomes. `lib/fake-api.ts` serves the same
 // documents to the pages' preview; tests/ap02 proves the API's documents on real PostgreSQL.
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { answer, envelope, recordingApi, type Sent } from "../../lib/api/fake.ts";
+import { answer, envelope, recordingApi, type Sent } from "../../lib/fake-api.ts";
 import { apiCreditReads, KEYS_BOUND } from "../../app/(console)/billing/credit-reads.ts";
 
 const WALLET = "a1000000-0000-4000-8000-00000000000a";

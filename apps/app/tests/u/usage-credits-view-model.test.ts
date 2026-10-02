@@ -15,7 +15,7 @@ import { credits } from "../../lib/format.ts";
 import { totalCredit, type Credit } from "../../lib/contracts/v2/money-units.ts";
 import type { Result, Page } from "../../lib/contracts/types.ts";
 import type { ConsumerJob } from "../../app/(console)/billing/credit-reads.ts";
-import { defaultWorld, fakeConsoleApi } from "../../lib/api/fake.ts";
+import { defaultWorld, fakeConsoleApi } from "../../lib/fake-api.ts";
 import { apiCreditReads, jobOf } from "../../app/(console)/billing/credit-reads.ts";
 import {
   DEFAULT_JOB_RANGE,

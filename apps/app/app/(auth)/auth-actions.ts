@@ -5,7 +5,7 @@
  * cookie. Next checks a server action's Origin against its host, so a cross-site form cannot run
  * these; the facade checks again. Every failure is a fixed `AuthFailure` (copy in `./flow.ts`).
  */
-import { accessToken } from "@/lib/api/server";
+import { accessToken } from "@/lib/request-api";
 import {
   afterSignIn,
   captchaGate,

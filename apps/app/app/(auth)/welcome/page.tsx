@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { KeyRound, BookOpen, Boxes } from "lucide-react";
 import { displayCredit } from "@/lib/contracts/v2/money-units";
-import { accessToken, apiSource, sessionEmail } from "@/lib/api/server";
+import { accessToken, apiSource, sessionEmail } from "@/lib/request-api";
 import { welcomeWallet } from "../flow";
 import { RetryGrant } from "./retry";
 
