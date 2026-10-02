@@ -8,8 +8,10 @@ const lab = resolve(import.meta.dirname, "../../..");
 // Turbopack refuses files outside its root; a mutant runner's copy links node_modules to the real
 // install, so the root is the deepest directory holding both.
 const modules = realpathSync(resolve(lab, "node_modules")).split(sep);
-const shared = lab.split(sep).filter((part, i) => modules[i] === part && lab.split(sep).slice(0, i).every((p, j) => modules[j] === p));
-const root = shared.join(sep) || sep;
+const parts = lab.split(sep);
+let depth = 0;
+while (depth < parts.length && parts[depth] === modules[depth]) depth += 1;
+const root = parts.slice(0, depth).join(sep) || sep;
 
 const config: NextConfig = {
   distDir: "../../../.next/ux-harness",
