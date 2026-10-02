@@ -412,6 +412,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '              after.get("request_id") == out["request_id"] and "content" not in after\n'
        '              and after.get("access") == "metadata" and after.get("access_state") == "revoked",',
        '              after.get("request_id") == out["request_id"],', DEFECT),
+    _m("payer_not_version_4", "14's payer ref is 0029's lab ref (version-4 ids)", L,
+       "payer_id = uuid.UUID(bytes=seed.digest()[:16], version=4)",
+       "payer_id = uuid.uuid5(uuid.NAMESPACE_URL, seed.hexdigest())", SERVED),
     _m("revoked_judge_unchecked", "17: a follow-up judge run is refused", L,
        "              follow.status_code in (403, 409, 422), follow.status_code)",
        "              follow.status_code in (202, 403, 409, 422), follow.status_code)", DEFECT),

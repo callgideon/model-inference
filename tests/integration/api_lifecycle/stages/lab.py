@@ -219,11 +219,12 @@ def s13(ctx) -> None:
 # ------------------------------------------------------------------ 14-17 (AP-08)
 
 def payer(ctx) -> str:
-    """This provider's own payer reference for the run (0037: `lab:payer:<provider>:...`)."""
+    """This provider's own payer reference for the run (0029's `lab:payer:<provider>:<id>@
+    sha256:<hex>`, both ids version-4 shaped), the same for every run on one target."""
     provider = _workspace(ctx)["provider_org_id"]
-    seed = f"ap11:{ctx.config['target']}"
-    return (f"lab:payer:{provider}:{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
-            f"@sha256:{hashlib.sha256(seed.encode()).hexdigest()}")
+    seed = hashlib.sha256(f"ap11:{ctx.config['target']}".encode())
+    payer_id = uuid.UUID(bytes=seed.digest()[:16], version=4)
+    return f"lab:payer:{provider}:{payer_id}@sha256:{seed.hexdigest()}"
 
 
 def s14(ctx) -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -32,6 +33,8 @@ WEB = {"eyJhbGci.eyJzdWIi.alphaWEB": ("u-alpha", "org-a"),
 PROVIDER = "b0000001-0000-4000-8000-000000000001"
 COMPOSED = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-07", "AP-08"]
 CHARGE = "3"
+_V4 = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+PAYER = f"lab:payer:{PROVIDER}:{_V4}@sha256:[0-9a-f]{{64}}"
 
 
 #: Product defects the fake can be told to have, each one a stage's failure oracle.
@@ -405,6 +408,8 @@ def judge(fake, request, method, path, key, query):
     spent = _money("0.01" if "budget_spent" in d else "0", "PROVIDER_USD")
     budget = {"limit": _money("1.00", "PROVIDER_USD"), "reserved": spent, "settled": spent}
     if path.startswith("/lab/v1/judge/budgets/"):
+        if not re.fullmatch(PAYER, path.split("/", 5)[5]):      # 0029's lab_ref_parts
+            return _refused(403, "forbidden")
         fake.objects["payer"] = path.split("/", 5)[5]
         return _ok(body={"payer_ref": fake.objects["payer"], **budget})
     if path == "/lab/v1/judge/budgets":
