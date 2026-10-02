@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "95cf8a0f (= claude/consumer-v1 tip)",
- "integration_head": "95cf8a0f",
+ "main": "004c1c30 (= claude/consumer-v1 tip)",
+ "integration_head": "004c1c30",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,8 +40,8 @@
    }
   ]
  },
- "revision": 402,
- "updated": "2026-10-02T02:59:56Z",
+ "revision": 403,
+ "updated": "2026-10-02T03:11:29Z",
  "agent_slots": {
   "total": 16,
   "active": 0,
@@ -11739,7 +11739,7 @@
   {
    "id": "W7-api-artifacts",
    "task": "AP-04",
-   "slice": "04a–04e: model projects, uploads, imports, compatibility, adoption; migration 0061 (wf_f0af5587-ce4)",
+   "slice": "04a–04e: model projects, uploads, imports, compatibility, adoption; migration 0061 (wf_f0af5587-ce4); merge #89 b05dfddb integrated (004c1c30)",
    "agent": "opus",
    "branch": "codex/w7-api-artifacts",
    "worktree": ".claude/worktrees/codex-w7-api-artifacts",
@@ -11750,11 +11750,11 @@
     "prefix": "infrx-ap4-*",
     "db": "infrx_ap4"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T02:59:56Z",
+   "updated": "2026-10-02T03:11:29Z",
    "blocker": null,
-   "next_action": "merge #89 (running)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 8,
     "likely_h": 12,
@@ -15533,6 +15533,12 @@
    "at": "2026-10-02T02:59:56Z",
    "by": "implementation coordinator (session 03)",
    "what": "rev 402: merge #88 (seven lanes) integrated at 95cf8a0f with coordinator fixes (the export walks included routers; x-infrx-no-body; the frozen set excludes the export tooling; harness list pins 0060/0064); eleven of twelve batch-1 lanes integrated; api-artifacts in merge #89. Batch 2 briefs written (sixteen lanes).",
+   "source": "research/plan/evidence/w7/"
+  },
+  {
+   "at": "2026-10-02T03:11:29Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 403: merge #89 api-artifacts integrated at 004c1c30 — wave 7 batch 1 complete (twelve lanes, merges #85–#89). Batch 2 (sixteen lanes) dispatches from 004c1c30. Register row 88: test_the_lw4_reads_keep_the_listings_already_written fails on the Supabase image at the base (42501 after 0044+), pre-existing; to api-schema-2.",
    "source": "research/plan/evidence/w7/"
   }
  ],
