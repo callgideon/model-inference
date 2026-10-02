@@ -110,6 +110,7 @@ test("UXS-02 a failed read is an honest state: unavailable, forbidden or signed 
   assert.equal(await kind(json(404, envelope("not_found"))), "unavailable");
   assert.equal(await kind(json(200, { ...DOC, keys: [{ ...DOC.keys[0], mode: "everything" }] })), "unavailable", "an unknown mode is not shown");
   assert.equal(await kind(json(200, { ...DOC, keys: undefined })), "unavailable");
+  assert.equal(await kind(json(200, { ...DOC, grants: [grant(GRANT_1, { state: "pending" })] })), "unavailable", "an unknown grant state is not shown");
   assert.equal(await kind(json(403, envelope("forbidden"))), "forbidden");
   // The routes refuse an API key with 401 invalid_api_key; the App sends only the session's bearer, so
   // a 401 here can only be a session that ended.
@@ -273,7 +274,7 @@ test("UXS-09 every other state is honest: unavailable, forbidden, signed out, su
   const unavailable = text(await section({ kind: "unavailable" }));
   assert.match(unavailable, /Data-use settings are unavailable right now/);
   assert.match(unavailable, /Try again/);
-  assert.doesNotMatch(unavailable, /\bOff\b|Save|Withdraw|no keys/i, "a failed read shows no choice and no empty list");
+  assert.doesNotMatch(unavailable, /\bOff\b|Save|Withdraw|no (active )?keys|not granted/i, "a failed read shows no choice and no empty list");
   const forbidden = text(await section({ kind: "forbidden" }));
   assert.match(forbidden, /Only the account's owner/);
   assert.doesNotMatch(forbidden, /Save|Withdraw/);
