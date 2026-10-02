@@ -40,8 +40,8 @@
    }
   ]
  },
- "revision": 410,
- "updated": "2026-10-02T12:30:10Z",
+ "revision": 411,
+ "updated": "2026-10-02T18:59:05Z",
  "agent_slots": {
   "total": 18,
   "active": 0,
@@ -13045,6 +13045,227 @@
     "apps/lab/tests/e2e/evaluate/"
    ],
    "wiring_requests": []
+  },
+  {
+   "id": "W7-api-publication-2",
+   "task": "AP-06",
+   "slice": "row 103: PgDevCredentials over 0068 doors (WR-AS3-2); role-login connector (WR-AS3-3) (wf_2caff617-e76) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-api-publication-2",
+   "worktree": ".claude/worktrees/codex-w7-api-publication-2",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap6",
+    "prefix": "infrx-ap6-*",
+    "db": "infrx_ap6"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/gateway/routes/operator_publication.py",
+    "infrx/lab/publication/",
+    "tests/ap06/",
+    "infrx/lab/workers/__main__.py (connector)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-improve-4",
+   "task": "AP-10",
+   "slice": "row 105: 10e routes + composed AP-04 test; the from-traces outcome read (wf_fb30eaf0-65b) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-api-improve-4",
+   "worktree": ".claude/worktrees/codex-w7-api-improve-4",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap10",
+    "prefix": "infrx-ap10-*",
+    "db": "infrx_ap10"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/lab/improve/",
+    "infrx/gateway/routes/lab_improve.py",
+    "routes/lab_datasets.py (outcome read)",
+    "tests/ap10/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-d-supabase-reds",
+   "task": "AP-00",
+   "slice": "the Supabase-image reds in tests/d (role-switch class), the harness production test, the r151_post_check_file_name anchor (wf_49f3e750-c5b) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-d-supabase-reds",
+   "worktree": ".claude/worktrees/codex-w7-d-supabase-reds",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap0",
+    "prefix": "infrx-ap0-*",
+    "db": "infrx_ap0"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/d/",
+    "tests/i/lab/mutants.py",
+    "tests/integration/test_harness.py",
+    "tests/d/pgharness.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-ux-app-3",
+   "task": "UX-07",
+   "slice": "C-07 data-use controls in Settings through the generated client + App transport (wf_cd8215a5-3b9) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-ux-app-3",
+   "worktree": ".claude/worktrees/codex-w7-ux-app-3",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key none",
+    "prefix": "none",
+    "db": "none"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/app/(console)/settings/",
+    "apps/app/lib/services/data-use/",
+    "apps/app/tests/ux/settings/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-lab-followups",
+   "task": "UX-08",
+   "slice": "WR-UX08-3 JudgeRecords; NO_CATALOG + docstring housekeeping; the inventory note (wf_e1f5746a-efb) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-lab-followups",
+   "worktree": ".claude/worktrees/codex-w7-lab-followups",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key none",
+    "prefix": "none",
+    "db": "none"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/app/(provider)/judge/",
+    "apps/lab/lib/services/judge/records.ts",
+    "infrx/lab/evaluation/__init__.py (housekeeping)",
+    "infrx/contracts/openapi/inventory.py (note)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-r151-prep",
+   "task": "AP-00",
+   "slice": "row 99: the R151 window for 0060–0068 prepared on a branch that stays unmerged until the window: EXPECTED_PENDING, the known-good reproof, infra/runbooks/r151-0060-0068.md (wf_9d4d67c9-2ad) (batch 4)",
+   "agent": "opus",
+   "branch": "codex/w7-r151-prep",
+   "worktree": ".claude/worktrees/codex-w7-r151-prep",
+   "base": "29b9df84",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap1",
+    "prefix": "infrx-ap1-*",
+    "db": "infrx_ap1"
+   },
+   "activity": "running",
+   "started": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T18:59:05Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-4 brief",
+    "at": "2026-10-02T18:59:05Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infra/rollout/hosted-migrate.sh (EXPECTED_PENDING + post-check)",
+    "tests/i/test_migrate.py",
+    "tests/i/test_known_good_proof.py",
+    "infra/runbooks/r151-0060-0068.md"
+   ],
+   "wiring_requests": []
   }
  ],
  "review_queue": [],
@@ -16862,6 +17083,10 @@
    "by": "tracker",
    "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
    "source": "updates/AP-02-20261002T1051Z.json"
+  },
+  {
+   "at": "2026-10-02T18:59:05Z",
+   "event": "batch 4 (the pending items) dispatched from main 29b9df84: api-publication-2, api-improve-4, d-supabase-reds, ux-app-3, lab-followups, r151-prep (six Opus lanes)"
   }
  ],
  "history": {

@@ -293,9 +293,9 @@ lab-local:
 	tests/integration/lab-local.sh --out $(CURDIR)/research/plan/evidence/e/E4ON-raw-$(shell git rev-parse --short HEAD) $(GATE_ARGS)
 
 # AP-11: the API-only lifecycle runner, isolated mode on task-local key ap11 (tests/integration/api_lifecycle); not in check.
-# Its 0700 state dir is under $TMPDIR; verdict.json lands in the evidence dir.
+# Its 0700 state dir and its raw output dir (service logs included) are under $TMPDIR, never in the tree (api-lifecycle-3's open item); the coordinator copies verdict.json into the evidence dir.
 api-lifecycle:
-	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $(CURDIR)/research/plan/evidence/w7/AP11-raw-$(shell git rev-parse --short HEAD)
+	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $${TMPDIR:-/tmp}/infrx-ap11-out-$(shell git rev-parse --short HEAD) && echo "verdict: $${TMPDIR:-/tmp}/infrx-ap11-out-$(shell git rev-parse --short HEAD)/verdict.json (copy it into research/plan/evidence/w7/ to keep it; the raw dir carries service logs)"
 
 # AP-05: the LAB-HOSTING gate (tests/integration/lab_hosting, key ap5); not in check.
 lab-hosting:
