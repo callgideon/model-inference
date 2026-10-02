@@ -1,8 +1,8 @@
 // node --test "tests/**/*.test.ts"
 //
-// U2: the Settings page model (`app/(console)/settings/view-model.ts`). v1 has no mutable consumer
-// setting (P-09: consumer capture is off; C3A exposes no settings write), so every privacy row is a
-// fact with its availability stated, never a control. Failure oracles: a row that offers a toggle,
+// U2: the Settings page model (`app/(console)/settings/view-model.ts`). Every privacy row is a fact
+// with its availability stated, never a control (C-07's data-use controls are their own section,
+// tests/ux/settings). Failure oracles: a row that offers a toggle, capture or sharing presented as on,
 // a claim of zero retention / "never stored" / a 120-second window, trace-off presented as deleting
 // serving data, or an account that failed to load shown as a blank or a guessed e-mail.
 import assert from "node:assert/strict";
@@ -15,7 +15,7 @@ const ACCOUNT = { userId: "u", email: "a@example.com", walletId: "w", orgId: "o"
 export const T = {
   facts: "U2-P01 every privacy row is a fixed fact with its availability, and none is a control",
   truthful: "U2-P02 privacy copy states real serving retention and makes no zero-retention, never-stored or 120-second claim",
-  consent: "U2-P03 sharing, annotation, evaluation and training are not offered, and signup grants no such permission",
+  consent: "U2-P03 sharing, annotation, evaluation and training are off unless granted, and signup grants no such permission",
   account: "U2-P04 the account block shows the session's own e-mail and state; a failed load says so",
 };
 
@@ -26,11 +26,11 @@ test(T.facts, () => {
   assert.ok(model.privacy.length >= 4);
   for (const row of model.privacy) {
     assert.deepEqual(Object.keys(row).sort(), ["detail", "href", "status", "title"], `${row.title}: a fact, not a control`);
-    assert.ok(["Off", "Not offered", "Not available", "Stored for limited periods"].includes(row.status), `${row.title}: ${row.status}`);
+    assert.ok(["Off unless you turn it on", "Off unless you grant it", "Not available", "Stored for limited periods"].includes(row.status), `${row.title}: ${row.status}`);
   }
   const capture = model.privacy.find((r) => /trace capture/i.test(r.title));
-  assert.equal(capture?.status, "Off");
-  assert.match(capture?.detail ?? "", /cannot be turned on/i);
+  assert.equal(capture?.status, "Off unless you turn it on");
+  assert.match(capture?.detail ?? "", /only after the account owner turns it on for that key/i);
 });
 
 test(T.truthful, () => {
@@ -48,7 +48,8 @@ test(T.truthful, () => {
 test(T.consent, () => {
   const model = settingsModel({ state: "ready", account: ACCOUNT });
   const use = model.privacy.find((r) => /training/i.test(r.title));
-  assert.equal(use?.status, "Not offered");
+  assert.equal(use?.status, "Off unless you grant it");
+  assert.match(use?.detail ?? "", /unless the account owner grants it to a named provider/);
   assert.match(use?.detail ?? "", /signing up grants no/i);
   assert.doesNotMatch(all(model), /opt(ed)? in by default|pre-?checked|you agreed/i);
 });

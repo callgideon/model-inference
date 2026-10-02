@@ -160,10 +160,10 @@ const T = {
   sActions: "U2-S02 the keys controls call the shared C3A actions; the leaky page-local actions are gone",
   sRead: "U2-S03 the keys page reads through the consumer session and never turns a failed read into an empty list",
   sCopy: "U2-S06 the one-time and lost-key copy is on screen where it applies, and closing the dialog forgets the plaintext",
-  sSettings: "U2-S04 settings has no fake controls: nothing on it saves, toggles or posts",
+  sSettings: "U2-S04 settings has no fake controls: its only controls are the data-use forms, each submitting one settings server action",
   pFacts: "U2-P01 every privacy row is a fixed fact with its availability, and none is a control",
   pTruthful: "U2-P02 privacy copy states real serving retention and makes no zero-retention, never-stored or 120-second claim",
-  pConsent: "U2-P03 sharing, annotation, evaluation and training are not offered, and signup grants no such permission",
+  pConsent: "U2-P03 sharing, annotation, evaluation and training are off unless granted, and signup grants no such permission",
   pAccount: "U2-P04 the account block shows the session's own e-mail and state; a failed load says so",
 };
 
@@ -1072,7 +1072,7 @@ const MUTANTS = [
 
   // --- U2: settings --------------------------------------------------------------------------
   { id: "U2-M15", what: "consumer trace capture is presented as on", file: SETTINGS_VM,
-    find: '    status: "Off",', replace: '    status: "On" as "Off",', cases: [T.pFacts] },
+    find: '    status: "Off unless you turn it on",', replace: '    status: "On" as "Off unless you turn it on",', cases: [T.pFacts] },
   { id: "U2-M16", what: "the page claims zero data retention", file: SETTINGS_VM,
     find: "This is not zero data retention.", replace: "We keep zero data retention.", cases: [T.pTruthful] },
   { id: "U2-M17", what: "the retention row stops pointing at the published periods", file: SETTINGS_VM,

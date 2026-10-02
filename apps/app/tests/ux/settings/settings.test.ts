@@ -74,7 +74,7 @@ function world(...answers: (Response | "network")[]) {
 }
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-const CAPTURE = { key_id: KEY_B, mode: "full", consent_version: 3, retention_days: 14, idempotency_key: "attempt-1" };
+const CAPTURE = { key_id: KEY_B, mode: "full" as const, consent_version: 3, retention_days: 14, idempotency_key: "attempt-1" };
 
 test("UXS-01 the data-use record is read once from the API as the signed-in session and shown exactly", async () => {
   const { api, seen } = world(json(200, DOC));
@@ -296,7 +296,7 @@ test("UXS-09 every other state is honest: unavailable, forbidden, signed out, su
 });
 
 test("UXS-10 Settings has a loading state in the page's order", async () => {
-  const html = await render("app/(console)/settings/loading.tsx", "SettingsLoading", {});
+  const html = await render("app/(console)/settings/loading.tsx", "default", {});
   assert.match(html, /aria-busy="true"/);
   assert.match(text(html), /Loading settings/);
 });
