@@ -877,6 +877,18 @@
       ],
       "consumers": [],
       "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/rubrics",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/judge/runs",
       "request_schema": "raw",

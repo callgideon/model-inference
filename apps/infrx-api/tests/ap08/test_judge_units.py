@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import types
 
+import pytest
+
 from infrx.contracts import api, errors
 from infrx.contracts.limits import DEFAULTS
 from infrx.judge import start
@@ -70,3 +72,64 @@ def test_ap08_units__a_dry_run_worker_refuses_and_counts_it():
 
     done = asyncio.run(start.start_pass(queued, DRY, some))
     assert done == {"started": 0, "waiting": 0, "refused": 1, "failed": 0}
+
+
+def test_ap08_units__start_and_collect_grade_with_the_runs_pinned_rubric():
+    """api-judge-2: with the wiring's `rubric_of` composed, a run is started and collected
+    with the rubric ITS configuration pins (a stored SOP v2 here), never the first rubric; a
+    run pinning nothing gradable is refused at start and at collect. Failure oracle: a v2 run
+    graded with v1's criteria, or one graded with no rubric at all."""
+    import dataclasses
+    import json
+
+    from infrx.contracts.v2.money_units import ProviderUsd
+    from infrx.judge import rubric as r
+    from infrx.judge import submit
+    from infrx.judge.submit import ConsentRef, LedgerRun, ProviderResults
+
+    sop = dataclasses.replace(r.SOP_VIDEO_V2, sop_steps=("step 1",))
+    sample = ROWS[0][0]
+
+    def wired(pinned):
+        async def rubric_of(run_id):
+            return pinned
+        return dataclasses.replace(DRY, rubric_of=rubric_of)
+
+    async def some(*_):
+        return ROWS
+
+    v2 = {**REQUEST, "rubric_version": 2}
+    with pytest.raises(errors.BudgetExceeded):      # graded, then dry-run refused before a send
+        asyncio.run(start.start(v2, wiring=wired(sop), eligible=some))
+    for pinned in (None, r.MARLIN_VIDEO_V1):
+        with pytest.raises(errors.InvalidRequest):
+            asyncio.run(start.start(v2, wiring=wired(pinned), eligible=some))
+
+    recorded: list = []
+
+    class Ledger:
+        async def run(self, run_id):
+            return LedgerRun(run_id=run_id, provider_org_id="p", payer_ref="x",
+                             consent=ConsentRef("g", 1), sample_ids=(sample,),
+                             media_ids=frozenset({sample}), price_version="v",
+                             reserved=ProviderUsd("1"), state="submitted", submit_key="k",
+                             external_id="e", sent_ids=(sample,))
+
+        async def record_results(self, run_id, results):
+            recorded.extend(results)
+            return len(results)
+
+    class Provider:
+        async def results(self, external_id):
+            payload = {c.name: {"score": 5, "rationale": "ok"} for c in sop.criteria}
+            payload.update(overall_pass=True, notes="")
+            return ProviderResults(done=False, items=((sample, json.dumps(payload)),))
+
+    def collect(pinned):
+        wiring = dataclasses.replace(wired(pinned), ledger=Ledger(), provider=Provider())
+        return asyncio.run(submit.collect(REQUEST["run_id"], wiring=wiring))
+
+    collect(sop)
+    assert [(x.rubric_version, x.accepted) for x in recorded] == [(2, True)]
+    with pytest.raises(errors.StateConflict):
+        collect(None)

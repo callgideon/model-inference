@@ -24,6 +24,7 @@ from pydantic import Field
 from ...contracts import api, errors
 from ...contracts.api import Money, OperationDoc, Wire
 from ...judge.cost import APPROVED_RATES, RateTable, estimate_worst_case
+from ...judge import rubric as j
 from ...judge.dryrun import DEFAULT_CEILINGS
 from . import rubric
 from .doors import SessionDoors
@@ -299,8 +300,40 @@ class JudgeApi:
             state="unavailable", reason="no approved judge rate (P-10)")
         return JudgeModels(data=data, availability=availability)
 
+    async def stored_rubrics(self, user: str, provider: str) -> dict[int, dict[str, Any]]:
+        """SR-AP08-1's stored versions, by version."""
+        rows = await self.doors.call(user, "lab_judge_rubric_list", _uuid(provider, "provider"))
+        return {row["rubric_version"]: row for row in rows}
+
+    async def rubrics(self, user: str, provider: str) -> api.ListPage[rubric.RubricDoc]:
+        return api.ListPage[rubric.RubricDoc](
+            data=rubric.rubrics(await self.stored_rubrics(user, provider)))
+
+    async def create_rubric(self, user: str, provider: str, key: str,
+                            body: rubric.RubricBody) -> rubric.RubricDoc:
+        """A reviewed definition -> a new immutable version (the door: operator only, once
+        per version; the same digest again is the stored row, another one 409)."""
+        scoped_id("judge.rubric", provider, user, key)    # validated; the version is the identity
+        try:
+            r = j.from_definition(body.definition())
+        except ValueError as refused:
+            raise errors.InvalidRequest(str(refused), param="criteria") from None
+        if r.version in rubric.RUBRICS:
+            raise errors.StateConflict(f"rubric version {r.version} is a reviewed code version "
+                                       f"and immutable")
+        row = await self.doors.call(user, "lab_judge_rubric_create", {
+            "rubric_version": r.version, "rubric_id": r.rubric_id,
+            "definition": j.definition(r), "digest": j.digest(r),
+            "review_ref": body.review_ref})
+        return rubric.stored_doc(row)
+
     async def configure(self, user: str, provider: str, key: str, body: ConfigBody) -> ConfigDoc:
-        if body.rubric_version not in rubric.RUBRICS:
+        version = body.rubric_version
+        if version not in rubric.RUBRICS and \
+                version not in await self.stored_rubrics(user, provider):
+            if version in j.PENDING:
+                raise errors.StateConflict(f"rubric version {version} is definition_pending: "
+                                           f"{j.PENDING[version][1]}")
             raise errors.InvalidRequest("no such rubric version", param="rubric_version")
         config = scoped_id("judge.config", provider, user, key)
         row = await self.doors.call(user, "lab_judge_configure_keyed", _uuid(provider, "provider"),
@@ -375,8 +408,12 @@ class JudgeApi:
                                      _uuid(run_id, "judge run"), decode_cursor(cursor),
                                      limit + 1)
         shown, nxt = page(rows, limit, lambda r: r["label_id"])
-        return api.ListPage[rubric.SampleResult](data=tuple(rubric.project(r) for r in shown),
-                                                 next_cursor=nxt)
+        known = dict(rubric.RUBRICS)
+        if any(r["rubric_version"] not in known for r in shown):
+            known.update({v: j.from_definition(row["definition"]) for v, row in
+                          (await self.stored_rubrics(user, provider)).items()})
+        return api.ListPage[rubric.SampleResult](
+            data=tuple(rubric.project(r, known) for r in shown), next_cursor=nxt)
 
     async def cancel(self, user: str, provider: str, run_id: str, key: str) -> RunDoc:
         scoped_id("judge.cancel", provider, user, key)      # validated; a cancel is idempotent

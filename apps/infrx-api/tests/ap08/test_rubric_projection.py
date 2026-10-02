@@ -79,7 +79,8 @@ def test_ap08_rubric__calibration_needs_enough_reference_labels():
 
 
 def test_ap08_rubric__the_registry_documents_evidence_and_the_output_schema():
-    (doc,) = rubric.rubrics()
+    doc, pending = rubric.rubrics({})
+    assert (pending.version, pending.state) == (2, "definition_pending")
     assert (doc.rubric_id, doc.version) == ("marlin-video-v1", 1)
     assert {c.name: c.evidence for c in doc.criteria}["groundedness"] == "media"
     assert set(doc.output_schema["required"]) >= {"overall_pass", "notes", "relevance"}

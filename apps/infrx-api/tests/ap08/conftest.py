@@ -9,6 +9,7 @@ never the d1 default."""
 from __future__ import annotations
 
 import os
+import pathlib
 
 import pytest
 
@@ -18,6 +19,13 @@ KEY = "ap8"
 TEMPLATE, CASE = f"{pgharness.DATABASE}_ap8tpl", f"{pgharness.DATABASE}_ap8case"
 LAB_PASSWORD = "infrx-ap8-lab-control"
 W: dict[str, str] = {}
+#: SR-AP08-1's DDL (api-judge-2's schema request), applied after 0001..0064 until it is
+#: allocated a migration; the SR mutants (`mutants.SR_MUTANTS`) edit this text.
+SR = pathlib.Path(__file__).with_name("sr_ap08_1.sql")
+
+
+def sr_sql() -> str:
+    return SR.read_text()
 
 
 def pg_reason() -> str | None:
@@ -26,11 +34,12 @@ def pg_reason() -> str | None:
     return pgharness.unavailable()
 
 
-def seed(conn) -> None:
+def seed(conn, sr: str | None = None) -> None:
     from infrx.contracts.conformance import builders as b
     from tests.d import checks_admission as ca
     from tests.d import checks_credit as cc
     from tests.d import test_d6j_judge as j
+    conn.execute(sr_sql() if sr is None else sr)
     j.seed(conn)
     conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
                  "values ('feedback', true, 'ap8', 'reviews') on conflict (name) do update "

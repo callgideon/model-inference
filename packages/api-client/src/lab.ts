@@ -582,7 +582,8 @@ export interface paths {
         /** Rubrics */
         get: operations["getLabV1JudgeRubrics"];
         put?: never;
-        post?: never;
+        /** Create Rubric */
+        post: operations["postLabV1JudgeRubrics"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1735,6 +1736,28 @@ export interface components {
                 [key: string]: components["schemas"]["Availability"];
             };
         };
+        /** CriterionBody */
+        CriterionBody: {
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "media" | "text";
+            /**
+             * Max Score
+             * @default 5
+             */
+            max_score: number;
+            /**
+             * Min Score
+             * @default 1
+             */
+            min_score: number;
+            /** Name */
+            name: string;
+            /** Pass At */
+            pass_at?: number | null;
+        };
         /** CriterionDoc */
         CriterionDoc: {
             /**
@@ -2559,20 +2582,77 @@ export interface components {
             /** Data */
             data: components["schemas"]["Proposal"][];
         };
-        /** RubricDoc */
+        /**
+         * RubricBody
+         * @description A reviewed rubric definition (`review_ref` names its review, e.g. the P-07 SOP
+         *     sign-off) that becomes an immutable version.
+         */
+        RubricBody: {
+            /** Criteria */
+            criteria: components["schemas"]["CriterionBody"][];
+            /**
+             * Max Notes Chars
+             * @default 500
+             */
+            max_notes_chars: number;
+            /**
+             * Max Rationale Chars
+             * @default 300
+             */
+            max_rationale_chars: number;
+            /**
+             * Min Rationale Chars
+             * @default 1
+             */
+            min_rationale_chars: number;
+            /** Review Ref */
+            review_ref: string;
+            /** Rubric Id */
+            rubric_id: string;
+            /**
+             * Sop Steps
+             * @default []
+             */
+            sop_steps: string[];
+            /** Version */
+            version: number;
+        };
+        /**
+         * RubricDoc
+         * @description A rubric version. `active`: immutable, `digest` its identity, gradable. A
+         *     `definition_pending` version is a reserved skeleton (criteria and evidence only): no
+         *     digest, no output schema, never configured (P-07).
+         */
         RubricDoc: {
             /** Criteria */
             criteria: components["schemas"]["CriterionDoc"][];
+            /** Digest */
+            digest?: string | null;
             /** Max Notes Chars */
             max_notes_chars: number;
             /** Max Rationale Chars */
             max_rationale_chars: number;
             /** Output Schema */
-            output_schema: {
+            output_schema?: {
                 [key: string]: unknown;
-            };
+            } | null;
+            /** Pending Reason */
+            pending_reason?: string | null;
+            /** Review Ref */
+            review_ref?: string | null;
             /** Rubric Id */
             rubric_id: string;
+            /**
+             * Sop Steps
+             * @default []
+             */
+            sop_steps: string[];
+            /**
+             * State
+             * @default active
+             * @enum {string}
+             */
+            state: "active" | "definition_pending";
             /** Version */
             version: number;
         };
@@ -5221,6 +5301,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListPage_RubricDoc_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeRubrics: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RubricBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RubricDoc"];
                 };
             };
             /** @description Validation Error */

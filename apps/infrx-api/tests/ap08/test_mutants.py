@@ -22,9 +22,12 @@ CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("run_id_is_random", "key_audience_acts", "missing_video_criterion_omitted")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
-WORLDS = {"doors": "tests.ap08.test_judge_doors_pg", "worker": "tests.ap08.test_judge_worker_pg"}
+WORLDS = {"doors": "tests.ap08.test_judge_doors_pg", "worker": "tests.ap08.test_judge_worker_pg",
+          "store": "tests.ap08.test_rubric_store_pg"}
 SQL = mutation_list.SQL_MUTANTS
 SQL_SELECTED = SQL if FULL_RUN else SQL[:1]
+SR = mutation_list.SR_MUTANTS
+SR_SELECTED = SR if FULL_RUN else SR[:1]
 
 
 def test_the_list_is_well_formed():
@@ -42,6 +45,11 @@ def test_the_list_is_well_formed():
     assert not stale, f"misdeclared 0064 anchors: {stale}"
     for mutant, world in SQL:
         assert mutant.check in importlib.import_module(WORLDS[world]).CHECKS, mutant.name
+    from .conftest import sr_sql
+    assert len({m[0] for m in SR}) == len(SR), "duplicate SR mutant names"
+    for name, old, new, world, check, why in SR:
+        assert sr_sql().count(old) == 1 and old != new and why, f"misdeclared SR anchor: {name}"
+        assert check in importlib.import_module(WORLDS[world]).CHECKS, name
 
 
 def test_every_case_is_covered_by_a_mutant():
@@ -65,3 +73,23 @@ def test_sql_mutant_is_killed(pair):
                               importlib.import_module(WORLDS[world]))
     assert outcome == _d.KILLED, (f"{mutant.name} was {outcome} by {mutant.check}: {detail}. "
                                   f"In production: {mutant.why}")
+
+
+@pytest.mark.skipif(pg_reason() is not None, reason=f"{pg_reason()}")
+@pytest.mark.parametrize("sr", SR_SELECTED, ids=[m[0] for m in SR_SELECTED])
+def test_sr_mutant_is_killed(sr):
+    """SR-AP08-1's DDL (not yet a migration) mutated in the world's seed: 0001..0064 as they
+    are, then the mutated request, the seed, the named check - only its assertion kills."""
+    from infrx.state import migrations
+    from tests.d import pgharness
+
+    from .conftest import seed, sr_sql
+    name, old, new, world, check, why = sr
+    db = f"{pgharness.DATABASE}_ap8srmut"
+    pgharness.ensure()
+    pgharness.recreate(db)
+    pgharness.apply(db, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    with pgharness.connect(db) as conn:
+        seed(conn, sr=sr_sql().replace(old, new))
+        outcome, detail = _d._run(importlib.import_module(WORLDS[world]).CHECKS[check], conn)
+    assert outcome == _d.KILLED, f"{name} was {outcome} by {check}: {detail}. In production: {why}"

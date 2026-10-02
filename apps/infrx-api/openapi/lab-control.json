@@ -813,6 +813,57 @@
         "title": "ConsoleCapabilities",
         "type": "object"
       },
+      "CriterionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "enum": [
+              "media",
+              "text"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "max_score": {
+            "default": 5,
+            "maximum": 1000.0,
+            "minimum": -1000.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "min_score": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": -1000.0,
+            "title": "Min Score",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "pass_at": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": -1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass At"
+          }
+        },
+        "required": [
+          "name",
+          "evidence"
+        ],
+        "title": "CriterionBody",
+        "type": "object"
+      },
       "CriterionDoc": {
         "additionalProperties": false,
         "properties": {
@@ -3091,8 +3142,79 @@
         "title": "Rows[Proposal]",
         "type": "object"
       },
+      "RubricBody": {
+        "additionalProperties": false,
+        "description": "A reviewed rubric definition (`review_ref` names its review, e.g. the P-07 SOP\nsign-off) that becomes an immutable version.",
+        "properties": {
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionBody"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Criteria",
+            "type": "array"
+          },
+          "max_notes_chars": {
+            "default": 500,
+            "maximum": 4000.0,
+            "minimum": 1.0,
+            "title": "Max Notes Chars",
+            "type": "integer"
+          },
+          "max_rationale_chars": {
+            "default": 300,
+            "maximum": 4000.0,
+            "minimum": 1.0,
+            "title": "Max Rationale Chars",
+            "type": "integer"
+          },
+          "min_rationale_chars": {
+            "default": 1,
+            "maximum": 4000.0,
+            "minimum": 1.0,
+            "title": "Min Rationale Chars",
+            "type": "integer"
+          },
+          "review_ref": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Review Ref",
+            "type": "string"
+          },
+          "rubric_id": {
+            "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$",
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "sop_steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Sop Steps",
+            "type": "array"
+          },
+          "version": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rubric_id",
+          "version",
+          "criteria",
+          "review_ref"
+        ],
+        "title": "RubricBody",
+        "type": "object"
+      },
       "RubricDoc": {
         "additionalProperties": false,
+        "description": "A rubric version. `active`: immutable, `digest` its identity, gradable. A\n`definition_pending` version is a reserved skeleton (criteria and evidence only): no\ndigest, no output schema, never configured (P-07).",
         "properties": {
           "criteria": {
             "items": {
@@ -3100,6 +3222,17 @@
             },
             "title": "Criteria",
             "type": "array"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
           },
           "max_notes_chars": {
             "title": "Max Notes Chars",
@@ -3110,12 +3243,58 @@
             "type": "integer"
           },
           "output_schema": {
-            "additionalProperties": true,
-            "title": "Output Schema",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "pending_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Reason"
+          },
+          "review_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Ref"
           },
           "rubric_id": {
             "title": "Rubric Id",
+            "type": "string"
+          },
+          "sop_steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sop Steps",
+            "type": "array"
+          },
+          "state": {
+            "default": "active",
+            "enum": [
+              "active",
+              "definition_pending"
+            ],
+            "title": "State",
             "type": "string"
           },
           "version": {
@@ -3128,8 +3307,7 @@
           "version",
           "criteria",
           "max_rationale_chars",
-          "max_notes_chars",
-          "output_schema"
+          "max_notes_chars"
         ],
         "title": "RubricDoc",
         "type": "object"
@@ -6957,6 +7135,69 @@
           }
         ],
         "summary": "Rubrics"
+      },
+      "post": {
+        "operationId": "postLabV1JudgeRubrics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubricBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubricDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Create Rubric"
       }
     },
     "/lab/v1/judge/runs": {
