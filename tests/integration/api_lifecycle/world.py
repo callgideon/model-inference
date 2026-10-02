@@ -166,12 +166,13 @@ def database():
 
 def individuals(pg, names=("alpha", "beta")) -> dict[str, str]:
     """FIXTURE: verified individuals (GoTrue's sign-up and verification) and the operator's
-    two flags; name -> user. Their grant and keys are the API's (stage 08)."""
+    flags (the signup grant, credit admission, the Lab's judge submissions); name -> user.
+    Their grant and keys are the API's (stage 08)."""
     found = {}
     with pg.connect(pg.DATABASE) as conn:
         conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'ap11', "
                      "reason = 'ap11 isolated world' where name = any(%s)",
-                     (["signup_grant", "credit_admission"],))
+                     (["signup_grant", "credit_admission", "lab_submission"],))
         for name in names:
             found[name] = str(uuid.uuid4())
             conn.execute("insert into auth.users (id, email, email_confirmed_at) values "
@@ -490,7 +491,8 @@ def compose(out: Path):
             "admin_session": "world.py: NemoStation administrator membership by SQL (operator "
                              "onboarding) and an edge session",
             "outsider_session": "world.py: a verified user without membership, edge session",
-            "flags": "world.py: signup_grant + credit_admission enabled by SQL (no flag API)",
+            "flags": "world.py: signup_grant, credit_admission and lab_submission enabled by "
+                     "SQL (operator flags; no flag API)",
             "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)",
             "judge": "dry_run: JUDGE_MODE's default on the Lab unit; no judge worker or START "
                      "job is composed, nothing is sent (live judging is P-10)"}
