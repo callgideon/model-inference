@@ -1,0 +1,28 @@
+command f81b9887-4925-4113-a19c-a7a1a8716de8 (e4c-run2-pg-diag5.sh on i-0e8449a4ffca29bab)
+== stats epoch
+   2026-08-25 20:33:23.891825+00:00 | 16 | 12157330 | 1378 | 579420 | 45490915806 | 100.00 | 0 | 9111
+== settings
+   autovacuum_naptime | 60 | s
+   autovacuum_vacuum_scale_factor | 0.2 | None
+   effective_cache_size | 49152 | 8kB
+   idle_in_transaction_session_timeout | 30000 | ms
+   log_min_duration_statement | -1 | ms
+   max_connections | 60 | None
+   shared_buffers | 28672 | 8kB
+   statement_timeout | 15000 | ms
+   track_functions | none | None
+   track_io_timing | off | None
+   work_mem | 2184 | kB
+== per-function stats (if tracked)
+== jobs: io stats
+   1 | 415750989 | 447 | 58464414
+== wait events now
+   None | None | 10
+   Client | ClientRead | 6
+== bgwriter/checkpoints
+   failed: UndefinedColumn column "checkpoints_timed" does not exist
+LINE 1: select checkpoints_timed, checkpoints_req, buffers_checkpoin...
+      
+exit 0
+	
+status Success

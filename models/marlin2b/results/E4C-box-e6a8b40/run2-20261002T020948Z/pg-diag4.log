@@ -1,0 +1,49 @@
+command 2b97c451-40a1-4514-bb45-2d4278ddf0f9 (e4c-run2-pg-diag4.sh on i-0e8449a4ffca29bab)
+== accept: global active count
+   Aggregate  (cost=1.27..1.28 rows=1 width=8)
+     ->  Index Only Scan using jobs_deadline_idx on jobs  (cost=0.12..1.26 rows=3 width=0)
+   -> 16 ms idle now
+== accept: per-org active count
+   Aggregate  (cost=1.25..1.26 rows=1 width=8)
+     ->  Index Only Scan using jobs_org_active_idx on jobs  (cost=0.12..1.24 rows=1 width=0)
+           Index Cond: (org_id = '00000000-0000-0000-0000-000000000001'::uuid)
+   -> 16 ms idle now
+== accept: per-key active count
+   Aggregate  (cost=1.25..1.26 rows=1 width=8)
+     ->  Index Only Scan using jobs_key_active_idx on jobs  (cost=0.12..1.24 rows=1 width=0)
+           Index Cond: (key_id = '00000000-0000-0000-0000-000000000001'::uuid)
+   -> 16 ms idle now
+== deadline sweep (0016:510)
+   Index Scan using jobs_key_active_idx on jobs j  (cost=0.12..2.41 rows=1 width=16)
+     Filter: (((state = 'preparing'::text) AND (preparation_deadline_at <= now())) OR ((state = 'queued'::text) AND (queue_deadline_at <= now())))
+   -> 27 ms idle now
+== held_unknown reconcile (0016:528)
+   Limit  (cost=2.36..2.41 rows=2 width=24)
+     ->  Incremental Sort  (cost=2.36..2.41 rows=2 width=24)
+           Sort Key: reconcile_after, request_id
+           Presorted Key: reconcile_after
+           ->  Index Scan using jobs_reconcile_idx on jobs  (cost=0.14..2.35 rows=1 width=24)
+                 Index Cond: (reconcile_after <= now())
+   -> 16 ms idle now
+== journal_bytes_charged body (0011:128)
+   failed: InsufficientPrivilege permission denied for table capacity_reservations
+== readiness waiting (0019:925)
+   Nested Loop Anti Join  (cost=0.41..3.78 rows=1 width=24)
+     ->  Index Scan using jobs_key_active_idx on jobs j  (cost=0.12..2.37 rows=1 width=24)
+           Filter: (state = 'preparing'::text)
+     ->  Index Only Scan using job_readiness_pkey on job_readiness r  (cost=0.28..1.40 rows=1 width=16)
+           Index Cond: (job_id = j.request_id)
+   -> 17 ms idle now
+== scrub candidates (0020:417)
+   Limit  (cost=0.42..148.00 rows=100 width=16)
+     ->  Nested Loop Anti Join  (cost=0.42..9563.39 rows=6480 width=16)
+           ->  Seq Scan on jobs j  (cost=0.00..3258.61 rows=12961 width=16)
+                 Filter: ((request_record IS NOT NULL) AND (content_scrubbed_at IS NULL))
+           ->  Index Only Scan using content_objects_location_key on content_objects c  (cost=0.42..0.49 rows=1 width=60)
+                 Index Cond: ((location = 'database'::text) AND (object_key = ('jobs/'::text || (j.request_id)::text)))
+   -> 134 ms idle now
+== active jobs now / jobs rows / reservations rows
+   (0, 12787, 38361)
+exit 0
+	
+status Success
