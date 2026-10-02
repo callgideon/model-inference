@@ -2182,6 +2182,7 @@ PROBE_ASKS = "test_journal_probe__asks_the_bounded_ready_never_the_usage_aggrega
 PROBE_FAULT = "test_probe__a_check_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread"
 READY_UNIT = "test_journal_ready__is_one_server_bounded_primary_key_lookup_on_one_connection"
 READY_PLAN = "test_journal_ready_pg__answers_on_the_migrated_schema_on_the_primary_key"
+READY_ORDER = "test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_bound"
 READY_STALL = ("test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_"
                "within_its_bound")
 MUTANTS += (
@@ -2195,7 +2196,10 @@ MUTANTS += (
        J, 'READY_SQL = (f"set local statement_timeout = {READY_TIMEOUT_MS}; "\n             ',
        "READY_SQL = (", READY_UNIT, READY_STALL),
     _m("ready_bound_widened", "the server cancels a stalled probe at 2 s",
-       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_STALL),
+       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_STALL,
+       READY_ORDER),
+    _m("probe_bound_below_pool_wait", "a probe fails typed before its own bound fires",
+       RD, "PROBE_TIMEOUT_S = 10.0\n", "PROBE_TIMEOUT_S = 6.0\n", READY_ORDER),
     _m("ready_bound_session_wide", "the bound is SET LOCAL: no session state on the pooler",
        J, '"set local statement_timeout', '"set statement_timeout', READY_UNIT),
     _m("ready_scans_the_journal", "the lookup is a primary-key descent, never a scan",

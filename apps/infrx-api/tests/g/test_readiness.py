@@ -144,3 +144,17 @@ def test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_within_i
         holder.rollback()
     assert isinstance(answer, pg.QueryCanceled), repr(answer)
     assert 1.5 <= elapsed < 4.0, elapsed
+
+
+def test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_bound():
+    """The bounds' order under a database stall (the api-probe ruling request): a probe
+    waits at most the pool's connect timeout (5 s) for a connection, then at most
+    `READY_TIMEOUT_MS` (2 s) for the server, so it fails by a typed error before
+    `PROBE_TIMEOUT_S` (10 s) and never holds a connection for the 15 s statement timeout.
+    Oracle: a widened server bound or a shortened probe bound breaks the order."""
+    from infrx.config import DEPLOYMENT_DEFAULTS
+
+    connect_s = DEPLOYMENT_DEFAULTS.database_pool_connect_timeout_s
+    ready_s = journal.READY_TIMEOUT_MS / 1000
+    assert connect_s + ready_s < readiness.PROBE_TIMEOUT_S
+    assert journal.READY_TIMEOUT_MS < DEPLOYMENT_DEFAULTS.database_pool_statement_timeout_ms
