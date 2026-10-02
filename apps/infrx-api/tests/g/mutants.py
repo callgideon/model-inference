@@ -1773,10 +1773,10 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "    relay.media = rt.media_store = MediaUploads(", "    relay.media = MediaUploads(",
        "test_f_base__one_large_body_bound_and_one_media_store_per_process"),
     _m("probe_never_refreshed", "the lifetime task refreshes the readiness answers",
-       P, "        self.value = await self._answer()", "        self.value = self.value",
+       "gateway/readiness.py", "        self.value = await self._answer()", "        self.value = self.value",
        "test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes"),
     _m("probe_asked_on_every_read", "a readiness read is a cached answer, not a blocking call",
-       P, "        if self.value is None:", "        if True:",
+       "gateway/readiness.py", "        if self.value is None:", "        if True:",
        "test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes"),
     _m("service_role_not_set", "every pooled connection runs set role service_role (D2 7)",
        P, '        await conn.execute("set role service_role")\n', "",
@@ -1828,7 +1828,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            return True",
        "test_f_base__the_credit_price_probe_requires_the_active_card"),
     _m("probe_failure_reads_ready", "a probe that hangs or fails reads unavailable (H-B4, C2)",
-       P, '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
+       "gateway/readiness.py", '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
           "                        exc_info=True)\n            return False",
        '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
        "                        exc_info=True)\n            return True",
