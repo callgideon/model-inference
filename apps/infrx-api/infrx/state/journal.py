@@ -17,12 +17,23 @@ from typing import Any
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import Chunk, Cursor, EngineEvent, Lease, TerminalOutcome
+from . import rpc
 from .jobstore import Connect, PgJobStore, _outcome
 
 #: Jobs one `expire` pass prunes (0017 clamps it to 1..10000); the next tick takes the rest.
 #: ponytail: a constant; a `PilotSettings` field when an operator needs to tune it.
 EXPIRE_JOBS_PER_PASS = 1000
 #: `records.Chunk`'s fields, in the order `finalize_in_transaction` selects them.
+#: The readiness probe (E4C run 2, register row 94): one simple-protocol message - the
+#: server-side bound and a primary-key lookup of a job that cannot exist, run as one implicit
+#: transaction, so `set local` needs no session state - a constant-cost btree descent
+#: whatever the journal holds, cancelled by the server at 2 s rather than holding a pooled
+#: connection for the login's 15 s statement timeout.
+#: ponytail: a constant; a `PilotSettings` field when an operator needs to tune it.
+READY_TIMEOUT_MS = 2000
+READY_SQL = (f"set local statement_timeout = {READY_TIMEOUT_MS}; "
+             "select 1 from infrx.stream_chunks "
+             "where job_id = '00000000-0000-0000-0000-000000000000' limit 1")
 _CHUNK_FIELDS = ("job_id", "generation", "sequence", "event_type", "payload", "bytes",
                  "persisted_at", "expires_at")
 
@@ -124,9 +135,17 @@ class PgStreamStore:
         return int(await self._db._call("expire_journal", {
             "now": None if now is None else now.isoformat(), "limit": EXPIRE_JOBS_PER_PASS}))
 
+    async def ready(self) -> bool:
+        """The journal readiness probe's body (`READY_SQL`): True once the one bounded
+        statement answers; a stalled or unreachable database raises."""
+        async with rpc.connection(self._db._connect) as conn:
+            await conn.execute(READY_SQL)
+        return True
+
     async def usage(self) -> dict[str, int]:
-        """`{reserved_bytes, stored_bytes, charged_bytes, chunks}` - the journal readiness
-        probe's body (G1R request 1) and the journal-bytes gauge's source."""
+        """`{reserved_bytes, stored_bytes, charged_bytes, chunks}` - the journal-bytes
+        gauge's source (G1R request 1). Four aggregates: never the readiness probe's body
+        (`ready`, E4C run 2)."""
         return (await self._db._query("select infrx.journal_usage()", ()))[0][0]
 
 
