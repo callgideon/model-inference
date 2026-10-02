@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 
-import psycopg
 import pytest
 from psycopg.types.json import Jsonb
 
@@ -74,7 +73,7 @@ def door(conn, fn: str, provider: str):
 def check_the_eval_catalog_offers_only_the_providers_launchables(conn) -> str:
     """SR-AP10-1 (a): the launch catalog is the provider's own dataset and harness records,
     its evaluators and its READY PRIVATE DEV deployment revisions (by serving ref) - never a
-    draft, a public proposal or another provider's; each with the fields the route checks a
+    draft, a public proposal, a private production revision or another provider's; each with the fields the route checks a
     launch against."""
     dataset = record(conn, "dataset", NEMO, 1, {"samples": []}, version=2)
     harness = record(conn, "harness", NEMO, 2, {"adapter": "finite_video"}, version=3)
@@ -85,6 +84,12 @@ def check_the_eval_catalog_offers_only_the_providers_launchables(conn) -> str:
     before = door(conn, "lab_eval_catalog", NEMO)
     assert [s["ref"] for s in before[0][0]["servings"]] == [ready], \
         f"only the world's ready private dev revision (not draft D2, not public P2): {before}"
+    conn.execute("insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+                 "provider_org_id, environment, serving_version_id, visibility, state, "
+                 "max_input_tokens, max_output_tokens, created_by) select %s, %s, provider_org_id, "
+                 "'prod', serving_version_id, 'private', 'ready_private', 1, 1, 'dev@nemo' "
+                 "from infrx.deployment_revisions where deployment_revision_id = %s",
+                 (_uid(15), cc.PROD_ENDPOINT, l3.D2))  # private but PROD: never evaluated
     l3.validated(conn)                                   # D2: draft -> ready_private (dev)
     serving = conn.execute("select infrx.lab_serving_ref(%s)", (l3.D2,)).fetchone()[0]
     got = door(conn, "lab_eval_catalog", NEMO)
@@ -124,8 +129,8 @@ def check_an_experiment_listing_names_its_two_runs(conn) -> str:
                  ("sha256:" + hashlib.sha256(body.encode()).hexdigest(), NEMO, runs[0], runs[1],
                   "sha256:" + "b" * 64, body))
     listed = door(conn, "lab_experiments", NEMO)[0][0]
-    assert [(e["experiment_id"], e["baseline_run_ref"], e["candidate_run_ref"], e["baseline"],
-             e["candidate"], e["report"]) for e in listed] == \
+    assert [(e.get("experiment_id"), e.get("baseline_run_ref"), e.get("candidate_run_ref"),
+             e.get("baseline"), e.get("candidate"), e.get("report")) for e in listed] == \
         [(_uid(9), runs[0], runs[1], None, None, None)], listed
     assert door(conn, "lab_experiments", OTHER) == [([],)]
     return "refs listed before freeze; another protocol's report and provider excluded"
@@ -135,7 +140,8 @@ def check_an_experiment_listing_names_its_two_runs(conn) -> str:
 def check_the_pipeline_listings_are_the_providers_own(conn) -> str:
     """SR-AP10-2 (register row 15, WR-LAB2-4): the provider's external runs as
     (external_run_id, doc) and its checkpoint receipts with P3's outcome note (the note's
-    state and reason override the receipt's), oldest first; never another provider's."""
+    state and reason override the receipt's), oldest first; never another provider's run,
+    receipt or note (OTHER noted a checkpoint id NEMO also received)."""
     rows = []
     for n, provider in ((10, NEMO), (11, OTHER)):
         ref = record(conn, "external_run", provider, n, {"n": n})
@@ -154,6 +160,8 @@ def check_the_pipeline_listings_are_the_providers_own(conn) -> str:
     conn.execute("insert into infrx.lab_checkpoint_receipts (checkpoint_id, provider_org_id, "
                  "external_run_ref, artifact_digest) values (%s, %s, %s, %s)",
                  (_uid(14), OTHER, rows[1][0], HASH))
+    conn.execute("insert into infrx.lab_pipeline_notes (provider_org_id, key, body) values "
+                 "(%s, %s, %s)", (OTHER, f"checkpoint:{_uid(13)}", Jsonb({"state": "evaluated"})))
     runs = door(conn, "lab_external_runs_of", NEMO)
     assert runs == [([{"external_run_id": _uid(10), "doc": rows[0][1]}],)], runs
     receipts = door(conn, "lab_checkpoint_receipts_of", NEMO)

@@ -5,7 +5,7 @@ lands) applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, t
 CLI history table) to a database at the hosted level 0059 that holds consumer history:
 nothing that existed changes (row counts, money sums, the jobs' identity and money, every
 ACL of an existing relation or column) except the control login's EXECUTE on 0066's six
-route reads; the set re-runs as a no-op; 0066's then 0065's own ROLLBACK lines restore the
+route reads and 0064's three judge/review doors; the set re-runs as a no-op; 0066's then 0065's own ROLLBACK lines restore the
 state before them exactly (their functions gone, those six grants revoked, the two bodies
 0066 re-creates back to 0043's and 0060's); rolling forward again is the same set, and an
 operation starts. 0061/0064 carry prose rollbacks; their lanes' upgrade proofs stand.
@@ -34,10 +34,13 @@ pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_control_ops_upgrade"
 MINE = ("0066_wave7_grants_and_reads.sql", "0065_identity_functions.sql")   # rollback order
-#: SR-AP10-3: the only existing functions whose grants the set changes (+ infrx_lab_control)
+#: The only existing functions whose grants the set changes, each + infrx_lab_control:
+#: 0066's SR-AP10-3 (its rollback revokes them) and 0064's judge/review doors (api-judge).
 REGRANTED = {f"infrx.{n}(jsonb)" for n in (
     "lab_put_experiment", "lab_checkpoint_listing", "lab_list_datasets", "lab_evaluator",
     "lab_checkpoint_subscribe", "lab_checkpoint_decisions")}
+REGRANTED_0064 = {"lab_judge_calibration(uuid,uuid,integer)",
+                  "lab_judge_request_run(uuid,uuid,uuid,text)", "lab_review_feedback(jsonb)"}
 #: (function, the earlier file whose body 0066's rollback restores)
 REDEFINED = (("infrx.lab_experiments(jsonb)", "0043_lab_reads_and_proposals.sql"),
              ("infrx.control_op_cancel(jsonb)", "0060_control_operations.sql"))
@@ -129,8 +132,8 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
         "the wave-7 set changed an existing relation's grants"
     assert after["cols"] == before["cols"]
     moved = {k for k, v in after["fns"].items() if k in before["fns"] and v != before["fns"][k]}
-    assert moved == REGRANTED, f"existing function grants moved: {sorted(moved)}"
-    assert all("infrx_lab_control=X" in after["fns"][k][0] for k in REGRANTED)
+    assert moved == REGRANTED | REGRANTED_0064, f"existing function grants moved: {sorted(moved)}"
+    assert all("infrx_lab_control=X" in after["fns"][k][0] for k in moved)
 
     pgharness.apply(DB, wave7)
     assert d10.snapshot(conn) == after, "the wave-7 set is not re-runnable"
@@ -138,7 +141,8 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
         pgharness.apply(DB, ((f"rollback {name}", rollback_sql(name)),))
     back, back_bodies = d10.snapshot(conn), bodies(conn)
     assert back["counts"] == after["counts"] and back["acl"] == after["acl"]
-    assert {k: v for k, v in back["fns"].items() if k in before["fns"]} == before["fns"], \
+    assert {k: v for k, v in back["fns"].items() if k in before["fns"]} == \
+        {k: after["fns"][k] if k in REGRANTED_0064 else v for k, v in before["fns"].items()}, \
         "the ROLLBACK lines do not restore the existing functions' grants"
     gone = set(after["fns"]) - set(back["fns"])
     assert {f.split("(")[0] for f in gone} == DROPPED and set(back["fns"]) < set(after["fns"])
