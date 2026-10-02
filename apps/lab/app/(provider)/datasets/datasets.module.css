@@ -1,0 +1,68 @@
+/* UX-06/UX-09 lane-local styles (a CSS module, so every class is scoped): tables, the import steps and
+   notes. Tokens only (components/ui/README.md). */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.table caption {
+  text-align: start;
+  font-weight: 600;
+  padding-block-end: 8px;
+}
+.table th,
+.table td {
+  text-align: start;
+  vertical-align: top;
+  padding: 8px 12px;
+  border-block-end: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.table th {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+.scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: var(--muted-foreground);
+}
+.steps [aria-current="step"] {
+  color: var(--foreground);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.step {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  padding: 16px;
+  margin: 0;
+}
+.step legend {
+  font-weight: 600;
+  padding-inline: 4px;
+}
+.note {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin: 0;
+}
+.problem {
+  border-inline-start: 3px solid var(--destructive);
+  padding-inline-start: 12px;
+}
+.form {
+  max-width: 720px;
+}
