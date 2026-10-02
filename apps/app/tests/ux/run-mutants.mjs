@@ -86,7 +86,7 @@ const MUTANTS = [
   m("UXM-X01", "a skipped case counts as run", RUNNER, "skipped: directive !== undefined,", "skipped: false,", [C.m01, C.m04], MATRIX),
   m("UXM-X02", "a TODO directive is read as a failure", RUNNER, "(SKIP|TODO)", "(SKIP)", [C.m01], MATRIX),
   m("UXM-X03", "only top-level TAP lines are read: nested cases vanish", RUNNER, "/^ *(not )?ok", "/^(not )?ok", [C.m01], MATRIX),
-  m("UXM-X04", "a declared-blocked part runs anyway", RUNNER, "  if (part.blocked) return", "  if (false) return", [C.m02], MATRIX),
+  m("UXM-X04", "a declared-blocked part runs anyway", RUNNER, "  if (part.blocked) return { status", "  if (false) return { status", [C.m02], MATRIX),
   m("UXM-X05", "the blocked cause drops the unblocking lane", RUNNER, "cause: `${part.blocked} (unblocks: ${part.lane})`", "cause: part.blocked", [C.m02], MATRIX),
   m("UXM-X06", "an unmerged suite is not named", RUNNER, "if (run.missing.length > 0) return", "if (false) return", [C.m03], MATRIX),
   m("UXM-X07", "no case run reads as PASS", RUNNER, "if (counts.passed === 0) return", "if (false) return", [C.m04], MATRIX),
