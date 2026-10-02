@@ -170,6 +170,7 @@ test("L1-A12 holds() on a workspace answers from the API's capability set for it
   assert.equal(holds(narrowed, "read_aggregate_health"), true);
   // An actor without the API's set (a fake's) still answers from the contract table.
   assert.equal(holds({ providerId: A.providerId, role: "administrator" }, "manage_members"), true);
+  assert.equal(holds({ providerId: A.providerId, role: "viewer" }, "run_evaluation"), false);
 });
 
 test("L1-M05 a workspace's feature availability is GET /lab/v1/capabilities for that provider; a failed read is unavailable, never disabled", async () => {

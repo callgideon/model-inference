@@ -5,7 +5,7 @@
 // Usage: node tests/l/shell/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "./harness.mjs";
 
-const SUITE = ["access", "config", "request", "guard", "boundary", "session", "shapes"].map((f) => `tests/l/shell/${f}.test.ts`);
+const SUITE = [...["access", "config", "request", "guard", "boundary", "session", "shapes"].map((f) => `tests/l/shell/${f}.test.ts`), "tests/boundary/api.test.ts"];
 
 const ACCESS = "lib/auth/access.ts";
 const MEMBERS = "lib/auth/memberships.ts";
@@ -19,6 +19,8 @@ const NEXT = "next.config.ts";
 const SIGNIN = "lib/auth/sign-in.ts";
 const SESSION = "lib/auth/session.ts";
 const COMMON = "lib/services/common.ts";
+const PORT = "lib/api/index.ts";
+const REVIEW = "lib/services/review/index.ts";
 const ROUTES = "lib/auth/routes.ts";
 const FORM = "lib/auth/sign-in-form.tsx";
 const PORTS = ["control", "evaluation", "pipelines"].map((f) => `lib/services/${f}/port.ts`); // LAB-07: they re-export access.ts's holds
@@ -68,6 +70,9 @@ const C = {
   a12: "L1-A12 holds() on a workspace answers from the API's capability set for it, not from the role table",
   a13: "L1-A13 an action lands by the workspace's own API capability set: withheld there, it is refused without a call",
   m05: "L1-M05 a workspace's feature availability is GET /lab/v1/capabilities for that provider; a failed read is unavailable, never disabled",
+  t01: "L1-T01 no Lab production module reaches the database: no RPC, no table read, no Supabase client or setting",
+  t02: "L1-T02 every API call the Lab makes is a documented operation: the Lab unit's export, or a Lab-shell route the gateway exports",
+  t03: "L1-T03 the hand-typed Lab-shell routes are the gateway export's, path, method and record fields",
   s05: "L1-S05 the proxy refreshes a session near expiry at the auth facade, on the response and the request; it never redirects",
 };
 
@@ -121,7 +126,7 @@ const MUTANTS = [
   m("L1-X32", "the token is read from another cookie", REQUEST, "store.get(AUTH_COOKIE)?.value || null", "store.get(WORKSPACE_COOKIE)?.value || null", [C.r02]),
   m("L1-X33", "the request's cookies ride along to the API", REQUEST, "session: () => ({ token })", 'session: () => ({ token, cookie: "infrx-lab-session=x" })', [C.r02]),
   m("L1-X34", "a request without a session cookie reads memberships", REQUEST, "signedIn: token !== null", "signedIn: true", [C.r03]),
-  m("L1-X46", "the guard reads no env", GUARD, "accessFromRequest(process.env, await cookies())", "accessFromRequest({}, await cookies())", [C.g01, C.g03]),
+  m("L1-X46", "the guard reads another API origin", GUARD, "accessFromRequest(process.env, await cookies())", 'accessFromRequest({ ...process.env, LAB_API_URL: "http://other.invalid" }, await cookies())', [C.g03]),
   m("L1-X51", "the credentials are not what was typed", SIGNIN, "{ body: { email, password } }", '{ body: { email, password: "" } }', [C.s01]),
   m("L1-X52", "a failed sign-in is not a fixed failure", SIGNIN, "  if (!answer.ok) return { error: signInFailure(answer.error) };\n", "", [C.s02]),
   m("L1-X53", "a sign-in without a password is sent anyway", SIGNIN, '  if (typeof email !== "string" || typeof password !== "string") return { error: "failed" };\n', "", [C.s02]),
@@ -154,6 +159,14 @@ const MUTANTS = [
   m("L1-X136", "a refused refresh keeps the session", ROUTES, "    clearSession(response.cookies);\n", "", [C.s05]),
   m("L1-X137", "an unreachable facade ends the session", ROUTES, "!answer.ok && answer.error.status === 401", "!answer.ok", [C.s05]),
   m("L1-X65", "the proxy redirects", ROUTES, "\n  return NextResponse.next({ request });\n}", '\n  return NextResponse.redirect(new URL("/", request.url));\n}', [C.s05]),
+  // API-BOUNDARY (tests/boundary/api.test.ts): a direct-database transport or an undocumented call comes back.
+  m("L1-X140", "the membership read is an RPC again", MEMBERS, 'const answer = await api.call("get", "/lab/v1/workspaces");',
+    'const answer = await (api as unknown as { rpc(n: string): ReturnType<LabApi["call"]> }).rpc("lab_provider_memberships");', [C.t01]),
+  m("L1-X141", "the review reads a table", REVIEW, "const KEYS = [", 'export const table = (c: { from(t: string): unknown }) => c.from("lab_trace_reviews");\nconst KEYS = [', [C.t01]),
+  m("L1-X142", "the guard loads a Supabase client", GUARD, 'import { cache } from "react";', 'import { cache } from "react";\nimport "@supabase/ssr";', [C.t01]),
+  m("L1-X143", "the config names a Supabase setting", CONFIG, 'export const WORKSPACE_COOKIE = "infrx-lab-workspace";', 'export const WORKSPACE_COOKIE = "infrx-lab-workspace";\nexport const PROJECT = () => process.env.NEXT_PUBLIC_SUPABASE_URL;', [C.t01]),
+  m("L1-X144", "the Lab calls an undocumented route", MEMBERS, '"/lab/v1/capabilities", { query', '"/lab/v1/capability", { query', [C.t02, C.m05]),
+  m("L1-X145", "a hand-typed shell route drifts from the gateway's", PORT, '"/auth/v1/refresh": { post:', '"/auth/v1/refresh-token": { post:', [C.t03]),
   m("L1-X20", "production accepts an http origin", CONFIG, '  if (production && url.protocol !== "https:") return null;\n', "", [C.c01]),
   m("L1-X21", "an origin with a path is accepted", CONFIG, '  if (url.origin !== raw.replace(/\\/$/, "")) return null; // an origin, no path\n', "", [C.c01]),
   m("L1-X41", "an unparsable origin throws out of the guard", CONFIG, "  let url: URL;\n  try {\n    url = new URL(raw);\n  } catch {\n    return null;\n  }\n", "  const url = new URL(raw);\n", [C.c01]),
@@ -173,7 +186,7 @@ const MUTANTS = [
   m("L1-X94", "the membership read imports the record-id strictness (lowercase v4)", MEMBERS, "import { UUID_ANY_RE as UUID }", "import { UUID_RE as UUID }", [C.m04]),
   m("L1-X29", "Lab responses become cacheable", NEXT, '"private, no-store"', '"public, max-age=60"', [C.c05]),
   m("L1-X30", "the framework header is advertised", NEXT, "poweredByHeader: false", "poweredByHeader: true", [C.c05]),
-  m("L1-X35", "the workspace preference is ignored", REQUEST, "selected: store.get(WORKSPACE_COOKIE)?.value,", "selected: undefined,", [C.r03]),
+  m("L1-X35", "the workspace preference is ignored", REQUEST, "selected: store.get(WORKSPACE_COOKIE)?.value }", "selected: undefined }", [C.r03]),
   m("L1-X36", "the selection action skips the provider guard", ACTION, "const access = await requireProviderSession();", 'const access = { kind: "denied" } as const;', [C.b01]),
   m("L1-X37", "the picker state renders the page", LAYOUT, "        <Workspaces workspaces={access.workspaces} />\n        <SignOut />\n      </main>", "        <Workspaces workspaces={access.workspaces} />\n        <SignOut />\n        {children}\n      </main>", [C.b02]),
   m("L1-X38", "the provider layout is prerendered", LAYOUT, 'export const dynamic = "force-dynamic";', "", [C.b02]),
