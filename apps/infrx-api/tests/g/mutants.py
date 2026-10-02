@@ -2174,6 +2174,42 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_w5_f5b__the_pre_d10_door_still_answers_a_post_admission_attach_failure"),
 )
 
+# api-probe (E4C run 2, register row 94): the journal readiness probe is `ready()` - one
+# server-bounded primary-key lookup - never `usage()`'s four aggregates.
+RD = "gateway/readiness.py"
+J = "state/journal.py"
+PROBE_ASKS = "test_journal_probe__asks_the_bounded_ready_never_the_usage_aggregates"
+PROBE_FAULT = "test_probe__a_check_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread"
+READY_UNIT = "test_journal_ready__is_one_server_bounded_primary_key_lookup_on_one_connection"
+READY_PLAN = "test_journal_ready_pg__answers_on_the_migrated_schema_on_the_primary_key"
+READY_ORDER = "test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_bound"
+READY_STALL = ("test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_"
+               "within_its_bound")
+MUTANTS += (
+    _m("journal_probe_asks_usage", "the journal probe asks ready(), never the aggregates",
+       RD, "        await stream.ready()\n", "        await stream.usage()\n", PROBE_ASKS),
+    _m("probe_fault_reads_ready", "a check that hangs or fails reads unavailable",
+       RD, "                        exc_info=True)\n            return False\n",
+       "                        exc_info=True)\n            return True\n",
+       PROBE_ASKS, PROBE_FAULT),
+    _m("ready_bound_dropped", "the probe's statement carries its own 2 s server bound",
+       J, 'READY_SQL = (f"set local statement_timeout = {READY_TIMEOUT_MS}; "\n             ',
+       "READY_SQL = (", READY_UNIT, READY_STALL),
+    _m("ready_bound_widened", "the server cancels a stalled probe at 2 s",
+       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_STALL,
+       READY_ORDER),
+    _m("probe_bound_below_pool_wait", "a probe fails typed before its own bound fires",
+       RD, "PROBE_TIMEOUT_S = 10.0\n", "PROBE_TIMEOUT_S = 6.0\n", READY_ORDER),
+    _m("ready_bound_session_wide", "the bound is SET LOCAL: no session state on the pooler",
+       J, '"set local statement_timeout', '"set statement_timeout', READY_UNIT),
+    _m("ready_scans_the_journal", "the lookup is a primary-key descent, never a scan",
+       J, "\"where job_id = '00000000-0000-0000-0000-000000000000' limit 1\")",
+       '"limit 1")', READY_PLAN),
+    _m("ready_asks_usage", "ready() never runs journal_usage()",
+       J, "            await conn.execute(READY_SQL)\n",
+       '            await conn.execute("select infrx.journal_usage()")\n', READY_UNIT),
+)
+
 
 def _definitions() -> dict[str, str]:
     """case name -> the suite-relative file that defines it."""
@@ -2218,7 +2254,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 
 #: F2R item 9: the shared runner, with G's per-mutant file selection and layout.
-RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout)
+#: api-probe: the copy inherits `INFRX_D_TASK`, so `test_readiness`'s PostgreSQL cases run on
+#: the caller's task-local harness (never d1's shared port by accident).
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout,
+                env=("INFRX_D_TASK",))
 
 
 def run_mutant(mutant) -> Result:

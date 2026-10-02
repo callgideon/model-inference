@@ -1,0 +1,81 @@
+{
+  "task": "AP-02",
+  "lane": "api-probe",
+  "slice": "operations: E4C run 2 code half (register rows 94/95): 1 ready() probe, 2 bounds review; 3 sampler BLOCKED, 4 protocol note BLOCKED",
+  "activity": "review",
+  "at": "2026-10-02T10:51:03Z",
+  "head": "42700e37",
+  "base": "49114933",
+  "worktree": ".claude/worktrees/codex-w7-api-probe",
+  "branch": "codex/w7-api-probe",
+  "owned_paths": [
+    "apps/infrx-api/infrx/state/journal.py",
+    "apps/infrx-api/infrx/gateway/readiness.py",
+    "apps/infrx-api/tests/g/test_readiness.py",
+    "apps/infrx-api/tests/g/mutants.py",
+    "research/plan/evidence/w7/api-probe-42700e3.md",
+    "research/plan/evidence/w7/api-probe-wr/WR-PROBE-1-42700e3.patch",
+    "research/plan/evidence/coordinator/updates/AP-02-20261002T1051Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/g/test_readiness.py (before the implementation)",
+      "exit": 2,
+      "summary": "red: ImportError readiness"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/g/test_readiness.py tests/g/test_startup.py tests/i/test_rollout.py",
+      "exit": 0,
+      "summary": "80 passed (9 readiness cases incl. 3 PG on ap2, 0 skipped)"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 457 (baseline 458)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 python -m tests.g.mutants <8 lane mutants>",
+      "exit": 0,
+      "summary": "8/8 killed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py",
+      "exit": 1,
+      "summary": "499 passed, 16 failed: all pre-existing misdeclared anchors (composition_root_* x14, given_stores_replaced, unapproved_card_published) in files this lane did not touch"
+    },
+    {
+      "cmd": "WR-PROBE-1 applied: composed suites (10 files)",
+      "exit": 0,
+      "summary": "601 passed"
+    },
+    {
+      "cmd": "WR-PROBE-1 applied: tests/g tests/m tests/contracts tests/w tests/ap02 tests/ap03 tests/ap07",
+      "exit": 1,
+      "summary": "3475 passed, 85 skipped, 1 failed (test_parity_pg: apps/app node_modules absent; 1 passed after pnpm install --offline)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1.5,
+    "likely_h": 3,
+    "pessimistic_h": 5,
+    "confidence": "medium",
+    "basis": "remaining: sampler step + 2 rollout cases + mutants + protocol note once the classifier permits; WR-PROBE-1 merge; slices 1-2 took ~3 h incl. a 34-min mutant run",
+    "at": "2026-10-02T10:51:03Z"
+  },
+  "blockers": [
+    "slice 3 75-pg-activity-sampler.sh: auto-mode classifier denied authoring it ([Production Reads]); needs the user's allow",
+    "slice 4 E4B-protocol.md driver-lag note: classifier denied reading the file; proposed text in the evidence"
+  ],
+  "wiring_requests": [
+    "WR-PROBE-1: pilot.py imports Probe/PROBE_TIMEOUT_S/journal_check from gateway/readiness.py (journal probe on ready()); 11 test-fake sites usage->ready; composed test + mutant case; patch research/plan/evidence/w7/api-probe-wr/WR-PROBE-1-42700e3.patch"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-probe-42700e3.md",
+    "research/plan/evidence/w7/api-probe-wr/WR-PROBE-1-42700e3.patch"
+  ]
+}
