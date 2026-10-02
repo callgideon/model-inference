@@ -260,6 +260,8 @@ def adapters_from_env(settings, **injected):
                     # AP-07a (W1): only when the deployment enables CONSOLE_DATA_USE
                     **({"data_use": DataUse(connect)}
                        if settings.deployment.console_data_use else {}),
+                    # AP-01 (WR-AP01-1): only when the deployment enables the identity routes
+                    **_identity(settings, connect),
                     **adapters}
     return adapters
 
@@ -284,6 +286,55 @@ def _rollouts(settings, connect) -> dict:
     from ..rollouts.routing import Router
     from ..state.lab_rollout import PgRoutingReleases
     return {"rollouts": Router(PgRoutingReleases(connect), NoShadows())}
+
+
+def _identity(settings, connect) -> dict:
+    """WR-AP01-1: AP-01's identity store and L2's `LabAccess` on this pool, only when
+    `IDENTITY_API` is on."""
+    if not settings.deployment.identity_api:
+        return {}
+    from ..console.session import PgIdentity
+    from ..lab.access import LabAccess
+    from ..state.lab_access import PgAccessStore
+    return {"identity": PgIdentity(connect), "lab_access": LabAccess(PgAccessStore(connect))}
+
+
+def _web_origins(deployment) -> tuple[str, ...]:
+    return tuple(o.strip() for o in deployment.web_origins.split(",") if o.strip())
+
+
+def _actors(rt, identity, lab_access):
+    """WR-AP01-1: `rt.actors` - the verified Supabase session (the Lab's own session check,
+    `GoTrueSessions`) and, at the operator door, an operator-audience key (`AuthResolver`)."""
+    if identity is None or lab_access is None:
+        raise RuntimeMisconfigured(rt.mode, detail="IDENTITY_API needs AP-01's identity store "
+                                                   "and L2's access: identity, lab_access")
+    import httpx
+
+    from ..auth.context import AuthResolver
+    from ..console.session import SessionActors
+    from .lab_auth import GoTrueSessions
+    # ponytail: process-lifetime client, as in `compose.lab_surfaces`.
+    sessions = GoTrueSessions(httpx.AsyncClient(base_url=rt.settings.supabase_url,
+                                                timeout=httpx.Timeout(5, connect=2)),
+                              rt.settings.supabase_key)
+    return SessionActors(sessions, identity, keys=AuthResolver(rt),
+                         origins=_web_origins(rt.settings.deployment))
+
+
+def _auth_facade(rt):
+    """WR-AP01-1: the auth facade on the project's publishable key, or a refusal to start."""
+    deployment = rt.settings.deployment
+    if not deployment.supabase_anon_key.strip():
+        raise RuntimeMisconfigured(rt.mode, ("SUPABASE_ANON_KEY",),
+                                   detail="AUTH_FACADE needs SUPABASE_ANON_KEY")
+    import httpx
+
+    from ..auth_facade import AuthFacade
+    return AuthFacade(httpx.AsyncClient(base_url=rt.settings.supabase_url,
+                                        timeout=httpx.Timeout(10, connect=2)),
+                      deployment.supabase_anon_key, origins=_web_origins(deployment),
+                      captcha_required=deployment.auth_captcha_required)
 
 
 def _pg_feedback(connect):
@@ -345,7 +396,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
                        lab_pipelines=None, lab_releases=None, lab_checkpoints=None,  # noqa: F811
                        lab_datasets=None, capture=None, console_actions=None,
-                       data_use=None) -> IngressDeps:
+                       data_use=None, identity=None, lab_access=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -401,8 +452,13 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.lab_releases = lab_releases if deployment.lab_releases else None
     rt.lab_checkpoints = lab_checkpoints if deployment.lab_checkpoints else None
     rt.lab_datasets = lab_datasets if deployment.lab_datasets else None
-    # AP-01 composes the verified session's `SessionActors` here; None until it does.
-    rt.actors = getattr(rt, "actors", None)
+    # AP-01 (WR-AP01-1): the web API's actor source and identity routes, only when enabled;
+    # off, `rt.actors` stays whatever the composition already put there (None by default).
+    rt.identity = identity if deployment.identity_api else None
+    rt.lab_access = lab_access if deployment.identity_api else None
+    rt.actors = (_actors(rt, identity, lab_access) if deployment.identity_api
+                 else getattr(rt, "actors", None))
+    rt.auth_facade = _auth_facade(rt) if deployment.auth_facade else None
     # AP-02 (WR-AP02-1): the console reads mount over this, and only when enabled.
     rt.console_reads = _console_reads(rt, deployment) if deployment.console_reads else None
     # AP-03 (WR-AP03-3): the console/operator mutations mount over this, only when enabled,

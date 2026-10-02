@@ -8,9 +8,10 @@ Each composition is built the way its process builds it - `gateway.app.create_ap
 matters and nothing connects anywhere:
 
 - `consumer`: the gateway with every consumer switch on (`FEEDBACK_API`, `TRACE_EXPORT_API`,
-  `CONSOLE_READS` over an unreachable DSN and an inert session-actor stand-in,
-  `CONSOLE_ACTIONS_API` over an inert repository stand-in, `CONSOLE_DATA_USE` over an inert
-  data-use stand-in);
+  `IDENTITY_API` over inert identity/access stand-ins - its `SessionActors` are the session
+  actors the console routes need - `AUTH_FACADE` over an inert publishable key,
+  `CONSOLE_READS` over an unreachable DSN, `CONSOLE_ACTIONS_API` over an inert repository
+  stand-in, `CONSOLE_DATA_USE` over an inert data-use stand-in);
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints,
@@ -57,7 +58,7 @@ SCHEMES = {
 }
 #: (path prefix or exact path, security, envelope, audience): first match wins, so the more
 #: specific entries come first. Security None = the route declares its own (`/auth/v1/*`:
-#: sign-in is public, a password change is a session's).
+#: sign-in is public, a password change is a session's - its exact paths below).
 FAMILIES: tuple[tuple[str, list[dict[str, list[str]]] | None, str, str], ...] = (
     ("/health", PUBLIC, "none", "public"),
     ("/healthz", PUBLIC, "none", "public"),
@@ -69,7 +70,10 @@ FAMILIES: tuple[tuple[str, list[dict[str, list[str]]] | None, str, str], ...] = 
     ("/lab/v1/", [{"SessionBearer": []}], "refusal", "provider session"),
     ("/console/v1/", [{"SessionBearer": []}], "r270", "consumer session"),
     ("/operator/v1/", [{"SessionBearer": []}, {"OperatorKey": []}], "r270", "operator"),
-    ("/auth/v1/", None, "r270", "identity transport"),
+    # WR-AP01-1: the facade's two session-bearing calls; every other `/auth/v1/*` is public
+    ("/auth/v1/sign-out", [{"SessionBearer": []}], "r270", "identity transport"),
+    ("/auth/v1/password", [{"SessionBearer": []}], "r270", "identity transport"),
+    ("/auth/v1/", PUBLIC, "r270", "identity transport"),
 )
 
 
@@ -87,10 +91,11 @@ def operation_id(method: str, path: str) -> str:
 
 
 def shape(route: APIRoute) -> tuple[str, str]:
-    """(request, response): `typed` / `none` / `raw` (the handler reads the `Request`)."""
+    """(request, response): `typed` / `none` / `raw` (the handler reads the `Request`).
+    A declared 204 No Content is a declared response: it has no body to model (WR-AP01-1)."""
     request = "typed" if route.body_field is not None else \
         "raw" if route.dependant.request_param_name else "none"
-    declared = route.response_model is not None or any(
+    declared = route.status_code == 204 or route.response_model is not None or any(
         str(code).isdigit() and 200 <= int(code) < 300 and "model" in answer
         for code, answer in route.responses.items())
     return request, "typed" if declared else "none"
@@ -146,12 +151,11 @@ def _gateway(env: dict[str, str]) -> FastAPI:
     inert = object()
     logging.disable(logging.CRITICAL)      # the startup probes of the inert stores log a failure
     try:
-        # until AP-01 composes `rt.actors`, CONSOLE_READS refuses to start without one
-        with mock.patch.object(gateway.Runtime, "actors", inert, create=True):
-            return gateway.create_app(from_env(env), catalog=inert, stream=inert, objects=inert,
-                                      jobs=inert, index=inert, feedback=inert,
-                                      trace_export=inert, console_actions=inert,
-                                      data_use=inert)
+        # WR-AP01-1: IDENTITY_API composes `rt.actors` (SessionActors over the inert stores)
+        return gateway.create_app(from_env(env), catalog=inert, stream=inert, objects=inert,
+                                  jobs=inert, index=inert, feedback=inert, trace_export=inert,
+                                  console_actions=inert, data_use=inert, identity=inert,
+                                  lab_access=inert)
     finally:
         logging.disable(logging.NOTSET)
 
@@ -177,7 +181,9 @@ def compositions() -> dict[str, FastAPI]:
     console = {"CONSOLE_READS": "1", "CONSOLE_DATABASE_URL": "postgresql://export@127.0.0.1:1/export",
                "CONSOLE_CURSOR_SECRET": "export-cursor-secret",       # WR-AP02-1
                "CONSOLE_ACTIONS_API": "1",                             # WR-AP03-3
-               "CONSOLE_DATA_USE": "1"}                                # W1 api-traces
+               "CONSOLE_DATA_USE": "1",                                # W1 api-traces
+               "IDENTITY_API": "1", "AUTH_FACADE": "1",                # WR-AP01-1
+               "SUPABASE_ANON_KEY": "export-anon"}
     return {"consumer": _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1",
                                   **console}),
             "consumer-launched": _gateway(test),

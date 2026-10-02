@@ -1,6 +1,102 @@
 {
   "routes": [
     {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/auth/v1/availability",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/auth/v1/callback",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/password",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/recovery",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/refresh",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/sign-in",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/sign-out",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/auth/v1/sign-up",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
       "audience": "consumer session",
       "compositions": [
         "consumer"
@@ -9,6 +105,18 @@
       "envelope": "r270",
       "method": "GET",
       "path": "/console/v1/account/members",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/capabilities",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -57,6 +165,18 @@
       "envelope": "r270",
       "method": "GET",
       "path": "/console/v1/legacy-statement",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/me",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -121,6 +241,18 @@
       "path": "/healthz",
       "request_schema": "none",
       "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/capabilities",
+      "request_schema": "raw",
+      "response_schema": "typed"
     },
     {
       "audience": "signed training loop",
@@ -833,6 +965,54 @@
       "response_schema": "none"
     },
     {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/workspaces",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/workspaces/{provider_org_id}/members",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/workspaces/{provider_org_id}/members",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "DELETE",
+      "path": "/lab/v1/workspaces/{provider_org_id}/members/{user_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
       "audience": "loopback",
       "compositions": [
         "consumer",
@@ -867,6 +1047,18 @@
       "method": "GET",
       "path": "/operator/v1/audit",
       "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/providers",
+      "request_schema": "typed",
       "response_schema": "typed"
     },
     {
@@ -1068,61 +1260,61 @@
     {
       "method": "POST",
       "path": "/auth/v1/sign-in",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "POST",
       "path": "/auth/v1/sign-up",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "POST",
       "path": "/auth/v1/refresh",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "POST",
       "path": "/auth/v1/sign-out",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "POST",
       "path": "/auth/v1/recovery",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "POST",
       "path": "/auth/v1/password",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "GET",
       "path": "/auth/v1/callback",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "GET",
       "path": "/auth/v1/availability",
-      "state": "target",
+      "state": "existing",
       "surface": "auth"
     },
     {
       "method": "GET",
       "path": "/console/v1/me",
-      "state": "target",
+      "state": "existing",
       "surface": "app shell"
     },
     {
       "method": "GET",
       "path": "/console/v1/capabilities",
-      "state": "target",
+      "state": "existing",
       "surface": "app shell"
     },
     {
@@ -1284,37 +1476,37 @@
     {
       "method": "POST",
       "path": "/operator/v1/providers",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "GET",
       "path": "/lab/v1/workspaces",
-      "state": "target",
+      "state": "existing",
       "surface": "lab shell"
     },
     {
       "method": "GET",
       "path": "/lab/v1/capabilities",
-      "state": "target",
+      "state": "existing",
       "surface": "lab shell"
     },
     {
       "method": "GET",
       "path": "/lab/v1/workspaces/{id}/members",
-      "state": "target",
+      "state": "existing",
       "surface": "lab shell"
     },
     {
       "method": "POST",
       "path": "/lab/v1/workspaces/{id}/members",
-      "state": "target",
+      "state": "existing",
       "surface": "lab shell"
     },
     {
       "method": "DELETE",
       "path": "/lab/v1/workspaces/{id}/members/{user}",
-      "state": "target",
+      "state": "existing",
       "surface": "lab shell"
     },
     {

@@ -293,6 +293,17 @@ NOT_SETTABLE = {
                      "default, Lab-only): enabling it needs AP-01's session actors on the unit, "
                      "0064 applied hosted and the E4 regression rerun, a deploy change, not a "
                      "--set; live judging waits on P-10",
+    "IDENTITY_API": "mounts /console/v1/me|capabilities, /lab/v1/workspaces|capabilities|"
+                    "members and /operator/v1/providers (WR-AP01-1, off by default): enabling "
+                    "it is AP-09's frontend switch, a deploy change, not a --set",
+    "WEB_ORIGINS": "the App/Lab browser origins a mutation or a redirect may come from "
+                   "(WR-AP01-1): a new origin is an approval, not a --set",
+    "AUTH_FACADE": "mounts /auth/v1/* over the project's auth server (WR-AP01-1, off by "
+                   "default): enabling it is AP-09's frontend switch, a deploy change, not a --set",
+    "SUPABASE_ANON_KEY": "the project's publishable key for the auth facade: by name from the "
+                         "secret store with the deploy change, never an argument",
+    "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
+                             "decision recorded with the deploy change, not a --set",
 }
 
 

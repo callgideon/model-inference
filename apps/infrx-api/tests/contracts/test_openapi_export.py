@@ -165,6 +165,13 @@ def test_ap00_a_get_reading_the_request_with_a_declared_response_is_documented(a
     assert any(entry.startswith("POST ") for entry in legacy["consumer"])
 
 
+def test_ap00_a_typed_body_answering_204_no_content_is_documented(apps):
+    """Oracle (WR-AP01-1): a typed body answered by a declared 204 No Content (the auth
+    facade's password change) is not legacy - there is no response body to model."""
+    legacy = export.legacy(exported(apps))
+    assert "POST /auth/v1/password" not in legacy["consumer"]
+
+
 def test_ap00_lab_control_documents_its_bodies_responses_and_refusals(apps):
     """Oracle (the worked example): the control family's operations carry their pydantic
     request and response schemas, the provider query parameter and the `{refusal}` answers -

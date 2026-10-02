@@ -336,8 +336,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
          "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
-         "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "console_reads",
-         "route"]
+         "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "auth", "console_me",
+         "lab_workspaces", "operator_providers", "console_reads", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -587,6 +587,13 @@ DEPLOYMENT_EXPECTED = {
     "CONSOLE_DATA_USE": False,
     # WR-1 (AP-08, api-judge): the Lab unit's judge/review routes switch, off
     "LAB_JUDGE_API": False,
+    # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
+    # origins and the facade's publishable key (unset)
+    "IDENTITY_API": False,
+    "WEB_ORIGINS": "",
+    "AUTH_FACADE": False,
+    "SUPABASE_ANON_KEY": "",
+    "AUTH_CAPTCHA_REQUIRED": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

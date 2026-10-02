@@ -434,6 +434,21 @@ class DeploymentSettings:
     # by default: no such route exists. On, the routes answer 503 until AP-01's session actors
     # are composed on the unit; JUDGE_MODE stays dry_run (live judging waits on P-10).
     lab_judge_api: bool = False
+    # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
+    # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
+    # `console.session.SessionActors` (the verified Supabase session, or an operator key at
+    # the operator door) and `PgIdentity` on the job store's pool. Off by default: no such
+    # route exists. `WEB_ORIGINS` (comma-separated, e.g. https://app.callbill.ai) are the only
+    # browser origins a mutation may come from and the only `redirect_to` origins.
+    identity_api: bool = False
+    web_origins: str = ""
+    # AP-01 (WR-AP01-1): the auth facade `/auth/v1/*` over the project's auth server with its
+    # publishable key `SUPABASE_ANON_KEY` (never the service-role key, which the auth server
+    # lets past its CAPTCHA); `AUTH_CAPTCHA_REQUIRED` reports the hosted CAPTCHA policy (LR-02).
+    # Off by default; on without `SUPABASE_ANON_KEY` refuses to start.
+    auth_facade: bool = False
+    supabase_anon_key: str = field(default="", repr=False)
+    auth_captcha_required: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
