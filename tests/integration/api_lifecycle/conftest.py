@@ -33,6 +33,8 @@ WEB = {"eyJhbGci.eyJzdWIi.alphaWEB": ("u-alpha", "org-a"),
 PROVIDER = "b0000001-0000-4000-8000-000000000001"
 COMPOSED = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-07", "AP-08"]
 CHARGE = "3"
+OPERATOR_KEY = "sk-infrx-operatorKEY000001"
+PRIVATE = "nemostation/ap11-private"
 _V4 = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 PAYER = f"lab:payer:{PROVIDER}:{_V4}@sha256:[0-9a-f]{{64}}"
 
@@ -51,7 +53,10 @@ DEFECTS = ("replay_new_job", "conflict_accepted", "artifact_upload", "foreign_re
            "judge_after_revoke", "dry_run_sends", "dry_run_scored", "run_replay_new",
            "judge_charges_consumer", "budget_spent", "review_twice", "review_not_human",
            "calibrated_on_one", "op_fails", "op_replay_new", "artifact_missing_file",
-           "revision_mutable", "revision_unpinned", "zero_elapsed", "no_inference_id")
+           "revision_mutable", "revision_unpinned", "zero_elapsed", "no_inference_id",
+           # 11c by protocol: AP-05/06 (composed only by the hosting cases)
+           "readiness_from_record", "consumer_key_private", "dev_key_public", "stale_approval",
+           "private_listed", "no_capacity")
 
 
 class FakeGateway:
@@ -107,12 +112,15 @@ class FakeGateway:
         return answer
 
     def route(self, request, method: str, path: str) -> httpx.Response:
-        found = wave7(self, request, method, path)
+        found = hosting(self, request, method, path)
+        found = found if found is not None else wave7(self, request, method, path)
         if found is not None:
             return found
         if path == "/v1/models":
+            public = self.models + ([PRIVATE] if self.objects.get("approved")
+                                    or "private_listed" in self.defects else [])
             return httpx.Response(200, json={"object": "list", "data": [
-                {"id": m, "object": "model", "owned_by": "nemostation"} for m in self.models]})
+                {"id": m, "object": "model", "owned_by": "nemostation"} for m in public]})
         if path == "/lab/v1/control/models":
             token = request.headers.get("authorization", "").removeprefix("Bearer ")
             if token not in SESSIONS and "forged_accepted" not in self.defects:
@@ -218,6 +226,83 @@ def _body(request) -> dict:
 
 def _money(amount, unit: str = "CREDIT") -> dict:
     return {"amount": str(amount), "unit": unit}
+
+
+def hosting(fake: FakeGateway, request, method: str, path: str) -> httpx.Response | None:
+    """AP-05/06 by contracts.md §5/§6 (no lane has merged them): deployments, readiness, the
+    operator's dev rate/funding/approval, dev keys and the private route."""
+    d, o, token = fake.defects, fake.objects, request.headers.get("authorization", "")[7:]
+    query, web = request.url.params, fake._web(request)
+    dev = o.setdefault("dev_keys", {})
+    if path == "/v1/chat/completions" and PRIVATE in request.content.decode():
+        if token in dev or (token in fake.keys and "consumer_key_private" in d):
+            fake.created += 1
+            return _ok(body={"model": PRIVATE, "usage": {"prompt_tokens": 9}},
+                       **{"Inference-Id": str(uuid.uuid4())})
+        return _refused(404, "model_not_found")
+    if token in dev and path == "/v1/chat/completions":
+        return _ok(body={"model": MODEL, "usage": {}}) if "dev_key_public" in d \
+            else _refused(403, "forbidden")
+    if token in dev and path.startswith("/v1/uploads"):
+        handle = path.split("/")[3] if path.count("/") > 2 else f"up_{uuid.uuid4().hex}"
+        return {"POST": _ok(201, {"upload_handle": handle, "destination_ref": f"infrx-upload:{handle}"})
+                if path == "/v1/uploads" else _ok(200, {"state": "finalized"}),
+                "PUT": httpx.Response(204)}[method]
+    if path.startswith("/operator/v1/"):
+        if token != OPERATOR_KEY:
+            return _refused(401, "invalid_api_key")
+        if path.endswith("/dev-rate"):
+            return _ok(201, {"rate": _money("0.5")})
+        if path == "/operator/v1/dev-wallet-grants":
+            return _ok(201, {"balance": _money("100")})
+        proposal = path.split("/")[4]
+        if method == "GET":
+            return _ok(body={"proposal_id": proposal, "listing_version": 3, "readiness":
+                             {"state": "ready"}, "deployment_revision_id": o.get("deployment")})
+        if _body(request)["expected_listing_version"] != 3 and "stale_approval" not in d:
+            return _refused(409, "state_conflict")
+        o["approved"] = True
+        return _ok(body={"audit_id": "audit-1"})
+    lab_paths = ("/lab/v1/hosting-profiles", "/lab/v1/control/deployments",
+                 "/lab/v1/control/dev-wallet", "/lab/v1/control/endpoints",
+                 "/lab/v1/control/proposals")
+    if not path.startswith(lab_paths):
+        return None
+    if web is None or not _member(web[0], query):
+        return _refused(403, "forbidden")
+    op = lambda resource: {"operation_id": str(uuid.uuid4()), "kind": "deployment",  # noqa: E731
+                           "state": "queued", "resource_id": resource,
+                           "created_at": "2026-10-02T00:00:00Z",
+                           "updated_at": "2026-10-02T00:00:00Z"}
+    if path == "/lab/v1/hosting-profiles":
+        return _ok(body={"data": [{"hosting_profile_id": "marlin-l40s", "eligible": True}]})
+    if path == "/lab/v1/control/deployments":
+        o["deployment"] = deployment = str(uuid.uuid4())
+        o["serving"] = _body(request)["serving_version_id"]
+        doc = op(deployment)
+        o[doc["operation_id"]] = deployment
+        o.setdefault("hosting_ops", []).append(doc["operation_id"])
+        return _ok(202, doc, Location=f"/lab/v1/operations/{doc['operation_id']}")
+    if path.endswith("/smoke"):
+        doc = op(o["deployment"])
+        o[doc["operation_id"]] = o["deployment"]
+        return _ok(202, doc, Location=f"/lab/v1/operations/{doc['operation_id']}")
+    if path.endswith("/readiness"):
+        served = "other" if "readiness_from_record" in d else o["serving"]
+        return _ok(body={"state": "ready", "serving_version_id": o["serving"],
+                         "engine": {"serving_version_id": served}})
+    if path.startswith("/lab/v1/control/deployments/"):
+        return _ok(body={"state": "ready", "endpoint_id": "ep-1", "model": PRIVATE,
+                         "observed_serving_version_id": o["serving"],
+                         "desired_serving_version_id": o["serving"]})
+    if path == "/lab/v1/control/dev-wallet":
+        return _ok(body={"balance": _money("100")})
+    if path.endswith("/keys"):
+        secret = f"sk-infrx-dev{uuid.uuid4().hex}"
+        dev[secret] = path.split("/")[5]
+        return _ok(201, {"key": {"key_id": str(uuid.uuid4()), "audience": "provider_dev",
+                                 "endpoint_id": path.split("/")[5]}, "secret": secret})
+    return _ok(201, {"proposal_id": "prop-1"})                # POST /lab/v1/control/proposals
 
 
 def wave7(fake: FakeGateway, request, method: str, path: str) -> httpx.Response | None:
@@ -374,6 +459,8 @@ def lab(fake, request, method, path, web, key, query):
         return _ok(202, op_of(op, "queued"), Location=f"/lab/v1/operations/{op}")
     if path.startswith("/lab/v1/operations/"):
         op = path.split("/")[4]
+        if "no_capacity" in d and op in objects.get("hosting_ops", ()):
+            return _ok(body={**op_of(op, "failed"), "error": {"code": "capacity_unavailable"}})
         return _ok(body=op_of(op, "failed" if "op_fails" in d else "succeeded", objects[op]))
     if path.startswith("/lab/v1/artifacts/"):
         files = list(objects[path.split("/")[4]])
@@ -540,12 +627,14 @@ def files(fast_tmp):
               "traces": True, "judge": "dry_run", "model_uuid": MODEL_UUID,
               "artifact": {"dir": str(artifact)}}
     config["identities"].update({
+        "operator": {"audience": "operator", "secret": "operator_key"},
+        "provider_dev": {"audience": "provider_dev", "secret": "provider_dev_key"},
         "consumer_a_web": {"audience": "session", "secret": "alpha_session"},
         "consumer_b_web": {"audience": "session", "secret": "beta_session"},
         "consumer_a_capture": {"audience": "consumer", "secret": "consumer_a_capture_key"}})
     secrets = {"admin_session": "eyJhbGci.eyJzdWIi.adminSIG",
                "outsider_session": "eyJhbGci.eyJzdWIi.outsideSIG",
                "alpha_session": "eyJhbGci.eyJzdWIi.alphaWEB",
-               "beta_session": "eyJhbGci.eyJzdWIi.betaWEB"}
+               "beta_session": "eyJhbGci.eyJzdWIi.betaWEB", "operator_key": OPERATOR_KEY}
     return (private(tmp_path / "config.json", config), private(tmp_path / "secrets.json", secrets),
             tmp_path / "run" / "state.json", tmp_path / "out")

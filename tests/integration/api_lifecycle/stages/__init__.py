@@ -95,7 +95,7 @@ def _r(method: str, path: str, owner: str | None = None, origin: str | None = No
     return Route(method, path, owner, "lab" if lab else "gateway")
 
 
-from . import consumer, lab  # noqa: E402  (the implementations read Blocked/Failed above)
+from . import consumer, hosting, lab  # noqa: E402  (the implementations read Blocked above)
 
 GPU = "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
 JUDGE = "P-10 an approved media-capable judge, its secret reference, payer and spend limit"
@@ -133,7 +133,7 @@ STAGES: tuple[Stage, ...] = (
            _r("POST", "/lab/v1/control/deployments", "AP-05"),
            _r("GET", "/lab/v1/control/deployments/{id}", "AP-05"),
            _r("GET", "/lab/v1/control/deployments/{id}/readiness", "AP-05")),
-          needs=("03",), prerequisites=(GPU,)),
+          run=hosting.s04, needs=("03",), prerequisites=(GPU,)),
     Stage("05", "Operator private rate/funding API; bounded smoke; issue provider-dev key",
           "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope "
           "correct; no public exposure",
@@ -143,12 +143,12 @@ STAGES: tuple[Stage, ...] = (
            # mounted, but a synchronous stand-in over NoEngine (503) until AP-05 05d
            _r("POST", "/lab/v1/control/deployments/{id}/smoke", "AP-05"),
            _r("POST", "/lab/v1/control/endpoints/{id}/keys", "AP-06")),
-          needs=("04",), prerequisites=(GPU,)),
+          run=hosting.s05, needs=("04",), prerequisites=(GPU,)),
     Stage("06", "Call private endpoint with finite-video fixture",
           "Real media processing and response; charge/usage receipt; no text-only substitute "
           "for modality smoke",
           (_r("POST", "/v1/chat/completions"),),
-          needs=("05",), prerequisites=(
+          run=hosting.s06, needs=("05",), prerequisites=(
               "AP-06 a provider-dev key scoped to the private endpoint (stage 05)", GPU)),
     Stage("07", "Provider administrator proposes; operator approves through API",
           "Expected listing version, approved rates/limits and candidate receipts validated; "
@@ -156,7 +156,7 @@ STAGES: tuple[Stage, ...] = (
           (_r("POST", "/lab/v1/control/proposals"),
            _r("GET", "/operator/v1/publication-proposals", "AP-06"),
            _r("POST", "/operator/v1/publication-proposals/{id}/approve", "AP-06")),
-          needs=("05",)),
+          run=hosting.s07, needs=("05",)),
     Stage("08", "GET public catalog; GET account; claim grant; create consumer A key",
           "Newly published test listing appears with truthful contract; one individual grant; "
           "one key despite retried creation",

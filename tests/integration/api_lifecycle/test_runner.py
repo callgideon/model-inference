@@ -421,10 +421,11 @@ def test_ap11_every_served_stage_passes_and_only_ap05_ap06_stay_blocked(files, g
     code, verdict = run(files, gateway)
     assert {sid: stage(verdict, sid)["status"] for sid in SERVED} == dict.fromkeys(SERVED, "PASS"), \
         {sid: stage(verdict, sid)["reasons"] for sid in SERVED}
-    for sid in ("04", "05", "06", "07", "18"):
-        reasons = " ".join(stage(verdict, sid)["reasons"])
+    for sid in ("04", "05", "06", "07", "18"):         # 06's own route is mounted: it waits
+        reasons = " ".join(stage(verdict, sid)["reasons"])   # on 04/05, which name AP-05/06
         assert stage(verdict, sid)["status"] == "BLOCKED" and ("AP-05" in reasons
-                                                               or "AP-06" in reasons), sid
+                                                               or "AP-06" in reasons
+                                                               or "needs stage 04" in reasons), sid
     assert (code, verdict["verdict"]) == (3, "BLOCKED")
 
 
@@ -534,3 +535,44 @@ def test_ap11_a_cas_write_resumes_with_the_version_it_first_read(files, gateway)
     assert verdict["verdict"] != "INVALID" and stage(verdict, "12")["status"] == "PASS", \
         verdict["reasons"]
     assert json.loads(files[2].read_text())["pinned"]["12.grant_version"] == 0
+
+
+HOSTED = ("04", "05", "06", "07")
+HOSTING = {"readiness_from_record": "04", "consumer_key_private": "08", "dev_key_public": "06",
+           "private_listed": "06", "stale_approval": "07"}
+
+
+def hosted(files) -> None:
+    edit(files[0], composed=json.loads(files[0].read_text())["composed"] + ["AP-05", "AP-06"])
+
+
+def test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol(files, gateway):
+    """Broken: a deployment, smoke, dev key, private call or approval that cannot pass once
+    AP-05/06 are composed - or a stage without a runner reported BLOCKED without a reason."""
+    hosted(files)
+    code, verdict = run(files, gateway)
+    assert {sid: stage(verdict, sid)["status"] for sid in HOSTED} == dict.fromkeys(HOSTED, "PASS"), \
+        {sid: (stage(verdict, sid)["reasons"], checks(stage(verdict, sid))) for sid in HOSTED}
+    assert json.loads(files[2].read_text())["minted_ids"]["provider_dev"]
+    eighteen = stage(verdict, "18")
+    assert eighteen["status"] == "BLOCKED" and "no runner implementation" in eighteen["reasons"][0]
+
+
+@pytest.mark.parametrize("defect", sorted(HOSTING))
+def test_ap11_a_hosting_defect_fails_its_stage(files, gateway, defect):
+    """Broken: readiness read from a record, a consumer key on a private endpoint, a dev key
+    spending publicly, a private model in discovery, or a stale approval accepted."""
+    hosted(files)
+    gateway.defects.add(defect)
+    code, verdict = run(files, gateway)
+    assert stage(verdict, HOSTING[defect])["status"] == "FAIL" and code == 1, \
+        stage(verdict, HOSTING[defect])["evidence"]
+
+
+def test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail(files, gateway):
+    """Broken: `capacity_unavailable` (no spare GPU) reported as a FAIL of the API under test."""
+    hosted(files)
+    gateway.defects.add("no_capacity")
+    _, verdict = run(files, gateway)
+    four = stage(verdict, "04")
+    assert four["status"] == "BLOCKED" and "GPU-TARGET" in " ".join(four["reasons"])

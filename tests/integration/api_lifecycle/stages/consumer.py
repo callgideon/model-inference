@@ -145,8 +145,22 @@ def s08(ctx) -> None:
                   and (grant.get("amount") or {}).get("unit") == "CREDIT", grant)
         mint(ctx, holder, web, f"08.key.{holder}")
     keyed(ctx, "consumer_a")
+    private_refused(ctx)
     ctx.publish(org_a=_json(ctx.call("GET", "/console/v1/me", actor="consumer_a_web"))
                 .get("actor", {}).get("org_id"))
+
+
+def private_refused(ctx) -> None:
+    """contracts.md §5: a consumer key cannot call a private endpoint - stage 04's, when it
+    passed (the keys exist only from here on, so 06 cannot prove it)."""
+    try:
+        model = ctx.outputs("04").get("private_model")
+    except Blocked:
+        return
+    refused = ctx.call("POST", "/v1/chat/completions", actor="consumer_a", inference=True,
+                       json={"model": model, "messages": TEXT, "max_tokens": 4})
+    ctx.check("a consumer key cannot call the private endpoint",
+              refused.status_code in (403, 404), refused.status_code)
 
 
 def _pick(response, *names: str) -> dict:
@@ -200,14 +214,14 @@ def video(ref: str) -> list:
         {"type": "video_url", "video_url": {"url": ref}}]}]
 
 
-def s09(ctx) -> None:
-    actor = "consumer_a"
+def upload(ctx, actor: str, step: str) -> str:
+    """The finite-video fixture through the upload API as `actor`: its destination ref."""
     ctx.credential(actor)
     media = ctx.config.get("media") or {}
     if not media.get("clip"):
         raise Blocked("config names no media clip (media.clip): verification.md prerequisite 4")
     clip, mime = Path(media["clip"]).read_bytes(), media.get("mime", "video/mp4")
-    ticket = ctx.mutate("09.upload", "POST", "/v1/uploads", actor=actor, json={
+    ticket = ctx.mutate(f"{step}.upload", "POST", "/v1/uploads", actor=actor, json={
         "bytes": len(clip), "digest": "sha256:" + hashlib.sha256(clip).hexdigest(),
         "accepted_mime": [mime]}, extract=lambda r: {
             "status": r.status_code, **{k: _json(r).get(k)
@@ -215,11 +229,11 @@ def s09(ctx) -> None:
     ctx.require("the upload ticket is issued 201", ticket["status"] == 201, ticket["status"])
     handle = {"handle": ticket["upload_handle"]}
     ctx.own("upload", ticket["upload_handle"], None)
-    put = ctx.mutate("09.put", "PUT", "/v1/uploads/{handle}", params=handle, actor=actor,
+    put = ctx.mutate(f"{step}.put", "PUT", "/v1/uploads/{handle}", params=handle, actor=actor,
                      content=clip, headers={"Content-Type": mime},
                      extract=lambda r: {"status": r.status_code})
     ctx.require("the bytes are stored 204", put["status"] == 204, put["status"])
-    done = ctx.mutate("09.complete", "POST", "/v1/uploads/{handle}/complete", params=handle,
+    done = ctx.mutate(f"{step}.complete", "POST", "/v1/uploads/{handle}/complete", params=handle,
                       actor=actor, extract=lambda r: {"status": r.status_code,
                                                       "state": _json(r).get("state"),
                                                       "fields": sorted(_json(r))})
@@ -227,7 +241,12 @@ def s09(ctx) -> None:
     ctx.check("the upload is consumer media, not a model artifact",
               str(ticket["destination_ref"]).startswith("infrx-upload:")
               and not {"artifact_id", "manifest"} & set(done["fields"]), done["fields"])
-    body = {"model": ctx.config["model"], "messages": video(ticket["destination_ref"])}
+    return ticket["destination_ref"]
+
+
+def s09(ctx) -> None:
+    actor = "consumer_a"
+    body = {"model": ctx.config["model"], "messages": video(upload(ctx, actor, "09"))}
 
     def found(out: dict) -> bool:
         again = ctx.call("GET", "/v1/jobs/{handle}", params={"handle": out["job_handle"]},

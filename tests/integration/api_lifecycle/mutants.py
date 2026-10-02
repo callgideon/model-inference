@@ -38,7 +38,7 @@ Mutant, Outcome, Result, Runner, _m = (shared.Mutant, shared.Outcome, shared.Res
 
 D = "tests/integration/api_lifecycle/"
 R, S, C, K = D + "runner.py", D + "state.py", D + "stages/consumer.py", D + "stages/__init__.py"
-L = D + "stages/lab.py"
+L, H = D + "stages/lab.py", D + "stages/hosting.py"
 TESTS = D + "test_runner.py"
 
 PRIVATE_FILES = "test_ap11_state_and_secrets_are_separate_private_files"
@@ -75,6 +75,9 @@ UNMOUNTED = "test_ap11_an_unmounted_route_is_blocked_by_name_never_failed"
 MINTED = "test_ap11_keys_are_minted_through_the_api_and_kept_outside_the_state"
 LOST_KEY = "test_ap11_a_lost_key_acknowledgement_revokes_it_and_mints_once_more"
 PINNED = "test_ap11_a_cas_write_resumes_with_the_version_it_first_read"
+HOSTED = "test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol"
+HOSTING_DEFECT = "test_ap11_a_hosting_defect_fails_its_stage"
+NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail"
 
 MUTANTS: tuple[Mutant, ...] = (
     # ---- 11a: the two private files
@@ -426,6 +429,29 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("payer_not_version_4", "14's payer ref is 0029's lab ref (version-4 ids)", L,
        "payer_id = uuid.UUID(bytes=seed.digest()[:16], version=4)",
        "payer_id = uuid.uuid5(uuid.NAMESPACE_URL, seed.hexdigest())", SERVED),
+    # ---- 11c by protocol: stages 04-07 (AP-05/06) on the fake
+    _m("readiness_from_record", "04: readiness is the engine's report for this revision", H,
+       '              ready.get("state") == "ready" and ready.get("serving_version_id") == revision\n'
+       '              and (ready.get("engine") or {}).get("serving_version_id") == revision,',
+       '              ready.get("state") == "ready" and ready.get("serving_version_id") == revision,',
+       HOSTING_DEFECT),
+    _m("no_capacity_is_a_fail", "04: capacity_unavailable is the GPU prerequisite", H,
+       '    if (final.get("error") or {}).get("code") == "capacity_unavailable":', "    if False:",
+       NO_CAPACITY),
+    _m("dev_key_public_unchecked", "06: a dev key cannot spend publicly", H,
+       "public.status_code in (401, 403),", "public.status_code in (200, 401, 403),",
+       HOSTING_DEFECT),
+    _m("private_listing_unchecked", "06: the private model is not in discovery", H,
+       "model not in listed, model)", "True, model)", HOSTING_DEFECT),
+    _m("stale_approval_unchecked", "07: an approval on a stale listing version is a 409", H,
+       "stale.status_code == 409,", "stale.status_code in (200, 409),", HOSTING_DEFECT),
+    _m("consumer_private_unchecked", "08: a consumer key cannot call a private endpoint", C,
+       "refused.status_code in (403, 404),", "refused.status_code in (200, 403, 404),",
+       HOSTING_DEFECT),
+    _m("unimplemented_stage_unexplained", "a stage without a runner names why it is BLOCKED", R,
+       '                + ([] if stage.run else [f"BLOCKED[AP-11] stage {stage.sid} has no runner "\n'
+       '                                         "implementation yet (AP-11 11d/11e)"]))',
+       "                + [])", HOSTED),
     _m("revoked_judge_unchecked", "17: a follow-up judge run is refused", L,
        "              follow.status_code in (403, 409, 422), follow.status_code)",
        "              follow.status_code in (202, 403, 409, 422), follow.status_code)", DEFECT),

@@ -394,7 +394,9 @@ def run_stages(session: Session, selected: set[str], results: list[dict]) -> lis
         served = [r for r in stage.routes if r.owner is None or r.owner in composed]
         if stage.run is None or not served:      # nothing of it is served: never called
             entry.update(status=BLOCKED, reasons=missing + [
-                f"BLOCKED[{why.split()[0]}] {why.split(' ', 1)[1]}" for why in stage.prerequisites])
+                f"BLOCKED[{why.split()[0]}] {why.split(' ', 1)[1]}" for why in stage.prerequisites]
+                + ([] if stage.run else [f"BLOCKED[AP-11] stage {stage.sid} has no runner "
+                                         "implementation yet (AP-11 11d/11e)"]))
             continue
         evidence, blocked = new_evidence(), []
         ctx = Context(session, stage.sid, evidence)
