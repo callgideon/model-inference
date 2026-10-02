@@ -327,7 +327,8 @@ class DeploymentSettings:
     # a console setting. What is enforced here is the *value*: set, it must be long enough
     # to be a signing key in any mode. Requiring it to be set belongs to the console's own
     # startup (C2) and to the deployment checklist (08 §5).
-    console_cursor_secret: str = ""
+    # WR-AP02-1: also the AP-02 console reads' cursor key (below); never in a repr.
+    console_cursor_secret: str = field(default="", repr=False)
     database_pool_min_size: int = 1
     database_pool_max_size: int = 10
     database_pool_connect_timeout_s: float = 5.0
@@ -409,6 +410,14 @@ class DeploymentSettings:
     # start until P-10). Off by default; an approval stays a 503 while JUDGE_MODE is not live.
     lab_teachers: bool = False
     lab_teacher_url: str = ""
+    # WR-AP02-1 (AP-02): mount the console read routes (/console/v1/* reads, /operator/v1/*
+    # reads) over infrx.console.reads.ConsoleReads. Off by default: no such route exists. Each
+    # read does `set local role authenticated` (PostgREST's session), so CONSOLE_DATABASE_URL
+    # must be a login that may (Supabase's `authenticator`), never `infrx_runtime`;
+    # CONSOLE_CURSOR_SECRET (>= 16 bytes; the field above, already C's cursor key) is read by
+    # name, never in a repr.
+    console_reads: bool = False
+    console_database_url: str = field(default="", repr=False)
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

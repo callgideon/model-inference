@@ -20,8 +20,8 @@ from ..config import (SUPABASE_CONNECT_S, SUPABASE_TIMEOUT_S, UPSTREAM_CONNECT_S
                       UPSTREAM_TIMEOUT_S, from_env, validate_runtime)
 from . import pilot
 from ..observe import route as metrics
-from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
-                     lab_evaluations, lab_pipelines, lab_releases, lab_traces, models,
+from .routes import (console_reads, feedback, health, ingress, jobs, lab_checkpoints, lab_control,
+                     lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_traces, models,
                      trace_export, uploads)
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
@@ -39,7 +39,8 @@ from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_contr
 # default off; WR-LAB-API-1), then its evaluation, pipeline and release surfaces the same way
 # (`LAB_EVALS`, `LAB_PIPELINES`, `LAB_RELEASES`, default off; WR-LAB2-1), and its datasets
 # and checkpoint receiver (`LAB_DATASETS`, `LAB_CHECKPOINTS`, default off; WR-N4-1, WR-B3-2).
-ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)
+# AP-02's console reads (`CONSOLE_READS`, default off; WR-AP02-1).
+ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, console_reads, metrics)
 
 
 def upstream_client(settings):

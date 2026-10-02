@@ -1,6 +1,102 @@
 {
   "routes": [
     {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/account/members",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/credit-ledger",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/credits",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/keys",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/legacy-statement",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/requests",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/requests/{request_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/requests/{request_id}/result",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
       "audience": "public",
       "compositions": [
         "consumer",
@@ -750,6 +846,54 @@
       "response_schema": "none"
     },
     {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/accounts",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/audit",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/unknown-usage",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/wallet-drift",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
       "audience": "public",
       "compositions": [
         "consumer",
@@ -990,7 +1134,7 @@
     {
       "method": "GET",
       "path": "/console/v1/keys",
-      "state": "target",
+      "state": "existing",
       "surface": "api keys"
     },
     {
@@ -1014,19 +1158,19 @@
     {
       "method": "GET",
       "path": "/console/v1/requests",
-      "state": "target",
+      "state": "existing",
       "surface": "usage"
     },
     {
       "method": "GET",
       "path": "/console/v1/requests/{id}",
-      "state": "target",
+      "state": "existing",
       "surface": "usage"
     },
     {
       "method": "GET",
       "path": "/console/v1/requests/{id}/result",
-      "state": "target",
+      "state": "existing",
       "surface": "usage"
     },
     {
@@ -1044,25 +1188,25 @@
     {
       "method": "GET",
       "path": "/console/v1/credits",
-      "state": "target",
+      "state": "existing",
       "surface": "credits"
     },
     {
       "method": "GET",
       "path": "/console/v1/credit-ledger",
-      "state": "target",
+      "state": "existing",
       "surface": "credits"
     },
     {
       "method": "GET",
       "path": "/console/v1/legacy-statement",
-      "state": "target",
+      "state": "existing",
       "surface": "credits"
     },
     {
       "method": "GET",
       "path": "/console/v1/account/members",
-      "state": "target",
+      "state": "existing",
       "surface": "teams"
     },
     {
@@ -1098,25 +1242,25 @@
     {
       "method": "GET",
       "path": "/operator/v1/accounts",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "GET",
       "path": "/operator/v1/wallet-drift",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "GET",
       "path": "/operator/v1/unknown-usage",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "GET",
       "path": "/operator/v1/audit",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {

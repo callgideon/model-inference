@@ -392,11 +392,31 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.lab_releases = lab_releases if deployment.lab_releases else None
     rt.lab_checkpoints = lab_checkpoints if deployment.lab_checkpoints else None
     rt.lab_datasets = lab_datasets if deployment.lab_datasets else None
+    # AP-01 composes the verified session's `SessionActors` here; None until it does.
+    rt.actors = getattr(rt, "actors", None)
+    # AP-02 (WR-AP02-1): the console reads mount over this, and only when enabled.
+    rt.console_reads = _console_reads(rt, deployment) if deployment.console_reads else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay, capture=capture)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
                        capture=capture,
                        catalog=catalog, large_bodies=rt.large_bodies)
+
+
+def _console_reads(rt, deployment):
+    """AP-02's `ConsoleReads` on its own login (`set_role=False`: each read does `SET LOCAL
+    ROLE authenticated` itself, safe on the transaction pooler). Enabled without the session
+    actors (AP-01), the DSN or a 16-byte cursor key is a refusal to start, never a route
+    that answers nobody."""
+    from ..console.reads import ConsoleReads
+    from ..state.jobstore import connector
+    if rt.actors is None:
+        raise RuntimeMisconfigured(rt.mode, ("SESSION_ACTORS",),
+                                   detail="CONSOLE_READS needs AP-01's session actors")
+    secret = deployment.console_cursor_secret.encode()
+    if not deployment.console_database_url or len(secret) < 16:
+        raise RuntimeMisconfigured(rt.mode, ("CONSOLE_DATABASE_URL", "CONSOLE_CURSOR_SECRET"))
+    return ConsoleReads(connector(deployment.console_database_url, set_role=False), secret)
 
 
 def _trace_export(rt, injected):

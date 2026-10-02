@@ -7,7 +7,8 @@ Each composition is built the way its process builds it - `gateway.app.create_ap
 `lab.control.app.create_app` - over inert stand-ins for the stores, so only the route table
 matters and nothing connects anywhere:
 
-- `consumer`: the gateway with every consumer switch on (`FEEDBACK_API`, `TRACE_EXPORT_API`);
+- `consumer`: the gateway with every consumer switch on (`FEEDBACK_API`, `TRACE_EXPORT_API`,
+  `CONSOLE_READS` over an unreachable DSN and an inert session-actor stand-in);
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints) on.
@@ -134,8 +135,11 @@ def _gateway(env: dict[str, str]) -> FastAPI:
     inert = object()
     logging.disable(logging.CRITICAL)      # the startup probes of the inert stores log a failure
     try:
-        return gateway.create_app(from_env(env), catalog=inert, stream=inert, objects=inert,
-                                  jobs=inert, index=inert, feedback=inert, trace_export=inert)
+        # until AP-01 composes `rt.actors`, CONSOLE_READS refuses to start without one
+        with mock.patch.object(gateway.Runtime, "actors", inert, create=True):
+            return gateway.create_app(from_env(env), catalog=inert, stream=inert, objects=inert,
+                                      jobs=inert, index=inert, feedback=inert,
+                                      trace_export=inert)
     finally:
         logging.disable(logging.NOTSET)
 
@@ -157,7 +161,10 @@ def _lab_control() -> FastAPI:
 
 def compositions() -> dict[str, FastAPI]:
     test = {"INFRX_MODE": "test"}         # the pilot's route table without its startup probes
-    return {"consumer": _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1"}),
+    console = {"CONSOLE_READS": "1", "CONSOLE_DATABASE_URL": "postgresql://export@127.0.0.1:1/export",
+               "CONSOLE_CURSOR_SECRET": "export-cursor-secret"}       # WR-AP02-1
+    return {"consumer": _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1",
+                                  **console}),
             "consumer-launched": _gateway(test),
             "lab-control": _lab_control()}
 
