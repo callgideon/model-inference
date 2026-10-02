@@ -277,6 +277,15 @@ NOT_SETTABLE = {
                     "hosted, P-10 and the E4 regression rerun, a deploy change, not a --set",
     "LAB_TEACHER_URL": "the teacher's endpoint, the local teacher fake only until P-10: a new "
                        "egress host is an approval, not a --set",
+    "CONSOLE_READS": "mounts the console/operator reads (WR-AP02-1, off by default): enabling "
+                     "it needs AP-01's session actors, CONSOLE_DATABASE_URL and the E4 "
+                     "regression rerun, a deploy change, not a --set",
+    "CONSOLE_DATABASE_URL": "the console reads' DSN, which carries a credential: a secret "
+                            "belongs in SSM, not in an argument",
+    "CONSOLE_ACTIONS_API": "mounts the console/operator mutations (WR-AP03-2, off by default): "
+                           "enabling it needs AP-01's session actors, a pool login that may set "
+                           "role authenticated and the E4 regression rerun, a deploy change, "
+                           "not a --set",
 }
 
 

@@ -45,6 +45,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..config import RuntimeMisconfigured, runtime_mode
+from ..console.actions import ConsoleActions
 from ..contracts import errors
 from ..contracts.limits import env_name
 from ..contracts.v2.lifecycle import AdmissionExpectation, ReadinessStore
@@ -252,6 +253,9 @@ def adapters_from_env(settings, **injected):
                     **trace_capture.adapters(settings, connect),
                     **({"feedback": _pg_feedback(connect)}
                        if settings.deployment.feedback_api else {}),
+                    # AP-03 (WR-AP03-3): only when the deployment enables CONSOLE_ACTIONS_API
+                    **({"console_actions": ConsoleActions(connect)}
+                       if settings.deployment.console_actions_api else {}),
                     **adapters}
     return adapters
 
@@ -336,7 +340,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
                        lab_pipelines=None, lab_releases=None, lab_checkpoints=None,  # noqa: F811
-                       lab_datasets=None, capture=None) -> IngressDeps:
+                       lab_datasets=None, capture=None, console_actions=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -396,6 +400,12 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     rt.actors = getattr(rt, "actors", None)
     # AP-02 (WR-AP02-1): the console reads mount over this, and only when enabled.
     rt.console_reads = _console_reads(rt, deployment) if deployment.console_reads else None
+    # AP-03 (WR-AP03-3): the console/operator mutations mount over this, only when enabled,
+    # and never without the session actors (a route that answers nobody).
+    if deployment.console_actions_api and rt.actors is None:
+        raise RuntimeMisconfigured(rt.mode, ("SESSION_ACTORS",),
+                                   detail="CONSOLE_ACTIONS_API needs AP-01's session actors")
+    rt.console_actions = console_actions if deployment.console_actions_api else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay, capture=capture)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,

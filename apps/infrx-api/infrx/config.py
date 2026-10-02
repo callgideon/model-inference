@@ -418,6 +418,12 @@ class DeploymentSettings:
     # name, never in a repr.
     console_reads: bool = False
     console_database_url: str = field(default="", repr=False)
+    # WR-AP03-2 (AP-03): mount the console and operator mutation routes (/console/v1/keys,
+    # signup-grant claim, request feedback; /operator/v1/* mutations) over
+    # infrx.console.actions.ConsoleActions on the gateway pool. Off by default: no such route
+    # exists. The pool's login must be able to `set role service_role` and `set local role
+    # authenticated` (not `infrx_runtime`, which has no such grant).
+    console_actions_api: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

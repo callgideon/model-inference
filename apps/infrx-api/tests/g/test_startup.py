@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import (console_reads, feedback, health, ingress, jobs,
-                                  lab_checkpoints,
+from infrx.gateway.routes import (console_actions, console_reads, feedback, health, ingress,
+                                  jobs, lab_checkpoints, operator_actions,
                                   lab_control, lab_datasets, lab_evaluations, lab_pipelines,
                                   lab_releases, lab_traces, models, trace_export, uploads)
 from infrx.observe import host
@@ -217,8 +217,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
     route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
     slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
-                                   lab_control, lab_traces, lab_evaluations, lab_pipelines,
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback,
+                                   console_actions, operator_actions, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines,
                                    lab_releases, lab_datasets, lab_checkpoints, console_reads,
                                    metrics)
     app = pilot_app()

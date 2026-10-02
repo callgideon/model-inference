@@ -334,9 +334,10 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
-         "lab_control", "lab_traces", "lab_evaluations", "lab_pipelines", "lab_releases",
-         "lab_datasets", "lab_checkpoints", "route"]
+        ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
+         "operator_actions", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
+         "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "console_reads",
+         "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -577,6 +578,11 @@ DEPLOYMENT_EXPECTED = {
     # teacher fake's URL (unset)
     "LAB_TEACHERS": False,
     "LAB_TEACHER_URL": "",
+    # WR-AP02-1 (AP-02): the console reads switch, off, and its login's DSN (unset)
+    "CONSOLE_READS": False,
+    "CONSOLE_DATABASE_URL": "",
+    # WR-AP03-2 (AP-03): the console/operator mutations switch, off
+    "CONSOLE_ACTIONS_API": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

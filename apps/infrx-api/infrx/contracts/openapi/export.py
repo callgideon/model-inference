@@ -8,7 +8,8 @@ Each composition is built the way its process builds it - `gateway.app.create_ap
 matters and nothing connects anywhere:
 
 - `consumer`: the gateway with every consumer switch on (`FEEDBACK_API`, `TRACE_EXPORT_API`,
-  `CONSOLE_READS` over an unreachable DSN and an inert session-actor stand-in);
+  `CONSOLE_READS` over an unreachable DSN and an inert session-actor stand-in,
+  `CONSOLE_ACTIONS_API` over an inert repository stand-in);
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints) on.
@@ -147,7 +148,7 @@ def _gateway(env: dict[str, str]) -> FastAPI:
         with mock.patch.object(gateway.Runtime, "actors", inert, create=True):
             return gateway.create_app(from_env(env), catalog=inert, stream=inert, objects=inert,
                                       jobs=inert, index=inert, feedback=inert,
-                                      trace_export=inert)
+                                      trace_export=inert, console_actions=inert)
     finally:
         logging.disable(logging.NOTSET)
 
@@ -170,7 +171,8 @@ def _lab_control() -> FastAPI:
 def compositions() -> dict[str, FastAPI]:
     test = {"INFRX_MODE": "test"}         # the pilot's route table without its startup probes
     console = {"CONSOLE_READS": "1", "CONSOLE_DATABASE_URL": "postgresql://export@127.0.0.1:1/export",
-               "CONSOLE_CURSOR_SECRET": "export-cursor-secret"}       # WR-AP02-1
+               "CONSOLE_CURSOR_SECRET": "export-cursor-secret",       # WR-AP02-1
+               "CONSOLE_ACTIONS_API": "1"}                             # WR-AP03-3
     return {"consumer": _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1",
                                   **console}),
             "consumer-launched": _gateway(test),
