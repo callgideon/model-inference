@@ -105,6 +105,7 @@ console-mutants:
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
 	cd apps/app && node tests/ux/run-mutants.mjs
+	cd apps/app && node tests/ux/first-call/run-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
