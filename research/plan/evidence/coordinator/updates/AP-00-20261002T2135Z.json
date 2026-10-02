@@ -1,0 +1,87 @@
+{
+  "task": "AP-00",
+  "lane": "d-supabase-reds",
+  "slice": "verification: the Supabase-image role-switch reds (10), the harness production test, r151_post_check_file_name",
+  "activity": "review",
+  "at": "2026-10-02T21:35:00Z",
+  "head": "7931d15",
+  "base": "29b9df84",
+  "worktree": ".claude/worktrees/codex-w7-d-supabase-reds",
+  "branch": "codex/w7-d-supabase-reds",
+  "owned_paths": [
+    "apps/infrx-api/tests/d/pgharness.py",
+    "apps/infrx-api/tests/d/test_pgharness.py",
+    "apps/infrx-api/tests/d/test_d8_requests.py",
+    "apps/infrx-api/tests/d/test_l3sql_reads.py",
+    "apps/infrx-api/tests/d/test_l3sql_control.py",
+    "apps/infrx-api/tests/d/test_code_mutants_lc2.py",
+    "apps/infrx-api/tests/d/test_code_mutants_lw8.py",
+    "tests/integration/test_harness.py",
+    "research/plan/evidence/w7/d-supabase-reds-7931d15.md",
+    "research/plan/evidence/w7/d-supabase-reds-WR-DSR-1.patch",
+    "research/plan/evidence/coordinator/updates/AP-00-20261002T2135Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap0 INFRX_D1_IMAGE=supabase pytest <the five base files> -k 'not test_mutants and not mutant_is_killed' (base versions)",
+      "exit": 1,
+      "summary": "RED: 10 failed (api-schema-3's 10), 36 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap0 INFRX_D1_IMAGE=supabase pytest tests/d tests/i -k 'not test_mutants'",
+      "exit": 0,
+      "summary": "2648 passed, 9 skipped, 9 xfailed, 0 failed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap0 pytest tests/d tests/i -k 'not test_mutants'",
+      "exit": 0,
+      "summary": "2649 passed, 8 skipped, 9 xfailed, 0 failed"
+    },
+    {
+      "cmd": "pytest tests/integration/test_harness.py",
+      "exit": 0,
+      "summary": "48 passed (base: 1 failed, the production test)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest tests/i/lab/test_mutants.py -k 'r151 or well_formed or every_case'",
+      "exit": 0,
+      "summary": "7 passed (green at the base already)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap0 pytest tests/d/test_code_mutants_{d8,l3sql,lc2,lw8}.py (plain, supabase)",
+      "exit": 0,
+      "summary": "262 passed each"
+    },
+    {
+      "cmd": "tests/integration/mutants.py --only e2m77|e2m78 with WR-DSR-1 applied (plain, supabase)",
+      "exit": 0,
+      "summary": "killed on both images"
+    },
+    {
+      "cmd": "make api-lint; make api-typecheck",
+      "exit": 0,
+      "summary": "ruff clean; pyright 457 (baseline 458)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0.25,
+    "pessimistic_h": 1,
+    "confidence": "high",
+    "basis": "every oracle green on both images at the head; left: WR-DSR-1 at merge, tests/r routing one-line adoption (other owner)",
+    "at": "2026-10-02"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-DSR-1: tests/integration/mutants.py e2m77/e2m78 (research/plan/evidence/w7/d-supabase-reds-WR-DSR-1.patch)"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/d-supabase-reds-7931d15.md",
+    "research/plan/evidence/w7/d-supabase-reds-WR-DSR-1.patch"
+  ]
+}

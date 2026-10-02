@@ -450,7 +450,7 @@ def check_the_operator_door_is_the_profiles_bit_on_the_control_login(conn) -> st
     def as_role(role: str):
         try:
             with conn.transaction():
-                conn.execute(f"set local role {role}")
+                pgharness.become(conn, role)
                 got = (call(conn, "lab_control_operator", {"user_id": OPS})["operator"],
                        call(conn, "lab_control_reject", reject())["state"])
                 raise psycopg.Rollback()

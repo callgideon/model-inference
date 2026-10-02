@@ -103,7 +103,7 @@ def check_a_worker_claim_stays_refused_to_the_control_login(conn) -> str:
     """A route-only login never claims an import job (the I5 pool's work): 42501."""
     try:
         with conn.transaction(force_rollback=True):
-            conn.execute(f"set local role {LOGIN}")
+            pgharness.become(conn, LOGIN)     # bare `set role`: 42501 on Supabase, vacuously
             conn.execute(f"select infrx.{WORKER_CLAIM}('{{}}'::jsonb)")
             refused = None
     except psycopg.errors.InsufficientPrivilege as error:

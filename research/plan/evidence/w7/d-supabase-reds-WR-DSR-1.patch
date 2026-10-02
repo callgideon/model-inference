@@ -1,0 +1,22 @@
+diff --git a/tests/integration/mutants.py b/tests/integration/mutants.py
+index 872b41b6..ac61ee82 100644
+--- a/tests/integration/mutants.py
++++ b/tests/integration/mutants.py
+@@ -616,6 +616,17 @@ MUTANTS: tuple[Mutant, ...] = (
+            'return Path("/tmp") / f"{CONTAINER}.lock"',
+            "apps/infrx-api/tests/d/test_pgharness.py", "both_image_variants",
+            cases=("test_the_port_lock_is_shared_by_both_image_variants",)),
++    Mutant("e2m77", "AP-00 d-supabase-reds: become() switches to the role, not just grants it",
++           "apps/infrx-api/tests/d/pgharness.py",
++           '    conn.execute(f"set local role {role}")\n',
++           "    pass\n",
++           "apps/infrx-api/tests/d/test_pgharness.py", "role_is_assumed",
++           cases=("test_a_role_is_assumed_and_logged_in_as_on_either_image_and_put_back",)),
++    Mutant("e2m78", "AP-00 d-supabase-reds: login() puts a NOLOGIN role back to NOLOGIN",
++           "apps/infrx-api/tests/d/pgharness.py",
++           "{'login' if could else 'nologin'}", "login",
++           "apps/infrx-api/tests/d/test_pgharness.py", "role_is_assumed",
++           cases=("test_a_role_is_assumed_and_logged_in_as_on_either_image_and_put_back",)),
+ 
+     Mutant("e2m27", "r1 R-a: the template copy is owned by postgres, or migrations cannot run",
+            "tests/integration/harness.py",
