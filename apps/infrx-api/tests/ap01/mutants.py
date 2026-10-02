@@ -68,12 +68,13 @@ MUTATION_GUARDS = "test_identity__member_mutations_need_an_idempotency_key_and_t
 OPERATOR_CREATES = "test_identity__an_operator_creates_a_provider_once"
 ONLY_OPERATOR = "test_identity__only_an_operator_creates_providers"
 NEMO = "test_identity_pg__an_existing_provider_is_never_reassigned"
+STORE_FAILURE = "test_identity__a_failing_store_is_a_typed_503_never_a_500"
 REUSED = "test_identity__a_reused_key_with_another_request_is_409_and_writes_nothing"
 REPLAY = "test_identity__a_replay_answers_the_first_outcome_and_never_redoes_it"
 REFUSED = "test_identity__a_refused_mutation_claims_no_key"
 CLAIMED = "test_identity_pg__a_first_mutation_is_one_finished_operation_under_its_key"
 LAB_LOGIN = "test_identity_pg__the_lab_login_runs_the_identity_doors_and_reads_no_table"
-FAKE_ONLY = (KEY_DOOR, MUTATION_GUARDS, ONLY_OPERATOR)
+FAKE_ONLY = (KEY_DOOR, MUTATION_GUARDS, ONLY_OPERATOR, STORE_FAILURE)
 PG_ONLY = (NEMO, CLAIMED, LAB_LOGIN)
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -161,6 +162,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("validation_left_to_fastapi", "a malformed body is the R270 envelope, not {detail}",
        C, "                return render(exc, control.request_id(request))\n",
        "                raise\n", INVALID_BODY),
+    _m("store_failure_is_a_500", "LDP-F3: an untyped store failure is a 503",
+       C, "    elif _store_failure(exc):", "    elif False:", STORE_FAILURE),
     _m("field_error_echoes_input", "a field error carries the type, never the value",
        C, 'code=str(e.get("type", "invalid"))', 'code=str(e.get("input", "invalid"))',
        SECRETS, INVALID_BODY),

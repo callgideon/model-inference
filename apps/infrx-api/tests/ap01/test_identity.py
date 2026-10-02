@@ -586,3 +586,26 @@ def test_identity_pg__the_lab_login_runs_the_identity_doors_and_reads_no_table(p
 
 def world_db(world) -> str:
     return world.conn.info.dbname
+
+
+def test_identity__a_failing_store_is_a_typed_503_never_a_500(fake_world, caplog):
+    """Oracle: LDP-F3 on the identity routes - a store failure that is no domain refusal (the
+    Lab login missing a grant: `permission denied`) is 503 `dependency_unavailable`, never a
+    500 and never the database's message; the log names its type only."""
+    import psycopg
+
+    from infrx.state.identity import PgIdentity
+
+    async def refused():
+        raise psycopg.errors.InsufficientPrivilege("permission denied for function x")
+    world = fake_world
+    world.identity = PgIdentity(refused)
+
+    async def go():
+        async with api(world) as c:
+            return [await c.get(door, headers=as_(world, DEV_A)) for door in (
+                "/console/v1/me", "/lab/v1/workspaces")]
+    for answer in run(go()):
+        assert code(answer) == (503, "dependency_unavailable"), answer.text
+        assert "permission" not in answer.text
+    assert all("permission" not in r.getMessage() for r in caplog.records)
