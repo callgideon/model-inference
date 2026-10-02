@@ -1,0 +1,32 @@
+{
+  "task": "AP-06",
+  "lane": "api-publication",
+  "slice": "06a-06d (dev keys/dev wallet/fund/dev rate; operator proposals approve/reject; registry-derived /v1/models; rollback + route outage); routes unmounted until WR-AP06-1/2",
+  "activity": "review",
+  "at": "2026-10-02T04:05:00Z",
+  "head": "5be6dbb",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-publication",
+  "branch": "codex/w7-api-publication",
+  "owned_paths": ["apps/infrx-api/infrx/gateway/routes/lab_control.py", "apps/infrx-api/infrx/gateway/routes/operator_publication.py", "apps/infrx-api/infrx/gateway/routes/models.py", "apps/infrx-api/tests/ap06/", "research/plan/evidence/w7/api-publication-5be6dbb.md", "research/plan/evidence/coordinator/updates/AP-06-20261002T0405Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/ap06 on base lab_control.py/models.py without operator_publication.py (seam red)", "exit": 2, "summary": "2 collection errors; test_catalog.py on base models.py: 1 failed (routed alias), 3 passed"},
+    {"cmd": "INFRX_D_TASK=ap6 pytest -q tests/ap06 tests/l/control tests/g/test_route_conformance.py tests/g/test_catalog_truth.py tests/contracts/test_openapi_export.py -k 'not mutant_is_killed and not false_kill'", "exit": 1, "summary": "136 passed; 1 failed = pre-existing tests/l/control every-case guard at b05eb6f4 (AP-08 case uncovered)"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap6 pytest -q tests/ap06/test_mutants.py -k 'not pg_mutant'", "exit": 0, "summary": "40 passed: 36/36 unit mutants killed, list + every-case guard green"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap6 pytest -q tests/ap06/test_mutants.py -k pg_mutant", "exit": 0, "summary": "4/4 PG mutants killed (two-process race kills rebase-on-conflict)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck (pyright JSON)", "exit": 0, "summary": "457 errors (baseline 458), lane files 0 new"},
+    {"cmd": "tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "expected until WR-AP06-5"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 5, "pessimistic_h": 9, "confidence": "medium", "basis": "door, ap6 PG proofs and both mutant lists done (~6 h spent); remaining = review fixes, SR-AP06-1 adapter, composing WR-AP06-1/2/3, the WR-AP06-4 route/admission join with AP-05", "at": "2026-10-02T04:05:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-AP06-1 infrx/config.py DeploymentSettings: lab_publication: bool = False (LAB_PUBLICATION)",
+    "WR-AP06-2 infrx/lab/control/app.py: _compose builds Publication(control.operations, PgControlOps(connect)) when lab_publication and puts it on rt.lab_publication; create_app registers operator_publication; needs AP-01 SessionActors on the unit (else refuse to start)",
+    "WR-AP06-3 infrx/contracts/openapi/export.py: LAB_PUBLICATION=1 in _lab_control; FAMILIES r270 entries for /lab/v1/control/endpoints/ and /lab/v1/control/dev-wallet; regenerate artifacts + api-client",
+    "WR-AP06-4 (with AP-05) PgCatalogDirectory.published_aliases SQL; rt.routes from AP-05 endpoints; admission refuses a non-served alias without a ready route and the relay picks its upstream",
+    "WR-AP06-5 Makefile api-mutants: cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap6 uv run --frozen pytest -q tests/ap06/test_mutants.py"
+  ],
+  "schema_requests": ["SR-AP06-1 infrx.lab_control_dev_keys / lab_control_revoke_dev_key / lab_control_dev_wallet (SECURITY DEFINER, EXECUTE infrx_lab_control, audited)"],
+  "evidence": ["research/plan/evidence/w7/api-publication-5be6dbb.md"]
+}
