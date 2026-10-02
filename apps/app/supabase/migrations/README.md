@@ -18,4 +18,18 @@ Files 0027–0059 carry a header such as `-- LOCAL-ONLY (R151/R201): never appli
 2. A hosted apply needs R151's three conditions (R201): a KNOWN-GOOD re-proof through the new file, a reviewed edit of `EXPECTED_PENDING` in `infra/rollout/hosted-migrate.sh`, and an operator window. R264 governs how the window's commits are pushed.
 3. After the window, the plan records the new hosted level. The file itself does not change.
 
-Rulings: `research/plan/08-contracts-v1-encoding.md` §10 (R150, R151, R201, R264). Written by wave 6 lane plan-ledger (audit INT-06; coordinator decision 1 in audit §7).
+## Wave 7 allocation (R271)
+
+R271 allocates the wave-7 numbers by owner; for these files it replaces rule 1's "only the lab-sql/D10 lane writes SQL" and R150's next-free-at-merge. Each file carries the `LOCAL-ONLY` header, ships its `tests/d` proof on its lane's task-local key, and leaves `infra/rollout/hosted-migrate.sh` alone until its window (R269). After the wave merges, api-schema re-proves the whole 0060+ set on the merged tree.
+
+| Number | Content | Owner (lane, task) | Condition |
+|---|---|---|---|
+| 0060 | `infrx.control_operations`, `infrx.control_idempotency`, `control_op_*` functions (the `ControlOps` store, `infrx/state/control_ops.py`) | api-schema, AP-00 00d | always |
+| 0061 | model projects, artifacts, artifact uploads and imports, the serving-revision link | api-artifacts, AP-04 | always |
+| 0062 | deployment operations, readiness receipts, hosting allocations, dev endpoints | api-hosting, AP-05 (batch 2) | always |
+| 0063 | consumer data-use grants and capture settings | api-traces, AP-07 | only if 0057 does not already carry them |
+| 0064 | judge-API additions | api-judge, AP-08 | only if needed |
+
+A number whose condition does not hold stays unused (no placeholder file).
+
+Rulings: `research/plan/08-contracts-v1-encoding.md` §10 (R150, R151, R201, R264, R269, R271). Written by wave 6 lane plan-ledger (audit INT-06; coordinator decision 1 in audit §7).

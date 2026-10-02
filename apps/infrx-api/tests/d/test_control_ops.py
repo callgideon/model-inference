@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 from infrx.state import migrations
-from infrx.state.control_ops import PgControlOps
+from infrx.state.control_ops import PgControlOps, Started
 from infrx.state.jobstore import connector
 from psycopg.types.json import Jsonb
 
@@ -96,6 +96,7 @@ def check_two_instances_race_one_key_to_one_operation(conn) -> str:
     started = asyncio.run(race())
     failed = [repr(s) for s in started if isinstance(s, BaseException)]
     assert not failed, f"a racing start failed: {failed[:2]}"
+    started = [s for s in started if isinstance(s, Started)]
     ids = {s.operation.operation_id for s in started}
     assert len(ids) == 1 and sum(not s.replayed for s in started) == 1, \
         [(s.operation.operation_id, s.replayed) for s in started]
@@ -109,7 +110,10 @@ def check_the_sql_refuses_an_actor_python_never_sends(conn) -> str:
     """0060 checks the actor's audience itself (R270's four), so a caller that bypasses the
     pydantic `Actor` cannot store an operation no reader can classify."""
     body = {"kind": "artifact.verify", "idempotency_key": "raw", "input_hash": u.H1,
-            "actor": {"audience": "root", "provider_org_id": u.uid()}}
+            "retention_s": 86400, "actor": {"audience": "root", "provider_org_id": u.uid()}}
+    with conn.transaction(force_rollback=True):      # the same body, a known audience: stored
+        conn.execute("select infrx.control_op_start(%s)",
+                     (Jsonb({**body, "actor": {**body["actor"], "audience": "session"}}),))
     try:
         with conn.transaction(force_rollback=True):
             conn.execute("select infrx.control_op_start(%s)", (Jsonb(body),))

@@ -79,7 +79,7 @@ def test_0060_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monkey
     expect = plan.rsplit("plan digest: ", 1)[1].strip()
     assert migrate.apply_command(migrations.DIR, expect) == 0
     assert conn.execute("select max(version) from supabase_migrations.schema_migrations"
-                        ).fetchone()[0] == "0060"
+                        ).fetchall() == [("0060",)]
     after = d10.snapshot(conn)
 
     assert set(after["counts"]) - set(before["counts"]) == NEW_TABLES
@@ -97,7 +97,7 @@ def test_0060_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monkey
 
     pgharness.apply(DB, ((FILE, (migrations.DIR / FILE).read_text()),))
     assert d10.snapshot(conn) == after, "0060 is not re-runnable"
-    conn.execute(rollback_sql())
+    pgharness.apply(DB, (("rollback", rollback_sql()),))
     assert d10.snapshot(conn) == before, "the ROLLBACK lines do not restore the 0059 state"
     pgharness.apply(DB, ((FILE, (migrations.DIR / FILE).read_text()),))
     assert d10.snapshot(conn) == after, "rolling forward again is not the same 0060"

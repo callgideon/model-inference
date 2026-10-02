@@ -279,7 +279,7 @@ begin
   return infrx.control_op_doc(r);
 end $$;
 
--- {kinds: [..], limit? (default 25, at most 100)} -> [operation_id, ...]: the oldest
+-- {kinds: [..], limit (clamped to 1..100)} -> [operation_id, ...]: the oldest
 -- unfinished operations of those kinds that no live lease holds (queued, a dead worker's,
 -- or cancel_requested awaiting reconciliation).
 create or replace function infrx.control_op_pending(p_args jsonb) returns jsonb
@@ -290,7 +290,7 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
              and kind in (select jsonb_array_elements_text(p_args->'kinds'))
              and (lease_until is null or lease_until <= infrx.now())
            order by created_at, operation_id
-           limit least(greatest(coalesce((p_args->>'limit')::int, 25), 1), 100)) o;
+           limit least(greatest((p_args->>'limit')::int, 1), 100)) o;
 $$;
 
 -- ============================================================== privileges ===
