@@ -22,14 +22,27 @@ Mounted only when the composition put a `LabControl` on `rt.lab_control` (LAB_CO
 E3L-F4: `reject` is the platform operator's, on the same session door: the session user must
 be an operator (`ControlOperations.operator`, `profiles.is_operator`) before the body is read;
 no provider membership or `provider_org_id` is involved.
+
+AP-06 06a (R270, typed; mounted only over `rt.lab_publication`, `operator_publication`):
+
+    POST   /lab/v1/control/endpoints/{id}/keys?provider_org_id=     201 DevKeyIssued
+    GET    /lab/v1/control/endpoints/{id}/keys?provider_org_id=     {data, next_cursor}
+    DELETE /lab/v1/control/endpoints/{id}/keys/{key_id}?provider_org_id=   200 DevKey
+    GET    /lab/v1/control/dev-wallet?provider_org_id=              200 DevWallet
+
+`LabControl.issue_dev_key` on the endpoint's newest validated dev revision: a provider_dev
+credential scoped to that endpoint (catalog resolution keeps it off public listings and keeps
+consumer keys off the private one). The actor is `rt.actors`' verified session; membership and
+capability are `LabAccess`'s, re-read on every call, before any Idempotency-Key is recorded
+in the provider's scope. The secret is returned once; a replay names the key without it.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, Sequence
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...contracts import errors
@@ -40,6 +53,8 @@ if TYPE_CHECKING:
     from ...lab.access import LabAccess
 
 CONTROL_PREFIX = "/lab/v1/control"
+#: R270: every new control mutation's key (AP-06's routes here and in operator_publication)
+IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=200)]
 DIGEST = r"^sha256:[0-9a-f]{64}$"
 
 
@@ -142,6 +157,7 @@ def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabCon
     path parameters and `response_model`s are FastAPI parameters the OpenAPI export
     documents - behind `lab_auth.refusal_route`, which keeps the `{refusal}` wire: the
     identity is a dependency, so it answers before any body is validated."""
+    _dev_routes(app, rt)
     control = control if control is not None else getattr(rt, "lab_control", None)
     if control is None:
         return None
@@ -205,3 +221,103 @@ def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabCon
     route("POST", "/proposals", propose, Proposal, 201)
     route("POST", "/proposals/{proposal_id}/reject", reject, Proposal)
     return control
+
+
+class DevKeyName(Record):
+    name: str = Field(default="dev", min_length=1, max_length=200)
+
+
+class DevKeyIssued(Record):
+    """`secret` only on the call that issued it; a replay carries null (lost: revoke and
+    issue another - never a re-reveal)."""
+
+    key_id: str
+    endpoint_id: str
+    prefix: str
+    secret: str | None
+    secret_returned: bool
+    replayed: bool
+
+
+def _dev_routes(app: FastAPI, rt: Any) -> None:
+    """AP-06 06a over `rt.lab_publication` (nothing without one)."""
+    pub = getattr(rt, "lab_publication", None)
+    if pub is None:
+        return
+    from fastapi import APIRouter
+
+    from ...contracts import api
+    from ...contracts.v2.records import DeploymentState, Environment
+    from .. import control as r270
+    from .operator_publication import ERRORS, DevKey, DevWallet, once
+
+    domain = pub.operations.control
+    router = APIRouter(route_class=r270.R270Route, responses=ERRORS)
+    base = CONTROL_PREFIX + "/endpoints/{endpoint_id}/keys"
+
+    async def member(request: Request, provider_org_id: str, capability: Cap) -> api.Actor:
+        actor = await rt.actors.actor(request)
+        if actor.audience != "session" or not actor.user_id:
+            raise errors.InvalidApiKey("an API key is not a Lab session")
+        await domain.access.require(actor.user_id, provider_org_id, capability)
+        return actor.model_copy(update={"provider_org_id": provider_org_id})
+
+    def credentials():
+        if pub.credentials is None:
+            raise errors.DependencyUnavailable("dev credential reads are not composed")
+        return pub.credentials
+
+    @router.post(base, response_model=DevKeyIssued, status_code=201, operation_id="issueDevKey")
+    async def issue(request: Request, endpoint_id: str, body: DevKeyName, key: IdempotencyKey,
+                    provider_org_id: str = Query()):
+        actor = await member(request, provider_org_id, Cap.manage_dev_deployment)
+        ready = [d for d in await pub.operations.reads.provider_deployments(provider_org_id)
+                 if d.endpoint_id == endpoint_id and d.environment is Environment.dev
+                 and d.state is DeploymentState.ready_private]
+        if not ready:
+            raise errors.NotFound("no validated dev revision on this endpoint")
+        revision = max(ready, key=lambda d: d.created_at).deployment_revision_id
+
+        async def work(op):
+            issued = await domain.issue_dev_key(actor.user_id, provider_org_id, revision,
+                                                body.name)
+            await pub.ops.advance(op.operation_id, op.fence,
+                                  f"issued:{issued.key_id}:{issued.prefix}")
+            return DevKeyIssued(key_id=issued.key_id, endpoint_id=endpoint_id,
+                                prefix=issued.prefix, secret=issued.secret,
+                                secret_returned=True, replayed=False)
+
+        async def done(op):
+            kind, _, rest = (op.phase or "").partition(":")
+            key_id, _, prefix = rest.partition(":")
+            return None if kind != "issued" else DevKeyIssued(
+                key_id=key_id, endpoint_id=endpoint_id, prefix=prefix, secret=None,
+                secret_returned=False, replayed=True)
+
+        issued, _ = await once(pub.ops, actor, "dev_key.issue", key,
+                               {"endpoint_id": endpoint_id, "name": body.name}, work, done,
+                               r270.request_id(request))
+        return r270.ok(issued, 200 if issued.replayed else 201)
+
+    @router.get(base, response_model=api.ListPage[DevKey], operation_id="listDevKeys")
+    async def keys(request: Request, endpoint_id: str, provider_org_id: str = Query()):
+        await member(request, provider_org_id, Cap.manage_dev_deployment)
+        return r270.ok(api.ListPage[DevKey](
+            data=tuple(await credentials().keys(provider_org_id, endpoint_id))))
+
+    @router.delete(base + "/{key_id}", response_model=DevKey, operation_id="revokeDevKey")
+    async def revoke(request: Request, endpoint_id: str, key_id: str,
+                     provider_org_id: str = Query(),
+                     key: str | None = Header(None, alias="Idempotency-Key", max_length=200)):
+        actor = await member(request, provider_org_id, Cap.manage_dev_deployment)
+        return r270.ok(await credentials().revoke(provider_org_id, endpoint_id, key_id,
+                                                  actor=f"lab:{actor.user_id}",
+                                                  idempotency_key=key))
+
+    @router.get(CONTROL_PREFIX + "/dev-wallet", response_model=DevWallet,
+                operation_id="getDevWallet")
+    async def wallet(request: Request, provider_org_id: str = Query()):
+        await member(request, provider_org_id, Cap.manage_dev_deployment)
+        return r270.ok(await credentials().wallet(provider_org_id))
+
+    app.include_router(router)
