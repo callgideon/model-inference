@@ -56,4 +56,4 @@ def register(app, rt) -> None:
         return control.ok(ProviderCreated(provider=provider, administrator=member),
                           201 if created else 200)
 
-    app.include_router(router)
+    app.router.routes.extend(router.routes)     # the app's own table, as every router (lab_datasets)

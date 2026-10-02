@@ -161,4 +161,4 @@ def register(app, rt) -> None:
             grant = None
         return control.ok(availability(await facade.settings(), grant, facade.captcha_required))
 
-    app.include_router(router)
+    app.router.routes.extend(router.routes)     # the app's own table, as every router (lab_datasets)

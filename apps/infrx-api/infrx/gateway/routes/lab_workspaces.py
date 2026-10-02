@@ -125,4 +125,4 @@ def register(app, rt) -> None:
             raise errors.Forbidden("a member never changes their own membership")
         return control.ok(await identity.revoke_member(provider_org_id, str(user_id)))
 
-    app.include_router(router)
+    app.router.routes.extend(router.routes)     # the app's own table, as every router (lab_datasets)
