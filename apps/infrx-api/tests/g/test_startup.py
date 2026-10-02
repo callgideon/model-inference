@@ -905,6 +905,8 @@ def test_lab_data__the_datasets_and_checkpoint_surfaces_are_composed_only_when_e
     assert type(x.store) is PgLabDataStore and x.objects is objects
     from infrx.state.lab_data import PgLabImportJobs          # WR-C5-N4-ROUTE: 0051's queue
     assert type(x.jobs) is PgLabImportJobs and x.jobs._connect is x.store._connect
+    from infrx.state.control_ops import PgControlOps          # WR-AP10D-1: from-traces ops
+    assert type(x.ops) is PgControlOps and x.ops._connect is x.store._connect
     assert outcome(lambda: pilot._lab_checkpoints(settings(), None)) == {}
     for keys in ("", "not a directory"):
         refused = outcome(lambda: pilot._lab_checkpoints(

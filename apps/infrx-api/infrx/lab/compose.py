@@ -116,10 +116,12 @@ def lab_surfaces(settings, connect, objects=None) -> dict:
     if deployment.lab_traces:
         lab["lab_traces"] = lab_traces(settings, connect, sessions, access)
     if deployment.lab_datasets:           # WR-N4-1 over D7, L2 and the Lab objects (R182)
+        from ..state.control_ops import PgControlOps
         from ..state.lab_data import PgLabDataStore, PgLabImportJobs
         from ..gateway.routes.lab_datasets import LabDatasets
         lab["lab_datasets"] = LabDatasets(sessions, access, PgLabDataStore(connect), objects,
-                                          PgLabImportJobs(connect))    # WR-C5-N4-ROUTE (0051)
+                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE (0051)
+                                          PgControlOps(connect))       # WR-AP10D-1 (0060)
     return {**lab, **lab_evaluations_pipelines_releases(deployment, connect, sessions, access,
                                                         objects, teachers)}
 
