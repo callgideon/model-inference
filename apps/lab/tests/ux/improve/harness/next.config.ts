@@ -6,11 +6,12 @@ import type { NextConfig } from "next";
 
 const lab = resolve(import.meta.dirname, "../../../..");
 // Turbopack refuses files outside its root; a mutant runner's copy links node_modules to the real
-// install, so the root is the deepest directory holding both.
-const modules = realpathSync(resolve(lab, "node_modules")).split(sep);
+// install, and the Lab's proxy imports the linked generated client (packages/api-client, AP-09), so
+// the root is the deepest directory holding all three (as tests/ux/harness/next.config.ts).
+const held = ["node_modules", "node_modules/@infrx/api-client"].map((p) => realpathSync(resolve(lab, p)).split(sep));
 const parts = lab.split(sep);
 let depth = 0;
-while (depth < parts.length && parts[depth] === modules[depth]) depth += 1;
+while (depth < parts.length && held.every((h) => parts[depth] === h[depth])) depth += 1;
 const root = parts.slice(0, depth).join(sep) || sep;
 
 const config: NextConfig = {
