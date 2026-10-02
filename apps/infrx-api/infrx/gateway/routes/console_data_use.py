@@ -8,66 +8,34 @@
 
 The actor is `rt.actors`' (a verified session); the organization is the actor's. Mounted only
 when the composition put a `DataUse` on `rt.data_use` (off by default). Every failure is the R270
-envelope, a body that does not validate included (`EnvelopeRoute`: route-local, so the other
-families keep their own 422s). Replays are state-based - the same decision is answered from the
-current state without a new version - so no `Idempotency-Key` store is needed here.
+envelope, a body that does not validate included (`control.R270Route`). Replays are state-based -
+the same decision is answered from the current state without a new version - so no
+`Idempotency-Key` store is needed here.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
+from fastapi.responses import JSONResponse
 
 from ...console import data_use
-from ...contracts import api, errors
+from ...contracts import api
 from .. import control
-
-log = logging.getLogger("infrx.gateway.console_data_use")
 
 DATA_USE_PATH = "/console/v1/data-use"
 KEYS_PATH = "/console/v1/keys"
 GRANTS_PATH = "/console/v1/data-grants"
 
 
-def invalid(exc: RequestValidationError, rid: str) -> JSONResponse:
-    """A body or parameter that does not validate: 422 with the fields, never the input."""
-    body = api.envelope(errors.InvalidRequest("the request does not validate"), rid)
-    fields = tuple(api.FieldError(field=".".join(str(p) for p in e["loc"][1:]) or "body",
-                                  code=e["type"], message=e["msg"]) for e in exc.errors())
-    body = body.model_copy(update={"error": body.error.model_copy(update={"field_errors": fields})})
-    return JSONResponse(body.model_dump(mode="json"), status_code=422, headers=control.NO_STORE)
-
-
-class EnvelopeRoute(APIRoute):
-    def get_route_handler(self):
-        handler = super().get_route_handler()
-
-        async def route(request: Request) -> Response:
-            try:
-                return await handler(request)
-            except RequestValidationError as exc:
-                return invalid(exc, control.request_id(request))
-        return route
-
-
 def register(app: FastAPI, rt: Any) -> data_use.DataUse | None:
     service = getattr(rt, "data_use", None)
     if service is None:
         return None
-    router = APIRouter(route_class=EnvelopeRoute)
+    router = APIRouter(route_class=control.R270Route)
 
     async def answer(request: Request, work, status: int = 200) -> JSONResponse:
-        rid = control.request_id(request)
-        try:
-            result = await work(await rt.actors.actor(request))
-        except Exception as exc:                       # noqa: BLE001 - every failure is an envelope
-            if not isinstance(exc, errors.DomainError):
-                log.exception("data-use request %s failed", rid)
-            return control.error_response(exc, rid)
+        result = await work(await rt.actors.actor(request))
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], bool):
             result, created = result
             status = 201 if created else 200

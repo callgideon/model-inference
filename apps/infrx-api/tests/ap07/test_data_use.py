@@ -218,6 +218,23 @@ def test_data_use__evaluation_consent_needs_full_capture(pg_world):
     assert consent_rows(w, w.C1) == []
 
 
+
+def test_data_use__a_failure_is_an_envelope_never_a_trace():
+    """Oracle (R270, `control.R270Route`): a service that breaks answers 500 in the envelope,
+    no-store, with the request id echoed and no exception text; a refused actor is 401."""
+    class Broken:
+        async def read(self, actor):
+            raise RuntimeError("secret-internal-detail")
+    app = FastAPI()
+    routes.register(app, SimpleNamespace(data_use=Broken(),
+                                         actors=control.StaticActors(session("u", "o"))))
+    answer = TestClient(app, raise_server_exceptions=False).get(
+        routes.DATA_USE_PATH, headers={"X-Request-Id": "rid-ap7"})
+    assert answer.status_code == 500 and answer.headers.get("cache-control") == "no-store"
+    assert answer.json()["error"]["request_id"] == "rid-ap7"
+    assert "secret-internal-detail" not in answer.text
+    assert client(None).get(routes.DATA_USE_PATH).status_code == 401
+
 # --- who decides -----------------------------------------------------------------------------
 def test_data_use__only_the_grantors_owner_decides(pg_world):
     """Oracle: no session 401; a key session (any audience but a verified web session) 403;
