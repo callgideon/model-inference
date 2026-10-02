@@ -718,23 +718,28 @@ def test_ap05__a_real_in_flight_request_finishes_before_its_engine_stops(pg_worl
     import httpx
     w = pg_world
     deployment = ready(w)
-    httpx.post(f"http://127.0.0.1:{ENGINE_PORT}/_control", json={"delta_gap_s": 0.4},
-               timeout=5)
-    answer: dict = {}
+    # a 15 s generation: longer than a stop's SIGTERM grace (10 s), so only a drain lets it end
+    httpx.post(f"http://127.0.0.1:{ENGINE_PORT}/_control",
+               json={"delta_gap_s": 0.25, "text": "a person walks in. " * 32}, timeout=5)
+    got: list[bytes] = []
 
     def stream():
-        with httpx.stream("POST", f"http://127.0.0.1:{ENGINE_PORT}/v1/chat/completions",
-                          json={"model": PROFILE.served_model_name, "stream": True,
-                                "messages": [{"role": "user", "content": "hi"}]},
-                          timeout=60) as r:
-            answer["body"] = b"".join(r.iter_bytes())
+        try:
+            with httpx.stream("POST", f"http://127.0.0.1:{ENGINE_PORT}/v1/chat/completions",
+                              json={"model": PROFILE.served_model_name, "stream": True,
+                                    "messages": [{"role": "user", "content": "hi"}]},
+                              timeout=60) as r:
+                for chunk in r.iter_bytes():
+                    got.append(chunk)
+        except httpx.HTTPError:
+            got.append(b"<cut>")
     client = threading.Thread(target=stream)
     client.start()
     time.sleep(0.5)
     retire = w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key()).json()
     w.drive()
-    client.join(30)
-    assert answer["body"].rstrip().endswith(b"data: [DONE]")    # not cut by the teardown
+    client.join(60)
+    assert b"".join(got).rstrip().endswith(b"data: [DONE]")      # not cut by the teardown
     assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
     with pytest.raises(httpx.ConnectError):                    # its process group is gone
         httpx.get(f"http://127.0.0.1:{ENGINE_PORT}/v1/models", timeout=5)
