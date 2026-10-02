@@ -121,6 +121,8 @@ def test_ap04__membership_and_role_decide_every_door(world) -> None:
     viewer = w.call("POST", PROJECTS, "viewer_a", w.key(), json={"name": "V", "slug": "v"})
     assert viewer.status_code == 403
     assert w.call("GET", PROJECTS, "viewer_a").status_code == 200
+    assert w.call("POST", UPLOADS, "viewer_a", w.key(), json={
+        "project_id": p["project_id"], "files": manifest(marlin_files())}).status_code == 403
     foreign = w.call("GET", f"{PROJECTS}/{p['project_id']}/revisions", "dev_b")
     assert foreign.status_code == 404
     assert w.call("GET", PROJECTS, "outsider").status_code == 404
@@ -148,11 +150,12 @@ def test_ap04__refusals_are_the_r270_envelope(world) -> None:
     w = world
     missing = w.call("POST", PROJECTS, "dev_a", json={"name": "M", "slug": "m"})
     body = missing.json()
-    assert missing.status_code == 422 and body["error"]["code"] == "invalid_request"
+    assert missing.status_code == 422 and set(body) == {"error"}, body
+    assert body["error"]["code"] == "invalid_request"
     assert any("idempotency-key" in e["field"].lower() for e in body["error"]["field_errors"])
     bad = w.call("POST", PROJECTS, "dev_a", w.key(),
                  json={"name": "M", "slug": "NOT A SLUG", "role": "administrator"})
-    assert bad.status_code == 422 and "NOT A SLUG" not in bad.text
+    assert bad.status_code == 422 and "NOT A SLUG" not in bad.text and "error" in bad.json()
     assert {e["field"] for e in bad.json()["error"]["field_errors"]} >= {"body.slug", "body.role"}
     assert w.call("GET", PROJECTS).json()["data"] == []
 
@@ -168,6 +171,9 @@ def test_ap04__reordered_resumed_parts_verify_into_an_artifact(world) -> None:
         put(w, up["upload_id"], path, files[path])
     first = "model-00001-of-00002.safetensors"
     put(w, up["upload_id"], first, files[first])           # resumed: a fresh URL, same bytes
+    undeclared = w.call("POST", f"{UPLOADS}/{up['upload_id']}/parts", json={
+        "relative_path": "modeling_marlin.json"})
+    assert undeclared.status_code == 422, "a URL was issued for an undeclared path"
     r = complete(w, up)
     assert r.status_code == 202 and r.headers["location"] == \
         f"/lab/v1/operations/{r.json()['operation_id']}"
@@ -177,7 +183,9 @@ def test_ap04__reordered_resumed_parts_verify_into_an_artifact(world) -> None:
     assert w.worker() == 1
     done = operation(w, op["operation_id"])
     assert done["state"] == "succeeded" and done["error"] is None
-    art = w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}", "viewer_a").json()
+    got = w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}", "viewer_a")
+    assert got.status_code == 200, got.text
+    art = got.json()
     assert art["source"] == "upload" and art["compatibility"]["supported"] is True
     assert {f["relative_path"]: f["sha256"] for f in art["files"]} == \
         {e["relative_path"]: e["sha256"] for e in manifest(files)}
@@ -276,12 +284,17 @@ def test_ap04__a_worker_killed_while_hashing_is_fenced_out(world) -> None:
     for path, blob in files.items():
         put(w, up["upload_id"], path, blob)
     op = complete(w, up).json()
+    from infrx.contracts import errors
     stale = run(w.ops.lease(op["operation_id"], "killed-worker", 600))
     assert stale == 1 and w.worker("second") == 0, "a live lease was taken over"
     w.advance(601)
-    assert w.worker("second") == 1
+    newer = run(w.ops.lease(op["operation_id"], "second", 600))
+    assert newer == 2
+    with pytest.raises(errors.StaleLease):
+        run(w.ops.advance(op["operation_id"], stale, "hashing:late"))
+    w.advance(601)
+    assert w.worker("third") == 1
     assert operation(w, op["operation_id"])["state"] == "succeeded"
-    from infrx.contracts import errors
     with pytest.raises(errors.StaleLease):
         run(w.ops.finish(op["operation_id"], stale, "failed"))
     assert w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}").status_code == 200
@@ -310,6 +323,20 @@ def test_ap04__a_retry_after_the_artifact_write_keeps_one_artifact(world) -> Non
     assert w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}").status_code == 200
 
 
+def test_ap04__a_session_moves_only_from_the_state_it_was_read_in(world) -> None:
+    """The intake rows are compare-and-set on `state`: a sweep holding a stale `open` copy
+    never expires a session a completion already moved."""
+    from infrx.contracts import errors
+    from infrx.lab.artifacts.store import Upload
+    w = world
+    up = open_upload(w, marlin_files(), project(w)["project_id"])
+    stale = run(w.store.get(Upload, w.A, up["upload_id"]))
+    assert complete(w, up).status_code == 202
+    with pytest.raises(errors.StateConflict):
+        run(w.store.update(stale.model_copy(update={"state": "expired"}), expected_state="open"))
+    assert run(w.store.get(Upload, w.A, up["upload_id"])).state == "verifying"
+
+
 def test_ap04__an_operation_is_read_only_inside_its_workspace(world) -> None:
     w = world
     files = marlin_files()
@@ -329,7 +356,9 @@ def test_ap04__a_pinned_import_fetches_and_verifies_every_file(world) -> None:
     op = r.json()
     assert w.worker() == 1
     assert operation(w, op["operation_id"])["state"] == "succeeded"
-    art = w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}").json()
+    got = w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}")
+    assert got.status_code == 200, got.text
+    art = got.json()
     assert (art["source"], art["source_repo"], art["source_commit"]) == ("import", REPO, COMMIT)
     assert len(w.stub.seen) == len(marlin_files())
     assert all(f"/resolve/{COMMIT}/" in url for url in w.stub.seen)
