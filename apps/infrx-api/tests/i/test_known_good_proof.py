@@ -328,9 +328,9 @@ def test_ops_recover__hosted_migrate_expects_exactly_the_migrations_after_its_an
     files = sorted(p.name for p in (support.REPO / MIG).glob("[0-9][0-9][0-9][0-9]_*.sql"))
     expected = re.search(r'^EXPECTED_PENDING="([^"]*)"', text, re.M)[1].split(", ")
     after = [f for f in files if f[:4] > at]
-    # R269/R271: a wave-7 file (0060-0064, migrations/README.md) stays LOCAL-ONLY after the
+    # R269/R271: a wave-7 file (0060-0066, migrations/README.md) stays LOCAL-ONLY after the
     # window's set until its own window edits these lines
     assert [f[:4] for f in after[:len(expected)]] == expected, (expected, after)
-    assert all("0060" <= f[:4] <= "0064" for f in after[len(expected):]), after[len(expected):]
+    assert all("0060" <= f[:4] <= "0066" for f in after[len(expected):]), after[len(expected):]
     newest = after[len(expected) - 1][:-4]
     assert f'case "$POST" in *"{newest[:4]} {newest[5:]}"$\'\\n\'"nothing pending") ;;' in text
