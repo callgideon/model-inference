@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiSource } from "@/lib/request-api";
+import { readDataUse } from "@/lib/services/data-use";
 import { consumerSession } from "@/lib/services/server";
+import { setKeyCapture, withdrawDataGrant } from "./actions";
+import { DataUseSection } from "./data-use";
 import { settingsModel } from "./view-model";
 
 export const metadata = { title: "Settings · infrx" };
@@ -12,6 +16,8 @@ export default async function SettingsPage() {
   const { context } = await consumerSession();
   if (context.state === "signed_out") redirect("/login");
   const model = settingsModel(context);
+  // C-07: only a ready account has an organization and keys to decide data use for.
+  const dataUse = context.state === "ready" ? await readDataUse((await apiSource()).api) : null;
 
   return (
     <>
@@ -82,6 +88,10 @@ export default async function SettingsPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {context.state === "ready" && dataUse !== null ? (
+        <DataUseSection read={dataUse} suspended={context.account.suspended} save={setKeyCapture} withdraw={withdrawDataGrant} />
+      ) : null}
 
       <p className="mt-6 text-sm text-muted-foreground">
         API keys are managed on{" "}

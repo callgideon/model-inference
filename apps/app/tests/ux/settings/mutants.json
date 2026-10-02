@@ -1,0 +1,569 @@
+{
+  "_comment": "ux-app-3 (R32): one single-edit mutant per decision the UXS cases claim; node tests/ux/settings/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
+  "mutants": [
+    {
+      "id": "UXS-X01",
+      "what": "a 401 on the read is shown as unavailable, not as a session that ended",
+      "file": "lib/services/data-use/index.ts",
+      "find": "      if (answer.error.status === 401) return { kind: \"signed_out\" };\n",
+      "replace": "",
+      "cases": [
+        "UXS-02 a failed read is an honest state: unavailable, forbidden or signed out - never Off, never an empty list"
+      ]
+    },
+    {
+      "id": "UXS-X02",
+      "what": "a non-owner's refusal is shown as an outage",
+      "file": "lib/services/data-use/index.ts",
+      "find": "answer.error.code === \"forbidden\" ? { kind: \"forbidden\" }",
+      "replace": "answer.error.code === \"never\" ? { kind: \"forbidden\" }",
+      "cases": [
+        "UXS-02 a failed read is an honest state: unavailable, forbidden or signed out - never Off, never an empty list"
+      ]
+    },
+    {
+      "id": "UXS-X03",
+      "what": "an unknown capture mode is shown",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  if (typeof value !== \"string\" || !MODES.includes(value)) throw new Malformed(\"mode\");\n",
+      "replace": "",
+      "cases": [
+        "UXS-02 a failed read is an honest state: unavailable, forbidden or signed out - never Off, never an empty list"
+      ]
+    },
+    {
+      "id": "UXS-X04",
+      "what": "an unknown grant state is shown",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  if (!GRANT_STATES.includes(g.state)) throw new Malformed(\"grant state\");\n",
+      "replace": "",
+      "cases": [
+        "UXS-02 a failed read is an honest state: unavailable, forbidden or signed out - never Off, never an empty list"
+      ]
+    },
+    {
+      "id": "UXS-X05",
+      "what": "a failed read is rendered as an empty, ready record",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  } catch {\n    return { kind: \"unavailable\" };",
+      "replace": "  } catch {\n    return { kind: \"ready\", value: { consentVersion: 0, retentionDays: 30, keys: [], grants: [] } };",
+      "cases": [
+        "UXS-02 a failed read is an honest state: unavailable, forbidden or signed out - never Off, never an empty list"
+      ]
+    },
+    {
+      "id": "UXS-X06",
+      "what": "an undecided consent submits a zero retention",
+      "file": "lib/services/data-use/index.ts",
+      "find": "doc.consent.retention_days ?? DEFAULT_RETENTION_DAYS",
+      "replace": "doc.consent.retention_days ?? 0",
+      "cases": [
+        "UXS-01 the data-use record is read once from the API as the signed-in session and shown exactly"
+      ]
+    },
+    {
+      "id": "UXS-X07",
+      "what": "a key's effective mode is shown as its chosen mode",
+      "file": "lib/services/data-use/index.ts",
+      "find": "effectiveMode: mode(k.effective_mode)",
+      "replace": "effectiveMode: mode(k.mode)",
+      "cases": [
+        "UXS-01 the data-use record is read once from the API as the signed-in session and shown exactly",
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X08",
+      "what": "capture is sent with evaluation consent",
+      "file": "lib/services/data-use/index.ts",
+      "find": "retention_days: days as number, evaluation_consent: false }",
+      "replace": "retention_days: days as number, evaluation_consent: true }",
+      "cases": [
+        "UXS-03 a capture change is one PUT with the submission's Idempotency-Key, and a retry sends the same key"
+      ]
+    },
+    {
+      "id": "UXS-X09",
+      "what": "a capture change mints its own Idempotency-Key (a retry is a new submission)",
+      "file": "lib/services/data-use/index.ts",
+      "find": "evaluation_consent: false },\n      idempotencyKey: f.idempotency_key as string,",
+      "replace": "evaluation_consent: false },\n      idempotencyKey: crypto.randomUUID(),",
+      "cases": [
+        "UXS-03 a capture change is one PUT with the submission's Idempotency-Key, and a retry sends the same key"
+      ]
+    },
+    {
+      "id": "UXS-X10",
+      "what": "a withdrawal is sent without its Idempotency-Key",
+      "file": "lib/services/data-use/index.ts",
+      "find": "      params: { grant_id: f.grant_id },\n      idempotencyKey: f.idempotency_key as string,\n",
+      "replace": "      params: { grant_id: f.grant_id },\n",
+      "cases": [
+        "UXS-06 withdrawing a grant is one DELETE with its Idempotency-Key and answers the revoked grant"
+      ]
+    },
+    {
+      "id": "UXS-X11",
+      "what": "a smuggled field (an organization, evaluation consent, a provider) passes the allowlist",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  return entries.every(([name]) => allowed.includes(name)) ? Object.fromEntries(entries) : null;",
+      "replace": "  return Object.fromEntries(entries);",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call",
+        "UXS-06 withdrawing a grant is one DELETE with its Idempotency-Key and answers the revoked grant"
+      ]
+    },
+    {
+      "id": "UXS-X12",
+      "what": "an unknown mode is submitted",
+      "file": "lib/services/data-use/index.ts",
+      "find": " || typeof f.mode !== \"string\" || !MODES.includes(f.mode)) {",
+      "replace": ") {",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call"
+      ]
+    },
+    {
+      "id": "UXS-X13",
+      "what": "a retention over 90 days is submitted",
+      "file": "lib/services/data-use/index.ts",
+      "find": "(days as number) > 90",
+      "replace": "(days as number) > 900",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call"
+      ]
+    },
+    {
+      "id": "UXS-X14",
+      "what": "a negative consent version is submitted",
+      "file": "lib/services/data-use/index.ts",
+      "find": "(version as number) < 0 || ",
+      "replace": "",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call"
+      ]
+    },
+    {
+      "id": "UXS-X15",
+      "what": "a fractional consent version is submitted",
+      "file": "lib/services/data-use/index.ts",
+      "find": "!Number.isInteger(version) || ",
+      "replace": "typeof version !== \"number\" || ",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call"
+      ]
+    },
+    {
+      "id": "UXS-X16",
+      "what": "a submission without an idempotency key reaches the API",
+      "file": "lib/services/data-use/index.ts",
+      "find": "const idempotencyKey = (value: unknown) => typeof value === \"string\" && value !== \"\" && value.length <= MAX_IDEMPOTENCY_KEY_CHARS;",
+      "replace": "const idempotencyKey = (value: unknown) => value === undefined || typeof value === \"string\";",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call",
+        "UXS-06 withdrawing a grant is one DELETE with its Idempotency-Key and answers the revoked grant"
+      ]
+    },
+    {
+      "id": "UXS-X17",
+      "what": "a malformed key id reaches the API",
+      "file": "lib/services/data-use/index.ts",
+      "find": "typeof f.key_id !== \"string\" || !UUID.test(f.key_id) ||",
+      "replace": "typeof f.key_id !== \"string\" ||",
+      "cases": [
+        "UXS-04 a malformed capture submission is refused before any call"
+      ]
+    },
+    {
+      "id": "UXS-X18",
+      "what": "a malformed grant id reaches the API",
+      "file": "lib/services/data-use/index.ts",
+      "find": "typeof f.grant_id !== \"string\" || !UUID.test(f.grant_id)) return",
+      "replace": "typeof f.grant_id !== \"string\") return",
+      "cases": [
+        "UXS-06 withdrawing a grant is one DELETE with its Idempotency-Key and answers the revoked grant"
+      ]
+    },
+    {
+      "id": "UXS-X19",
+      "what": "an ended session reads as an unconfirmed change",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  if (error.status === 401) return fail(\"forbidden\", \"your session has ended; sign in again\");\n",
+      "replace": "",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe"
+      ]
+    },
+    {
+      "id": "UXS-X20",
+      "what": "the API's own message and code reach the page",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  return message === undefined ? fail(\"dependency_unavailable\", UNCONFIRMED) : fail(code as ErrorCode, message);",
+      "replace": "  return error.kind === \"error\" ? fail(error.code as ErrorCode, error.message) : fail(\"dependency_unavailable\", UNCONFIRMED);",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe"
+      ]
+    },
+    {
+      "id": "UXS-X21",
+      "what": "a consent that moved reads as an unconfirmed change, not 'reload'",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  state_conflict: \"your data-use settings changed since this page loaded; reload and choose again\",\n",
+      "replace": "",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe"
+      ]
+    },
+    {
+      "id": "UXS-X22",
+      "what": "a suspended account reads as an unconfirmed change",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  org_suspended: \"this account is suspended; capture cannot be changed\",\n",
+      "replace": "",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe"
+      ]
+    },
+    {
+      "id": "UXS-X23",
+      "what": "an unknown key or grant reads as an unconfirmed change",
+      "file": "lib/services/data-use/index.ts",
+      "find": "  if (code === \"not_found\") return fail(\"not_found\", notFound);\n",
+      "replace": "",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe",
+        "UXS-06 withdrawing a grant is one DELETE with its Idempotency-Key and answers the revoked grant"
+      ]
+    },
+    {
+      "id": "UXS-X24",
+      "what": "an unconfirmed change does not say a retry is safe",
+      "file": "lib/services/data-use/index.ts",
+      "find": "const UNCONFIRMED = \"the change was not confirmed; try again - the same choice is applied once\";",
+      "replace": "const UNCONFIRMED = \"the change failed\";",
+      "cases": [
+        "UXS-05 a refused change says why in the App's words; an unconfirmed one says retrying is safe"
+      ]
+    },
+    {
+      "id": "UXS-X25",
+      "what": "a cross-site submission reaches the API",
+      "file": "lib/services/data-use/index.ts",
+      "find": "    if (!sameOrigin(await deps.headers())) return fail(\"forbidden\", \"this change must be made from the console itself\");\n",
+      "replace": "",
+      "cases": [
+        "UXS-07 the settings actions refuse a cross-site submission and refresh Settings only after an acknowledged change"
+      ]
+    },
+    {
+      "id": "UXS-X26",
+      "what": "a refused change refreshes Settings as if it applied",
+      "file": "lib/services/data-use/index.ts",
+      "find": "    if (result.ok) deps.revalidate(\"/settings\");",
+      "replace": "    deps.revalidate(\"/settings\");",
+      "cases": [
+        "UXS-07 the settings actions refuse a cross-site submission and refresh Settings only after an acknowledged change"
+      ]
+    },
+    {
+      "id": "UXS-X27",
+      "what": "a failed read says capture is Off",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "          Data-use settings are unavailable right now.{\" \"}",
+      "replace": "          Trace capture is Off. Data-use settings are unavailable right now.{\" \"}",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X28",
+      "what": "a failed read renders as no keys and no grants",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "    case \"unavailable\":\n      return (",
+      "replace": "    case \"unavailable\":\n      return read.kind === \"unavailable\" ? <p>You have no active keys.</p> : (",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X29",
+      "what": "an ended session is worded as an API-key problem",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "          Your session has ended.{\" \"}",
+      "replace": "          Your API key is invalid.{\" \"}",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X30",
+      "what": "an ended session offers no way to sign in",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "href=\"/login\"",
+      "replace": "href=\"/settings\"",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X31",
+      "what": "a non-owner is shown an empty record",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "      return <p role=\"status\">Only the account&apos;s owner can see and change its data use.</p>;",
+      "replace": "      return <p role=\"status\">You have no data-use settings.</p>;",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X32",
+      "what": "a suspended account is not told why capture cannot change",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "      {suspended ? <p role=\"status\">",
+      "replace": "      {false ? <p role=\"status\">",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X33",
+      "what": "an account with no keys sees an empty list",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "      {keys.length === 0 ? (",
+      "replace": "      {false ? (",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X34",
+      "what": "an account with no grants sees an empty list",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "      {grants.length === 0 ? (",
+      "replace": "      {false ? (",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X35",
+      "what": "a revoked grant can be withdrawn again",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "{grant.state === \"active\" ? <WithdrawForm",
+      "replace": "{grant.state !== \"expired\" ? <WithdrawForm",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X36",
+      "what": "a withdrawn grant hides when it was withdrawn",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "  if (grant.state === \"revoked\" && grant.revokedAt !== null) return `Withdrawn ${utc(grant.revokedAt)}`;\n",
+      "replace": "",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X37",
+      "what": "the captured-content retention is a fixed claim, not the record's",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "        {retentionDays} days. Turning",
+      "replace": "        30 days. Turning",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X38",
+      "what": "capture-off copy implies serving stores nothing",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "Turning capture off does not change what we store to run a request (see Serving retention).",
+      "replace": "Turning capture off means nothing is stored.",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X39",
+      "what": "the copy stops saying a choice applies only to later requests",
+      "file": "app/(console)/settings/data-use.tsx",
+      "find": "Capture is chosen per key and applies to requests sent after you save.",
+      "replace": "Capture is chosen per key.",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X40",
+      "what": "a key's effective mode is never shown",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "      {props.effectiveMode !== props.mode ? (",
+      "replace": "      {false ? (",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X41",
+      "what": "every key carries the not-in-effect note",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "      {props.effectiveMode !== props.mode ? (",
+      "replace": "      {true ? (",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X42",
+      "what": "the choice becomes a toggle",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "        <select id={id} name=\"mode\"",
+      "replace": "        <input type=\"checkbox\" aria-label=\"capture\" />\n        <select id={id} name=\"mode\"",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X43",
+      "what": "each key's choice is not preselected",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "defaultValue={props.mode}",
+      "replace": "defaultValue=\"off\"",
+      "cases": [
+        "UXS-08 a ready record shows each key's capture choice, what it records, and the grants with withdrawal only where active"
+      ]
+    },
+    {
+      "id": "UXS-X44",
+      "what": "a suspended account can still change the select",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": " disabled={props.suspended} className={SELECT_CLASS}",
+      "replace": " className={SELECT_CLASS}",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X45",
+      "what": "a suspended account can still press Save",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "disabled={props.suspended || pending}",
+      "replace": "disabled={pending}",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X46",
+      "what": "withdrawal is disabled while suspended",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "<Button type=\"submit\" size=\"sm\" variant=\"outline\" disabled={pending}>",
+      "replace": "<Button type=\"submit\" size=\"sm\" variant=\"outline\" disabled>",
+      "cases": [
+        "UXS-09 every other state is honest: unavailable, forbidden, signed out, suspended, no keys, no grants"
+      ]
+    },
+    {
+      "id": "UXS-X47",
+      "what": "the capture form rotates its key after a failure (a retry applies twice)",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "      setOutcome(outcomeOf(result, \"Saved. It applies to requests sent from now on.\"));\n      setKey(result.ok ? newKey() : key);",
+      "replace": "      setOutcome(outcomeOf(result, \"Saved. It applies to requests sent from now on.\"));\n      setKey(newKey());",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X48",
+      "what": "the withdraw form rotates its key after a failure",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "      setOutcome(outcomeOf(result, \"Withdrawn.\"));\n      setKey(result.ok ? newKey() : key);",
+      "replace": "      setOutcome(outcomeOf(result, \"Withdrawn.\"));\n      setKey(newKey());",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X49",
+      "what": "the capture form submits a fresh key, not the one it holds",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "        idempotency_key: key,\n",
+      "replace": "        idempotency_key: newKey(),\n",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X50",
+      "what": "the withdraw form submits a fresh key",
+      "file": "app/(console)/settings/data-use-controls.tsx",
+      "find": "{ grant_id: grantId, idempotency_key: key }",
+      "replace": "{ grant_id: grantId, idempotency_key: newKey() }",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X51",
+      "what": "the page reads data use for an account that is not ready",
+      "file": "app/(console)/settings/page.tsx",
+      "find": "context.state === \"ready\" ? await readDataUse(",
+      "replace": "true ? await readDataUse(",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X52",
+      "what": "the page never shows a suspension to the section",
+      "file": "app/(console)/settings/page.tsx",
+      "find": "suspended={context.account.suspended}",
+      "replace": "suspended={false}",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X53",
+      "what": "the actions do not refresh Settings",
+      "file": "app/(console)/settings/actions.ts",
+      "find": "  revalidate: (path) => revalidatePath(path),",
+      "replace": "  revalidate: () => {},",
+      "cases": [
+        "UXS-11 the page reads data use through the request's client and wires the settings actions; the form keeps its key until a change is acknowledged"
+      ]
+    },
+    {
+      "id": "UXS-X54",
+      "what": "the loading state is not announced as busy",
+      "file": "app/(console)/settings/loading.tsx",
+      "find": "aria-busy=\"true\"",
+      "replace": "aria-busy=\"false\"",
+      "cases": [
+        "UXS-10 Settings has a loading state in the page's order"
+      ]
+    },
+    {
+      "id": "UXS-X55",
+      "what": "the capture fact says it can never be turned on",
+      "file": "app/(console)/settings/view-model.ts",
+      "find": "\"Optional trace capture records a key's requests only after the account owner turns it on for that key below.",
+      "replace": "\"Optional trace capture is off for consumer accounts and cannot be turned on yet.",
+      "cases": [
+        "UXS-12 the privacy facts say capture is off unless turned on for a key and never stands in for serving retention"
+      ]
+    },
+    {
+      "id": "UXS-X56",
+      "what": "sharing is presented as not available rather than off unless granted",
+      "file": "app/(console)/settings/view-model.ts",
+      "find": "    status: \"Off unless you grant it\",",
+      "replace": "    status: \"Not available\" as \"Off unless you grant it\",",
+      "cases": [
+        "UXS-12 the privacy facts say capture is off unless turned on for a key and never stands in for serving retention"
+      ]
+    }
+  ]
+}

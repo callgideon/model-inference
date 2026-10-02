@@ -46,7 +46,7 @@ export const T = {
   secret: "U2-S01 the plaintext secret is never stored, logged, put in a URL or sent anywhere but the screen",
   actions: "U2-S02 the keys controls call the shared C3A actions; the leaky page-local actions are gone",
   read: "U2-S03 the keys page reads through the consumer session and never turns a failed read into an empty list",
-  settings: "U2-S04 settings has no fake controls: nothing on it saves, toggles or posts",
+  settings: "U2-S04 settings has no fake controls: its only controls are the data-use forms, each submitting one settings server action",
   keyboard: "U2-S05 every icon-only control has an accessible name and the name field has a label",
   copy: "U2-S06 the one-time and lost-key copy is on screen where it applies, and closing the dialog forgets the plaintext",
 };
@@ -145,8 +145,14 @@ test(T.settings, () => {
   const files = owned(SETTINGS);
   assert.ok(files.some((x) => x.f === "page.tsx"), "the settings page exists");
   for (const { f, src } of files) {
-    assert.doesNotMatch(src, /type="checkbox"|<Switch|<Checkbox|role="switch"|onChange=|onCheckedChange|<form|"use server"|"use client"/, `${f}: no control that looks like it saves`);
+    assert.doesNotMatch(src, /type="checkbox"|<Switch|<Checkbox|role="switch"|onChange=|onCheckedChange/, `${f}: no toggle that looks saved before the API answered`);
+    // C-07 (ux-app-3): the data-use forms are the page's only controls.
+    if (f !== "data-use-controls.tsx") assert.doesNotMatch(src, /<form|"use client"/, `${f}: no control outside the data-use forms`);
   }
+  const controls = read(SETTINGS, "data-use-controls.tsx");
+  assert.equal(count(controls, "<form onSubmit={submit}"), 2, "two forms: a key's capture and a grant's withdrawal");
+  assert.equal(count(controls, "const result = await props.save(") + count(controls, "const result = await withdraw("), 2, "each submit is one server action");
+  assert.match(read(SETTINGS, "actions.ts"), /^"use server";/);
 });
 
 test(T.keyboard, () => {
