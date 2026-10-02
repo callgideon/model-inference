@@ -307,14 +307,88 @@ def check_the_trace_dataset_pass_runs_on_the_datasets_role(conn) -> str:
     return "selection -> @1 + @2 split on the role's login; refs reached; one model read"
 
 
+# ------------------------------------------------- E4C run 2 (register row 94)
+CHARGED = "infrx.journal_bytes_charged()"
+
+
+def body(name: str, fn: str) -> str:
+    """`fn`'s SQL body as file `name` writes it (the text between its `$$`s)."""
+    text = (migrations.DIR / name).read_text()
+    start = text.index("$$", text.index(f"\ncreate or replace function {fn.split('(')[0]}("))
+    return text[start + 2:text.index("$$", start + 2)].strip().rstrip(";")
+
+
+def plan(conn, sql: str) -> str:
+    """`sql`'s plan with sequential scans priced out: which indexes CAN serve it."""
+    with conn.transaction(force_rollback=True):
+        conn.execute("set local enable_seqscan = off")
+        return "\n".join(r for r, in conn.execute("explain " + sql).fetchall())
+
+
+def check_the_scrub_sweep_plans_on_its_partial_index(conn) -> str:
+    """Row 94: the content-scrub sweep's job branch (0020's register_existing_database_content,
+    the only per-tick statement that planned as a full scan of `infrx.jobs`) can be served by
+    0068's partial index of the unscrubbed request records - its predicate is the sweep's."""
+    text = (migrations.DIR / "0020_content_lifecycle.sql").read_text()
+    start = text.index("    select 'payload', j.org_id")
+    sweep = text[start:text.index("    limit v_limit", start)]
+    got = plan(conn, sweep)
+    assert "jobs_content_unscrubbed_idx" in got, got
+    return "the sweep's jobs branch: Index Scan using jobs_content_unscrubbed_idx"
+
+
+def check_journal_bytes_charged_keeps_its_answer_without_the_or_join(conn) -> str:
+    """Row 94: the installed journal_bytes_charged() (0068's) answers exactly 0011's OR-join - a job counts its
+    live journal reservation or its stored bytes, whichever is larger, never both - on every
+    combination (stored 0/40/100/150 x no reservation / active 100 / released 100 / another
+    kind's 100, plus a reservation with no job), and on the seeded database; and its two
+    aggregates can be served by indexes (0011's stored-bytes partial index, 0003's active
+    reservations; no sequential scan once those are priced out), where the OR-join could
+    not."""
+    installed = conn.execute("select prosrc from pg_proc where oid = %s::regprocedure",
+                             (CHARGED,)).fetchone()[0].strip().rstrip(";")
+    old, new = body("0011_admission.sql", CHARGED), installed
+    local = {"infrx.jobs": "pg_temp.jobs", "infrx.capacity_reservations": "pg_temp.reservations"}
+    for real, temp in local.items():
+        old, new = old.replace(real, temp), new.replace(real, temp)
+    wrong = []
+    with conn.transaction(force_rollback=True):
+        conn.execute("create temp table jobs (request_id uuid, journal_stored_bytes bigint); "
+                     "create temp table reservations (request_id uuid, kind text, amount bigint,"
+                     " active boolean)")
+        for stored in (0, 40, 100, 150):
+            for kind, active in ((None, None), ("journal_bytes", True),
+                                 ("journal_bytes", False), ("inference", True)):
+                conn.execute("truncate jobs, reservations")
+                conn.execute("insert into jobs values (%s, %s), (%s, 7)",
+                             (_uid(10), stored, _uid(11)))
+                conn.execute("insert into reservations values (%s, 'journal_bytes', 1000, true)",
+                             (_uid(12),))                          # no such job: never counted
+                if kind:
+                    conn.execute("insert into reservations values (%s, %s, 100, %s)",
+                                 (_uid(10), kind, active))
+                answers = [conn.execute(f"select ({q})").fetchone()[0] for q in (old, new)]
+                if answers[0] != answers[1]:
+                    wrong.append((stored, kind, active, *answers))
+    assert not wrong, f"(stored, kind, active, 0011, 0068): {wrong}"
+    seeded = conn.execute(f"select {CHARGED}, ({body('0011_admission.sql', CHARGED)})"
+                          ).fetchone()
+    assert seeded[0] == seeded[1], seeded
+    got = plan(conn, installed)
+    assert "jobs_journal_stored_idx" in got and "Seq Scan" not in got, got
+    return f"16 combinations + the seeded database ({seeded[0]} bytes) equal; both on indexes"
+
+
 CHECKS = {c.__name__: c for c in (
     check_the_dev_key_listing_is_the_endpoints_own,
     check_a_dev_key_revocation_is_one_way_and_audited_once,
     check_the_dev_wallet_reads_the_providers_balance,
     check_the_dev_doors_are_the_control_logins,
     check_the_datasets_role_holds_exactly_its_passes_grants,
+    check_the_scrub_sweep_plans_on_its_partial_index,
+    check_journal_bytes_charged_keeps_its_answer_without_the_or_join,
     check_the_trace_dataset_pass_runs_on_the_datasets_role)}
-KEYS, REVOKE, WALLET, DOOR_GRANTS, ROLE, PASS = CHECKS
+KEYS, REVOKE, WALLET, DOOR_GRANTS, ROLE, SCRUB, CHARGE, PASS = CHECKS
 
 
 def seed(conn) -> None:
@@ -397,6 +471,27 @@ SQL_MUTANTS = (
     _s("ap0068_datasets_every_column", "grant select (serving_version_id, model_id) on "
        "infrx.serving_versions to", "grant select on infrx.serving_versions to", PASS,
        "the worker reads the whole registry row, not the one mapping it needs"),
+    # --- row 94: the scrub sweep's index
+    _s("ap0068_scrub_index_dropped", "create index if not exists jobs_content_unscrubbed_idx on "
+       "infrx.jobs (request_id)\n  where request_record is not null and content_scrubbed_at is "
+       "null;", "", SCRUB, "the sweep keeps reading every job each tick (E4C's 134 ms scan)"),
+    _s("ap0068_scrub_index_wrong_rows", "  where request_record is not null and "
+       "content_scrubbed_at is null;", "  where request_record is not null and "
+       "content_scrubbed_at is not null;", SCRUB,
+       "an index of the scrubbed rows the sweep never asks for"),
+    # --- row 94: journal_bytes_charged()
+    _s("ap0068_charged_reserved_and_stored", "greatest(r.amount - j.journal_stored_bytes, 0)",
+       "r.amount", CHARGE, "a job's bytes count twice: admission refuses at half the journal"),
+    _s("ap0068_charged_excess_negative", "greatest(r.amount - j.journal_stored_bytes, 0)",
+       "r.amount - j.journal_stored_bytes", CHARGE,
+       "a job storing past its reservation lowers the charge: the journal overfills"),
+    _s("ap0068_charged_released_counted", "where r.kind = 'journal_bytes' and r.active))",
+       "where r.kind = 'journal_bytes'))", CHARGE,
+       "released reservations keep charging: the journal fills up with nothing stored"),
+    _s("ap0068_charged_any_kind", "where r.kind = 'journal_bytes' and r.active))",
+       "where r.active))", CHARGE, "inference slots are charged as journal bytes"),
+    _s("ap0068_charged_unindexed", "            where j.journal_stored_bytes > 0)\n",
+       ")\n", CHARGE, "the stored-bytes sum reads every job again (the partial index unused)"),
 )
 
 

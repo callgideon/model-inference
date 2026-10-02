@@ -34,6 +34,22 @@
 --     refs (issue, redeem), D6F's request_feedback and infrx.now(); SELECT on
 --     serving_versions(serving_version_id, model_id) under a policy of its own (WR-N3-4's
 --     serving -> model read; pg_ports.model_of unchanged).
+--   Register row 94 (E4C run 2 on e6a8b40a, evidence/e/E4C-e6a8b40/README.md "The soak's
+--     503s"): the two per-tick statements that read every `infrx.jobs` row -
+--     jobs_content_unscrubbed_idx: 0020's content-scrub sweep (register_existing_database_
+--       content's job branch, `request_record is not null and content_scrubbed_at is null`)
+--       planned as a full scan of jobs (134 ms idle on the hosted instance); this partial index
+--       holds exactly the rows it selects (a job leaves it when scrubbed).
+--     infrx.journal_bytes_charged(): 0011's body OR-joins jobs with capacity_reservations
+--       (`r.request_id is not null or j.journal_stored_bytes > 0`), which no index serves, on
+--       every admission and readiness probe. Same answer as two aggregates, each on an index:
+--       greatest(reserved, stored) = stored + greatest(reserved - stored, 0), so the stored
+--       bytes of every job (0011's jobs_journal_stored_idx) plus each live journal
+--       reservation's excess over its job's stored bytes (0003's capacity_reservations_active_
+--       idx; (request_id, kind) is the key, so at most one per job). A reservation with no job
+--       still counts nothing. `create or replace` keeps 0011's grants (nobody: a definer body
+--       calls it). The index is a plain `create index` (a migration runs in a transaction): it
+--       holds jobs' SHARE lock while it builds - milliseconds at the hosted 13k rows.
 --
 -- ROLLBACK (this file alone; nothing earlier references it; tests/d/test_control_ops_upgrade.py runs these lines):
 -- rollback: drop function if exists infrx.lab_control_dev_keys(jsonb), infrx.lab_control_revoke_dev_key(jsonb), infrx.lab_control_dev_wallet(jsonb);
@@ -42,6 +58,8 @@
 -- rollback: revoke select (serving_version_id, model_id) on infrx.serving_versions from infrx_lab_datasets;
 -- rollback: revoke execute on function infrx.now(), infrx.control_op_pending(jsonb), infrx.control_op_lease(jsonb), infrx.control_op_advance(jsonb), infrx.control_op_finish(jsonb), infrx.lab_provider_memberships(jsonb), infrx.lab_access_grants(jsonb), infrx.lab_register_source(jsonb), infrx.lab_publish(jsonb), infrx.lab_resolve(jsonb), infrx.lab_accessible_samples(jsonb), infrx.lab_import_job_claim(jsonb), infrx.lab_import_job_heartbeat(jsonb), infrx.lab_import_job_finish(jsonb), infrx.lab_import_job(jsonb), infrx.lab_tombstone_samples(jsonb), infrx.lab_bound_samples(jsonb), infrx.lab_blocked_samples(jsonb), infrx.lab_permitted_samples(jsonb), infrx.lab_content_ref_issue(jsonb), infrx.lab_content_ref_redeem(jsonb), infrx.request_feedback(jsonb) from infrx_lab_datasets;
 -- rollback: revoke usage on schema infrx from infrx_lab_datasets;
+-- rollback: drop index if exists infrx.jobs_content_unscrubbed_idx;
+-- rollback: create or replace function infrx.journal_bytes_charged() returns bigint language sql stable security definer set search_path = infrx, public, pg_temp as $$ select coalesce(sum(greatest(coalesce(r.amount, 0), j.journal_stored_bytes)), 0)::bigint from infrx.jobs j left join infrx.capacity_reservations r on r.request_id = j.request_id and r.kind = 'journal_bytes' and r.active where r.request_id is not null or j.journal_stored_bytes > 0; $$;
 -- (the role itself stays: a role is the cluster's, and with no grant it reaches nothing;
 -- the restored check refuses while a `lab_dev_key_revoke` event exists: control events are
 -- history, never deleted - roll back only before the first revocation)
@@ -133,3 +151,17 @@ grant select (serving_version_id, model_id) on infrx.serving_versions to infrx_l
 drop policy if exists lab_datasets_serving_models on infrx.serving_versions;
 create policy lab_datasets_serving_models on infrx.serving_versions for select
   to infrx_lab_datasets using (true);
+
+-- ================================================== E4C run 2 (register row 94) ===
+create index if not exists jobs_content_unscrubbed_idx on infrx.jobs (request_id)
+  where request_record is not null and content_scrubbed_at is null;
+
+create or replace function infrx.journal_bytes_charged() returns bigint
+language sql stable security definer set search_path = infrx, public, pg_temp as $$
+  select ((select coalesce(sum(j.journal_stored_bytes), 0) from infrx.jobs j
+            where j.journal_stored_bytes > 0)
+        + (select coalesce(sum(greatest(r.amount - j.journal_stored_bytes, 0)), 0)
+             from infrx.capacity_reservations r
+             join infrx.jobs j on j.request_id = r.request_id
+            where r.kind = 'journal_bytes' and r.active))::bigint;
+$$;
