@@ -16,7 +16,8 @@ matters and nothing connects anywhere:
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints,
-  `LAB_JUDGE_API`'s judge and trace reviews) on.
+  `LAB_JUDGE_API`'s judge and trace reviews, `LAB_PUBLICATION`'s publication door over an
+  inert session-actors stand-in - AP-01's are not composed on the unit yet) on.
 
 `document` adds what FastAPI does not: an operationId derived from method + path (unique by
 construction), and a security declaration per operation from `FAMILIES` unless the route
@@ -68,6 +69,8 @@ FAMILIES: tuple[tuple[str, list[dict[str, list[str]]] | None, str, str], ...] = 
     ("/v1/models", PUBLIC, "openai", "public"),
     ("/v1/", [{"ApiKeyAuth": []}], "openai", "consumer or provider_dev key"),
     ("/lab/v1/checkpoints", [{"CheckpointSignature": []}], "refusal", "signed training loop"),
+    ("/lab/v1/control/endpoints/", [{"SessionBearer": []}], "r270", "provider session"),
+    ("/lab/v1/control/dev-wallet", [{"SessionBearer": []}], "r270", "provider session"),
     ("/lab/v1/", [{"SessionBearer": []}], "refusal", "provider session"),
     ("/console/v1/", [{"SessionBearer": []}], "r270", "consumer session"),
     ("/operator/v1/", [{"SessionBearer": []}, {"OperatorKey": []}], "r270", "operator"),
@@ -186,7 +189,7 @@ def _gateway(env: dict[str, str]) -> FastAPI:
         logging.disable(logging.NOTSET)
 
 
-def _lab_control() -> FastAPI:
+def _lab_control(publication: bool = True) -> FastAPI:
     from ...lab import compose
     from ...lab.control import app as control
     inert = object()
@@ -194,11 +197,14 @@ def _lab_control() -> FastAPI:
            control.SUPABASE_URL: "http://127.0.0.1:1", control.SUPABASE_KEY: "export",
            "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export",
            "LAB_JUDGE_API": "1"}                                           # WR-1 api-judge
+    if publication:
+        env["LAB_PUBLICATION"] = "1"                                       # WR-AP06-3
     # ponytail: the two families that connect at composition (ClickHouse, the key directory)
     # are patched to inert stand-ins; the rest compose lazily over an unreachable DSN.
     with mock.patch.dict(os.environ, env, clear=True), \
             mock.patch.object(compose, "lab_traces", lambda *_: inert), \
-            mock.patch.object(compose, "lab_checkpoints", lambda *_: {"lab_checkpoints": inert}):
+            mock.patch.object(compose, "lab_checkpoints", lambda *_: {"lab_checkpoints": inert}), \
+            mock.patch.object(control, "_actors", lambda *_: inert):   # LAB_PUBLICATION refuses None
         return control.create_app()
 
 

@@ -588,6 +588,8 @@ DEPLOYMENT_EXPECTED = {
     "CONSOLE_DATA_USE": False,
     # WR-1 (AP-08, api-judge): the Lab unit's judge/review routes switch, off
     "LAB_JUDGE_API": False,
+    # WR-AP06-1 (AP-06, api-publication): the Lab unit's publication door switch, off
+    "LAB_PUBLICATION": False,
     # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
     # origins and the facade's publishable key (unset)
     "IDENTITY_API": False,
