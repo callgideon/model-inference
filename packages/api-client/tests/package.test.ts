@@ -37,9 +37,11 @@ test("nothing shipped names a server secret or reads the environment", () => {
 
 test("the App port imports only the consumer client, the Lab port only the Lab client", () => {
   const imports = (dir: string) => shipped(dir).flatMap(([, text]) => [...text.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]));
+  // Either spelling: the relative source path today, `@infrx/api-client/<entry>` once the apps link it.
+  const entry = (name: string) => (s: string) => new RegExp(`api-client/(src/)?${name}(\\.ts)?$`).test(s);
   const app = imports(PORTS.app), lab = imports(PORTS.lab);
-  assert.ok(app.some((s) => s.endsWith("api-client/src/consumer.ts")) && app.some((s) => s.endsWith("api-client/src/transport.ts")));
-  assert.ok(lab.some((s) => s.endsWith("api-client/src/lab.ts")) && lab.some((s) => s.endsWith("api-client/src/transport.ts")));
-  assert.ok(!app.some((s) => s.endsWith("/lab.ts") || s.includes("apps/lab")), app.join());
-  assert.ok(!lab.some((s) => s.endsWith("/consumer.ts") || s.includes("apps/app")), lab.join());
+  assert.ok(app.some(entry("consumer")) && app.some(entry("transport")), app.join());
+  assert.ok(lab.some(entry("lab")) && lab.some(entry("transport")), lab.join());
+  assert.ok(!app.some((s) => entry("lab")(s) || s.includes("apps/lab")), app.join());
+  assert.ok(!lab.some((s) => entry("consumer")(s) || s.includes("apps/app")), lab.join());
 });
