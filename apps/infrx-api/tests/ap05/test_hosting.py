@@ -8,13 +8,25 @@ implementation.md AP-05 05a-05e). Every case runs on the fake world; the `pg`-ma
 """
 from __future__ import annotations
 
+import json
+import pathlib
+import signal
+import subprocess
+import sys
+import uuid
+from datetime import UTC, datetime
+
 import pytest
 
 from infrx.contracts import errors
 from infrx.lab.hosting import PROFILE
+from infrx.lab.hosting.engine import Runtime
 from infrx.lab.hosting.store import Hold
 
-from .conftest import run
+from .conftest import ENGINE_PORT, REPO_ROOT, run
+
+PROC = pathlib.Path(__file__).with_name("controller_proc.py")
+NOW = datetime(2026, 10, 2, tzinfo=UTC)
 
 DEPLOYMENTS = "/lab/v1/control/deployments"
 
@@ -169,3 +181,179 @@ def test_ap05__a_stale_fence_writes_nothing(world):
     with pytest.raises(errors.NotFound):                 # a hold of another deployment
         run(world.hosting.store.transition(Hold(operation, second.fence, world.serving),
                                            deployment, world.A, "draft", "retired", "x"))
+
+
+# ================================================== 05b: the allocator and launcher ===
+def test_ap05__a_taken_slot_is_capacity_unavailable_never_an_eviction(world):
+    first_op, first = world.deployed()
+    world.drive()
+    assert world.op(first_op).state == "succeeded" and world.state(first) == "validating"
+    second_op, second = world.deployed()
+    world.drive()
+    failed = world.op(second_op)
+    assert (failed.state, failed.error.code, failed.error.retryable) == \
+        ("failed", "capacity_unavailable", True)
+    assert world.state(second) == "retired"
+    assert world.state(first) == "validating"               # the holder is untouched
+    assert world.detail(first)["allocation"]["state"] == "launched"
+    assert list(world.launcher.running) == [f"infrx-hosting-{first}"]
+    retire = world.call("POST", f"{DEPLOYMENTS}/{first}/retire", key=world.key())
+    assert retire.status_code == 202
+    world.drive()
+    third_op, third = world.deployed()                     # the slot is free again
+    world.drive()
+    assert world.op(third_op).state == "succeeded"
+    assert list(world.launcher.running) == [f"infrx-hosting-{third}"]
+
+
+@pytest.mark.pg
+@pytest.mark.parametrize("boundary", BOUNDARIES)
+def test_ap05__a_controller_process_killed_at_each_boundary_resumes_once(pg_world, boundary):
+    """SIGKILL, not an exception: the dead holder's lease, engine and half-done work remain;
+    the next holder finds the engine by its tag (no second start), re-uses what it recorded,
+    and the dead holder's fence writes nothing."""
+    w = pg_world
+    operation, deployment = w.deployed()
+    died = subprocess.run((sys.executable, str(PROC), w.service_dsn, w.dsn, str(w.tmp),
+                           "doomed", boundary), timeout=240, capture_output=True)
+    assert died.returncode == -signal.SIGKILL, died.stderr.decode()[-2000:]
+    dead = run(w.ops.get(operation, w.actors["dev_a"]))
+    assert (dead.state, dead.lease_owner) == ("running", "doomed")
+    already = len(w.launcher.running)
+    assert already == (1 if boundary in ("launched", "identity") else 0)
+    w.advance(120)                                         # the dead holder's lease expires
+    w.drive(w.controller(owner="resumer"))
+    doc = w.op(operation)
+    assert (doc.state, doc.error) == ("succeeded", None), doc
+    assert w.state(deployment) == "validating"
+    assert len(w.launcher.running) == 1                    # exactly one engine, ever
+    assert w.launcher.starts == ([] if already else [f"infrx-hosting-{deployment}"])
+    identities = [r for r in run(w.store.receipts(deployment)) if r.kind == "identity"]
+    assert len(identities) == 1 and identities[0].passed
+    with pytest.raises(errors.Conflict):                   # the dead holder's fence
+        run(w.store.transition(Hold(operation, dead.fence, deployment), deployment, w.A,
+                               "validating", "retired", "a dead controller"))
+
+
+@pytest.mark.pg
+def test_ap05__foreign_processes_are_never_stopped_or_adopted(pg_world, tmp_path):
+    """The serving engine and any process without this deployment's tag in its argv are not
+    a candidate's: a state file naming such a pid (a reused pid, a forged file) is ignored."""
+    w = pg_world
+    serving = subprocess.Popen((sys.executable, "-c", "import time; time.sleep(600)",
+                                "marlin2b-8000"), start_new_session=True)
+    try:
+        operation, deployment = w.deployed()
+        engines = w.launcher.inner.state_dir
+        engines.mkdir(parents=True, exist_ok=True)
+        (engines / f"infrx-hosting-{deployment}.json").write_text(json.dumps(
+            {"pid": serving.pid, "port": ENGINE_PORT, "tag": f"infrx-hosting-{deployment}"}))
+        w.drive()
+        assert w.op(operation).state == "succeeded"
+        assert w.launcher.starts == [f"infrx-hosting-{deployment}"]   # not adopted
+        w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key())
+        w.drive()
+        assert w.state(deployment) == "retired" and w.launcher.running == {}
+        assert serving.poll() is None                      # never signalled
+    finally:
+        serving.kill()
+        serving.wait()
+
+
+def test_ap05__the_box_launcher_runs_only_its_own_unit(tmp_path):
+    from infrx.lab.hosting.engine import BoxLauncher
+    from infrx.lab.hosting.store import Allocation
+    calls = []
+    inspected = {"State": {"Running": True}, "Image": PROFILE.runtime_image_ref.split("@")[1],
+                 "Args": ["/model", *PROFILE.flags],
+                 "Mounts": [{"Source": "/opt/dlami/nvme/hosting/x", "Destination": "/model"}]}
+
+    def fake_run(argv, **kw):
+        calls.append(tuple(argv))
+        out = json.dumps([inspected]) if argv[:2] == ["docker", "inspect"] else ""
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+    box = BoxLauncher(tmp_path / "etc", run=fake_run)
+    mine = Allocation(allocation_id=str(uuid.uuid4()), deployment_revision_id=str(uuid.uuid4()),
+                      slot="pilot-l40s/candidate-0", port=8100, operation_id=str(uuid.uuid4()),
+                      resource_tag=f"infrx-hosting-{uuid.uuid4()}", reserved_at=NOW)
+    run(box.start(mine, pathlib.Path("/opt/dlami/nvme/hosting/x")))
+    env = (tmp_path / "etc" / "8100.env").read_text()
+    assert f"INFRX_HOSTING_TAG={mine.resource_tag}\n" in env
+    assert "WEIGHTS=/opt/dlami/nvme/hosting/x\n" in env
+    assert calls == [("systemctl", "start", "infrx-candidate@8100.service")]
+    seen = run(box.inspect(mine))
+    assert seen == Runtime(image=inspected["Image"], flags=PROFILE.flags,
+                           model_dir="/opt/dlami/nvme/hosting/x", declared=False)
+    assert calls[-1] == ("docker", "inspect", "marlin2b-8100")
+    other = mine.model_copy(update={"resource_tag": f"infrx-hosting-{uuid.uuid4()}"})
+    before = len(calls)
+    assert run(box.inspect(other)) is None and run(box.stop(other)) is False
+    assert len(calls) == before                            # nothing run for another's tag
+    inspected["State"]["Running"] = False
+    assert run(box.inspect(mine)) is None
+    assert run(box.stop(mine)) is True
+    assert calls[-1] == ("systemctl", "stop", "infrx-candidate@8100.service")
+    assert not (tmp_path / "etc" / "8100.env").exists()
+    before = len(calls)
+    serving = mine.model_copy(update={"port": 8000})
+    with pytest.raises(ValueError):                        # the serving engine's port
+        run(box.start(serving, pathlib.Path("/x")))
+    assert run(box.stop(serving)) is False and len(calls) == before
+
+
+STUB = """#!/bin/sh
+echo "$(basename "$0") $*" >> "{log}"
+for rc in "$0.$1.$2.rc" "$0.$1.rc" "$0.rc"; do [ -f "$rc" ] && exit "$(cat "$rc")"; done
+[ -f "$0.out" ] && cat "$0.out"
+exit 0
+"""
+
+
+def window(tmp_path, state: str, **env) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """infra/lab/hosting/window.sh in a sandbox root, every box tool a recording stub."""
+    stub, root = tmp_path / "bin", tmp_path / "root"
+    if not stub.exists():
+        stub.mkdir()
+        (root / "etc" / "systemd" / "system").mkdir(parents=True)
+        for tool in ("systemctl", "nvidia-smi", "docker", "curl", "install", "git"):
+            (stub / tool).write_text(STUB.format(log=tmp_path / "calls.log"))
+            (stub / tool).chmod(0o755)
+        (stub / "git.out").write_text("a" * 40 + "\n")
+        (stub / "systemctl.is-active.rc").write_text("3")      # the gateway: inactive
+    (tmp_path / "calls.log").write_text("")
+    done = subprocess.run(("bash", str(REPO_ROOT / "infra" / "lab" / "hosting" / "window.sh")),
+                          capture_output=True, text=True, timeout=60, env={
+                              "PATH": f"{stub}:/usr/bin:/bin", "HOME": str(root),
+                              "REPO": str(REPO_ROOT), "INFRX_ROOT": str(root),
+                              "RELEASE": "a" * 40, "STATE": state, "GPU_FREE_S": "1",
+                              "READY_S": "1", "READY_SLEEP_S": "0", **env})
+    return done, (tmp_path / "calls.log").read_text().splitlines()
+
+
+def test_ap05__the_box_window_never_runs_two_engines_on_the_gpu(tmp_path):
+    done, calls = window(tmp_path, "open", PORT="8000")
+    assert done.returncode == 3 and not any(c.startswith("systemctl stop") for c in calls)
+    (tmp_path / "bin" / "systemctl.is-active.rc").write_text("0")   # the gateway serves
+    done, calls = window(tmp_path, "open", PORT="8100")
+    assert done.returncode == 3 and "maintenance" in done.stderr
+    assert not any(c.startswith("systemctl stop") for c in calls)
+    (tmp_path / "bin" / "systemctl.is-active.rc").write_text("3")
+    done, calls = window(tmp_path, "open", PORT="8100")
+    assert done.returncode == 0, done.stderr
+    stop = calls.index("systemctl stop marlin2b-vllm.service")
+    assert stop < next(i for i, c in enumerate(calls) if c.startswith("install -m 0644"))
+    assert calls[-1] == "systemctl daemon-reload"
+    etc = tmp_path / "root" / "etc" / "infrx-lab" / "hosting"
+    etc.mkdir(parents=True)
+    (etc / "8100.env").write_text("INFRX_HOSTING_TAG=x\n")
+    (etc / "8000.env").write_text("INFRX_HOSTING_TAG=forged\n")
+    done, calls = window(tmp_path, "close", HOSTING_ROOT=str(tmp_path / "models"))
+    assert done.returncode == 0, done.stderr
+    assert "systemctl stop infrx-candidate@8100.service" in calls
+    assert "docker rm -f marlin2b-8100" in calls
+    assert not any("8000" in c for c in calls if c.startswith(("systemctl stop", "docker")))
+    assert calls.index("docker rm -f marlin2b-8100") < calls.index(
+        "systemctl start marlin2b-vllm.service")
+    (tmp_path / "bin" / "curl.rc").write_text("7")                 # the engine never answers
+    done, _ = window(tmp_path, "close", HOSTING_ROOT=str(tmp_path / "models"))
+    assert done.returncode == 4 and "do not reopen" in done.stderr

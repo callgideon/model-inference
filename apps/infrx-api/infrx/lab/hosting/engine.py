@@ -18,7 +18,7 @@ import os
 import shutil
 import signal
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -166,6 +166,70 @@ class LocalLauncher:
                     break
         self._state(allocation).unlink(missing_ok=True)
         return found is not None
+
+
+# ================================================================= the box ===
+SERVING_PORT = 8000                       # marlin2b-vllm.service: never a candidate's
+
+
+class BoxLauncher:
+    """The one approved host (infra/lab/hosting/README.md): a candidate is the unit
+    `infrx-candidate@<port>.service` - serve.sh with WEIGHTS = the installed directory on
+    GPU 0 - whose container serve.sh names `marlin2b-<port>`. The unit's environment file
+    `<env_dir>/<port>.env` carries the deployment's tag: only a container whose file names
+    this tag is this deployment's. What it reports is `docker inspect`'s: the image the
+    container runs, its arguments after the image, the directory mounted at /model."""
+
+    def __init__(self, env_dir: Path, *, run: Callable[..., subprocess.CompletedProcess]
+                 = subprocess.run) -> None:
+        self.env_dir, self.run = Path(env_dir), run
+
+    def _env(self, allocation: Allocation) -> Path:
+        return self.env_dir / f"{allocation.port}.env"
+
+    def _mine(self, allocation: Allocation) -> bool:
+        try:
+            text = self._env(allocation).read_text()
+        except OSError:
+            return False
+        return f"INFRX_HOSTING_TAG={allocation.resource_tag}\n" in text
+
+    def _unit(self, allocation: Allocation) -> str:
+        return f"infrx-candidate@{allocation.port}.service"
+
+    async def start(self, allocation: Allocation, model_dir: Path) -> None:
+        if allocation.port == SERVING_PORT:
+            raise ValueError("the serving engine's port is never a candidate's")
+        self.env_dir.mkdir(parents=True, exist_ok=True)
+        part = self._env(allocation).with_suffix(".part")
+        part.write_text(f"INFRX_HOSTING_TAG={allocation.resource_tag}\nWEIGHTS={model_dir}\n")
+        os.replace(part, self._env(allocation))
+        await asyncio.to_thread(self.run, ["systemctl", "start", self._unit(allocation)],
+                                check=True, capture_output=True, text=True, timeout=60)
+
+    async def inspect(self, allocation: Allocation) -> Runtime | None:
+        if not self._mine(allocation):
+            return None
+        found = await asyncio.to_thread(
+            self.run, ["docker", "inspect", f"marlin2b-{allocation.port}"],
+            capture_output=True, text=True, timeout=30)
+        try:
+            (doc,) = json.loads(found.stdout or "[]")
+        except ValueError:
+            return None
+        if found.returncode != 0 or not doc.get("State", {}).get("Running"):
+            return None
+        mounts = {m.get("Destination"): m.get("Source") for m in doc.get("Mounts", [])}
+        return Runtime(image=str(doc.get("Image", "")), flags=tuple(doc.get("Args", [])[1:]),
+                       model_dir=str(mounts.get("/model", "")), declared=False)
+
+    async def stop(self, allocation: Allocation) -> bool:
+        if not self._mine(allocation):
+            return False
+        await asyncio.to_thread(self.run, ["systemctl", "stop", self._unit(allocation)],
+                                check=True, capture_output=True, text=True, timeout=120)
+        self._env(allocation).unlink(missing_ok=True)
+        return True
 
 
 # ================================================================= the engine ===

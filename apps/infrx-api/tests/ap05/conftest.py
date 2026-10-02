@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import itertools
 import json
 import os
 import pathlib
 import sys
+import time
 import types
 import uuid
 from datetime import UTC, datetime
@@ -39,7 +41,7 @@ from infrx.lab.artifacts.manifest import Card, FileEntry, Manifest
 from infrx.lab.artifacts.projects import Projects, RevisionRequest
 from infrx.lab.artifacts.store import Artifact, FakeArtifactStore, Project
 from infrx.lab.artifacts.verify import Compatibility
-from infrx.lab.hosting import PROFILE, LabHosting, Target
+from infrx.lab.hosting import KINDS, PROFILE, LabHosting, Target
 from infrx.lab.hosting.controller import Controller
 from infrx.lab.hosting.engine import Runtime
 from infrx.lab.hosting.store import FakeHostingStore
@@ -157,6 +159,12 @@ class ScriptedLauncher:
         return self.running.pop(allocation.resource_tag, None) is not None
 
 
+def target_in(tmp: pathlib.Path) -> Target:
+    """The world's one slot: ap5's engine port, models installed under `tmp/models`."""
+    return Target(slot=SLOT, port=ENGINE_PORT, model_root=tmp / "models",
+                  source_dir=tmp / "source", smoke_video=tmp / "clip.mp4")
+
+
 # ======================================================================= actors ===
 class TestActors:
     """`ActorSource` for the suite: the `x-test-actor` header names a fixed actor."""
@@ -184,15 +192,14 @@ class World:
     def __init__(self, w, artifacts, store, ops, launcher, transport, tmp: pathlib.Path,
                  real: bool) -> None:
         self.w, self.artifacts, self.store, self.ops = w, artifacts, store, ops
-        self.launcher, self.transport, self.real = launcher, transport, real
+        self.launcher, self.transport, self.real, self.tmp = launcher, transport, real, tmp
         self.A, self.B = w.A, w.B
         self.files = model_files()
         (tmp / "source").mkdir()
         for name, blob in self.files.items():
             (tmp / "source" / name).write_bytes(blob)
         (tmp / "clip.mp4").write_bytes(clip())
-        self.target = Target(slot=SLOT, port=ENGINE_PORT, model_root=tmp / "models",
-                             source_dir=tmp / "source", smoke_video=tmp / "clip.mp4")
+        self.target = target_in(tmp)
         self.hosting = LabHosting(w.access, w.control, artifacts, ops, store, self.target)
         app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
         rt = types.SimpleNamespace(actors=TestActors(actors(w)), lab_hosting=self.hosting)
@@ -266,9 +273,18 @@ class World:
                           boundary=boundary, transport=self.transport, **kw)
 
     def drive(self, controller: Controller | None = None, passes: int = 6) -> None:
+        """Passes until no operation is pending or held (at least two; a real engine is given
+        up to 90 s of wall time to start)."""
         controller = controller or self.controller()
-        for _ in range(passes):
+        deadline = time.monotonic() + 90
+        for i in itertools.count(1):
             run(controller.run_once())
+            busy = controller.holding or run(self.ops.pending(KINDS, 100))
+            if (not busy and i >= 2) or (i >= passes and (not self.real
+                                                          or time.monotonic() > deadline)):
+                return
+            if self.real:
+                time.sleep(0.2)
 
     def advance(self, seconds: float) -> None:
         self.w.advance(seconds)
@@ -375,7 +391,7 @@ def pg_world(pg_template, tmp_path):
         launcher = Recorded(local_launcher(tmp_path / "engines"))
         world = World(w, PgArtifactStore(login), PgHostingStore(login), PgControlOps(login),
                       launcher, None, tmp_path, real=True)
-        world.dsn = login_dsn(CASE)
+        world.dsn, world.service_dsn = login_dsn(CASE), pgharness.dsn(CASE)
         try:
             yield world
         finally:
