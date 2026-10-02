@@ -22,7 +22,7 @@ from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
 SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
           "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py",
-          "tests/ap10/test_sop_benchmark.py")
+          "tests/ap10/test_sop_benchmark.py", "tests/ap10/test_release.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -53,6 +53,11 @@ SOP_BLOCKED = "test_ap10_sop_quality_is_blocked_on_p07_and_validity_is_counted_a
 SOP_AGREE = "test_ap10_sop_agreement_is_computed_only_from_reviewed_gold_within_tolerance"
 SOP_PERF = ("test_ap10_sop_performance_is_meas_only_for_a_declared_candidate_without_the_"
             "fake_surface")
+REL = "lab/improve/release.py"
+REL_TRAINER = "test_ap10_release_an_unsupported_trainer_is_an_explicit_refusal"
+REL_IMPORT = "test_ap10_release_a_candidate_is_registered_only_through_ap04s_import"
+REL_EVIDENCE = "test_ap10_release_evidence_pins_the_lineage_once_the_import_is_verified"
+IDENTITY = '"import", candidate["repo"], candidate["commit"], candidate["files"])'
 #: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
 PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
 BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
@@ -238,6 +243,51 @@ MUTANTS: tuple[Mutant, ...] = (
       "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 1, 60", SOP_PERF, file=SOP),
     m("sop_p95_guessed", "p95 is refused below 60 samples",
       "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 6, 6", SOP_PERF, file=SOP),
+    # --- 10e: reviewed labels -> external training -> AP-04 import -> release evidence
+    m("rel_any_trainer", "only the supported trainer bundles",
+      "    if trainer not in SUPPORTED:\n", "    if False:\n", REL_TRAINER, file=REL),
+    m("rel_objective_unchecked", "the objective is the reviewed export's adapter",
+      'if OBJECTIVE.get(json.loads(stored)["adapter"]) != config.get("objective"):',
+      "if False:", REL_TRAINER, file=REL),
+    m("rel_export_id_unchecked", "a label export is named by its id only",
+      "    if not UUID_RE.fullmatch(label_export_id):\n", "    if False:\n", REL_TRAINER,
+      file=REL),
+    m("rel_not_eligible_registered", "only an approved checkpoint of this run registers",
+      '        raise errors.StateConflict("not an approved checkpoint of this run")',
+      "        return bundle, eligible", REL_IMPORT, file=REL),
+    m("rel_foreign_workspace", "a candidate is registered in its run's workspace",
+      "    if actor.provider_org_id != provider_org_id:\n", "    if False:\n", REL_IMPORT,
+      file=REL),
+    m("rel_descriptor_unbound", "the descriptor is the receipt's bytes",
+      '"sha256:" + hashlib.sha256(data).hexdigest() != receipt[1]', "False", REL_IMPORT,
+      file=REL, dies_by=("Unsupported",)),
+    m("rel_descriptor_anywhere", "the descriptor is read under its run's prefix only",
+      'if artifact_key.startswith(f"lab/{provider_org_id}/training/{external_run_id}/") else None',
+      "if True else None", REL_IMPORT, file=REL),
+    m("rel_files_unchecked", "the import declares exactly the checkpoint's files",
+      "    if sorted(f.relative_path for f in body.files) != declared:\n", "    if False:\n",
+      REL_IMPORT, file=REL),
+    m("rel_many_imports", "one import per checkpoint",
+      'await ledger.note(f"candidate:{checkpoint_id}", {',
+      'await ledger.note(f"candidate:{checkpoint_id}:{key}", {', REL_IMPORT, REL_EVIDENCE,
+      file=REL),
+    m("rel_unverified_recorded", "evidence waits for AP-04's verification",
+      '    if op.doc.state != "succeeded":\n', "    if False:\n", REL_EVIDENCE, file=REL),
+    m("rel_commit_unchecked", "the verified artifact is the registered commit",
+      IDENTITY, '"import", candidate["repo"], artifact.source_commit, candidate["files"])',
+      REL_EVIDENCE, file=REL),
+    m("rel_files_unbound", "the verified artifact is the registered files",
+      IDENTITY, '"import", candidate["repo"], candidate["commit"], '
+      "sorted(f.relative_path for f in artifact.files))", REL_EVIDENCE, file=REL),
+    m("rel_evidence_rewritten", "the evidence record is written once",
+      "    if stored is not None:\n        return json.loads(stored)\n",
+      "    if False:\n        return json.loads(stored)\n", REL_EVIDENCE, file=REL),
+    m("rel_self_qualified", "a new revision is qualified elsewhere, never here",
+      '"qualification": {"state": "pending"', '"qualification": {"state": "qualified"',
+      REL_EVIDENCE, file=REL),
+    m("rel_methods_dropped", "the record carries the labels' provenance",
+      'methods = Counter(m for x in export.get("lineage", ()) for m in x["methods"])',
+      "methods = Counter()", REL_EVIDENCE, file=REL),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),
