@@ -11,6 +11,8 @@ const HUB = `${E}/page.tsx`;
 const SUBS = `${E}/checkpoints/page.tsx`;
 const J = "app/(provider)/judge";
 const JV = `${J}/view.ts`;
+const JP = `${J}/page.tsx`;
+const JF = `${J}/form.tsx`;
 
 const C = {
   c01: "UX08-C01 a catalog the service could not read is unavailable, never an empty launch form",
@@ -31,6 +33,8 @@ const C = {
   j03: "UX08-J03 a judge run shows the backend's state and counts; an ambiguous send is unknown, never retried or failed",
   j04: "UX08-J04 a budget shows limit, reserved and settled each with its own unit, never a sum",
   j05: "UX08-J05 judge setup sits under Evaluations and says unreadable records are unavailable, not absent",
+  j06: "UX08-J06 configure and budget send a key minted at render; only an unknown outcome keeps it for the retry, a definite answer frees it",
+  j07: "UX08-J07 each judge form carries every field its action reads, so a filled form is sent, never refused as invalid",
 };
 
 const MUTANTS = [
@@ -72,6 +76,16 @@ const MUTANTS = [
   m("UX08-X36", "unreadable judge records read as empty", `${J}/records.tsx`, '<ServiceState state="unavailable" title="Judge records', '<ServiceState state="empty" title="Judge records', [C.j05]),
   m("UX08-X37", "the page claims empty records it never read", `${J}/page.tsx`, "<JudgeRecords records={null} />", "<JudgeRecords records={{ configs: [], runs: [], budgets: [] }} />", [C.j05]),
   m("UX08-X38", "judge setup is not placed under Evaluations", `${J}/page.tsx`, 'breadcrumb={[{ href: "/evaluations", label: "Evaluations" }]}', "breadcrumb={[]}", [C.j05]),
+  // Register row 98: the judge forms send what their actions read.
+  m("UX08-X39", "every refusal keeps the key", JV, '!o.ok && o.reason === "unavailable"', "!o.ok", [C.j06]),
+  m("UX08-X40", "a conflict keeps the key, an unknown outcome frees it", JV, 'o.reason === "unavailable"', 'o.reason === "conflict"', [C.j06]),
+  m("UX08-X41", "the form replaces the key only when it should keep it", JF, "if (keyed && !retryKeepsKey(outcome))", "if (keyed && retryKeepsKey(outcome))", [C.j06]),
+  m("UX08-X42", "the form sends the render's key forever", JF, "Object.entries(values).map(", "Object.entries(hidden).map(", [C.j06]),
+  m("UX08-X43", "configure carries no key", JP, '        hidden={{ idempotency_key: mint() }}\n        keyed="idempotency_key"\n      />', "      />", [C.j06, C.j07]),
+  m("UX08-X44", "the budget carries no key", JP, '          hidden={{ idempotency_key: mint() }}\n          keyed="idempotency_key"\n        />', "        />", [C.j06, C.j07]),
+  m("UX08-X45", "calibration names no configuration", JP, 'fields={[{ name: "config_id", label: "Configuration id" }]}', "fields={[]}", [C.j07]),
+  m("UX08-X46", "the run form replaces its run id", JP, "hidden={{ run_id: runId }}", 'hidden={{ run_id: runId }}\n        keyed="run_id"', [C.j06]),
+  m("UX08-X47", "the configure key is a fixed field, not minted", JP, '        hidden={{ idempotency_key: mint() }}\n        keyed="idempotency_key"\n      />', '        hidden={{ idempotency_key: runId }}\n        keyed="idempotency_key"\n      />', [C.j06]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "UX08", mutants: MUTANTS }));

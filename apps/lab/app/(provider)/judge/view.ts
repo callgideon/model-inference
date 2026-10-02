@@ -3,6 +3,8 @@
 // ponytail: the field subsets are copied here because packages/api-client is not yet regenerated with
 // the judge paths (WR-UX08-3); then they become `components["schemas"][…]`. UX08-J01 pins them to the
 // committed OpenAPI meanwhile.
+import type { Outcome } from "@/lib/services/judge/core";
+
 export type Money = { amount: string; unit: "CREDIT" | "USD" | "PROVIDER_USD" };
 export type Calibration = { state: "calibrated" | "insufficient" | "uncalibrated"; labels: number; required: number; agreement: number | null; interval: number[] | null };
 export type Config = { config_id: string; model_id: string; judge_model: string; rubric_version: number; sample_size: number; grantor_org_id: string; created_at: string; calibration: Calibration };
@@ -51,3 +53,8 @@ export function runRow(r: JudgeRun) {
 export function budgetRow(b: Budget) {
   return { payer: b.payer_ref, limit: money(b.limit), reserved: money(b.reserved), settled: money(b.settled) };
 }
+
+/** Register row 98: whether a keyed form resends its Idempotency-Key on the next submission. Only after
+ *  an unknown outcome (unavailable: the write may have happened), so the retry replays it; any definite
+ *  answer ends that submission and the next one is a new write with a new key. */
+export const retryKeepsKey = (o: Outcome) => !o.ok && o.reason === "unavailable";

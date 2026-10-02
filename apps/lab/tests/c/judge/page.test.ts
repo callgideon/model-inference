@@ -1,6 +1,6 @@
 // WR-C3L-2 CONSOLE-FLOWS: the Lab judge page posts C3L's four actions. The run id is minted once per
 // page render (so a double-click repeats it and the RPC answers the same run, C3L-B02) and never by the
-// action or the browser; the provider never rides a form field; a viewer gets no form and only an
+// action or the browser (register row 98: configure/budget keys are UX08-J06's); the provider never rides a form field; a viewer gets no form and only an
 // administrator the budget form. The page is a server component, so its source is the unit under test
 // (as V3-P01 reads panel.tsx); the outcome copy is a pure module.
 import assert from "node:assert/strict";
@@ -21,11 +21,16 @@ test("C3P-01 the page runs the guard, then mints one run id per render into the 
   const mint = page.indexOf("crypto.randomUUID()");
   assert.ok(guard !== -1 && mint > guard, "the guard runs before anything is rendered");
   assert.equal(page.split("crypto.randomUUID()").length - 1, 1);
-  for (const path of [FORM, "lib/services/judge/actions.ts", "lib/services/judge/core.ts"]) {
+  assert.equal(page.split("const runId = mint();").length - 1, 1);
+  for (const path of ["lib/services/judge/actions.ts", "lib/services/judge/core.ts"]) {
     assert.equal(read(path).includes("randomUUID"), false, `${path} never mints a run id`);
   }
+  // Register row 98: the form mints only its keyed field's next key (configure/budget), never a run id.
+  const form = read(FORM);
+  assert.equal(form.split("crypto.randomUUID()").length - 1, 1);
+  assert.match(form, /\[keyed\]: crypto\.randomUUID\(\)/);
   assert.equal(page.split("hidden={{ run_id: runId }}").length - 1, 1);
-  assert.match(page, /action=\{requestJudgeRun\}[^>]*hidden=\{\{ run_id: runId \}\}/);
+  assert.match(page, /action=\{requestJudgeRun\}[^>]*hidden=\{\{ run_id: runId \}\}\s*\/>/);
 });
 
 test("C3P-02 the four forms post the four C3L actions and never a provider or identity field", () => {
@@ -35,7 +40,7 @@ test("C3P-02 the four forms post the four C3L actions and never a provider or id
   }
   const names = [...page.matchAll(/name: "([a-z_]+)"/g)].map((m) => m[1]);
   assert.equal(/provider|user|role/.test(names.join(" ")), false);
-  assert.deepEqual(names.sort(), ["after", "config_id", "grantor_org_id", "judge_model", "limit", "limit_usd", "model_id", "payer_ref", "payer_ref", "rubric_version", "sample_size"]);
+  assert.deepEqual(names.sort(), ["config_id", "config_id", "grantor_org_id", "judge_model", "limit_usd", "model_id", "payer_ref", "payer_ref", "rubric_version", "sample_size"]);
   assert.match(read(FORM), /<input type="hidden" key=\{name\} name=\{name\} value=\{value\} \/>/);
 });
 
