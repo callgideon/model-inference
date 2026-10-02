@@ -149,8 +149,10 @@ def test_ap08_cli__queued_to_calibrated_through_the_judge_role_process(pg, tmp_p
 
         second = Role(env)
         until("the collect pass settling the run", lambda: state() == "completed", second)
-        until("the calibration pass publishing", lambda: conn.execute(
-            "select count(*) from infrx.lab_judge_calibrations").fetchone()[0] > 0, second)
+        # the first process's pass already published `uncalibrated` (no settled results)
+        until("the calibration pass grading the settled results", lambda: conn.execute(
+            "select count(*) from infrx.lab_judge_calibrations "
+            "where (calibration->>'labels')::int > 0").fetchone()[0] > 0, second)
         code, out = second.stop()
         assert code == 0, out[-2000:]
         assert len(fake.posts) == 1, "the restart sent the batch again"
