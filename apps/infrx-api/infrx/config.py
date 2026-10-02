@@ -418,6 +418,37 @@ class DeploymentSettings:
     # name, never in a repr.
     console_reads: bool = False
     console_database_url: str = field(default="", repr=False)
+    # WR-AP03-2 (AP-03): mount the console and operator mutation routes (/console/v1/keys,
+    # signup-grant claim, request feedback; /operator/v1/* mutations) over
+    # infrx.console.actions.ConsoleActions on the gateway pool. Off by default: no such route
+    # exists. The pool's login must be able to `set role service_role` and `set local role
+    # authenticated` (not `infrx_runtime`, which has no such grant).
+    console_actions_api: bool = False
+    # W1 (AP-07a, api-traces): mount the grantor's data-use routes (/console/v1/data-use,
+    # PUT /console/v1/keys/{id}/capture, /console/v1/data-grants) over
+    # infrx.console.data_use.DataUse on the gateway pool (service_role). Off by default: no
+    # such route exists; on, it needs AP-01's session actors.
+    console_data_use: bool = False
+    # WR-1 (AP-08, api-judge): the Lab control unit mounts `/lab/v1/judge/*` and
+    # `/lab/v1/traces/{id}/feedback|reviews` over `JudgeApi(SessionDoors)` on its own login. Off
+    # by default: no such route exists. On, the routes answer 503 until AP-01's session actors
+    # are composed on the unit; JUDGE_MODE stays dry_run (live judging waits on P-10).
+    lab_judge_api: bool = False
+    # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
+    # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
+    # `console.session.SessionActors` (the verified Supabase session, or an operator key at
+    # the operator door) and `PgIdentity` on the job store's pool. Off by default: no such
+    # route exists. `WEB_ORIGINS` (comma-separated, e.g. https://app.callbill.ai) are the only
+    # browser origins a mutation may come from and the only `redirect_to` origins.
+    identity_api: bool = False
+    web_origins: str = ""
+    # AP-01 (WR-AP01-1): the auth facade `/auth/v1/*` over the project's auth server with its
+    # publishable key `SUPABASE_ANON_KEY` (never the service-role key, which the auth server
+    # lets past its CAPTCHA); `AUTH_CAPTCHA_REQUIRED` reports the hosted CAPTCHA policy (LR-02).
+    # Off by default; on without `SUPABASE_ANON_KEY` refuses to start.
+    auth_facade: bool = False
+    supabase_anon_key: str = field(default="", repr=False)
+    auth_captcha_required: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

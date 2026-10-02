@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -51,6 +51,8 @@ api-mutants:
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_observe/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve/test_mutants.py
+	# AP-11's lifecycle-runner list (api-lifecycle, LW7): layer 1 on the contract fake, no Docker
+	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/api_lifecycle/test_mutants.py
 	# LAB-LOCAL's (E4-ON) list: its stack half skips visibly without a kept e3l stack (lab-local.sh --keep)
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_local/test_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py tests/i/lab_control/test_mutants.py
@@ -70,10 +72,18 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py
 	# 0058's SQL list (lab-sql LW9: WR-LW7-3a, WR-C7-TALLY): needs Docker, skips visibly without it; task-local key l3
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw9.py
+	# AP-03's lists (api-actions, wave 7): the unit list, and the PostgreSQL list (needs Docker, skips visibly without it); task-local key ap3
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py
 	# 0060's SQL list + control_ops.py's Python list (api-schema, AP-00 00d, R271): the SQL needs Docker, skips visibly without it; task-local key ap0
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
 	# AP-02's console reads (wave 7): PostgreSQL half needs Docker, skips visibly without it; task-local key ap2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
+	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 uv run --frozen pytest -q tests/ap07/test_mutants.py
+	# AP-08's lists (api-judge, LW7): Python mutants + 0064's SQL list (needs Docker, skips visibly without it); task-local key ap8
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08/test_mutants.py
+	# AP-01's list (api-identity, LW7, WR-AP01-1): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap1
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -96,6 +106,8 @@ console-mutants:
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
+	cd apps/app && node tests/ux/run-mutants.mjs
+	cd apps/app && node tests/ux/first-call/run-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
@@ -185,6 +197,7 @@ lab-mutants:
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
+	cd apps/lab && node tests/ux/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
 api-client-test:
@@ -237,6 +250,8 @@ lab-compositions:
 	# WR-LC-MAKE: the trace pumps + WR-C6-CAPTURE on real PostgreSQL/ClickHouse/MinIO (the t2f block)
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/w/test_worker_traces_pg.py
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/t/capture/test_capture_stack.py
+	# AP-07b/07d: the composed trace proof on the ap7 block (PG + ClickHouse + MinIO; containers per the file's header)
+	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:
@@ -265,3 +280,8 @@ lab-improve:
 # Lab web); not in check. verdict.json lands in the evidence dir. GATE_ARGS: "--keep", "--only scenarios".
 lab-local:
 	tests/integration/lab-local.sh --out $(CURDIR)/research/plan/evidence/e/E4ON-raw-$(shell git rev-parse --short HEAD) $(GATE_ARGS)
+
+# AP-11: the API-only lifecycle runner, isolated mode on task-local key ap11 (tests/integration/api_lifecycle); not in check.
+# Its 0700 state dir is under $TMPDIR; verdict.json lands in the evidence dir.
+api-lifecycle:
+	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $(CURDIR)/research/plan/evidence/w7/AP11-raw-$(shell git rev-parse --short HEAD)

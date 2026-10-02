@@ -59,3 +59,21 @@ async def test_r270_static_actors_raise_the_domain_error_or_return_the_actor():
         await control.StaticActors(error=errors.Forbidden("no")).actor(req)
     with pytest.raises(errors.InvalidApiKey):
         await control.StaticActors().actor(req)
+
+
+def test_r270_route_renders_request_validation_as_the_422_envelope():
+    from fastapi import APIRouter, FastAPI, Query
+    from fastapi.testclient import TestClient
+    app, r = FastAPI(), APIRouter(route_class=control.R270Route)
+
+    @r.get("/x")
+    async def x(n: int = Query()):
+        return control.ok({"n": n})
+
+    app.include_router(r)
+    got = TestClient(app).get("/x", params={"n": "not-an-int"}, headers={"X-Request-Id": "rid-9"})
+    assert got.status_code == 422 and got.headers.get("cache-control") == "no-store"
+    error = got.json()["error"]
+    assert (error["code"], error["request_id"], error["retryable"]) == ("invalid_request", "rid-9", False)
+    assert [f["field"] for f in error["field_errors"]] == ["n"]
+    assert "not-an-int" not in got.text

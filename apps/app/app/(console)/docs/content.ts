@@ -77,6 +77,9 @@ const STORED: Record<StoredContent, string> = {
   stream_journal: "the streamed output events",
 };
 
+/** Said when the record commits no physical-deletion bound (02-foundations' copy). */
+export const NO_DELETION_DEADLINE = "The result access window does not specify a physical-deletion deadline.";
+
 /** What serving keeps and for how long, from the record. Never "zero retention". */
 export function retentionFacts(r: ServingRetention): string[] {
   const facts = [
@@ -86,9 +89,12 @@ export function retentionFacts(r: ServingRetention): string[] {
     `An Idempotency-Key keeps answering with its original job for ${duration(r.idempotency_ttl_s)} after the job finishes.`,
     `Prepared video may be kept in a processing cache for up to ${duration(r.processing_cache_ttl_s)}.`,
   ];
-  if (r.physical_deletion_bound_s !== undefined) {
-    facts.push(`Expired content is physically deleted within ${duration(r.physical_deletion_bound_s)}.`);
-  }
+  // Null (as served) or absent: no bound is committed. Unknown, never "within 0 hours" (UX-01).
+  facts.push(
+    r.physical_deletion_bound_s == null
+      ? NO_DELETION_DEADLINE
+      : `Expired content is physically deleted within ${duration(r.physical_deletion_bound_s)}.`,
+  );
   facts.push(
     "Trace capture is off by default. Turning it off does not delete the serving data above; it only stops optional trace collection.",
   );

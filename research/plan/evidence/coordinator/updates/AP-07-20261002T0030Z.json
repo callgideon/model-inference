@@ -1,0 +1,27 @@
+{
+  "task": "AP-07",
+  "lane": "api-traces",
+  "slice": "07a + 07c done; 07b/07d composed proof PASS on the ap7 stack; the e5l-box variant -> batch 2",
+  "activity": "review",
+  "at": "2026-10-02T00:30:00Z",
+  "head": "c75f85b",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-traces",
+  "branch": "codex/w7-api-traces",
+  "owned_paths": ["apps/infrx-api/infrx/console/data_use.py", "apps/infrx-api/infrx/gateway/routes/console_data_use.py", "apps/infrx-api/infrx/gateway/routes/lab_traces.py", "apps/infrx-api/tests/ap07/", "research/plan/evidence/w7/api-traces-c75f85b.md", "research/plan/evidence/coordinator/updates/AP-07-20261002T0030Z.json"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=ap7 pytest -q tests/ap07/test_data_use.py (before implementation)", "exit": 2, "summary": "RED: infrx.console absent"},
+    {"cmd": "INFRX_D_TASK=ap7 pytest -q tests/ap07/test_trace_reads.py (before implementation)", "exit": 1, "summary": "RED: 9 failed, 2 passed"},
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 pytest -q tests/ap07 tests/g/lab_traces tests/g/lab_auth tests/l/access tests/contracts/test_api_wire.py", "exit": 0, "summary": "120 passed, 2 skipped"},
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 pytest -q tests/ap07/test_trace_stack.py", "exit": 0, "summary": "2 passed (composed proof PASS)"},
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_MUTANTS=all pytest -q tests/ap07/test_mutants.py", "exit": 0, "summary": "47/47 mutants killed + 3 guards"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/g/lab_traces/test_mutants.py", "exit": 0, "summary": "28 passed (existing anchors intact)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "458 (baseline 458)"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "expected until wiring W2 (ap07 list not in api-mutants)"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 5, "pessimistic_h": 9, "confidence": "medium", "basis": "W1-W3 wiring review at merge; e5l-box variant in batch 2 after W1; optional 0063 for suspended-org revocation", "at": "2026-10-02T00:30:00Z"},
+  "blockers": [],
+  "wiring_requests": ["W1 gateway/app.py ROUTERS + pilot.py rt.data_use + DeploymentSettings.console_data_use=False", "W2 Makefile api-mutants: INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 tests/ap07/test_mutants.py", "W3 Makefile lab-compositions: INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 tests/ap07/test_trace_stack.py", "W4 batch 2: e5l-box variant under tests/integration/lab_observe/"],
+  "evidence": ["research/plan/evidence/w7/api-traces-c75f85b.md"]
+}

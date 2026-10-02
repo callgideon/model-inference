@@ -101,7 +101,9 @@ export type ServingRetention = V2 & {
   stream_journal_ttl_s: number;
   idempotency_ttl_s: number;
   processing_cache_ttl_s: number;
-  physical_deletion_bound_s?: number;
+  /** The committed bound on when expired bytes are gone. Null or absent: none is committed (P-25;
+   * Python's `Count | None = None`, served as `null`), which is unknown, never zero (UX-01). */
+  physical_deletion_bound_s?: number | null;
 };
 
 export type ServingIdentity = V2 & {

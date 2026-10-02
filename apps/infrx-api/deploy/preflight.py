@@ -277,6 +277,33 @@ NOT_SETTABLE = {
                     "hosted, P-10 and the E4 regression rerun, a deploy change, not a --set",
     "LAB_TEACHER_URL": "the teacher's endpoint, the local teacher fake only until P-10: a new "
                        "egress host is an approval, not a --set",
+    "CONSOLE_READS": "mounts the console/operator reads (WR-AP02-1, off by default): enabling "
+                     "it needs AP-01's session actors, CONSOLE_DATABASE_URL and the E4 "
+                     "regression rerun, a deploy change, not a --set",
+    "CONSOLE_DATABASE_URL": "the console reads' DSN, which carries a credential: a secret "
+                            "belongs in SSM, not in an argument",
+    "CONSOLE_ACTIONS_API": "mounts the console/operator mutations (WR-AP03-2, off by default): "
+                           "enabling it needs AP-01's session actors, a pool login that may set "
+                           "role authenticated and the E4 regression rerun, a deploy change, "
+                           "not a --set",
+    "CONSOLE_DATA_USE": "mounts the grantor's data-use routes (W1 AP-07a, off by default): "
+                        "enabling it needs AP-01's session actors and the E4 regression rerun, "
+                        "a deploy change, not a --set",
+    "LAB_JUDGE_API": "mounts the Lab unit's judge and trace-review routes (WR-1 AP-08, off by "
+                     "default, Lab-only): enabling it needs AP-01's session actors on the unit, "
+                     "0064 applied hosted and the E4 regression rerun, a deploy change, not a "
+                     "--set; live judging waits on P-10",
+    "IDENTITY_API": "mounts /console/v1/me|capabilities, /lab/v1/workspaces|capabilities|"
+                    "members and /operator/v1/providers (WR-AP01-1, off by default): enabling "
+                    "it is AP-09's frontend switch, a deploy change, not a --set",
+    "WEB_ORIGINS": "the App/Lab browser origins a mutation or a redirect may come from "
+                   "(WR-AP01-1): a new origin is an approval, not a --set",
+    "AUTH_FACADE": "mounts /auth/v1/* over the project's auth server (WR-AP01-1, off by "
+                   "default): enabling it is AP-09's frontend switch, a deploy change, not a --set",
+    "SUPABASE_ANON_KEY": "the project's publishable key for the auth facade: by name from the "
+                         "secret store with the deploy change, never an argument",
+    "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
+                             "decision recorded with the deploy change, not a --set",
 }
 
 

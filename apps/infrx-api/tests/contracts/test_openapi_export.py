@@ -33,10 +33,9 @@ def exported(apps: dict[str, FastAPI]) -> dict[str, FastAPI]:
     return {name: apps[name] for name in export.ARTIFACTS}
 
 
-def mounted(app: FastAPI) -> set[str]:
-    """Every mounted (method, path) as a client addresses it (`{ref}`, not `{ref:path}`)."""
-    return {f"{method} {getattr(route, 'path_format', '')}" for route in app.routes
-            for method in (getattr(route, "methods", None) or ())}
+def mounted(app) -> set[str]:
+    """Every (method, path) the app serves, included routers walked like the export does."""
+    return {f"{method} {route.path_format}" for route in export.routes(app) for method in route.methods or ()}
 
 
 # --- 00a: the inventory -----------------------------------------------------------------------
@@ -69,7 +68,8 @@ def test_ap00_inventory_joins_web_actions_to_target_operations(apps):
         assert action["flag"] == (action["transport"] in inventory.BYPASS), action["action"]
     assert targets["GET /v1/models"]["state"] == "existing"
     assert targets["GET /lab/v1/traces/{id}"]["state"] == "existing"     # {request_id} mounted
-    assert targets["POST /console/v1/keys"]["state"] == "target"
+    assert targets["POST /console/v1/keys"]["state"] == "existing"           # AP-03 mounted (merge #88)
+    assert targets["POST /lab/v1/control/deployments"]["state"] == "target"  # AP-05, batch 2
     flagged = {a["action"] for a in doc["web_actions"] if a["flag"]}
     assert {"createConsumerKey", "claimSignupGrant"} <= flagged
 
@@ -163,6 +163,22 @@ def test_ap00_a_get_reading_the_request_with_a_declared_response_is_documented(a
     legacy = export.legacy(exported(apps))
     assert "GET /console/v1/credits" not in legacy["consumer"]
     assert any(entry.startswith("POST ") for entry in legacy["consumer"])
+
+
+def test_ap00_a_typed_body_answering_204_no_content_is_documented(apps):
+    """Oracle (WR-AP01-1): a typed body answered by a declared 204 No Content (the auth
+    facade's password change) is not legacy - there is no response body to model."""
+    legacy = export.legacy(exported(apps))
+    assert "POST /auth/v1/password" not in legacy["consumer"]
+
+
+def test_ap00_a_declared_no_body_post_and_an_included_router_are_documented(apps):
+    """Oracle: a body method that declares `x-infrx-no-body` (sign-out reads only headers) is
+    not legacy; routes mounted through `app.include_router` are walked by the export."""
+    legacy = export.legacy(exported(apps))
+    assert "POST /auth/v1/sign-out" not in legacy["consumer"]
+    paths = {f"{m} {r.path_format}" for r in export.routes(exported(apps)["consumer"]) for m in r.methods}
+    assert "POST /console/v1/keys" in paths and "DELETE /console/v1/keys/{key_id}" in paths
 
 
 def test_ap00_lab_control_documents_its_bodies_responses_and_refusals(apps):

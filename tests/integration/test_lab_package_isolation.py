@@ -26,6 +26,7 @@ CASES = (
     "lab_improve/test_e7l_runner.py::test_e7l_a_not_run_case_names_its_lanes_and_the_exact_rerun",
     "lab_improve/test_e7l_runner.py::test_e7l_the_i07_tripwire_fires_on_a_worker_pass_not_the_module",
     "lab_rollout/test_e8l_runner.py::test_e8l_a_not_run_case_names_its_lanes_and_the_exact_rerun",
+    "api_lifecycle/test_runner.py::test_ap11_a_stage_without_its_api_is_blocked_naming_the_prerequisite",
 )
 
 

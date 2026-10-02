@@ -1,6 +1,116 @@
 {
   "components": {
     "schemas": {
+      "Actor": {
+        "additionalProperties": false,
+        "description": "Who is acting, as the server established it. `session` = a verified Supabase session\n(the web apps' transport); the key audiences come from `infrx.auth`.",
+        "properties": {
+          "audience": {
+            "enum": [
+              "consumer",
+              "operator",
+              "provider_dev",
+              "session"
+            ],
+            "title": "Audience",
+            "type": "string"
+          },
+          "operator": {
+            "default": false,
+            "title": "Operator",
+            "type": "boolean"
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id"
+          },
+          "provider_org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Org Id"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "audience"
+        ],
+        "title": "Actor",
+        "type": "object"
+      },
+      "ApiKey": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "key_id",
+          "name",
+          "prefix",
+          "created_at"
+        ],
+        "title": "ApiKey",
+        "type": "object"
+      },
       "AuditEntry": {
         "additionalProperties": false,
         "properties": {
@@ -59,6 +169,256 @@
         "title": "AuditEntry",
         "type": "object"
       },
+      "AuthAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_required": {
+            "title": "Captcha Required",
+            "type": "boolean"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "sign_in": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "sign_up": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "signup_grant": {
+            "$ref": "#/components/schemas/Availability"
+          }
+        },
+        "required": [
+          "sign_in",
+          "sign_up",
+          "recovery",
+          "signup_grant",
+          "captcha_required"
+        ],
+        "title": "AuthAvailability",
+        "type": "object"
+      },
+      "Availability": {
+        "additionalProperties": false,
+        "description": "A feature's availability as FastAPI states it. A failed fetch is `unknown` with a\nreason; it is never rendered as a zero count or a disabled feature.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "configured",
+              "disabled",
+              "unavailable",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "Availability",
+        "type": "object"
+      },
+      "CaptureRequest": {
+        "additionalProperties": false,
+        "description": "The key's mode plus the organization-level consent it is decided under.",
+        "properties": {
+          "consent_version": {
+            "minimum": 0.0,
+            "title": "Consent Version",
+            "type": "integer"
+          },
+          "evaluation_consent": {
+            "default": false,
+            "title": "Evaluation Consent",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "retention_days": {
+            "default": 30,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "consent_version"
+        ],
+        "title": "CaptureRequest",
+        "type": "object"
+      },
+      "Consent": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "evaluation_consent": {
+            "title": "Evaluation Consent",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "mode",
+          "retention_days",
+          "evaluation_consent",
+          "effective_at",
+          "revoked_at"
+        ],
+        "title": "Consent",
+        "type": "object"
+      },
+      "ConsoleCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Actions",
+            "type": "object"
+          },
+          "features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Availability"
+            },
+            "title": "Features",
+            "type": "object"
+          }
+        },
+        "required": [
+          "actions",
+          "features"
+        ],
+        "title": "ConsoleCapabilities",
+        "type": "object"
+      },
+      "CreditAdjusted": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "replayed",
+          "amount"
+        ],
+        "title": "CreditAdjusted",
+        "type": "object"
+      },
+      "CreditAdjustment": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 40,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "amount",
+          "reason"
+        ],
+        "title": "CreditAdjustment",
+        "type": "object"
+      },
       "Credits": {
         "additionalProperties": false,
         "description": "The individual's CREDIT wallet. No wallet yet is `wallet_id: null` with zero figures (the\ndatabase's own answer); `spent` is null when it cannot be computed exactly.",
@@ -114,6 +474,57 @@
           "signup_granted_at"
         ],
         "title": "Credits",
+        "type": "object"
+      },
+      "DataCategory": {
+        "enum": [
+          "request_content",
+          "response_content",
+          "media",
+          "usage_metadata",
+          "feedback"
+        ],
+        "title": "DataCategory",
+        "type": "string"
+      },
+      "DataPurpose": {
+        "description": "Four separate permissions (`01-architecture.md`). Capture implies none of\nthe other three, and a role is never consent.",
+        "enum": [
+          "capture",
+          "provider_sharing",
+          "external_judging",
+          "training"
+        ],
+        "title": "DataPurpose",
+        "type": "string"
+      },
+      "DataUseDoc": {
+        "additionalProperties": false,
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/Consent"
+          },
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            },
+            "title": "Grants",
+            "type": "array"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyCapture"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "consent",
+          "keys",
+          "grants"
+        ],
+        "title": "DataUseDoc",
         "type": "object"
       },
       "ErrorBody": {
@@ -188,6 +599,93 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "FeedbackAccepted": {
+        "additionalProperties": false,
+        "description": "201 means PostgreSQL accepted it; provenance is server-set.",
+        "properties": {
+          "author_role": {
+            "title": "Author Role",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/FeedbackChannel"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "replayed": {
+            "default": false,
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "request_id",
+          "channel",
+          "author_role",
+          "created_at"
+        ],
+        "title": "FeedbackAccepted",
+        "type": "object"
+      },
+      "FeedbackChannel": {
+        "enum": [
+          "api",
+          "console"
+        ],
+        "title": "FeedbackChannel",
+        "type": "string"
+      },
+      "FeedbackCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "FeedbackCreate",
+        "type": "object"
+      },
       "FieldError": {
         "additionalProperties": false,
         "properties": {
@@ -210,6 +708,398 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "Grant": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/DataCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "grant_id": {
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "purposes": {
+            "items": {
+              "$ref": "#/components/schemas/DataPurpose"
+            },
+            "title": "Purposes",
+            "type": "array"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grant_id",
+          "version",
+          "provider_org_id",
+          "model_ids",
+          "categories",
+          "purposes",
+          "retention_days",
+          "effective_at",
+          "expires_at",
+          "revoked_at",
+          "state"
+        ],
+        "title": "Grant",
+        "type": "object"
+      },
+      "GrantClaim": {
+        "additionalProperties": false,
+        "description": "`claim_signup_grant`'s answer: a grant (`credit` + `granted_at`) or why not.",
+        "properties": {
+          "credit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "status": {
+            "enum": [
+              "granted",
+              "replayed",
+              "unverified",
+              "identity_reused",
+              "rollout_hold",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "GrantClaim",
+        "type": "object"
+      },
+      "GrantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/DataCategory"
+            },
+            "minItems": 1,
+            "title": "Categories",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "grant_version": {
+            "minimum": 0.0,
+            "title": "Grant Version",
+            "type": "integer"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "provider_org_id": {
+            "format": "uuid",
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "purposes": {
+            "items": {
+              "$ref": "#/components/schemas/DataPurpose"
+            },
+            "minItems": 1,
+            "title": "Purposes",
+            "type": "array"
+          },
+          "retention_days": {
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "model_ids",
+          "categories",
+          "purposes",
+          "retention_days",
+          "grant_version"
+        ],
+        "title": "GrantRequest",
+        "type": "object"
+      },
+      "GrantStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "state": {
+            "enum": [
+              "granted",
+              "not_granted"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "GrantStatus",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "KeyCapture": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Effective Mode",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "name",
+          "mode",
+          "effective_mode"
+        ],
+        "title": "KeyCapture",
+        "type": "object"
+      },
+      "KeyCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "KeyCreate",
+        "type": "object"
+      },
+      "KeyCreated": {
+        "additionalProperties": false,
+        "description": "`secret` is set only on the call that created the row; a replay carries null and\n`secret_returned: false` - a lost secret is a revoke and a new key, never a re-reveal.",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ApiKey"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "secret_returned": {
+            "title": "Secret Returned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "secret",
+          "secret_returned",
+          "replayed"
+        ],
+        "title": "KeyCreated",
+        "type": "object"
+      },
+      "KeyRevocation": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "format": "uuid",
+            "title": "Key Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "reason"
+        ],
+        "title": "KeyRevocation",
+        "type": "object"
+      },
+      "KeyRevoked": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key_id",
+          "replayed"
+        ],
+        "title": "KeyRevoked",
         "type": "object"
       },
       "KeySummary": {
@@ -264,6 +1154,59 @@
           "revoked_at"
         ],
         "title": "KeySummary",
+        "type": "object"
+      },
+      "LabCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Availability"
+            },
+            "title": "Features",
+            "type": "object"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "role",
+          "capabilities",
+          "features"
+        ],
+        "title": "LabCapabilities",
+        "type": "object"
+      },
+      "Landing": {
+        "additionalProperties": false,
+        "properties": {
+          "redirect": {
+            "title": "Redirect",
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        },
+        "required": [
+          "session",
+          "redirect"
+        ],
+        "title": "Landing",
         "type": "object"
       },
       "LedgerEntry": {
@@ -368,6 +1311,34 @@
         "title": "ListPage[AuditEntry]",
         "type": "object"
       },
+      "ListPage_Grant_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Grant]",
+        "type": "object"
+      },
       "ListPage_KeySummary_": {
         "additionalProperties": false,
         "properties": {
@@ -422,34 +1393,6 @@
           "data"
         ],
         "title": "ListPage[LedgerEntry]",
-        "type": "object"
-      },
-      "ListPage_Member_": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/Member"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "ListPage[Member]",
         "type": "object"
       },
       "ListPage_OperatorAccount_": {
@@ -564,10 +1507,17 @@
         "title": "ListPage[WalletDrift]",
         "type": "object"
       },
-      "Member": {
+      "ListPage_Workspace_": {
         "additionalProperties": false,
         "properties": {
-          "email": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
             "anyOf": [
               {
                 "type": "string"
@@ -576,28 +1526,71 @@
                 "type": "null"
               }
             ],
-            "title": "Email"
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Workspace]",
+        "type": "object"
+      },
+      "Me": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
           },
-          "joined_at": {
-            "title": "Joined At",
+          "signup_grant": {
+            "$ref": "#/components/schemas/GrantStatus"
+          },
+          "state": {
+            "enum": [
+              "unverified",
+              "onboarding",
+              "ready"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actor",
+          "state",
+          "suspended",
+          "signup_grant"
+        ],
+        "title": "Me",
+        "type": "object"
+      },
+      "MemberGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
             "type": "string"
           },
           "role": {
+            "enum": [
+              "viewer",
+              "developer",
+              "administrator"
+            ],
             "title": "Role",
-            "type": "string"
-          },
-          "user_id": {
-            "title": "User Id",
             "type": "string"
           }
         },
         "required": [
-          "user_id",
           "email",
-          "role",
-          "joined_at"
+          "role"
         ],
-        "title": "Member",
+        "title": "MemberGrant",
         "type": "object"
       },
       "Money": {
@@ -623,6 +1616,24 @@
           "unit"
         ],
         "title": "Money",
+        "type": "object"
+      },
+      "NewPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "NewPassword",
         "type": "object"
       },
       "OperatorAccount": {
@@ -700,6 +1711,170 @@
           "signup_granted_at"
         ],
         "title": "OperatorAccount",
+        "type": "object"
+      },
+      "Provider": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "slug",
+          "display_name",
+          "created_by",
+          "created_at"
+        ],
+        "title": "Provider",
+        "type": "object"
+      },
+      "ProviderCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "administrator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/infrx__console__session__Member"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderCreated",
+        "type": "object"
+      },
+      "ProviderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "administrator_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Administrator Email"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "slug": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "display_name"
+        ],
+        "title": "ProviderRequest",
+        "type": "object"
+      },
+      "Recovery": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "Recovery",
+        "type": "object"
+      },
+      "Refresh": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh_token": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Refresh Token",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "Refresh",
         "type": "object"
       },
       "RequestResult": {
@@ -897,6 +2072,202 @@
         "title": "RequestSummary",
         "type": "object"
       },
+      "Sent": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "sent",
+            "default": "sent",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "Sent",
+        "type": "object"
+      },
+      "Session": {
+        "additionalProperties": false,
+        "description": "A signed-in session, for Next to set as its cookies. Never in a URL or a log.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "token_type": {
+            "title": "Token Type",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in",
+          "user_id"
+        ],
+        "title": "Session",
+        "type": "object"
+      },
+      "SignIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignIn",
+        "type": "object"
+      },
+      "SignUp": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignUp",
+        "type": "object"
+      },
+      "Suspension": {
+        "additionalProperties": false,
+        "properties": {
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "org_id",
+          "suspended",
+          "reason"
+        ],
+        "title": "Suspension",
+        "type": "object"
+      },
+      "SuspensionSet": {
+        "additionalProperties": false,
+        "properties": {
+          "org_id": {
+            "title": "Org Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "org_id",
+          "suspended",
+          "replayed"
+        ],
+        "title": "SuspensionSet",
+        "type": "object"
+      },
       "UnknownUsage": {
         "additionalProperties": false,
         "description": "A request whose usage is unknown: the hold is quarantined, never charged.",
@@ -945,6 +2316,46 @@
         "title": "UnknownUsage",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "WalletDrift": {
         "additionalProperties": false,
         "properties": {
@@ -970,6 +2381,177 @@
           "reserved_drift"
         ],
         "title": "WalletDrift",
+        "type": "object"
+      },
+      "Workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "provider_name",
+          "role",
+          "capabilities"
+        ],
+        "title": "Workspace",
+        "type": "object"
+      },
+      "infrx__console__reads__Member": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "joined_at": {
+            "title": "Joined At",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "role",
+          "joined_at"
+        ],
+        "title": "Member",
+        "type": "object"
+      },
+      "infrx__console__session__Member": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "granted_by": {
+            "title": "Granted By",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "role",
+          "granted_by",
+          "granted_at"
+        ],
+        "title": "Member",
+        "type": "object"
+      },
+      "infrx__contracts__api__ListPage_Member___1": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/infrx__console__session__Member"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Member]",
+        "type": "object"
+      },
+      "infrx__contracts__api__ListPage_Member___2": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/infrx__console__reads__Member"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Member]",
         "type": "object"
       }
     },
@@ -1006,6 +2588,377 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/auth/v1/availability": {
+      "get": {
+        "operationId": "getAuthV1Availability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthAvailability"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Available"
+      }
+    },
+    "/auth/v1/callback": {
+      "get": {
+        "operationId": "getAuthV1Callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token_hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token Hash"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Code"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-auth-code-verifier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Auth-Code-Verifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Landing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Callback"
+      }
+    },
+    "/auth/v1/password": {
+      "post": {
+        "operationId": "postAuthV1Password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Password"
+      }
+    },
+    "/auth/v1/recovery": {
+      "post": {
+        "operationId": "postAuthV1Recovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Recovery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Recovery"
+      }
+    },
+    "/auth/v1/refresh": {
+      "post": {
+        "operationId": "postAuthV1Refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Refresh"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Refresh"
+      }
+    },
+    "/auth/v1/sign-in": {
+      "post": {
+        "operationId": "postAuthV1SignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign In"
+      }
+    },
+    "/auth/v1/sign-out": {
+      "post": {
+        "operationId": "postAuthV1SignOut",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Sign Out",
+        "x-infrx-no-body": true
+      }
+    },
+    "/auth/v1/sign-up": {
+      "post": {
+        "operationId": "postAuthV1SignUp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUp"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign Up"
+      }
+    },
     "/console/v1/account/members": {
       "get": {
         "operationId": "getConsoleV1AccountMembers",
@@ -1052,7 +3005,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListPage_Member_"
+                  "$ref": "#/components/schemas/infrx__contracts__api__ListPage_Member___2"
                 }
               }
             },
@@ -1135,6 +3088,29 @@
           }
         ],
         "summary": "Handler"
+      }
+    },
+    "/console/v1/capabilities": {
+      "get": {
+        "operationId": "getConsoleV1Capabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Capabilities"
       }
     },
     "/console/v1/credit-ledger": {
@@ -1361,6 +3337,137 @@
         "summary": "Credits"
       }
     },
+    "/console/v1/data-grants": {
+      "get": {
+        "operationId": "getConsoleV1DataGrants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_Grant_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Grants"
+      },
+      "post": {
+        "operationId": "postConsoleV1DataGrants",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Put Grant"
+      }
+    },
+    "/console/v1/data-grants/{grant_id}": {
+      "delete": {
+        "operationId": "deleteConsoleV1DataGrantsByGrantId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke Grant"
+      }
+    },
+    "/console/v1/data-use": {
+      "get": {
+        "operationId": "getConsoleV1DataUse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataUseDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Read Data Use"
+      }
+    },
     "/console/v1/keys": {
       "get": {
         "operationId": "getConsoleV1Keys",
@@ -1490,6 +3597,173 @@
           }
         ],
         "summary": "Handler"
+      },
+      "post": {
+        "operationId": "postConsoleV1Keys",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Create Key"
+      }
+    },
+    "/console/v1/keys/{key_id}": {
+      "delete": {
+        "operationId": "deleteConsoleV1KeysByKeyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke Key"
+      }
+    },
+    "/console/v1/keys/{key_id}/capture": {
+      "put": {
+        "operationId": "putConsoleV1KeysByKeyIdCapture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataUseDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Put Capture"
       }
     },
     "/console/v1/legacy-statement": {
@@ -1583,6 +3857,29 @@
           }
         ],
         "summary": "Legacy Statement"
+      }
+    },
+    "/console/v1/me": {
+      "get": {
+        "operationId": "getConsoleV1Me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Me"
       }
     },
     "/console/v1/requests": {
@@ -1892,6 +4189,70 @@
         "summary": "One Request"
       }
     },
+    "/console/v1/requests/{request_id}/feedback": {
+      "post": {
+        "operationId": "postConsoleV1RequestsByRequestIdFeedback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Submit Feedback"
+      }
+    },
     "/console/v1/requests/{request_id}/result": {
       "get": {
         "operationId": "getConsoleV1RequestsByRequestIdResult",
@@ -1996,6 +4357,59 @@
         "summary": "Result"
       }
     },
+    "/console/v1/signup-grant/claim": {
+      "post": {
+        "description": "No body: the individual is the session's. An Idempotency-Key is accepted and not\nneeded - the grant is keyed by the individual (R71), so every retry replays.",
+        "operationId": "postConsoleV1SignupGrantClaim",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantClaim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Claim Grant",
+        "x-infrx-no-body": true
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -2029,6 +4443,224 @@
         },
         "security": [],
         "summary": "Healthz"
+      }
+    },
+    "/lab/v1/capabilities": {
+      "get": {
+        "operationId": "getLabV1Capabilities",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Lab Capabilities"
+      }
+    },
+    "/lab/v1/workspaces": {
+      "get": {
+        "operationId": "getLabV1Workspaces",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_Workspace_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Workspaces"
+      }
+    },
+    "/lab/v1/workspaces/{provider_org_id}/members": {
+      "get": {
+        "operationId": "getLabV1WorkspacesByProviderOrgIdMembers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/infrx__contracts__api__ListPage_Member___1"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Members"
+      },
+      "post": {
+        "operationId": "postLabV1WorkspacesByProviderOrgIdMembers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/infrx__console__session__Member"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Grant"
+      }
+    },
+    "/lab/v1/workspaces/{provider_org_id}/members/{user_id}": {
+      "delete": {
+        "operationId": "deleteLabV1WorkspacesByProviderOrgIdMembersByUserId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/infrx__console__session__Member"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke"
       }
     },
     "/metrics": {
@@ -2314,6 +4946,223 @@
           }
         ],
         "summary": "Handler"
+      }
+    },
+    "/operator/v1/credit-adjustments": {
+      "post": {
+        "operationId": "postOperatorV1CreditAdjustments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditAdjustment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditAdjusted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Adjust"
+      }
+    },
+    "/operator/v1/key-revocations": {
+      "post": {
+        "operationId": "postOperatorV1KeyRevocations",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyRevocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyRevoked"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Revoke"
+      }
+    },
+    "/operator/v1/providers": {
+      "post": {
+        "operationId": "postOperatorV1Providers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Create"
+      }
+    },
+    "/operator/v1/suspensions": {
+      "post": {
+        "operationId": "postOperatorV1Suspensions",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Suspension"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuspensionSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Suspend"
       }
     },
     "/operator/v1/unknown-usage": {

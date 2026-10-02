@@ -1,0 +1,27 @@
+{
+  "task": "AP-08",
+  "lane": "api-judge",
+  "slice": "08a, 08b, 08e done (routes unmounted, WR-1); 08c/08d done against the local judge fake on ap8; live external pass BLOCKED on P-10",
+  "activity": "review",
+  "at": "2026-10-02T01:00:00Z",
+  "head": "7c383a0e",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-judge",
+  "branch": "codex/w7-api-judge",
+  "owned_paths": ["apps/app/supabase/migrations/0064_judge_api.sql", "apps/infrx-api/infrx/lab/judge_api/", "apps/infrx-api/infrx/gateway/routes/lab_judge.py", "apps/infrx-api/infrx/gateway/routes/lab_reviews.py", "apps/infrx-api/infrx/judge/", "apps/infrx-api/tests/ap08/", "research/plan/evidence/w7/api-judge-7c383a0.md", "research/plan/evidence/coordinator/updates/AP-08-20261002T0100Z.json"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08/<each new test file> (before implementation)", "exit": 2, "summary": "red seam runs: module absent"},
+    {"cmd": "INFRX_D_TASK=ap8 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap08", "exit": 0, "summary": "81 passed: 37 cases (14 PG), 29/29 Python mutants, 13/13 0064 SQL mutants, every-case green"},
+    {"cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08 --ignore=tests/ap08/test_mutants.py", "exit": 0, "summary": "37 passed on the real supabase/postgres image"},
+    {"cmd": "INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08/test_egress_allowlist.py tests/j/submit", "exit": 0, "summary": "54 passed"},
+    {"cmd": "INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/d/{test_schema_postgres,test_credit_schema,test_code_mutants_lw8,test_d6j_doors,test_d6j_judge,test_d6f_doors}.py -k 'not sql_mutant and not mutant_is_killed'", "exit": 0, "summary": "66 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/i tests/contracts tests/j tests/g/test_startup.py -m 'not pg'", "exit": 1, "summary": "2094 passed, 48 failed: 2 migration pins + 43 i-mutant baselines (WR-4, caused only by a migration above EXPECTED_PENDING), 3 PG cases run without the key (green on ap8)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 458 (baseline 458)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "see evidence"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 6, "pessimistic_h": 12, "confidence": "medium", "basis": "code and ap8 proofs done; remaining = WR-1/WR-2 composition with AP-01 SessionActors and AP-07's trace read, AP-09 Lab adapter, review fixes; live pass excluded (P-10)", "at": "2026-10-02T01:00:00Z"},
+  "blockers": ["P-10: live external judging (approved provider/model/rate, adapter, credential, budget, 50-lab-role mode)"],
+  "wiring_requests": ["WR-1 lab/control/app.py + config.py LAB_JUDGE_API (default off) mount lab_judge/lab_reviews", "WR-2 workers/__main__.py judge_start job + JUDGE_PROVIDER_ALLOWLIST", "WR-3 Makefile api-mutants += tests/ap08/test_mutants.py", "WR-4 migration pins vs EXPECTED_PENDING (all wave-7 migrations)", "WR-5 move R270Route into gateway/control.py"],
+  "evidence": ["research/plan/evidence/w7/api-judge-7c383a0.md"]
+}

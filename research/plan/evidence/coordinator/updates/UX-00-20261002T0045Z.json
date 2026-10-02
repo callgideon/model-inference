@@ -1,0 +1,58 @@
+{
+ "task": "UX-00",
+ "lane": "ux-foundations",
+ "slice": "tokens + Lab font loading; Button/Field/Badge/PageHeader/ServiceState/Dialog/Drawer/CopyButton; fixture harness isolated from production; primitive examples",
+ "owned_paths": [
+  "apps/lab/app/layout.tsx",
+  "apps/lab/app/lab.css",
+  "apps/lab/components/ui/",
+  "apps/lab/package.json",
+  "apps/lab/pnpm-lock.yaml",
+  "apps/app/app/globals.css",
+  "apps/lab/tests/ux/",
+  "apps/app/tests/ux/"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/lab && node --test tests/ux/foundations.test.ts (before components)",
+   "exit": 1,
+   "summary": "9/9 red: components absent"
+  },
+  {
+   "cmd": "make lab-test lab-lint lab-typecheck lab-build",
+   "exit": 0,
+   "summary": "285 tests, 0 fail, 14 pre-existing skips; clean; build OK"
+  },
+  {
+   "cmd": "cd apps/lab && node tests/ux/run-mutants.mjs",
+   "exit": 0,
+   "summary": "9 cases named, 16/16 killed"
+  },
+  {
+   "cmd": "cd apps/lab && pnpm install --frozen-lockfile",
+   "exit": 0,
+   "summary": "lockfile current, additions only"
+  }
+ ],
+ "wiring_requests": [
+  "Makefile: lab-mutants += cd apps/lab && node tests/ux/run-mutants.mjs; console-mutants += cd apps/app && node tests/ux/run-mutants.mjs (test_makefile_mutant_lists.py 7 passed with it)"
+ ],
+ "activity": "review",
+ "head": "ab5dfc80",
+ "base": "cd9f517c",
+ "worktree": ".claude/worktrees/codex-w7-ux-foundations",
+ "branch": "codex/w7-ux-foundations",
+ "at": "2026-10-02T00:45:00Z",
+ "blockers": [],
+ "evidence": [
+  "research/plan/evidence/w7/ux-foundations-ab5dfc8.md"
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "review of 7 primitives + interface note; WR-UXF-1 at merge",
+  "at": "2026-10-02T00:45:00Z"
+ }
+}

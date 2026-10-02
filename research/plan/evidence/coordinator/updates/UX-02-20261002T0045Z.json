@@ -1,0 +1,54 @@
+{
+ "task": "UX-02",
+ "lane": "ux-foundations",
+ "slice": "nav order, aria-current, skip link, internal Docs icon; modal drawer with inert background, Escape/focus return, route-change and resize close",
+ "owned_paths": [
+  "apps/app/components/sidebar.tsx",
+  "apps/app/tests/ux/shell/"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/app && node --test tests/ux/shell/navigation.test.ts (base sidebar)",
+   "exit": 1,
+   "summary": "6/6 red by assertion; offscreen 'infrx' link focused (C9)"
+  },
+  {
+   "cmd": "cd apps/app && node --test tests/ux/shell/navigation.test.ts",
+   "exit": 0,
+   "summary": "6/6 green at 390/1440"
+  },
+  {
+   "cmd": "cd apps/app && node tests/ux/run-mutants.mjs",
+   "exit": 0,
+   "summary": "UXN 15/15 killed"
+  },
+  {
+   "cmd": "cd apps/app && node tests/c/run-mutants.mjs --only CREDITS-13",
+   "exit": 1,
+   "summary": "stale until WR-UXF-3"
+  }
+ ],
+ "wiring_requests": [
+  "Makefile: lab-mutants += cd apps/lab && node tests/ux/run-mutants.mjs; console-mutants += cd apps/app && node tests/ux/run-mutants.mjs (test_makefile_mutant_lists.py 7 passed with it)",
+  "apps/app/app/(console)/layout.tsx: <main id={MAIN_ID} tabIndex={-1} ...> importing MAIN_ID from components/sidebar (skip-link target)",
+  "apps/app/tests/c/mutants.json CREDITS-13 find -> 10-space '{balance === null ? (' (killed with the patch)"
+ ],
+ "activity": "review",
+ "head": "ab5dfc80",
+ "base": "cd9f517c",
+ "worktree": ".claude/worktrees/codex-w7-ux-foundations",
+ "branch": "codex/w7-ux-foundations",
+ "at": "2026-10-02T00:45:00Z",
+ "blockers": [],
+ "evidence": [
+  "research/plan/evidence/w7/ux-foundations-ab5dfc8.md"
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1.5,
+  "confidence": "medium",
+  "basis": "review + three coordinator patches at merge",
+  "at": "2026-10-02T00:45:00Z"
+ }
+}

@@ -1,0 +1,869 @@
+{
+  "task": "AP-11",
+  "gate": "API-LIFECYCLE",
+  "mode": "isolated",
+  "verdict": "BLOCKED",
+  "exit": 3,
+  "reasons": [],
+  "complete_lifecycle": false,
+  "verdicts": {
+    "lifecycle": "BLOCKED",
+    "api_boundary": "NOT RUN",
+    "quality": "NOT RUN",
+    "operations": "NOT RUN"
+  },
+  "label": "isolated: task-local services, a controlled engine and declared fixtures - never the real GPU, real judge or hosted gate",
+  "fixtures": {
+    "consumer_a_key": "world.py: verified individual + A1 grant + consumer key by SQL (AP-03's grant/key APIs absent)",
+    "consumer_b_key": "world.py: as consumer_a_key, a second tenant",
+    "admin_session": "world.py: NemoStation administrator membership by SQL and an HS256 session of the world's edge (AP-01 onboarding absent)",
+    "outsider_session": "world.py: a verified user without membership, edge session",
+    "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)"
+  },
+  "pins": {
+    "base": "cd9f517c",
+    "head": "ea353c12d8889b13342b4e97970684edbe93161f",
+    "dirty": false,
+    "target": {
+      "release_label": "ec27c9aa3fbe8eece24d53959c45040011f99f29",
+      "migrations": "0001_init.sql..0059_lab_control_grants_2.sql",
+      "migration_count": 59,
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372",
+      "engine": "fake_vllm.py",
+      "ports": {
+        "postgres": 57567,
+        "valkey": 57568,
+        "s3": 57569
+      }
+    }
+  },
+  "target": "ap11-isolated-ec27c9aa3fbe",
+  "state_file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/ap11-run2/state.json",
+  "counters": {
+    "requests": 18,
+    "inference": 5
+  },
+  "started": "2026-10-02T00:25:01+00:00",
+  "seconds": 29.8,
+  "stages": [
+    {
+      "id": "01",
+      "title": "Auth/session APIs for each actor; workspace/account/capability reads",
+      "proves": "Correct roles and distinct audiences; fresh feature availability; no unauthorized membership/grants",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-01] GET /auth/v1/availability, GET /console/v1/me, GET /console/v1/capabilities, GET /lab/v1/workspaces, GET /lab/v1/capabilities, GET /lab/v1/workspaces/{id}/members: not on the base"
+      ],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /lab/v1/control/models",
+        "GET /auth/v1/availability [AP-01]",
+        "GET /console/v1/me [AP-01]",
+        "GET /console/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces [AP-01]",
+        "GET /lab/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces/{id}/members [AP-01]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": {
+        "started": "2026-10-02T00:25:23.827Z",
+        "ended": "2026-10-02T00:25:24.056Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-42c29545-0c3d-40ed-9392-dc0d7b184e8f",
+            "inference_id": null,
+            "location": null,
+            "ms": 66.7,
+            "at": "2026-10-02T00:25:23.893Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-0916fa61-194a-44d7-b18c-f2b9d8ca8602",
+            "inference_id": null,
+            "location": null,
+            "ms": 51.3,
+            "at": "2026-10-02T00:25:23.945Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-681b6adb-78ff-40be-9b00-b9a229c4597e",
+            "inference_id": null,
+            "location": null,
+            "ms": 51.6,
+            "at": "2026-10-02T00:25:23.996Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-9778594b-9046-458d-9d73-37dd7dfb8e77",
+            "inference_id": null,
+            "location": null,
+            "ms": 37.3,
+            "at": "2026-10-02T00:25:24.034Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 401,
+            "request_id": "ap11-46e752de-bf8a-463b-a96d-b128189d2144",
+            "inference_id": null,
+            "location": null,
+            "ms": 21.7,
+            "at": "2026-10-02T00:25:24.056Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "a valid consumer key is authenticated",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "a missing key is refused 401",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "a member session reads its workspace",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "a non-member session is refused",
+            "ok": true,
+            "detail": "403"
+          },
+          {
+            "name": "a forged session is refused 401",
+            "ok": true,
+            "detail": "401"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 5,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "consumer_a_key",
+          "admin_session",
+          "outsider_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "02",
+      "title": "POST model project; start pinned import or upload parts/complete",
+      "proves": "Empty workspace succeeds; manifest hashes cover all actual model files; operation completes once",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-04] POST /lab/v1/control/model-projects, POST /lab/v1/artifacts/uploads, POST /lab/v1/artifacts/uploads/{id}/complete, POST /lab/v1/artifacts/imports, GET /lab/v1/operations/{id}: not on the base"
+      ],
+      "routes": [
+        "POST /lab/v1/control/model-projects [AP-04]",
+        "POST /lab/v1/artifacts/uploads [AP-04]",
+        "POST /lab/v1/artifacts/uploads/{id}/complete [AP-04]",
+        "POST /lab/v1/artifacts/imports [AP-04]",
+        "GET /lab/v1/operations/{id} [AP-04]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "03",
+      "title": "GET verified artifact; create immutable serving revision",
+      "proves": "Actual source commit, model/card/schema/harness/processor/runtime pins, supported hardware profile",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-04] GET /lab/v1/artifacts/{id}, POST /lab/v1/control/model-projects/{id}/revisions: not on the base"
+      ],
+      "routes": [
+        "GET /lab/v1/artifacts/{id} [AP-04]",
+        "POST /lab/v1/control/model-projects/{id}/revisions [AP-04]"
+      ],
+      "needs": [
+        "02"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "04",
+      "title": "POST private deployment; poll its operation and detail",
+      "proves": "Isolated resource allocated; real engine reports matching identity; state is not inferred from record presence",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-05] GET /lab/v1/hosting-profiles, POST /lab/v1/control/deployments, GET /lab/v1/control/deployments/{id}, GET /lab/v1/control/deployments/{id}/readiness: not on the base",
+        "BLOCKED[GPU-TARGET] an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "routes": [
+        "GET /lab/v1/hosting-profiles [AP-05]",
+        "POST /lab/v1/control/deployments [AP-05]",
+        "GET /lab/v1/control/deployments/{id} [AP-05]",
+        "GET /lab/v1/control/deployments/{id}/readiness [AP-05]"
+      ],
+      "needs": [
+        "03"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "05",
+      "title": "Operator private rate/funding API; bounded smoke; issue provider-dev key",
+      "proves": "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope correct; no public exposure",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] POST /operator/v1/deployments/{id}/dev-rate, POST /operator/v1/dev-wallet-grants, GET /lab/v1/control/dev-wallet, POST /lab/v1/control/endpoints/{id}/keys: not on the base",
+        "BLOCKED[AP-05] POST /lab/v1/control/deployments/{id}/smoke: not on the base",
+        "BLOCKED[GPU-TARGET] an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "routes": [
+        "POST /operator/v1/deployments/{id}/dev-rate [AP-06]",
+        "POST /operator/v1/dev-wallet-grants [AP-06]",
+        "GET /lab/v1/control/dev-wallet [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/smoke [AP-05]",
+        "POST /lab/v1/control/endpoints/{id}/keys [AP-06]"
+      ],
+      "needs": [
+        "04"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "06",
+      "title": "Call private endpoint with finite-video fixture",
+      "proves": "Real media processing and response; charge/usage receipt; no text-only substitute for modality smoke",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] a provider-dev key scoped to the private endpoint (stage 05)",
+        "BLOCKED[GPU-TARGET] an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "routes": [
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [
+        "AP-06 a provider-dev key scoped to the private endpoint (stage 05)",
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "07",
+      "title": "Provider administrator proposes; operator approves through API",
+      "proves": "Expected listing version, approved rates/limits and candidate receipts validated; decision audited",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] GET /operator/v1/publication-proposals, POST /operator/v1/publication-proposals/{id}/approve: not on the base"
+      ],
+      "routes": [
+        "POST /lab/v1/control/proposals",
+        "GET /operator/v1/publication-proposals [AP-06]",
+        "POST /operator/v1/publication-proposals/{id}/approve [AP-06]"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "08",
+      "title": "GET public catalog; GET account; claim grant; create consumer A key",
+      "proves": "Newly published test listing appears with truthful contract; one individual grant; one key despite retried creation",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-01] GET /console/v1/me: not on the base",
+        "BLOCKED[AP-03] POST /console/v1/signup-grant/claim, POST /console/v1/keys: not on the base"
+      ],
+      "routes": [
+        "GET /v1/models",
+        "GET /console/v1/me [AP-01]",
+        "POST /console/v1/signup-grant/claim [AP-03]",
+        "POST /console/v1/keys [AP-03]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": {
+        "started": "2026-10-02T00:25:24.174Z",
+        "ended": "2026-10-02T00:25:24.246Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/models",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-1d5c8618-87ef-4a79-9a26-4effbd1779e5",
+            "inference_id": null,
+            "location": null,
+            "ms": 71.8,
+            "at": "2026-10-02T00:25:24.246Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the catalog lists the model under test",
+            "ok": true,
+            "detail": "['nemostation/marlin-2b']"
+          }
+        ],
+        "versions": {
+          "listing": {
+            "id": "nemostation/marlin-2b",
+            "created": 1788220800,
+            "owned_by": "nemostation",
+            "listing_version": 1
+          }
+        },
+        "counters": {
+          "requests": 1,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "09",
+      "title": "Allocate consumer upload; PUT bytes; complete; submit async video job",
+      "proves": "Upload not mistaken for model artifact; stable idempotency; result references the requested published serving version",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /v1/uploads",
+        "PUT /v1/uploads/{handle}",
+        "POST /v1/uploads/{handle}/complete",
+        "POST /v1/jobs"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": {
+        "started": "2026-10-02T00:25:24.319Z",
+        "ended": "2026-10-02T00:25:24.828Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/uploads",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-f7deef62-f79a-4d38-bfbd-3d950d642b6b",
+            "inference_id": null,
+            "location": null,
+            "ms": 34.5,
+            "at": "2026-10-02T00:25:24.389Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/v1/uploads/{handle}",
+            "origin": "gateway",
+            "status": 204,
+            "request_id": "ap11-bd72d6a8-904a-464f-9188-2db04d93a98c",
+            "inference_id": null,
+            "location": null,
+            "ms": 56.7,
+            "at": "2026-10-02T00:25:24.490Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/uploads/{handle}/complete",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-13a04fe1-eb66-406e-824c-cffb512e360c",
+            "inference_id": null,
+            "location": null,
+            "ms": 65.2,
+            "at": "2026-10-02T00:25:24.574Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-b2454bf7-b80d-4dc2-afca-63bdba8c1bf6",
+            "inference_id": null,
+            "location": "/v1/jobs/job_bf9a5a6f467448ccabd0daf856530050",
+            "ms": 128.1,
+            "at": "2026-10-02T00:25:24.729Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-61c95f7c-b09e-48f3-b317-44783d0dbc18",
+            "inference_id": null,
+            "location": "/v1/jobs/job_bf9a5a6f467448ccabd0daf856530050",
+            "ms": 39.2,
+            "at": "2026-10-02T00:25:24.803Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 409,
+            "request_id": "ap11-59811f6c-a4a9-4a97-bdb6-d9cedba450b7",
+            "inference_id": null,
+            "location": null,
+            "ms": 21.2,
+            "at": "2026-10-02T00:25:24.828Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the upload ticket is issued 201",
+            "ok": true,
+            "detail": "201"
+          },
+          {
+            "name": "the bytes are stored 204",
+            "ok": true,
+            "detail": "204"
+          },
+          {
+            "name": "the upload completes 200",
+            "ok": true,
+            "detail": "{'status': 200, 'state': 'finalized', 'fields': ['media', 'state', 'upload_handle']}"
+          },
+          {
+            "name": "the upload is consumer media, not a model artifact",
+            "ok": true,
+            "detail": "['media', 'state', 'upload_handle']"
+          },
+          {
+            "name": "the job is accepted 202",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a replay returns the same job",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a changed body under the key is 409",
+            "ok": true,
+            "detail": "409"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 6,
+          "inference": 3
+        },
+        "owned": [
+          {
+            "kind": "upload",
+            "id": "upl_awqPvCA-vngWa95nERjYvhA3MqUCVf-tTM-VoqQHxtU"
+          },
+          {
+            "kind": "job",
+            "id": "job_bf9a5a6f467448ccabd0daf856530050"
+          }
+        ],
+        "fixtures": [
+          "consumer_a_key"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "10",
+      "title": "Poll status/result and console request/ledger APIs",
+      "proves": "Terminal result and one exact CREDIT settlement; reserve released correctly; request/deployment/listing/rate pins agree",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-02] GET /console/v1/requests/{id}, GET /console/v1/credit-ledger: not on the base"
+      ],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /v1/jobs/{handle}/result",
+        "GET /console/v1/requests/{id} [AP-02]",
+        "GET /console/v1/credit-ledger [AP-02]"
+      ],
+      "needs": [
+        "09"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": {
+        "started": "2026-10-02T00:25:24.842Z",
+        "ended": "2026-10-02T00:25:25.426Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-a02a91e4-899e-449d-907d-4a2663641cc8",
+            "inference_id": null,
+            "location": null,
+            "ms": 30.4,
+            "at": "2026-10-02T00:25:24.872Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-0b57b647-7c0a-451e-b964-04c5ce6e1356",
+            "inference_id": null,
+            "location": null,
+            "ms": 11.7,
+            "at": "2026-10-02T00:25:25.384Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}/result",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-8c3d7a21-6a25-424f-83ba-b08daad25eab",
+            "inference_id": null,
+            "location": null,
+            "ms": 14.0,
+            "at": "2026-10-02T00:25:25.398Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-6721ba9a-73c2-435a-9d53-8f7527eefd7c",
+            "inference_id": null,
+            "location": null,
+            "ms": 27.9,
+            "at": "2026-10-02T00:25:25.426Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the job succeeded",
+            "ok": true,
+            "detail": "succeeded"
+          },
+          {
+            "name": "the result names the model under test",
+            "ok": true,
+            "detail": "nemostation/marlin-2b"
+          },
+          {
+            "name": "the result reports usage",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "consumer B cannot read A's job",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 4,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "consumer_a_key",
+          "consumer_b_key"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "11",
+      "title": "Repeat bounded sync and SSE calls to cover supported modes",
+      "proves": "Correct sync behavior, stream journal/disconnect rules; no implicit async conversion; exact usage/settlement per request",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-02] GET /console/v1/requests/{id}: not on the base"
+      ],
+      "routes": [
+        "POST /v1/chat/completions",
+        "GET /console/v1/requests/{id} [AP-02]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": {
+        "started": "2026-10-02T00:25:25.433Z",
+        "ended": "2026-10-02T00:25:26.134Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-1a399a3e-713c-4d41-a594-1114af6a089e",
+            "inference_id": null,
+            "location": null,
+            "ms": 216.2,
+            "at": "2026-10-02T00:25:25.662Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-1e025420-c9a8-4ee4-b257-5f4533848ba0",
+            "inference_id": null,
+            "location": null,
+            "ms": 429.7,
+            "at": "2026-10-02T00:25:26.128Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "sync answers 200 in-line, never 202",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "sync names the model and reports usage",
+            "ok": true,
+            "detail": "{'status': 200, 'object': 'chat.completion', 'model': 'nemostation/marlin-2b', 'usage': True}"
+          },
+          {
+            "name": "SSE is an event stream",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE ends with [DONE]",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE carries content for the model",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 2,
+          "inference": 2
+        },
+        "owned": [],
+        "fixtures": [
+          "consumer_a_key"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "12",
+      "title": "Enable capture and scoped sharing/external_judging grants for test key/data; submit one captured request",
+      "proves": "Permission persisted through API; prior uncaptured request stays uncaptured; use remaining request budget",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-07] PUT /console/v1/keys/{id}/capture, POST /console/v1/data-grants, GET /console/v1/data-grants: not on the base",
+        "BLOCKED[AP-07] trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "routes": [
+        "PUT /console/v1/keys/{id}/capture [AP-07]",
+        "POST /console/v1/data-grants [AP-07]",
+        "GET /console/v1/data-grants [AP-07]",
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "08"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "13",
+      "title": "Poll Lab trace list/detail for that request; inspect authorized media",
+      "proves": "Same request ID/pins; real capture content/timing/usage; metadata-only and unavailable content distinguished",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-07] trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "routes": [
+        "GET /lab/v1/traces",
+        "GET /lab/v1/traces/{id}"
+      ],
+      "needs": [
+        "12"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "14",
+      "title": "Create rubric/config; estimate; set budget; POST judge run; poll results",
+      "proves": "Approved live adapter invoked once; video/SOP evidence available; real judge result or honest abstention; exact provider spend",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-08] GET /lab/v1/judge/models, POST /lab/v1/judge/rubrics, POST /lab/v1/judge/configs, POST /lab/v1/judge/estimates, PUT /lab/v1/judge/budgets/{payer_id}, POST /lab/v1/judge/runs, GET /lab/v1/judge/runs/{id}, GET /lab/v1/judge/runs/{id}/results: not on the base",
+        "BLOCKED[P-10] an approved media-capable judge, its secret reference, payer and spend limit"
+      ],
+      "routes": [
+        "GET /lab/v1/judge/models [AP-08]",
+        "POST /lab/v1/judge/rubrics [AP-08]",
+        "POST /lab/v1/judge/configs [AP-08]",
+        "POST /lab/v1/judge/estimates [AP-08]",
+        "PUT /lab/v1/judge/budgets/{payer_id} [AP-08]",
+        "POST /lab/v1/judge/runs [AP-08]",
+        "GET /lab/v1/judge/runs/{id} [AP-08]",
+        "GET /lab/v1/judge/runs/{id}/results [AP-08]"
+      ],
+      "needs": [
+        "13"
+      ],
+      "prerequisites": [
+        "P-10 an approved media-capable judge, its secret reference, payer and spend limit"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "15",
+      "title": "Read consumer credits and provider budget after judge",
+      "proves": "Consumer not charged for provider judging; run replay does not duplicate spend; estimates separate from settled cost",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-02] GET /console/v1/credits: not on the base",
+        "BLOCKED[AP-08] GET /lab/v1/judge/budgets: not on the base"
+      ],
+      "routes": [
+        "GET /console/v1/credits [AP-02]",
+        "GET /lab/v1/judge/budgets [AP-08]"
+      ],
+      "needs": [
+        "14"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "16",
+      "title": "Submit human review; read review/calibration",
+      "proves": "Immutable reviewed provenance; inadequate reference sample shows insufficient calibration",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-08] POST /lab/v1/traces/{id}/reviews, GET /lab/v1/traces/{id}/feedback, GET /lab/v1/judge/calibration: not on the base"
+      ],
+      "routes": [
+        "POST /lab/v1/traces/{id}/reviews [AP-08]",
+        "GET /lab/v1/traces/{id}/feedback [AP-08]",
+        "GET /lab/v1/judge/calibration [AP-08]"
+      ],
+      "needs": [
+        "13"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "17",
+      "title": "Revoke sharing/judging grant; retry reads and enqueue a follow-up judge",
+      "proves": "Future prohibited content read/egress refused; no permanent content bypass; aggregate access follows its separate policy",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-07] DELETE /console/v1/data-grants/{id}: not on the base",
+        "BLOCKED[AP-08] POST /lab/v1/judge/runs: not on the base",
+        "BLOCKED[AP-07] trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "routes": [
+        "DELETE /console/v1/data-grants/{id} [AP-07]",
+        "GET /lab/v1/traces/{id}",
+        "POST /lab/v1/judge/runs [AP-08]"
+      ],
+      "needs": [
+        "12",
+        "14"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "evidence": null
+    },
+    {
+      "id": "18",
+      "title": "Roll back/retire test listing and candidate through operator/control APIs",
+      "proves": "Prior jobs keep original pins; new admissions use correct listing or refuse; task-owned resources drained and cleaned",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] POST /operator/v1/listings/{model_id}/rollback: not on the base",
+        "BLOCKED[AP-05] POST /lab/v1/control/deployments/{id}/retire, POST /lab/v1/operations/{id}/cancel: not on the base"
+      ],
+      "routes": [
+        "POST /operator/v1/listings/{model_id}/rollback [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/retire [AP-05]",
+        "POST /lab/v1/operations/{id}/cancel [AP-05]"
+      ],
+      "needs": [
+        "07"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "evidence": null
+    }
+  ],
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --state <state> --world ap11"
+}

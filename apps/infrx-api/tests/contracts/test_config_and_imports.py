@@ -334,9 +334,10 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
-         "lab_control", "lab_traces", "lab_evaluations", "lab_pipelines", "lab_releases",
-         "lab_datasets", "lab_checkpoints", "route"]
+        ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
+         "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
+         "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "auth", "console_me",
+         "lab_workspaces", "operator_providers", "console_reads", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -577,6 +578,22 @@ DEPLOYMENT_EXPECTED = {
     # teacher fake's URL (unset)
     "LAB_TEACHERS": False,
     "LAB_TEACHER_URL": "",
+    # WR-AP02-1 (AP-02): the console reads switch, off, and its login's DSN (unset)
+    "CONSOLE_READS": False,
+    "CONSOLE_DATABASE_URL": "",
+    # WR-AP03-2 (AP-03): the console/operator mutations switch, off
+    "CONSOLE_ACTIONS_API": False,
+    # W1 (AP-07a, api-traces): the grantor's data-use routes switch, off
+    "CONSOLE_DATA_USE": False,
+    # WR-1 (AP-08, api-judge): the Lab unit's judge/review routes switch, off
+    "LAB_JUDGE_API": False,
+    # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
+    # origins and the facade's publishable key (unset)
+    "IDENTITY_API": False,
+    "WEB_ORIGINS": "",
+    "AUTH_FACADE": False,
+    "SUPABASE_ANON_KEY": "",
+    "AUTH_CAPTCHA_REQUIRED": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

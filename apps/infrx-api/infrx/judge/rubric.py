@@ -482,3 +482,7 @@ class ScoreLedger:
 
     def __len__(self) -> int:
         return len(self._by_key)
+
+#: AP-08: the rubric versions the worker grades, by the integer version a configuration pins
+#: (0037 `lab_judge_configs.rubric_version`). A version is added with the rubric it names.
+RUBRICS: dict[int, Rubric] = {MARLIN_VIDEO_V1.version: MARLIN_VIDEO_V1}
