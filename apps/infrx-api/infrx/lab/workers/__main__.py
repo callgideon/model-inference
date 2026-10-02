@@ -331,25 +331,27 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     except (OSError, ValueError) as unreadable:
         raise RuntimeMisconfigured(mode, detail=f"JUDGE_GOLD_SET is not a reviewed reference "
                                    f"set ({type(unreadable).__name__})") from None
-    ledger, results_of = PgJudgeLedger(connect), goldset.pg_results_of(connect)
+    ledger = PgJudgeLedger(connect)
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
                          settings=limits, rubric_of=start.pg_rubric_of(connect))
 
-    async def collect() -> dict[str, int]:
-        done = await judge_pass(wiring, partial(ledger.providers_in, JUDGE_WORK))
+    async def collected(wiring, providers) -> dict[str, int]:
+        """The collect pass, then (a reviewed reference set configured) its calibration."""
+        done = await judge_pass(wiring, providers)
         if gold is not None:
-            await goldset.calibrate(ledger, results_of, gold)
+            await goldset.calibrate(ledger, goldset.pg_results_of(connect), gold)
         return done
 
-    tasks = {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
-                                          "judge sweep"),
-             "judge_collect": lambda: every(JUDGE_PASS_S, collect, "judge collect")}
+    jobs = {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
+                                         "judge sweep"),
+            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: collected(
+                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}
     eligible = start.eligible_read(limits)
     if eligible is not None:
-        tasks["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
+        jobs["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
             start.pg_queued(connect), wiring, eligible), "judge start")
-    return tasks, wiring
+    return jobs, wiring
 
 
 async def judge_pass(wiring, providers) -> dict[str, int]:

@@ -94,6 +94,7 @@ def test_ap08_routes__rubrics_list_their_state_and_a_pending_one_is_never_config
     c = client(doors)
     listed = {d["version"]: d for d in c.get(f"{lab_judge.PREFIX}/rubrics", params=Q)
               .json()["data"]}
+    assert set(listed) == {1, 2}, "the pending skeleton is listed"
     assert (listed[1]["state"], listed[1]["digest"]) == ("active", r.digest(r.MARLIN_VIDEO_V1))
     assert listed[2]["state"] == "definition_pending" and "P-07" in listed[2]["pending_reason"]
     assert listed[2]["digest"] is None and listed[2]["output_schema"] is None
