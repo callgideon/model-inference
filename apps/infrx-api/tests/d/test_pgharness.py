@@ -297,39 +297,59 @@ def test_a_run_killed_mid_provision_is_cleaned_up_by_the_next_one():
         "and the replacement is removed at exit, leaving nothing behind"
 
 
+# `become`/`login` of the harness under test, on the decoy (its own lock and port, so this runs
+# beside a suite holding the task's harness), as the image the run selects: prints the answers.
+ROLES_CHILD = """
+import importlib.util, json, sys
+import psycopg
+spec = importlib.util.spec_from_file_location("pgh_child", sys.argv[1])
+pgh = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pgh)
+pgh.CONTAINER, pgh.PORT = sys.argv[2], int(sys.argv[3])
+pgh.ensure()
+probe, got = "infrx_harness_probe", {}
+with pgh.connect("postgres") as conn:
+    conn.execute(f"create role {probe} nologin")
+    held = (f"select count(*) from pg_auth_members where roleid = '{probe}'::regrole "
+            "and member = current_user::regrole and set_option")
+    before = conn.execute(held).fetchone()[0]
+    with conn.transaction(force_rollback=True):
+        pgh.become(conn, probe)
+        got["current_user"] = conn.execute("select current_user").fetchone()[0]
+    got["grant_outlived"] = conn.execute(held).fetchone()[0] != before
+    with pgh.login(probe, "postgres") as dsn, psycopg.connect(dsn) as session:
+        got["session_user"] = session.execute("select session_user").fetchone()[0]
+        try:
+            session.execute("set role postgres")
+            got["set_back"] = None
+        except psycopg.Error as refused:
+            got["set_back"] = refused.sqlstate
+    got["login_after"] = conn.execute("select rolcanlogin from pg_roles where rolname = %s",
+                                      (probe,)).fetchone()[0]
+    try:
+        psycopg.connect(dsn).close()
+        got["connects_after"] = True
+    except psycopg.OperationalError:
+        got["connects_after"] = False
+print(json.dumps(got), flush=True)
+"""
+
+
 @needs_docker
 def test_a_role_is_assumed_and_logged_in_as_on_either_image_and_put_back():
-    """The Supabase-image reds (`permission denied to set role`/`session authorization`):
+    """The Supabase-image reds (`permission denied to set role` / `session authorization`):
     the harness login is no superuser there and holds a role it created WITH ADMIN only.
     `become` switches to such a role in the caller's transaction and leaves no grant behind;
     `login` is a real session of the role (its session user, so it cannot `set role` back to
-    the harness login) and puts the role back to NOLOGIN after. Oracle: a bare `set local
-    role` (42501 on the Supabase image), a grant that outlives the transaction, a login left
-    open."""
-    import psycopg
-
-    from . import pgharness
-    probe, db = "infrx_harness_probe", f"{pgharness.DATABASE}_roles"
-    pgharness.ensure()
-    pgharness.recreate(db)
-    with pgharness.connect(db) as conn:
-        conn.execute(f"drop role if exists {probe}")
-        conn.execute(f"create role {probe} nologin")
-        try:
-            held = (f"select count(*) from pg_auth_members where roleid = '{probe}'::regrole "
-                    "and member = current_user::regrole and set_option")
-            before = conn.execute(held).fetchone()[0]
-            with conn.transaction(force_rollback=True):
-                pgharness.become(conn, probe)
-                assert conn.execute("select current_user").fetchone()[0] == probe
-            assert conn.execute(held).fetchone()[0] == before, "the grant outlived the check"
-            with pgharness.login(probe, db) as dsn, psycopg.connect(dsn) as session:
-                assert session.execute("select session_user").fetchone()[0] == probe
-                with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                    session.execute("set role postgres")
-            assert conn.execute("select rolcanlogin from pg_roles where rolname = %s",
-                                (probe,)).fetchone()[0] is False
-            with pytest.raises(psycopg.OperationalError):
-                psycopg.connect(dsn).close()
-        finally:
-            conn.execute(f"drop role if exists {probe}")
+    the harness login) and puts the role back to NOLOGIN after. Run on the decoy under
+    `INFRX_D1_IMAGE` as the suite is. Oracle: a bare `set local role` (42501 on the Supabase
+    image), no switch at all, a grant that outlives the transaction, a login left open."""
+    env = {**os.environ, "PYTHONPATH": str(API_ROOT), "PYTHONDONTWRITEBYTECODE": "1"}
+    child = subprocess.run(
+        [sys.executable, "-c", ROLES_CHILD, str(HARNESS_PATH), DECOY, str(DECOY_PORT)],
+        capture_output=True, text=True, env=env, timeout=180)
+    assert child.returncode == 0, (child.stdout, child.stderr[-2000:])
+    probe = "infrx_harness_probe"
+    assert json.loads(child.stdout.strip().splitlines()[-1]) == {
+        "current_user": probe, "grant_outlived": False, "session_user": probe,
+        "set_back": "42501", "login_after": False, "connects_after": False}
