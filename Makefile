@@ -84,6 +84,10 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08/test_mutants.py
 	# AP-01's list (api-identity, LW7, WR-AP01-1): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap1
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_mutants.py
+	# 0061's SQL list (api-artifacts, AP-04, R271): needs Docker, skips visibly without it; task-local key ap4
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/d/test_upgrade_0061_mutants.py
+	# AP-04's list: fake world, then its PostgreSQL + MinIO half in its own process (the copy starts the D harness); task-local key ap4
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test

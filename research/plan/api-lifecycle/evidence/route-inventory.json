@@ -357,6 +357,66 @@
       ],
       "consumers": [],
       "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/artifacts/imports",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/artifacts/uploads",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/artifacts/uploads/{upload_id}/complete",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/artifacts/uploads/{upload_id}/parts",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/artifacts/{artifact_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/capabilities",
       "request_schema": "raw",
@@ -414,6 +474,54 @@
       "method": "POST",
       "path": "/lab/v1/control/deployments/{deployment_revision_id}/smoke",
       "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/model-projects",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/model-projects",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/model-projects/{project_id}/revisions",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/model-projects/{project_id}/revisions",
+      "request_schema": "typed",
       "response_schema": "typed"
     },
     {
@@ -747,6 +855,18 @@
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/judge/runs/{run_id}/results",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/operations/{operation_id}",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -1348,6 +1468,18 @@
       ],
       "consumers": [],
       "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/artifacts/adopt",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
       "method": "GET",
       "path": "/operator/v1/audit",
       "request_schema": "raw",
@@ -1870,25 +2002,25 @@
     {
       "method": "GET",
       "path": "/lab/v1/control/model-projects",
-      "state": "target",
+      "state": "existing",
       "surface": "lab models"
     },
     {
       "method": "POST",
       "path": "/lab/v1/control/model-projects",
-      "state": "target",
+      "state": "existing",
       "surface": "lab models"
     },
     {
       "method": "GET",
       "path": "/lab/v1/control/model-projects/{id}/revisions",
-      "state": "target",
+      "state": "existing",
       "surface": "lab models"
     },
     {
       "method": "POST",
       "path": "/lab/v1/control/model-projects/{id}/revisions",
-      "state": "target",
+      "state": "existing",
       "surface": "lab models"
     },
     {
