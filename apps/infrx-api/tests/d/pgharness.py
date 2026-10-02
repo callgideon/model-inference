@@ -356,10 +356,8 @@ def become(conn, role: str) -> None:
     Supabase image `postgres` is no superuser and holds such a role only WITH ADMIN
     (PostgreSQL 16+: no SET), so the switch itself is refused 42501 and a refusal probe
     passes vacuously. The login first takes SET on the role, INHERIT false (its own
-    privileges do not change), in the same transaction - rolled back with it. A login that
-    can already SET it (any superuser: the plain image) grants nothing."""
-    if not conn.execute("select pg_has_role(current_user, %s, 'SET')", (role,)).fetchone()[0]:
-        conn.execute(f"grant {role} to current_user with inherit false, set true")
+    privileges do not change), in the same transaction - rolled back with it."""
+    conn.execute(f"grant {role} to current_user with inherit false, set true")
     conn.execute(f"set local role {role}")
 
 
