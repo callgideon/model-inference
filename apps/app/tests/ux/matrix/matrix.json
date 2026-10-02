@@ -1,12 +1,12 @@
 {
-  "_comment": "UX-11: the UX-T01–T13 acceptance journeys of research/design/v1/07-handoff.md and its required-fixture register. A runnable part: app (app|lab), paths relative to that app (a directory means every *.test.ts under it), optional match (a regex on case names), lane (the owner). A blocked part: blocked (the cause) and lane (what unblocks it). Directory parts attribute every case in the directory to the journey until the owning lane names its cases per journey; the final acceptance (batch 3) narrows them. Fixtures: path (repo-relative) + contains (a symbol the committed source must still hold), or gap (the owner). run-matrix.mjs reads this file.",
+  "_comment": "UX-11: the UX-T01–T13 acceptance journeys of research/design/v1/07-handoff.md and its required-fixture register. A runnable part: app (app|lab), paths relative to that app (a directory means every *.test.ts under it), optional match (a regex on case names), lane (the owner). A blocked part: blocked (the cause) and lane (what unblocks it). Directory parts are narrowed by match to their journey's cases (UX-11 final). A real part (real: env, needs, optional ports/prepare) runs only with --real, on its own task-local key; without --real or with a declared port closed it is BLOCKED naming what it needs. Fixtures: path (repo-relative) + contains (a symbol the committed source must still hold), or gap (the owner). run-matrix.mjs reads this file.",
   "journeys": [
     {
       "id": "T01",
       "title": "truthful retention",
       "parts": [
         { "name": "Models/Docs wire-to-view", "app": "app", "paths": ["tests/ux/retention.test.ts"], "lane": "ux-foundations (UX-01)" },
-        { "name": "Settings privacy row (WR-UXF-5)", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)" }
+        { "name": "Settings privacy row (WR-UXF-5)", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)", "match": "^UXU-0[12] " }
       ]
     },
     {
@@ -15,7 +15,7 @@
       "parts": [
         { "name": "App drawer", "app": "app", "paths": ["tests/ux/shell/navigation.test.ts"], "lane": "ux-foundations (UX-02)" },
         { "name": "Lab dialog/drawer primitives", "app": "lab", "paths": ["tests/ux/foundations.test.ts"], "match": "^UX00-K0[12] ", "lane": "ux-foundations (UX-00)" },
-        { "name": "Lab provider shell", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)" }
+        { "name": "Lab provider shell", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)", "match": "^OP-S0[12] " }
       ]
     },
     {
@@ -23,7 +23,7 @@
       "title": "first call",
       "parts": [
         { "name": "fixture guide, snippets, fold", "app": "app", "paths": ["tests/ux/first-call"], "lane": "ux-app (UX-04)" },
-        { "name": "real persisted key, request, charge", "blocked": "real-service variant: exactly one persisted key operation, a real text request, the charge/hold release and guide completion from the real read need the App on the API (CONSOLE_ACTIONS_API, CONSOLE_READS on) and the E3A app-e2e gate or the operator's bounded window", "lane": "api-frontends-app (AP-09 09a/09b) + coordinator window" }
+        { "name": "real persisted key, request, charge", "blocked": "the real variant (one persisted key operation, a real text request, the charge/hold release, guide completion from the real read) runs in the E3A app-e2e gate on the e4b block (not this lane's key) or the operator's bounded window; AP-09 09a/09b (the thin App) is on the tree with CONSOLE_READS/CONSOLE_ACTIONS_API off", "lane": "coordinator (make app-e2e on e4b; production window)" }
       ]
     },
     {
@@ -31,38 +31,39 @@
       "title": "finite video",
       "parts": [
         { "name": "fixture async/video examples", "app": "app", "paths": ["tests/ux/first-call/examples.test.ts"], "match": "video|[Aa]sync", "lane": "ux-app (UX-04)" },
-        { "name": "fixture result states", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)" },
-        { "name": "real bounded clip", "blocked": "a rights-cleared bounded clip through the real async path (job, bounded poll, result before expiry, ledger reconcile) runs only in the operator's bounded window, never during E4C", "lane": "api-lifecycle-3 (AP-11 11e) + coordinator window" }
+        { "name": "fixture result states", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)", "match": "^UXU-0[38] " },
+        { "name": "real bounded clip", "blocked": "a rights-cleared bounded clip through the real async path (job, bounded poll, result before expiry, ledger reconcile) runs only in the operator's bounded window, never during E4C", "lane": "api-lifecycle-3 (AP-11 11e hosted plan) + coordinator window" }
       ]
     },
     {
       "id": "T05",
       "title": "read retry/expiry",
       "parts": [
-        { "name": "fixture read retry, expiry, bfcache", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)" }
+        { "name": "fixture read retry, expiry, bfcache", "app": "app", "paths": ["tests/ux/usage"], "lane": "ux-app-2 (UX-07)", "match": "^UXU-0[45] " }
       ]
     },
     {
       "id": "T06",
       "title": "consumer isolation",
       "parts": [
-        { "name": "real two-user journey", "blocked": "user A's request/key deep link as user B, A's key revoked, refresh: the two-user real consumer journey (review 26 §4 Step C) after the App cut-over to the API", "lane": "api-frontends-app (AP-09) + coordinator window" }
+        { "name": "real two-user journey", "blocked": "user A's request/key deep link as user B, A's key revoked, refresh: the two-user real consumer journey (review 26 §4 Step C) needs the App cut over to the API in an environment with two verified accounts", "lane": "coordinator window (AP-09 on the tree, switches off)" }
       ]
     },
     {
       "id": "T07",
       "title": "Lab roles",
       "parts": [
-        { "name": "fixture roles through direct routes", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03, AP-09 09d)" },
-        { "name": "server authorization on the merged SHA", "blocked": "make lab-e2e (LAB_E2E_REAL=1 LAB_E2E_BUILT=1, key l4) on the merged batch-2 SHA", "lane": "ux-verify-final (UX-11, batch 3)" }
+        { "name": "fixture roles through direct routes", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03, AP-09 09d)", "match": "^OP-(J01|A0[1246]|P0[1359]|P11|S04) " },
+        { "name": "server authorization on the real routes (lab-e2e)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-(O0[13]|I06|R05) ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} },
+        { "name": "workspace isolation on the real trace route (V1M stack)", "app": "lab", "paths": ["tests/v/list/stack.test.ts"], "match": "^S0[1-3] ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_V1M_REAL": "1", "INFRX_D_TASK": "lab-v1m"}, "needs": "Docker, key lab-v1m (PG 57513) and infrx-t2i-clickhouse on the t2i block", "ports": [57540]} }
       ]
     },
     {
       "id": "T08",
       "title": "registration",
       "parts": [
-        { "name": "fixture wizard, errors, receipt, proposal", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)" },
-        { "name": "engine readiness receipts", "blocked": "readiness distinct from a recorded smoke needs the deployments API mounted (served identities == the revision) and the publication API", "lane": "api-hosting (AP-05) + api-publication (AP-06)" }
+        { "name": "fixture wizard, errors, receipt, proposal", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)", "match": "^OP-(J02|A0[1-7]|P0[4-9]|V0[4-6]|W0[1-6]) " },
+        { "name": "engine readiness receipts", "blocked": "readiness distinct from a recorded smoke needs a candidate engine: AP-05's deployments API is on the tree (LAB_HOSTING off) and its real smoke (05d) needs a GPU window on the box - BLOCKED[CANDIDATE-ENGINE]", "lane": "api-hosting (AP-05 05d) + coordinator GPU window" }
       ]
     },
     {
@@ -70,40 +71,45 @@
       "title": "partial services",
       "parts": [
         { "name": "Lab service-state primitive", "app": "lab", "paths": ["tests/ux/foundations.test.ts"], "match": "^UX00-K05 ", "lane": "ux-foundations (UX-00)" },
-        { "name": "control/aggregate split", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)" },
-        { "name": "trace service unavailable", "app": "lab", "paths": ["tests/ux/requests"], "lane": "ux-lab-requests (UX-05)" },
-        { "name": "evaluations disabled", "app": "lab", "paths": ["tests/ux/evaluations"], "lane": "ux-lab-evaluations (UX-08)" }
+        { "name": "control/aggregate split", "app": "lab", "paths": ["tests/ux/operate"], "lane": "ux-lab-operate (UX-03)", "match": "^OP-(J03|P02|P10|V0[23]) " },
+        { "name": "trace service unavailable", "app": "lab", "paths": ["tests/ux/requests"], "lane": "ux-lab-requests (UX-05)", "match": "^UX05-(L07|D06|E01) " },
+        { "name": "evaluations disabled", "app": "lab", "paths": ["tests/ux/evaluations"], "lane": "ux-lab-evaluations (UX-08)", "match": "^UX08-(C01|P01|J05) " },
+        { "name": "partial services on the real routes (lab-e2e)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-(E01|I01|R01) ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} }
       ]
     },
     {
       "id": "T10",
       "title": "dataset",
       "parts": [
-        { "name": "fixture mapping → import → derive → export", "app": "lab", "paths": ["tests/ux/improve"], "lane": "ux-lab-improve (UX-06)" }
+        { "name": "fixture mapping → import → derive → export", "app": "lab", "paths": ["tests/ux/improve"], "lane": "ux-lab-improve (UX-06)", "match": "^UX06-" },
+        { "name": "labels import and train-only export on the real routes (lab-e2e)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-I0[24] ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} },
+        { "name": "import interrupted and resumed, splits, export, revocation (N4-J01)", "app": "lab", "paths": ["tests/n/journey.test.ts"], "match": "^N4-J01 ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_N_REAL": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503)"} }
       ]
     },
     {
       "id": "T11",
       "title": "comparison",
       "parts": [
-        { "name": "fixture frozen suite → inconclusive report", "app": "lab", "paths": ["tests/ux/evaluations"], "lane": "ux-lab-evaluations (UX-08)" },
-        { "name": "real catalog and experiments", "blocked": "the evaluation catalog listing is 503 until SR-AP10-1 (infrx.lab_eval_catalog, migration 0066) and the comparison runs need AP-10 10c", "lane": "api-schema-2 (AP-00, 0066) + api-improve-2 (AP-10 10c)" }
+        { "name": "fixture frozen suite → inconclusive report", "app": "lab", "paths": ["tests/ux/evaluations"], "lane": "ux-lab-evaluations (UX-08)", "match": "^UX08-(C02|D0[12]|R01|T0[1-3]|P0[2-4]|J0[1-4]) " },
+        { "name": "launch, cancel and compare on the real routes (lab-e2e E02-E05)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-E0[2-5] ", "lane": "api-improve-3 (AP-10: the Catalog port over 0066's lab_eval_catalog, WR-UXVF-1) + the lab-e2e journey composition (WR-UXVF-2)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} },
+        { "name": "judge runs on the request page (register row 98)", "blocked": "lib/services/judge/runs.ts answers unavailable until row 98 maps GET /lab/v1/traces/{request_id}/judge-runs through the generated client; re-point this part at its suite when it merges", "lane": "lab-judge-runs (row 98, UX-08/AP-09 09c follow-up)" }
       ]
     },
     {
       "id": "T12",
       "title": "improvement safety",
       "parts": [
-        { "name": "fixture teacher dry-run, ambiguous training", "app": "lab", "paths": ["tests/ux/improve"], "lane": "ux-lab-improve (UX-09)" },
-        { "name": "stale release fence", "blocked": "the releases screen (L-11) is batch 3", "lane": "ux-lab-releases (UX-10, on AP-06)" },
-        { "name": "real teacher/training", "blocked": "no duplicate paid submit and ambiguous reconciliation against the real services need AP-10 10c/10e and a live judge (P-10)", "lane": "api-improve-2/3 (AP-10 10c/10e) + operator P-10" }
+        { "name": "fixture teacher dry-run, ambiguous training", "app": "lab", "paths": ["tests/ux/improve"], "lane": "ux-lab-improve (UX-09)", "match": "^UX09-" },
+        { "name": "stale release fence, release/optimization evidence (fixture)", "app": "lab", "paths": ["tests/ux/releases"], "lane": "ux-lab-releases (UX-10)" },
+        { "name": "review, bundle, fence and rollback on the real routes (lab-e2e)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-(I0[35]|R0[2-5]) ", "lane": "ux-verify-final (UX-11)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} },
+        { "name": "real teacher/training", "blocked": "no duplicate paid submit and ambiguous reconciliation against a live teacher/judge need P-10 (provider, credentials by SSM name, budget, payer) and AP-10 10e's external-training path", "lane": "api-improve-3 (AP-10 10e) + operator P-10" }
       ]
     },
     {
       "id": "T13",
       "title": "usability",
       "parts": [
-        { "name": "moderated session", "blocked": "representative users complete setup/recovery tasks without coaching (completion, assistance, errors, time recorded); not automatable and never claimed from expert inspection", "lane": "ux-verify-final (UX-11, batch 3) + operator-recruited participants" }
+        { "name": "moderated session", "blocked": "representative users complete setup/recovery tasks without coaching (completion, assistance, errors, time recorded); not automatable and never claimed from expert inspection", "lane": "operator-recruited participants (UX-11 protocol in the acceptance report)" }
       ]
     }
   ],
@@ -117,37 +123,37 @@
     { "dimension": "App activity", "case": "one key", "path": "apps/app/tests/ux/first-call/first-call.test.ts", "contains": "an account with an active key is offered it" },
     { "dimension": "App activity", "case": "revoked key", "path": "apps/app/tests/ux/first-call/first-call.test.ts", "contains": "a revoked key is not an active key" },
     { "dimension": "App activity", "case": "no requests", "path": "apps/app/tests/ux/first-call/first-call.test.ts", "contains": "a request that has not succeeded is not completion" },
-    { "dimension": "App activity", "case": "filtered-empty", "gap": "ux-app-2 (UX-07)" },
-    { "dimension": "App activity", "case": "running/succeeded/failed/expired", "gap": "ux-app-2 (UX-07)" },
-    { "dimension": "App activity", "case": "unknown accounting", "gap": "ux-app-2 (UX-07)" },
+    { "dimension": "App activity", "case": "filtered-empty", "path": "apps/app/tests/ux/usage/usage.test.ts", "contains": "UXU-07 empty, filtered-empty and failed usage" },
+    { "dimension": "App activity", "case": "running/succeeded/failed/expired", "path": "apps/app/tests/ux/usage/usage.test.ts", "contains": "UXU-03 the request detail renders the ready, running, failed, expired" },
+    { "dimension": "App activity", "case": "unknown accounting", "path": "apps/app/tests/ux/usage/usage.test.ts", "contains": "the charge is authoritative or absent" },
     { "dimension": "App activity", "case": "exhausted wallet", "path": "apps/app/app/(console)/billing/credit-view-model.ts", "contains": "exhausted" },
     { "dimension": "App activity", "case": "wallet unavailable", "path": "apps/app/tests/ux/harness/app/(shell)/fixture.tsx", "contains": "?balance=unavailable" },
     { "dimension": "Lab role", "case": "viewer/developer/administrator", "path": "apps/lab/lib/auth/access.ts", "contains": "[\"viewer\", \"developer\", \"administrator\"]" },
     { "dimension": "Lab role", "case": "no membership", "path": "apps/lab/lib/auth/access.ts", "contains": "{ kind: \"denied\" }" },
     { "dimension": "Lab role", "case": "multiple workspaces", "path": "apps/lab/lib/auth/access.ts", "contains": "{ kind: \"select\"; workspaces: Membership[] }" },
-    { "dimension": "Lab role", "case": "lost membership", "gap": "ux-lab-operate (UX-03)" },
-    { "dimension": "Lab control", "case": "empty", "gap": "ux-lab-operate (UX-03)" },
+    { "dimension": "Lab role", "case": "lost membership", "path": "apps/lab/tests/ux/operate/journeys.test.ts", "contains": "no membership reaches no page" },
+    { "dimension": "Lab control", "case": "empty", "path": "apps/lab/tests/ux/operate/pages.test.ts", "contains": "OP-P01 overview: an empty workspace has one obvious next action" },
     { "dimension": "Lab control", "case": "registered private revision, smoke none", "path": "apps/lab/lib/services/control/fake.ts", "contains": "state: \"active\", smoke: \"none\"" },
-    { "dimension": "Lab control", "case": "smoke pass/fail without engine provenance", "gap": "ux-lab-operate (UX-03) + api-hosting (AP-05)" },
+    { "dimension": "Lab control", "case": "smoke pass/fail without engine provenance", "path": "apps/lab/tests/ux/operate/view.test.ts", "contains": "a recorded smoke never verifies an engine" },
     { "dimension": "Lab control", "case": "pending/rejected/approved publication", "path": "apps/lab/lib/services/control/fake.ts", "contains": "state: approve ? \"approved\" : \"rejected\"" },
     { "dimension": "Lab control", "case": "retired deployment", "path": "apps/lab/lib/services/control/fake.ts", "contains": "r.state = \"retired\"" },
     { "dimension": "Lab control", "case": "partial service failure", "path": "apps/lab/components/ui/service-state.tsx", "contains": "unavailable" },
     { "dimension": "Lab content", "case": "cross-workspace not-found", "path": "apps/lab/components/traces/detail/fake.ts", "contains": "reason: \"not_found\"" },
-    { "dimension": "Lab content", "case": "metadata-only, shared complete/partial, expired, revoked", "gap": "ux-lab-requests (UX-05, on AP-07 access_state)" },
+    { "dimension": "Lab content", "case": "metadata-only, shared complete/partial, expired, revoked", "path": "apps/lab/tests/ux/requests/requests.test.ts", "contains": "UX05-D02 expired and revoked content disappears" },
     { "dimension": "Improvement", "case": "import published/rejected rows", "path": "apps/lab/lib/services/datasets/views.ts", "contains": "job.state === \"published\"" },
-    { "dimension": "Improvement", "case": "import partial/requeued", "gap": "ux-lab-improve (UX-06)" },
+    { "dimension": "Improvement", "case": "import partial/requeued", "path": "apps/lab/lib/services/datasets/views.ts", "contains": "\"Import again\" starts a new import of the same upload" },
     { "dimension": "Improvement", "case": "leakage refusal", "path": "apps/lab/lib/services/datasets/views.ts", "contains": "export function leakageWarnings" },
     { "dimension": "Improvement", "case": "evaluation accept/reject/inconclusive", "path": "apps/lab/lib/services/evaluation/view.ts", "contains": "inconclusive: \"Inconclusive" },
     { "dimension": "Improvement", "case": "teacher dry-run/approved", "path": "apps/lab/lib/services/pipelines/fake.ts", "contains": "Teacher batches (P2 behind the route) are a dry run" },
     { "dimension": "Improvement", "case": "teacher/external training ambiguous", "path": "apps/lab/lib/services/pipelines/fake.ts", "contains": "an ambiguous submit only ever looked up" },
     { "dimension": "Improvement", "case": "rollout stale fence", "path": "apps/lab/lib/services/rollouts/fake.ts", "contains": "const stale = approve && r.fence !== p.fence" },
-    { "dimension": "Improvement", "case": "rollout unit refusal", "gap": "ux-lab-releases (UX-10, batch 3)" },
+    { "dimension": "Improvement", "case": "rollout unit refusal", "gap": "ux-lab-releases (UX-10, in flight)" },
     { "dimension": "Presentation", "case": "320px reflow", "path": "apps/lab/tests/ux/foundations.test.ts", "contains": "UX00-K06 at 320px" },
     { "dimension": "Presentation", "case": "390px mobile", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-01 at 390px" },
-    { "dimension": "Presentation", "case": "768px tablet / 1440px desktop", "gap": "ux-lab-operate (UX-03 journeys at 390/768/1440)" },
-    { "dimension": "Presentation", "case": "200% zoom", "gap": "ux-verify-final (UX-11, batch 3)" },
+    { "dimension": "Presentation", "case": "768px tablet / 1440px desktop", "path": "apps/lab/tests/ux/improve/wizard.test.ts", "contains": "{ width: 768, height: 1024 }" },
+    { "dimension": "Presentation", "case": "200% zoom", "gap": "ux-verify-final (UX-11)" },
     { "dimension": "Presentation", "case": "long names/IDs", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-06 a long email" },
-    { "dimension": "Presentation", "case": "reduced motion", "gap": "ux-verify-final (UX-11, batch 3)" },
+    { "dimension": "Presentation", "case": "reduced motion", "gap": "ux-verify-final (UX-11)" },
     { "dimension": "Presentation", "case": "keyboard-only", "path": "apps/app/tests/ux/shell/navigation.test.ts", "contains": "UXN-02 the open menu is a modal" }
   ]
 }
