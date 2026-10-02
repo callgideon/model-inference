@@ -31,3 +31,16 @@ def test_composed__lab_publication_without_session_actors_refuses_startup(monkey
         monkeypatch.setenv(name, value)
     with pytest.raises(RuntimeMisconfigured, match="LAB_PUBLICATION"):
         control.create_app()
+
+
+def test_composed__the_lab_unit_composes_0068s_dev_credentials(monkeypatch):
+    """WR-AS3-2: with LAB_PUBLICATION the dev-key listing/revocation and the dev wallet stand
+    on `PgDevCredentials` over the unit's own login - not 503."""
+    from infrx.gateway.routes import operator_publication
+    from infrx.lab.publication import PgDevCredentials
+    seen, real = [], operator_publication.register
+    monkeypatch.setattr(operator_publication, "register",
+                        lambda app, rt: seen.append(rt) or real(app, rt))
+    export._lab_control()
+    [rt] = seen
+    assert isinstance(rt.lab_publication.credentials, PgDevCredentials)
