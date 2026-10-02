@@ -163,7 +163,7 @@ async function welcomeBalance(page: Page): Promise<string> {
   return shown(await page.getByRole("region", { name: "Available balance" }).locator("p").first().textContent());
 }
 
-/** A balance-card figure on /usage (Available, Reserved, Spent, Balance). */
+/** A credit-summary figure on /usage (Available to use, Reserved for requests, Spent, Balance). */
 async function figure(page: Page, label: string): Promise<string> {
   const value = page.locator("dt", { hasText: new RegExp(`^${label}$`) }).locator("xpath=following-sibling::dd[1]");
   return shown(await value.textContent());
@@ -265,7 +265,7 @@ test("signup-verify-grant: a fresh individual verifies once and is granted 10,00
 
   // The console: exact balance, CREDIT labelled, no requests yet.
   await page.goto("/usage");
-  expect(await figure(page, "Available")).toBe("10000");
+  expect(await figure(page, "Available to use")).toBe("10000");
   expect(await figure(page, "Balance")).toBe("10000");
   await expect(page.getByText("CREDIT", { exact: true }).first()).toBeVisible();
   await expect(page.locator("tr", { hasText: "for request" })).toHaveCount(0);
@@ -407,8 +407,8 @@ test("usage-balance: the console shows every request and the balance exactly as 
   const books = await facts(email);
   expect(books.jobs.length, "the journey made requests").toBeGreaterThanOrEqual(1);
   expect(books.conserved, "every charge = the admitted card x its usage; ledger = grant - charges").toEqual({ ok: true });
-  expect(await figure(page, "Available")).toBe(exact(books.wallet!.available));
-  expect(await figure(page, "Reserved")).toBe(exact(books.wallet!.reserved));
+  expect(await figure(page, "Available to use")).toBe(exact(books.wallet!.available));
+  expect(await figure(page, "Reserved for requests")).toBe(exact(books.wallet!.reserved));
   expect(await figure(page, "Balance")).toBe(exact(books.wallet!.ledger));
   expect(exact(books.wallet!.ledger)).not.toBe("10000");
   await expect(page.locator("tr", { hasText: "for request" })).toHaveCount(books.jobs.length);
@@ -428,12 +428,12 @@ test("refresh: a reload and an expiring session mid-journey keep the individual'
   try {
     await signIn(page, email);
     await page.goto("/usage");
-    const available = await figure(page, "Available");
+    const available = await figure(page, "Available to use");
     const before = await control<Record<string, number>>("/stats");
     await page.waitForTimeout(12_000);
     await page.reload();
     expect(new URL(page.url()).pathname, "still signed in after the refresh").toBe("/usage");
-    expect(await figure(page, "Available")).toBe(available);
+    expect(await figure(page, "Available to use")).toBe(available);
     const after = await control<Record<string, number>>("/stats");
     expect(after.refresh_grants ?? 0, "the session was refreshed with its refresh token").toBeGreaterThan(before.refresh_grants ?? 0);
     expect(exact((await facts(email)).wallet!.available)).toBe(available);
@@ -476,7 +476,7 @@ test("accounting-uncertainty: usage the engine did not report is held for reconc
   await expect(cells.nth(4)).toContainText("Awaiting reconciliation");
   expect((await cells.nth(5).textContent())?.trim(), "no charge is shown").toBe("—");
   expect(shown(await cells.nth(6).textContent())).toBe(exact(job.hold!));
-  expect(await figure(page, "Reserved")).toBe(exact(books.wallet!.reserved));
+  expect(await figure(page, "Reserved for requests")).toBe(exact(books.wallet!.reserved));
   expect(exact(books.wallet!.reserved)).not.toBe("0");
 });
 
@@ -527,7 +527,7 @@ test("low-funds: with almost nothing left the API refuses 402 and admits nothing
   expect([after.jobs.length, exact(after.wallet!.available)], "the refusal admitted and held nothing").toEqual([jobs, exact(keep)]);
   await signIn(page, email);
   await page.goto("/usage");
-  expect(await figure(page, "Available")).toBe(exact(keep));
+  expect(await figure(page, "Available to use")).toBe(exact(keep));
   await expect(page.getByText(/Credits running low|No credits available/)).toBeVisible();
 });
 

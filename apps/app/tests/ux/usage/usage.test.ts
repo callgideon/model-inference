@@ -23,7 +23,7 @@ import {
   type Shown,
 } from "../../../app/(console)/usage/[requestId]/request-view-model.ts";
 import { jobRowView, jobsPageModel, parseJobFilters } from "../../../app/(console)/usage/credit-view-model.ts";
-import { creditCardState } from "../../../app/(console)/billing/credit-view-model.ts";
+import { CREDITS_NOTICE, creditAccountState, creditCardState, ledgerEntryView } from "../../../app/(console)/billing/credit-view-model.ts";
 import { settingsModel } from "../../../app/(console)/settings/view-model.ts";
 
 import { render, text } from "./render.ts";
@@ -279,4 +279,37 @@ test("UXU-08 a request row keeps execution and money apart: status is the reques
     assert.doesNotMatch(row[3], /charge|held|credit|pending|reconcil/i, "the status cell carries no money state");
     assert.doesNotMatch(row.join(" "), /\bspent\b/i, "a hold is never called spent");
   }
+});
+
+// ---------------------------------------------------------------------------------------------------
+// Credits (C-05)
+// ---------------------------------------------------------------------------------------------------
+
+test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event", () => {
+  const wallet = fixture.wallet!;
+  const card = creditCardState({ ok: true, value: wallet }, { ok: true, value: "9995.00000000" });
+  assert.ok(card.kind === "ready");
+  assert.deepEqual(
+    card.value.figures.map((f) => [f.label, f.value, f.emphasis]),
+    [
+      ["Available to use", "9,982.67777779 credits", true],
+      ["Reserved for requests", "10.00 credits", false],
+      ["Spent", "2.32222221 credits", false],
+      ["Balance", "9,992.67777779 credits", false],
+    ],
+  );
+  assert.equal(card.value.grant, "10,000 promotional credits, granted once after verification. Received 2026-09-20 09:00 UTC.");
+  const pending = creditCardState({ ok: true, value: { ...wallet, signupGrantedAt: null } }, null);
+  assert.ok(pending.kind === "ready");
+  assert.equal(pending.value.grant, "10,000 promotional credits, granted once after verification. Not received yet.");
+  const said = [CREDITS_NOTICE, card.value.grant, pending.value.grant, ...[null, wallet, { ...wallet, available: "0.00000000" }].flatMap((w) => Object.values(creditAccountState(w as never)))].join(" ");
+  assert.doesNotMatch(said, /\$|top[- ]?up|subscri|monthly|resets?\b|buy|purchase/i, "no paid path, refill or dollar value");
+
+  const grant = ledgerEntryView({ ...fixture.ledger[0], kind: "signup_grant" });
+  assert.deepEqual([grant.kind, grant.code, grant.amount], ["Promotional credit grant", "signup_grant", "+10,000.00 credits"]);
+  const debit = ledgerEntryView({ ...fixture.ledger[0], kind: "inference_debit", amount: "-0.00000001" });
+  assert.deepEqual([debit.kind, debit.amount], ["Request charge", "-0.00000001 credits"]);
+  const novel = ledgerEntryView({ ...fixture.ledger[0], kind: "novel_kind" });
+  assert.deepEqual([novel.kind, novel.code], ["Other", "novel_kind"], "an unknown event is neutral, with its raw code");
+  assert.match(source("app/(console)/billing/page.tsx"), /<span className="block font-mono text-xs text-muted-foreground">\{row\.code\}<\/span>/);
 });

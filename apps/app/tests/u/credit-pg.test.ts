@@ -194,12 +194,12 @@ test(T.card, { skip }, async () => {
   const card = creditCardState(wallet, await reads.creditsIn(wallet.value.walletId));
   assert.ok(card.kind === "ready" && card.value.reconciles);
   const figure = (label: string) => card.value.figures.find((f) => f.label === label)?.value;
-  assert.equal(figure("Reserved"), credits(holds.held));
+  assert.equal(figure("Reserved for requests"), credits(holds.held));
   assert.equal(figure("Balance"), credits(ledger.total));
   assert.equal(WORLD.refused, 4, "the exhaustion race refused nothing");
   assert.equal(card.value.state.kind, "low", `after the race: ${JSON.stringify(card.value.state)}`);
-  assert.equal(figure("Available"), "0.00000001 credits");
-  assert.match(card.value.grant, /10,000 credits, received/);
+  assert.equal(figure("Available to use"), "0.00000001 credits");
+  assert.match(card.value.grant, /10,000 promotional credits, granted once after verification\. Received /);
 });
 
 test(T.ledger, { skip }, async () => {

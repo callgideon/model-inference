@@ -281,6 +281,86 @@
       "cases": [
         "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
       ]
+    },
+    {
+      "id": "UXU-X29",
+      "what": "the primary figure keeps the old label",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "label: \"Available to use\",",
+      "replace": "label: \"Available\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X30",
+      "what": "the reserve is not said to be for requests",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "label: \"Reserved for requests\",",
+      "replace": "label: \"Reserved\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X31",
+      "what": "a grant not yet received says nothing about it",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "? `${GRANT} Not received yet.`",
+      "replace": "? GRANT",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X32",
+      "what": "the grant reads as recurring",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "\"10,000 promotional credits, granted once after verification.\"",
+      "replace": "\"10,000 promotional credits, granted monthly after verification.\"",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X33",
+      "what": "the grant event keeps the old label",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "signup_grant: \"Promotional credit grant\",",
+      "replace": "signup_grant: \"One-time signup grant\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X34",
+      "what": "the ledger row loses its raw event code",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "    code: entry.kind,\n",
+      "replace": "    code: \"\",\n",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X35",
+      "what": "the Credits page does not show the raw event code",
+      "file": "app/(console)/billing/page.tsx",
+      "find": "                      <span className=\"block font-mono text-xs text-muted-foreground\">{row.code}</span>\n",
+      "replace": "",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
+    },
+    {
+      "id": "UXU-X36",
+      "what": "an unknown event is shown as a known one",
+      "file": "app/(console)/billing/credit-view-model.ts",
+      "find": "KIND_LABELS[entry.kind] : \"Other\",",
+      "replace": "KIND_LABELS[entry.kind] : \"Request charge\",",
+      "cases": [
+        "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
+      ]
     }
   ]
 }

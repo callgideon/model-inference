@@ -67,12 +67,12 @@ test(T.figures, () => {
   if (state.kind !== "ready") return;
   const byLabel = Object.fromEntries(state.value.figures.map((f) => [f.label, f.value]));
   assert.deepEqual(byLabel, {
-    Available: "9,975.65432099 credits",
-    Reserved: "12.00000001 credits",
+    "Available to use": "9,975.65432099 credits",
+    "Reserved for requests": "12.00000001 credits",
     Spent: "12.345679 credits",
     Balance: "9,987.654321 credits",
   });
-  assert.equal(state.value.figures[0].label, "Available");
+  assert.equal(state.value.figures[0].label, "Available to use");
   assert.ok(state.value.figures[0].emphasis);
   for (const figure of state.value.figures) {
     assert.doesNotMatch(`${figure.value} ${figure.hint}`, /\$|USD|dollar/i, figure.label);
@@ -127,7 +127,7 @@ test(T.grant, () => {
   const card = creditCardState(ok(wallet("10000.00000000", "0.00000000")), ok("10000.00000000" as Credit));
   assert.ok(card.kind === "ready");
   if (card.kind !== "ready") return;
-  assert.match(card.value.grant, /one-time/i);
+  assert.match(card.value.grant, /granted once/i);
   assert.match(card.value.grant, /10,000/);
   assert.match(card.value.grant, /2026-09-20 12:00 UTC/);
   const everything = [CREDITS_NOTICE, card.value.grant, ...Object.values(creditAccountState(null)),
@@ -146,9 +146,9 @@ test(T.ledger, () => {
   });
   const grant = ledgerEntryView(entry({}));
   assert.deepEqual([grant.kind, grant.amount, grant.detailHref],
-    ["One-time signup grant", "+10,000.00 credits", null]);
+    ["Promotional credit grant", "+10,000.00 credits", null]);
   // R59-1: every entry a consumer can see is the platform's, so the row names nobody at all.
-  assert.deepEqual(Object.keys(grant).sort(), ["amount", "detailHref", "id", "kind", "reason", "when"]);
+  assert.deepEqual(Object.keys(grant).sort(), ["amount", "code", "detailHref", "id", "kind", "reason", "when"]);
   const debit = ledgerEntryView(entry({ kind: "inference_debit", amount: "-0.00012345" as Credit, requestId: "b1/../x", reason: "inference" }));
   assert.deepEqual([debit.kind, debit.amount, debit.detailHref],
     ["Request charge", "-0.00012345 credits", "/usage/b1%2F..%2Fx"]);
