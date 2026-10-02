@@ -157,3 +157,47 @@ export function registrationOutcome(result: Result<Deployment>): RegistrationOut
     return { kind: "uncertain", message: "Outcome not confirmed: the control service did not answer. Check Models before trying again; the revision may have been registered." };
   return { kind: "refused", message: REFUSAL_COPY[result.reason] };
 }
+
+// ---- UX-03 L-04 Deployments: record state, readiness stages and the actions offered.
+
+type Tone = "neutral" | "info" | "warning" | "danger" | "success";
+/** A deployment record's own state: "active" is a registered record, never "healthy" or "ready". */
+export const RECORD_STATE: Record<Deployment["state"], { tone: Tone; label: string }> = {
+  active: { tone: "info", label: "Registered · active record" },
+  retired: { tone: "neutral", label: "Retired" },
+};
+
+export type Check = { stage: string; status: string; tone: Tone };
+const NOT_HERE = { status: "Not verified here", tone: "neutral" as const };
+const UNREAD = { status: "Couldn't check", tone: "warning" as const };
+export const DECISION: Record<Proposal["state"], { status: string; tone: Tone }> = {
+  proposed: { status: "Awaiting operator decision", tone: "warning" },
+  approved: { status: "Approved by an operator", tone: "info" },
+  rejected: { status: "Rejected", tone: "danger" },
+};
+/**
+ * L-04's readiness stages for one record, only as far as evidence exists here: the record itself, then
+ * engine evidence and a private smoke on this engine (not readable until AP-05's receipts), then the
+ * latest publication request for it and the operator's decision (`proposals` null = that read failed).
+ */
+export function readiness(d: Deployment, proposals: Proposal[] | null): Check[] {
+  const latest = proposals?.filter((p) => p.deploymentRevisionId === d.deploymentRevisionId).at(-1);
+  return [
+    { stage: "Record registered", status: d.state === "active" ? "Registered" : "Retired", tone: RECORD_STATE[d.state].tone },
+    { stage: "Engine evidence", ...NOT_HERE },
+    { stage: "Private smoke on this engine and revision", ...NOT_HERE },
+    { stage: "Publication requested", ...(proposals === null ? UNREAD : latest ? { status: `Requested ${latest.proposedAt}`, tone: "neutral" as const } : { status: "Not requested", tone: "neutral" as const }) },
+    { stage: "Operator decision", ...(proposals === null ? UNREAD : latest ? DECISION[latest.state] : { status: "No decision", tone: "neutral" as const }) },
+  ];
+}
+
+/** The record's smoke field as what it is: a recorded result with no engine provenance. */
+export function recordedSmoke(d: Deployment): string {
+  return d.smoke === "none"
+    ? "No smoke result is recorded."
+    : `Recorded smoke result: ${d.smoke}. The record names no engine, so it does not verify serving readiness.`;
+}
+
+/** The actions a page offers. ponytail: "smoke" is withheld until AP-05's real, receipted smoke exists -
+ *  the current stand-in can leave a record validating (L-04); return it when that API is mounted. */
+export const operateActions = (row: DeploymentRow): Action[] => row.actions.filter((a) => a !== "smoke");

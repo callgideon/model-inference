@@ -71,3 +71,37 @@ test("OP-V04 a revision registration is checked field by field with the existing
   const [row] = v.modelRows([model]);
   assert.deepEqual([row.name, row.modelId, row.revision], ["alpha-2b", "synthetic/alpha-2b", "r1"]);
 });
+
+test("OP-V05 a deployment record is registered, not healthy; a recorded smoke never verifies an engine; publication and the operator's decision are separate facts", () => {
+  assert.deepEqual(v.RECORD_STATE.active, { tone: "info", label: "Registered · active record" });
+  assert.deepEqual(v.RECORD_STATE.retired, { tone: "neutral", label: "Retired" });
+  const stages = (d: Deployment, p: Proposal[] | null) => v.readiness(d, p).map((c) => [c.stage, c.status]);
+  const passed = dep({ smoke: "passed" });
+  assert.deepEqual(stages(passed, []), [
+    ["Record registered", "Registered"],
+    ["Engine evidence", "Not verified here"],
+    ["Private smoke on this engine and revision", "Not verified here"],
+    ["Publication requested", "Not requested"],
+    ["Operator decision", "No decision"],
+  ]);
+  for (const c of v.readiness(passed, [proposal({ state: "approved", decidedAt: "t" })])) {
+    assert.doesNotMatch(c.status, /ready|healthy|live|published/i);
+    if (c.stage !== "Operator decision") assert.notEqual(c.tone, "success");
+  }
+  assert.deepEqual(stages(passed, [proposal()]).slice(3), [["Publication requested", "Requested 2026-09-30T11:00:00Z"], ["Operator decision", "Awaiting operator decision"]]);
+  assert.deepEqual(stages(passed, [proposal({ state: "rejected", decidedAt: "t" })])[4], ["Operator decision", "Rejected"]);
+  assert.deepEqual(stages(passed, [proposal({ deploymentRevisionId: "other" })]).slice(3), [["Publication requested", "Not requested"], ["Operator decision", "No decision"]]);
+  assert.deepEqual(stages(passed, null).slice(3).map(([, s]) => s), ["Couldn't check", "Couldn't check"]);
+  assert.deepEqual(stages(dep({ state: "retired" }), [])[0], ["Record registered", "Retired"]);
+  assert.match(v.recordedSmoke(passed), /^Recorded smoke result: passed\. .*does not verify/);
+  assert.match(v.recordedSmoke(dep()), /No smoke result is recorded/);
+});
+
+test("OP-V06 a dev smoke is never offered until readiness checks exist; publication only to an administrator after a recorded pass", () => {
+  const rows = (role: "viewer" | "developer" | "administrator", d: Deployment, p: Proposal[] = []) => v.operateActions(v.deploymentRows(role, [d], p)[0]);
+  assert.deepEqual(rows("developer", dep()), []);
+  assert.deepEqual(rows("developer", dep({ smoke: "passed" })), []);
+  assert.deepEqual(rows("administrator", dep({ smoke: "passed" })), ["publish"]);
+  assert.deepEqual(rows("administrator", dep({ smoke: "passed" }), [proposal()]), []);
+  assert.deepEqual(rows("viewer", dep({ smoke: "passed" })), []);
+});

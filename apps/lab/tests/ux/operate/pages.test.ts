@@ -67,7 +67,7 @@ test("OP-P02 overview: control records and measured traffic load and fail apart;
     let p = await open(traffic);
     let shown = await text(p);
     assert.match(shown, /We couldn't load measured traffic/);
-    assert.match(shown, /Registered deployment records 1/, `the control counts survive: ${shown}`);
+    assert.match(shown, /Registered deployment records [1-9]/, `the control counts survive: ${shown}`);
     assert.doesNotMatch(shown, /No measured requests/);
     await p.close();
     restore();
@@ -206,4 +206,52 @@ test("OP-P08 add model: serving setup only for a compatible verified artifact; a
   assert.match(created, /Serving readiness can't be verified here yet/);
   assert.doesNotMatch(mainOf(created), /Deployed|Ready|Live|Healthy|Connect/);
   await laidOut(created);
+});
+
+// ---- UX-03 L-04 deployments over the preview fake: a dev revision registered and smoke-recorded.
+const devReady = await (async () => {
+  const d = await fake.register(as("developer"), { name: "alpha-2b", artifactDigest: DIGEST, schemaVersion: "chat.v1", runtime: "vllm@sha256:bb" });
+  assert.ok(d.ok);
+  await fake.smoke(as("developer"), d.value.deploymentRevisionId);
+  return d.value.deploymentRevisionId;
+})();
+
+test("OP-P09 deployments: records read as registered; no dev smoke is offered; only an administrator can request publication, with a confirmation summary", async () => {
+  const dev = mainOf(await at("deployments/page.tsx", "/deployments", "developer"));
+  assert.match(dev, /Registered · active record/);
+  assert.match(dev, /Recorded smoke result: passed/);
+  assert.doesNotMatch(dev, /Run dev smoke|Request publication</);
+  assert.match(dev, /Requesting publication needs an administrator/);
+  assert.match(dev, /Connection details are provided after serving setup is verified/);
+  assert.doesNotMatch(dev, /Healthy|Ready|Live\b|Published/);
+  const admin = mainOf(await at("deployments/page.tsx", "/deployments", "administrator"));
+  assert.match(admin, /<summary[^>]*>Request publication<\/summary>/);
+  assert.match(admin, new RegExp(`name="deploymentRevisionId" value="${devReady}"`));
+  assert.match(admin, /name="kind" value="publish"/);
+  assert.match(admin, /An infrx operator approves or rejects it/);
+  assert.match(admin, /Serving readiness: not verified here/);
+  assert.match(admin, />Confirm publication request</);
+  await laidOut(await at("deployments/page.tsx", "/deployments", "administrator"), 16);
+});
+
+test("OP-P10 deployments: a failed proposal read keeps the records and withholds the request; a failed record read is unavailable, never empty", async () => {
+  try {
+    fake.proposals = DOWN;
+    const partial = mainOf(await at("deployments/page.tsx", "/deployments", "administrator"));
+    assert.match(partial, /Registered · active record/);
+    assert.match(partial, /Couldn't check/);
+    assert.match(partial, /We couldn't load publication requests/);
+    assert.doesNotMatch(partial, /Request publication<\/summary>/, "no request without knowing what is pending");
+    restore();
+    fake.deployments = DOWN;
+    const down = mainOf(await at("deployments/page.tsx", "/deployments", "administrator"));
+    assert.match(down, /data-state="unavailable"/);
+    assert.match(down, /We couldn't load deployments/);
+    assert.doesNotMatch(down, /No deployments yet/);
+  } finally {
+    restore();
+  }
+  const empty = mainOf(await at("deployments/page.tsx", "/deployments", "developer", EMPTY));
+  assert.match(empty, /No deployments yet/);
+  assert.match(empty, /href="\/models\/new"/);
 });
