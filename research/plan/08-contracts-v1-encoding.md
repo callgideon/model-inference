@@ -591,3 +591,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-10-01: R268 on codex/w5-merge-69; R269 numbered at the lab-release-tool merge on codex/w5-merge-71; next free R270
 - 2026-10-01: R270–R271 numbered at the wave-7 base (the keystone commit after the lifecycle-plan merge 2eeff879); next free R272
 - 2026-10-02: R271 allocation extended by the coordinator: 0065 = api-identity's SR-AP01-1 (the six SECURITY DEFINER identity functions for the Lab control login), LOCAL-ONLY, batch 2; the migration pins' admitted range becomes 0060..0065 when that file lands; next free R272
+- 2026-10-02: R271 allocation extended: 0067 = the late wave-7 schema requests (SR-AP08-1 judge rubrics table + doors, SR-AP06-1 dev-key/wallet doors, SR-AP10C-1 datasets-role grants, the artifacts-role grants if it gets its own login), LOCAL-ONLY; the pins' admitted range becomes 0060..0067 when it lands; next free R272
