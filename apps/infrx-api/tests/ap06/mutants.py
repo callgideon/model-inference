@@ -178,10 +178,22 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 PG_MUTANTS: tuple[Mutant, ...] = (
-    _m("pg_lost_cas_answered_as_reconciled", "two racing approvals: one winner, one 409",
-       OP, "        raise\n    await ops.finish(op.operation_id, op.fence, \"succeeded\")",
-       "        result = await done(op)\n"
-       "    await ops.finish(op.operation_id, op.fence, \"succeeded\")",
+    _m("pg_lost_cas_rebased_on_the_fresh_version", "two racing approvals: one winner, one 409",
+       OP, "            return await self.control.approve(\n"
+           "                operator, proposal_id, rate_card_version=body.rate_card_version,\n"
+           "                input_rate=body.input_rate, output_rate=body.output_rate,\n"
+           "                expected_version=body.expected_version, reason=body.reason)\n",
+       "            for attempt in (1, 2):\n"
+       "                try:\n"
+       "                    return await self.control.approve(\n"
+       "                        operator, proposal_id, rate_card_version=body.rate_card_version,\n"
+       "                        input_rate=body.input_rate, output_rate=body.output_rate,\n"
+       "                        expected_version=body.expected_version if attempt == 1 else (\n"
+       "                            await self.pub.operations.reads.listing_versions(alias)\n"
+       "                        )[-1].version, reason=body.reason)\n"
+       "                except errors.StateConflict:\n"
+       "                    if attempt == 2:\n"
+       "                        raise\n",
        PG + "two_processes_racing_approvals_publish_one_listing"),
     _m("pg_replay_not_flagged", "0060's receipt replays the approval",
        OP, "        return found, True", "        return found, False",
