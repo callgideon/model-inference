@@ -418,6 +418,8 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
                 verdict = worst(r["status"] for r in results if r["selected"])
     except InvalidRun as invalid:
         verdict, reasons = INVALID, [f"INVALID {invalid}"]
+    except Blocked as missing:                     # the isolated world could not be composed
+        verdict, reasons = BLOCKED, [str(missing)]
     finally:
         if session is not None:
             session.close()
