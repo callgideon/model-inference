@@ -150,6 +150,9 @@ class ScriptedLauncher:
         self.model_dir: str | None = None          # a launch that loads another directory
 
     async def start(self, allocation, model_dir) -> None:
+        from infrx.lab.hosting.engine import PortBusy
+        if getattr(self, "busy", False):
+            raise PortBusy(allocation.port)
         self.starts.append(allocation.resource_tag)
         self.running[allocation.resource_tag] = Runtime(
             image=self.image, flags=tuple(self.flags), model_dir=self.model_dir or str(model_dir),

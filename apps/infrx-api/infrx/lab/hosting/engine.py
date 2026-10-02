@@ -48,6 +48,22 @@ def options_digest(flags: Sequence[str]) -> str:
     return "sha256:" + hashlib.sha256(compact.encode()).hexdigest()
 
 
+class PortBusy(Exception):
+    """Another process listens on the candidate's port: starting there would let a stranger
+    answer for the candidate (found by the LAB-HOSTING gate: an orphaned engine did)."""
+
+
+def free(port: int) -> None:
+    """PortBusy unless nothing listens on 127.0.0.1:`port` now."""
+    import socket
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            raise PortBusy(port) from None
+
+
 class Launcher(Protocol):
     async def start(self, allocation: Allocation, model_dir: Path) -> None: ...
     async def inspect(self, allocation: Allocation) -> Runtime | None:
@@ -116,6 +132,7 @@ class LocalLauncher:
         return self.state_dir / f"{allocation.resource_tag}.json"
 
     async def start(self, allocation: Allocation, model_dir: Path) -> None:
+        free(allocation.port)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         argv = [a.replace("{port}", str(allocation.port)).replace("{model_dir}", str(model_dir))
                 for a in self.argv]
@@ -250,6 +267,7 @@ class BoxLauncher:
     async def start(self, allocation: Allocation, model_dir: Path) -> None:
         if allocation.port == SERVING_PORT:
             raise ValueError("the serving engine's port is never a candidate's")
+        free(allocation.port)
         self.env_dir.mkdir(parents=True, exist_ok=True)
         part = self._env(allocation).with_suffix(".part")
         part.write_text(f"INFRX_HOSTING_TAG={allocation.resource_tag}\nWEIGHTS={model_dir}\n")

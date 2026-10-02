@@ -28,8 +28,8 @@ from ...contracts.api import FieldError
 from ...contracts.v2.records import DeploymentState, ServingRevision
 from ...state.control_ops import Operation, input_hash
 from . import KINDS, PROFILE, LabHosting, Target, gaps, latest
-from .engine import (BoxLauncher, Engine, InstallRefused, Launcher, Runtime, install, measure,
-                     mismatches, options_digest)
+from .engine import (BoxLauncher, Engine, InstallRefused, Launcher, PortBusy, Runtime, install,
+                     measure, mismatches, options_digest)
 from .store import Allocation, Hold, Receipt, tag
 
 log = logging.getLogger(__name__)
@@ -215,7 +215,11 @@ class Controller:
                 await self.store.transition(hold, deployment_id, d.provider_org_id, "draft",
                                             "validating", "hosting: launching")
             if await self.launcher.inspect(allocation) is None:
-                await self.launcher.start(allocation, self._dir(allocation))
+                try:
+                    await self.launcher.start(allocation, self._dir(allocation))
+                except PortBusy:
+                    return await self._fail(op, hold, "port_in_use", "another process holds "
+                                            "the candidate's port", retryable=True)
             self.boundary("launched")
             allocation = await self.store.move(hold, allocation.allocation_id, "launched")
         receipt = await self._mine(op, "identity")

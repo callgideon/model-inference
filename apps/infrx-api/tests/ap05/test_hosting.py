@@ -864,3 +864,24 @@ def test_ap05__a_newer_failed_check_supersedes_an_interrupted_smoke(fake_world):
     doc = w.op(first)
     assert (doc.state, code(doc)) == ("failed", "stale_receipt")
     assert w.state(deployment) == "validating"
+
+
+def test_ap05__a_port_another_process_holds_is_never_shared(world):
+    """Found by the gate: an orphaned engine on the slot's port answered for a candidate that
+    could not bind. A held port fails the create before anything starts."""
+    import socket
+    holder = socket.socket()
+    holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        if world.real:
+            holder.bind(("127.0.0.1", ENGINE_PORT))
+            holder.listen()
+        else:
+            world.launcher.busy = True
+        operation, deployment = world.deployed()
+        world.drive()
+        doc = world.op(operation)
+        assert (doc.state, code(doc)) == ("failed", "port_in_use")
+        assert world.launcher.running == {} and world.state(deployment) == "retired"
+    finally:
+        holder.close()

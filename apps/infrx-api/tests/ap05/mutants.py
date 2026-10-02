@@ -69,6 +69,7 @@ REAL_DRAIN = c("a_real_in_flight_request_finishes_before_its_engine_stops")
 KILLED = c("a_controller_process_killed_at_each_boundary_resumes_once")
 ROLE = c("the_hosting_role_hosts_only_its_configured_slot_on_the_box_launcher")
 NO_TARGET = c("without_a_target_nothing_is_queued_and_unwired_nothing_mounts")
+PORT_HELD = c("a_port_another_process_holds_is_never_shared")
 SUPERSEDED = c("a_newer_failed_check_supersedes_an_interrupted_smoke")
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -132,10 +133,16 @@ MUTANTS: tuple[Mutant, ...] = (
        ST, "            raise errors.CapacityUnavailable(f\"slot {allocation.slot} is taken\")",
        "            pass", CAPACITY),
     # --- 05b: the controller's allocation and launch ---------------------------------------
+    _m("busy_port_shared", "a held port fails the create before anything starts",
+       CT, "                    return await self._fail(op, hold, \"port_in_use\", \"another "
+       "process holds \"\n                                            \"the candidate's port\", "
+       "retryable=True)", "                    return False", PORT_HELD),
     _m("second_engine_started", "a resumed controller finds its engine by tag",
        CT, "            if await self.launcher.inspect(allocation) is None:\n"
-       "                await self.launcher.start(", "            if True:\n"
-       "                await self.launcher.start(", RESUME),
+       "                try:", "            if True:\n                try:", RESUME),
+    _m("promotes_elsewhere", "a passing smoke promotes the revision to ready_private",
+       CT, '"ready_private", "hosting: identity and smoke passed")',
+       '"retired", "hosting: identity and smoke passed")', PROMOTES),
     _m("cancel_not_reconciled", "a cancel_requested create tears down what it made",
        CT, '        if op.state == "cancel_requested" or d.state is S.retired:',
        "        if d.state is S.retired:", RUNNING),
@@ -308,9 +315,13 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        EN, "        if stat.rpartition(\")\")[2].split()[0] == \"Z\" or not any(\n"
        "                allocation.resource_tag in a for a in argv):",
        "        if stat.rpartition(\")\")[2].split()[0] == \"Z\":", FOREIGN),
-    _m("local_stop_misses_group", "a stop takes the engine's whole process group down",
-       EN, "                    os.killpg(pid, sig)", "                    os.kill(pid, 0)",
-       REAL_DRAIN),
+    _m("local_port_unchecked", "a local launch refuses a held port",
+       EN, "    async def start(self, allocation: Allocation, model_dir: Path) -> None:\n"
+       "        free(allocation.port)\n", "    async def start(self, allocation: Allocation, "
+       "model_dir: Path) -> None:\n", PORT_HELD),
+    # (never a mutant that leaves an engine running: an orphan on 57557 poisons later runs)
+    _m("real_in_flight_ignored", "drain reads the real engine's in-flight gauge",
+       EN, "        return int(total)", "        return 0", REAL_DRAIN),
 )
 FAKE_ONLY = (PROFILE, BOX, WINDOW_CASE, ROLE, NO_TARGET, SUPERSEDED, SMOKE_FAILS, SWAPPED,
              SMOKE_ONCE, EXPIRY, TERMINAL, RETIRE, BOUNDED)
