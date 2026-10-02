@@ -4,7 +4,7 @@
 // Usage: node tests/ux/evaluations/run-mutants.mjs [--only ID,ID]
 import { m, runMutants } from "../../l/shell/harness.mjs";
 
-const SUITE = ["tests/ux/evaluations/evaluations.test.ts", "tests/ux/evaluations/judge.test.ts"];
+const SUITE = ["tests/ux/evaluations/evaluations.test.ts", "tests/ux/evaluations/judge.test.ts", "tests/ux/evaluations/records.test.ts"];
 const E = "app/(provider)/evaluations";
 const VIEW = `${E}/view.ts`;
 const HUB = `${E}/page.tsx`;
@@ -13,6 +13,7 @@ const J = "app/(provider)/judge";
 const JV = `${J}/view.ts`;
 const JP = `${J}/page.tsx`;
 const JF = `${J}/form.tsx`;
+const JR = "lib/services/judge/records.ts";
 
 const C = {
   c01: "UX08-C01 a catalog the service could not read is unavailable, never an empty launch form",
@@ -35,6 +36,11 @@ const C = {
   j05: "UX08-J05 judge setup sits under Evaluations and says unreadable records are unavailable, not absent",
   j06: "UX08-J06 configure and budget send a key minted at render; only an unknown outcome keeps it for the retry, a definite answer frees it",
   j07: "UX08-J07 each judge form carries every field its action reads, so a filled form is sent, never refused as invalid",
+  k01: "UX08-K01 a workspace's configurations, runs and budgets are read for the guarded workspace only, as the routes answer them",
+  k02: "UX08-K02 a misconfigured Lab is unavailable before any call",
+  k03: "UX08-K03 any refusal or lost answer of any one list is unavailable, never the other lists alone",
+  k04: "UX08-K04 an answer it cannot read whole is unavailable: never CREDIT as PROVIDER_USD, never an unknown state, never a partial list",
+  k05: "UX08-K05 a list with a further page is shown with more set, so the page never reads it as complete",
 };
 
 const MUTANTS = [
@@ -74,7 +80,7 @@ const MUTANTS = [
   m("UX08-X34", "rejected samples are dropped", JV, " · ${r.rejected} rejected", "", [C.j03]),
   m("UX08-X35", "the reserved column shows the limit", JV, "reserved: money(b.reserved)", "reserved: money(b.limit)", [C.j04]),
   m("UX08-X36", "unreadable judge records read as empty", `${J}/records.tsx`, '<ServiceState state="unavailable" title="Judge records', '<ServiceState state="empty" title="Judge records', [C.j05]),
-  m("UX08-X37", "the page claims empty records it never read", `${J}/page.tsx`, "<JudgeRecords records={null} />", "<JudgeRecords records={{ configs: [], runs: [], budgets: [] }} />", [C.j05]),
+  m("UX08-X37", "the page claims empty records it never read", `${J}/page.tsx`, "<JudgeRecords records={records} />", "<JudgeRecords records={records ?? { configs: [], runs: [], budgets: [], more: false }} />", [C.j05]),
   m("UX08-X38", "judge setup is not placed under Evaluations", `${J}/page.tsx`, 'breadcrumb={[{ href: "/evaluations", label: "Evaluations" }]}', "breadcrumb={[]}", [C.j05]),
   // Register row 98: the judge forms send what their actions read.
   m("UX08-X39", "every refusal keeps the key", JV, '!o.ok && o.reason === "unavailable"', "!o.ok", [C.j06]),
@@ -86,6 +92,25 @@ const MUTANTS = [
   m("UX08-X45", "calibration names no configuration", JP, 'fields={[{ name: "config_id", label: "Configuration id" }]}', "fields={[]}", [C.j07]),
   m("UX08-X46", "the run form replaces its run id", JP, "hidden={{ run_id: runId }}", 'hidden={{ run_id: runId }}\n        keyed="run_id"', [C.j06]),
   m("UX08-X47", "the configure key is a fixed field, not minted", JP, '        hidden={{ idempotency_key: mint() }}\n        keyed="idempotency_key"\n      />', '        hidden={{ idempotency_key: runId }}\n        keyed="idempotency_key"\n      />', [C.j06]),
+  // WR-UX08-3: the records the page reads from the judge API.
+  m("UX08-X48", "the page still lists no records", JP, "<JudgeRecords records={records} />", "<JudgeRecords records={null} />", [C.j05]),
+  m("UX08-X49", "a further page goes unmentioned on the page", `${J}/records.tsx`, "      {records.more && <p>", "      {false && <p>", [C.j05]),
+  m("UX08-X50", "a misconfigured Lab reads as empty records", JR, "if (api === null) return null;", "if (api === null) return { configs: [], runs: [], budgets: [], more: false };", [C.k02]),
+  m("UX08-X51", "a refused list reads as empty records", JR, "if (!configs.ok || !runs.ok || !budgets.ok) return null;", "if (!configs.ok || !runs.ok || !budgets.ok) return { configs: [], runs: [], budgets: [], more: false };", [C.k03]),
+  m("UX08-X52", "configurations are read at the route's default page", JR, '"/lab/v1/judge/configs", { query: { ...query, limit: 100 } }', '"/lab/v1/judge/configs", { query }', [C.k01]),
+  m("UX08-X53", "runs are read at the route's default page", JR, '"/lab/v1/judge/runs", { query: { ...query, limit: 100 } }', '"/lab/v1/judge/runs", { query }', [C.k01]),
+  m("UX08-X54", "CREDIT reads as PROVIDER_USD", JR, '(v as Row).unit === "PROVIDER_USD" && ', "", [C.k04]),
+  m("UX08-X55", "an inexact amount is shown", JR, "USD_RE.test((v as Row).amount as string)", "true", [C.k04]),
+  m("UX08-X56", "an unknown run state is shown", JR, "domain_state: one(r.domain_state, RUN_STATES)", 'domain_state: r.domain_state as JudgeRun["domain_state"]', [C.k04]),
+  m("UX08-X57", "an unknown calibration state is shown", JR, "state: one(c.state, CALIBRATION)", 'state: c.state as Calibration["state"]', [C.k04]),
+  m("UX08-X58", "a further page reads as complete", JR, "more: Boolean(configs.data.next_cursor || runs.data.next_cursor)", "more: false", [C.k05]),
+  m("UX08-X59", "a further runs page is ignored", JR, "configs.data.next_cursor || runs.data.next_cursor", "configs.data.next_cursor", [C.k05]),
+  m("UX08-X60", "an absent amount reads as zero", JR, "reserved: opt(r.reserved, usd)", 'reserved: opt(r.reserved, usd) ?? { amount: "0.00000000", unit: "PROVIDER_USD" }', [C.k01]),
+  m("UX08-X61", "a budget without settled is shown", JR, "settled: usd(r.settled) })", "settled: opt(r.settled, usd)! })", [C.k04]),
+  m("UX08-X62", "a fractional count is read", JR, "const int = (v: unknown) => (Number.isInteger(v)", 'const int = (v: unknown) => (typeof v === "number"', [C.k04]),
+  m("UX08-X63", "a text flag is read as a flag", JR, 'const bool = (v: unknown) => (typeof v === "boolean" ? v : bad());', "const bool = (v: unknown) => Boolean(v);", [C.k04]),
+  m("UX08-X64", "an interval of any length is read", JR, "Array.isArray(v) && v.length === 2 && ", "Array.isArray(v) && ", [C.k04]),
+  m("UX08-X65", "the budget list is not read", JR, 'budgets: rows(budgets.data).map(budget),', "budgets: [],", [C.k01]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "UX08", mutants: MUTANTS }));

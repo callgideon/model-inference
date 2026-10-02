@@ -1,5 +1,6 @@
 import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { configureJudge, judgeCalibrationPage, requestJudgeRun, setJudgeBudget } from "@/lib/services/judge/actions";
+import { readJudgeRecords } from "@/lib/services/judge/records";
 import { PageHeader } from "@/components/ui/page-header";
 import { JudgeForm } from "./form";
 import { JudgeRecords } from "./records";
@@ -9,12 +10,14 @@ export const metadata = { title: "Judge setup · infrx Lab" };
 // WR-C3L-2: C3L's four actions. The run id is minted here, once per render: a double click posts
 // the same id twice and the RPC answers one run. The provider is the guarded workspace, never a field.
 // Register row 98: configure and budget carry a render-minted Idempotency-Key the form replaces after a
-// definite answer; calibration names its configuration.
+// definite answer; calibration names its configuration. WR-UX08-3: the records come from the judge API's
+// list reads (null = unavailable, never empty).
 export default async function Judge() {
   const workspace = await requireProviderWorkspace();
   if (workspace.role === "viewer") return <p>Your role cannot configure or run the judge.</p>;
   const mint = () => crypto.randomUUID();
   const runId = mint();
+  const records = await readJudgeRecords(workspace);
   return (
     <>
       <PageHeader
@@ -26,8 +29,7 @@ export default async function Judge() {
         Judge runs are paid in PROVIDER_USD by a named payer of this workspace, never in CREDIT, and nothing is sent without
         the grantor&apos;s current external_judging grant.
       </p>
-      {/* ponytail: unreadable until api-frontends-lab's judge port lists configs/runs/budgets (WR-UX08-2). */}
-      <JudgeRecords records={null} />
+      <JudgeRecords records={records} />
       <JudgeForm
         action={configureJudge}
         title="Configure a judge"

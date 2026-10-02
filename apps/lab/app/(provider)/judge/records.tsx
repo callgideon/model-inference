@@ -4,9 +4,10 @@ import { budgetRow, configRow, runRow, type JudgeRecords as Records } from "./vi
 /** UX-08: the workspace's judge configurations, runs and budgets as AP-08 returns them; `null` = could not be read. */
 export function JudgeRecords({ records }: { records: Records | null }) {
   if (records === null)
-    return <ServiceState state="unavailable" title="Judge records cannot be read here yet" explanation="Configurations, runs and budgets are not listed until the Lab reads them from the judge API. The forms below still post; their answers show beside each form." />;
+    return <ServiceState state="unavailable" title="Judge records cannot be read right now" explanation="The judge API did not answer with this workspace's configurations, runs and budgets, so none are listed. The forms below still post; their answers show beside each form." />;
   return (
     <section aria-label="Judge records">
+      {records.more && <p>More configurations or runs exist than are shown here: the first 100 of each are listed.</p>}
       <h2>Configurations</h2>
       {records.configs.length === 0 ? <p>No configurations yet.</p> : (
         <table>
