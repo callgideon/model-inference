@@ -170,9 +170,11 @@ def individuals(pg, names=("alpha", "beta")) -> dict[str, str]:
     Their grant and keys are the API's (stage 08)."""
     found = {}
     with pg.connect(pg.DATABASE) as conn:
-        conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'ap11', "
-                     "reason = 'ap11 isolated world' where name = any(%s)",
-                     (["signup_grant", "credit_admission", "lab_submission"],))
+        for flag in ("signup_grant", "credit_admission", "lab_submission"):  # absent = off
+            conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
+                         "values (%s, true, 'ap11', 'ap11 isolated world') on conflict (name) "
+                         "do update set enabled = true, updated_by = 'ap11', "
+                         "reason = 'ap11 isolated world'", (flag,))
         for name in names:
             found[name] = str(uuid.uuid4())
             conn.execute("insert into auth.users (id, email, email_confirmed_at) values "
