@@ -3,7 +3,7 @@
 //
 // One httpOnly cookie holds the access token, the refresh token and the expiry instant. Nothing
 // here verifies a token: infrx-api checks the bearer on every call (SessionActors), so a forged or
-// stale cookie reads nothing. `tokenEmail` is display-only for the same reason.
+// stale cookie reads nothing.
 import type { components } from "@infrx/api-client/consumer";
 
 export type FacadeSession = components["schemas"]["Session"];
@@ -52,20 +52,4 @@ export function decodeSession(value: string | undefined | null): StoredSession |
 
 export function needsRefresh(session: StoredSession, nowS: number): boolean {
   return session.expiresAt - REFRESH_SKEW_S <= nowS;
-}
-
-/**
- * The `email` claim of the access token, for display only (the sidebar, settings, welcome).
- * ponytail: `GET /console/v1/me` names no email yet; drop this when it does (wiring request).
- */
-export function tokenEmail(access: string): string | null {
-  const payload = access.split(".")[1];
-  if (payload === undefined) return null;
-  try {
-    const claims: unknown = JSON.parse(fromB64url(payload));
-    const email = (claims as { email?: unknown } | null)?.email;
-    return typeof email === "string" && email !== "" ? email : null;
-  } catch {
-    return null;
-  }
 }

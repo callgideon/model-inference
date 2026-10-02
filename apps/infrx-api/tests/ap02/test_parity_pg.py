@@ -1,21 +1,25 @@
-"""AP-02 parity (02a exit): the App's current TS read adapters and the new API, on the SAME seeded
-ap2 rows, give identical balances, strings and states.
+"""AP-02 parity (02a exit), re-pointed by AP-09 (WR-AP09-PARITY): the App's TS read adapters as
+they now ship and the API, on the SAME seeded ap2 rows, give identical balances, strings and states.
 
 `parity_harness.ts` runs credit-reads.ts / request-reads.ts / request-view-model.ts /
-operator-reads.ts unchanged under node, through a PostgREST-equivalent client (the browser's
-`authenticated` session, `json_agg` rendering); this case reads the same database through the
-routes and compares field by field. Oracle: any drift in a balance, a ledger amount, "spent", a
-job's unit/hold/charge/state, a result's read outcome or an operator figure fails here.
+operator-reads.ts unchanged under node against the API's routes served over HTTP here (uvicorn on
+loopback, the individual's and the operator's actor); this case reads the same routes and compares
+field by field. Oracle: any drift between what the API answers and what the App renders from it -
+a balance, a ledger amount, "spent", a job's unit/hold/charge/state, a result's read outcome or an
+operator figure - fails here.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import pathlib
 import shutil
+import socket
 import subprocess
+import threading
+import time
 from datetime import datetime
-from urllib.parse import urlsplit
 
 import pytest
 
@@ -31,17 +35,34 @@ RESULT_STATUS = {"ready": 200, "pending": 409, "withheld": 409, "no_result": 404
                  "not_found": 404, "expired": 410, "unavailable": 503, "signed_out": 401}
 
 
-def _ts(dsn: str, seeded) -> dict:
+@contextlib.contextmanager
+def _served(app):
+    """The routes over HTTP on a free loopback port, for the node harness (uvicorn in a thread)."""
+    import uvicorn
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", lifespan="off"))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.01)
+    try:
+        yield f"http://127.0.0.1:{sock.getsockname()[1]}"
+    finally:
+        server.should_exit = True
+        thread.join(10)
+
+
+def _ts(me, op) -> dict:
     node = shutil.which("node", path="/usr/bin:/bin:/usr/local/bin")
     if node is None:
         pytest.skip("node is not installed (the App's adapters run under node)")
-    url = urlsplit(dsn)
-    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "PGHOST": url.hostname or "127.0.0.1",
-           "PGPORT": str(url.port), "PGUSER": url.username or "postgres",
-           "PGPASSWORD": url.password or "", "PGDATABASE": url.path.lstrip("/"),
-           "AP02_USER": seeded.me, "AP02_ORG": seeded.my_org, "AP02_OPERATOR": seeded.operator}
-    done = subprocess.run([node, "--no-warnings", str(HARNESS)], env=env, capture_output=True,
-                          text=True, timeout=120, check=False)
+    with _served(me.app) as me_url, _served(op.app) as op_url:
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "AP02_API_ME": me_url,
+               "AP02_API_OPERATOR": op_url}
+        done = subprocess.run([node, "--no-warnings", str(HARNESS)], env=env,
+                              capture_output=True, text=True, timeout=120, check=False)
     assert done.returncode == 0, done.stderr[-2000:]
     return json.loads(done.stdout)
 
@@ -61,9 +82,9 @@ def test_parity__the_apps_adapters_and_the_api_read_the_same(db, seeded):
     conn.execute("insert into infrx.audit_entries (id, actor_principal, action, target_org_id, "
                  "reason, idempotency_key) values (gen_random_uuid(), 'operator:x', "
                  "'admin_grant', %s, 'parity', 'ap02-parity')", (seeded.my_org,))
-    ts = _ts(dsn, seeded)
     me = client(dsn, session(seeded.me, seeded.my_org))
     op = client(dsn, session(seeded.operator, operator=True))
+    ts = _ts(me, op)
 
     # 02a: the wallet, "spent", the ledger and the legacy statement
     credits = me.get("/console/v1/credits").json()

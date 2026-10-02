@@ -169,6 +169,7 @@ test("A2-WIRE-02 signup and reset go through the tested requests with a PKCE cha
   const actions = read(join(AUTH, "auth-actions.ts"));
   has(actions, /return requestSignup\(facadeApi\(\), email, String\(form\.get\("password"\) \?\? ""\), await origin\(\), \{\s*codeChallenge: await newChallenge\(\),\s*captchaToken: captchaOf\(form\),/);
   has(actions, /return requestReset\(facadeApi\(\), [^\n]*await origin\(\), \{\s*codeChallenge: await newChallenge\(\),\s*captchaToken: captchaOf\(form\),/);
+  has(actions, /return requestResend\(facadeApi\(\), [^\n]*await origin\(\), \{\s*codeChallenge: await newChallenge\(\),\s*captchaToken: captchaOf\(form\),/);
   has(read(join(AUTH, "signup", "signup-form.tsx")), /const settled = await signUp\(form\)/);
   has(read(join(AUTH, "forgot-password", "page.tsx")), /const settled = await recover\(form\)/);
   for (const file of files(AUTH).filter((f) => !f.endsWith("flow.ts"))) {
@@ -176,14 +177,16 @@ test("A2-WIRE-02 signup and reset go through the tested requests with a PKCE cha
   }
 });
 
-test("A2-WIRE-03 an expired reset session offers a new link; the resend form claims no send", () => {
+test("A2-WIRE-03 an expired reset session offers a new link; resend goes through the tested request and cools down for 60 s", () => {
   const update = read(join(AUTH, "update-password", "page.tsx"));
   has(update, /setExpired\(outcome === "link_expired"\);/);
   has(update, /\{expired \? \(\s*<Link href="\/forgot-password"/);
   has(read(join(AUTH, "auth-actions.ts")), /if \(token === null\) return "link_expired";/, "no session is the expired-link state");
   const resend = read(join(AUTH, "verify-email", "resend-form.tsx"));
-  has(resend, /\{RESEND_UNAVAILABLE\}/);
-  assert.ok(!/<form|onSubmit|<Button/.test(resend), "no control that sends nothing");
+  has(resend, /const settled = await resendVerification\(form\)/);
+  has(resend, /const COOLDOWN_MS = 60_000;/);
+  has(resend, /setCoolingDown\(true\);\s*setTimeout\(\(\) => setCoolingDown\(false\), COOLDOWN_MS\);/);
+  has(resend, /disabled=\{pending \|\| coolingDown\}/);
 });
 
 test("A2-WIRE-04 /welcome shows the balance only from welcomeWallet's `available` answer, through displayCredit, never a float", () => {
@@ -200,7 +203,7 @@ test("LR02-FORM-02 the signup page asks the facade's availability and closes the
   has(read(join(AUTH, "signup", "page.tsx")), /const gate = captchaGate\(await facade\.call\("get", "\/auth\/v1\/availability"\)/);
   has(read(join(AUTH, "signup", "signup-form.tsx")), /if \(gate === "unconfigured"\) \{\s*return \(\s*<p role="status"[^>]*>\s*\{CAPTCHA_UNAVAILABLE\}/);
   const actions = read(join(AUTH, "auth-actions.ts"));
-  assert.equal(actions.split('if (captchaOf(form) === null && (await emailFormGate()) === "unconfigured") return "captcha_unconfigured";').length - 1, 2, "both email forms re-check on the server");
+  assert.equal(actions.split('if (captchaOf(form) === null && (await emailFormGate()) === "unconfigured") return "captcha_unconfigured";').length - 1, 3, "all three email forms (sign-up, recovery, resend) re-check on the server");
 });
 
 test("A2-A11Y-02 after signup, focus moves to the 'Check your email' heading", () => {

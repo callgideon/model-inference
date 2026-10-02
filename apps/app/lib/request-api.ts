@@ -9,7 +9,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { apiBaseUrl } from "@/app/(console)/models/catalog";
 import { consoleContext } from "@/app/(console)/usage/fake-console-context";
-import { decodeSession, SESSION_COOKIE, tokenEmail } from "./api/cookie";
+import { decodeSession, SESSION_COOKIE } from "./api/cookie";
 import { consumerApi, type ConsumerApi } from "./api/index";
 import { onceGets } from "./api/result";
 
@@ -31,11 +31,15 @@ export const apiSource = cache(async (): Promise<ApiSource> => {
   };
 });
 
-/** The display email of the signed-in session (the preview's fixture account in a preview). */
+/**
+ * The display email of the signed-in session: `Me.email` from `GET /console/v1/me` (the request's
+ * one answer to that GET, shared with the session read), "" when absent or unreadable; the
+ * preview's fixture account in a preview.
+ */
 export async function sessionEmail(): Promise<string> {
   if (consoleContext() !== null) return "preview@example.com";
-  const access = await accessToken();
-  return access === null ? "" : (tokenEmail(access) ?? "");
+  const me = await (await apiSource()).api.call("get", "/console/v1/me");
+  return me.ok ? (me.data.email ?? "") : "";
 }
 
 /** The signed-in session's access token (for the auth facade's bearer-only routes), or null. */

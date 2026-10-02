@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix lab-hosting
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-pg console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix lab-hosting
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -126,30 +126,16 @@ console-mutants:
 	cd apps/app && node tests/ux/first-call/run-mutants.mjs
 	cd apps/app && node tests/ux/usage/run-mutants.mjs
 
-# C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
-# Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
-console-c0-real:
-	cd $(API) && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py
-
-# C3A DUR-RLS / CONSOLE-FLOWS: the trusted actions through real Supabase PostgreSQL + PostgREST
-# (Docker; fails visibly without it). Gate for C3A / APP-M1 and E4.
-console-c3a-real:
-	cd $(API) && INFRX_D_TASK=app-c3a INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/actions_stack.py
-
-# U3 DUR-RLS / DUR-CAP / CONSOLE-FLOWS: operator console over real Supabase PostgreSQL + PostgREST (Docker).
-console-u3-real:
-	cd $(API) && INFRX_D_TASK=app-u3 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/u/operator_stack.py
-
-# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors over real Supabase PostgreSQL + PostgREST,
+# C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors as the browser roles on real Supabase PostgreSQL
+# (no PostgREST stage: neither app calls the doors through it since AP-09),
 # then the SQL mutants of the doors (Docker; fails visibly without it). Not part of check.
 console-c3f-real:
 	cd $(API) && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/feedback/stack.py --mutants
 
-# U1R/U4: the App's read adapters against real PostgreSQL as the browser principal, each on its
-# own task-local instance (D harness). A missing Docker prints SKIP and exits 0, as tests/d does.
+# AP-09 (WR-AP09-MAKE): the App holds no database client, so its real-DB gate is the composed parity:
+# the App's shipped read adapters against infrx-api's routes on a seeded PostgreSQL (tests/ap02, key ap2).
 console-pg:
-	cd $(API) && INFRX_D_TASK=app-u1r uv run --frozen python ../app/tests/u/credit_world.py
-	cd $(API) && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py
+	cd $(API) && INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_parity_pg.py
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.

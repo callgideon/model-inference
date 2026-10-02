@@ -390,13 +390,33 @@
       ]
     },
     {
-      "id": "RESEND-CLAIMS-SENT",
-      "what": "the resend copy claims a new link is on its way",
+      "id": "RESEND-ROUTE",
+      "what": "resend posts to the recovery route (a reset email instead of a verification one)",
       "file": "app/(auth)/flow.ts",
-      "find": "\"Resending the verification email is not available right now. Open the newest link we sent, or contact hello@callbill.ai.\"",
-      "replace": "\"If that address is waiting for verification, a new link is on its way.\"",
+      "find": "api.call(\"post\", \"/auth/v1/resend\",",
+      "replace": "api.call(\"post\", \"/auth/v1/recovery\" as \"/auth/v1/resend\",",
       "cases": [
-        "A2-EMAIL-03 resending has no facade route: the copy says so and never claims a send (WR-AP09-RESEND)"
+        "A2-EMAIL-03 resend sends one facade request with the verify link (PKCE, CAPTCHA forwarded) and never claims a send it did not make"
+      ]
+    },
+    {
+      "id": "RESEND-SERVER-SKIP",
+      "what": "the resend action does not re-check the challenge requirement",
+      "file": "app/(auth)/auth-actions.ts",
+      "find": "export async function resendVerification(form: FormData): Promise<\"sent\" | AuthFailure | \"captcha_unconfigured\"> {\n  if (captchaOf(form) === null && (await emailFormGate()) === \"unconfigured\") return \"captcha_unconfigured\";\n",
+      "replace": "export async function resendVerification(form: FormData): Promise<\"sent\" | AuthFailure | \"captcha_unconfigured\"> {\n",
+      "cases": [
+        "LR02-FORM-02 the signup page asks the facade's availability and closes the form honestly when a challenge cannot be shown"
+      ]
+    },
+    {
+      "id": "RESEND-COOLDOWN",
+      "what": "the resend button is enabled again straight after a send",
+      "file": "app/(auth)/verify-email/resend-form.tsx",
+      "find": "      setCoolingDown(true);\n",
+      "replace": "",
+      "cases": [
+        "A2-WIRE-03 an expired reset session offers a new link; resend goes through the tested request and cools down for 60 s"
       ]
     },
     {
@@ -486,7 +506,7 @@
       "find": "      setExpired(outcome === \"link_expired\");",
       "replace": "      setExpired(false);",
       "cases": [
-        "A2-WIRE-03 an expired reset session offers a new link; the resend form claims no send"
+        "A2-WIRE-03 an expired reset session offers a new link; resend goes through the tested request and cools down for 60 s"
       ]
     },
     {
@@ -496,7 +516,7 @@
       "find": "  if (token === null) return \"link_expired\";",
       "replace": "  if (token === null) return \"unavailable\";",
       "cases": [
-        "A2-WIRE-03 an expired reset session offers a new link; the resend form claims no send"
+        "A2-WIRE-03 an expired reset session offers a new link; resend goes through the tested request and cools down for 60 s"
       ]
     },
     {

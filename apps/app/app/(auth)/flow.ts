@@ -278,12 +278,10 @@ export function requestReset(api: ConsumerApi, email: string, origin: string, mo
   return settle(() => api.call("post", "/auth/v1/recovery", { body: { email, redirect_to: resetRedirect(origin), ...extras(more) } }));
 }
 
-/**
- * Resending the verification email has no facade route yet (wiring request WR-AP09-RESEND):
- * honest unavailable copy, never a "sent" that sent nothing.
- */
-export const RESEND_UNAVAILABLE =
-  "Resending the verification email is not available right now. Open the newest link we sent, or contact hello@callbill.ai.";
+/** The verification email again (`POST /auth/v1/resend`; enumeration-safe like recovery). */
+export function requestResend(api: ConsumerApi, email: string, origin: string, more: EmailExtras = {}) {
+  return settle(() => api.call("post", "/auth/v1/resend", { body: { email, redirect_to: verifyRedirect(origin), ...extras(more) } }));
+}
 
 // ------------------------------------------------------------------------------- CAPTCHA ---
 

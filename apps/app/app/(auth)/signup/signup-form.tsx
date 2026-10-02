@@ -47,7 +47,7 @@ export function SignupForm({ gate }: { gate: CaptchaGate }) {
             We sent a verification link to {sentTo}. Open it on this device to finish creating your account.
           </p>
         </div>
-        <ResendForm />
+        <ResendForm email={sentTo} />
       </div>
     );
   }

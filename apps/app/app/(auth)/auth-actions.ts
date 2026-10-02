@@ -12,6 +12,7 @@ import {
   claimGrant,
   facadeFailure,
   requestReset,
+  requestResend,
   requestSignup,
   safeNext,
   type AuthFailure,
@@ -54,6 +55,14 @@ export async function signUp(form: FormData): Promise<"sent" | AuthFailure | "ca
 export async function recover(form: FormData): Promise<"sent" | AuthFailure | "captcha_unconfigured"> {
   if (captchaOf(form) === null && (await emailFormGate()) === "unconfigured") return "captcha_unconfigured";
   return requestReset(facadeApi(), String(form.get("email") ?? "").trim(), await origin(), {
+    codeChallenge: await newChallenge(),
+    captchaToken: captchaOf(form),
+  });
+}
+
+export async function resendVerification(form: FormData): Promise<"sent" | AuthFailure | "captcha_unconfigured"> {
+  if (captchaOf(form) === null && (await emailFormGate()) === "unconfigured") return "captcha_unconfigured";
+  return requestResend(facadeApi(), String(form.get("email") ?? "").trim(), await origin(), {
     codeChallenge: await newChallenge(),
     captchaToken: captchaOf(form),
   });

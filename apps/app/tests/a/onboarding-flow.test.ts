@@ -17,7 +17,6 @@ import {
   AFTER_VERIFY,
   CAPTCHA_UNAVAILABLE,
   FAILURE_COPY,
-  RESEND_UNAVAILABLE,
   afterSignIn,
   captchaGate,
   claimGrant,
@@ -27,6 +26,7 @@ import {
   loginNotice,
   onboardingFor,
   requestReset,
+  requestResend,
   requestSignup,
   resetRedirect,
   safeNext,
@@ -350,9 +350,14 @@ test("A2-EMAIL-02 the links those emails carry pass through the callback, which 
   }
 });
 
-test("A2-EMAIL-03 resending has no facade route: the copy says so and never claims a send (WR-AP09-RESEND)", () => {
-  assert.match(RESEND_UNAVAILABLE, /not available/);
-  assert.doesNotMatch(RESEND_UNAVAILABLE, /on its way|new link is|we have sent/i);
+test("A2-EMAIL-03 resend sends one facade request with the verify link (PKCE, CAPTCHA forwarded) and never claims a send it did not make", async () => {
+  const resend = recorded(() => json(200, { status: "sent" }));
+  assert.equal(await requestResend(resend.api, "a@example.test", ORIGIN, { codeChallenge: "e".repeat(43), captchaToken: "tok" }), "sent");
+  assert.deepEqual(resend.sent.map((s) => [s.method, s.path, s.body, s.auth]), [
+    ["POST", "/auth/v1/resend", { email: "a@example.test", redirect_to: `${ORIGIN}/auth/callback?next=/welcome`, code_challenge: "e".repeat(43), captcha_token: "tok" }, null],
+  ]);
+  assert.equal(await requestResend(recorded(() => json(429, envelope("rate_limited"))).api, "a@example.test", ORIGIN), "rate_limited");
+  assert.equal(await requestResend(recorded(() => { throw new Error("down"); }).api, "a@example.test", ORIGIN), "unavailable");
 });
 
 test("LR02-FORM-01 a required challenge with no widget configured closes the email forms honestly; otherwise they are open", () => {
