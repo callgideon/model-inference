@@ -33,6 +33,7 @@ import logging
 import os
 import pathlib
 import re
+from types import SimpleNamespace
 from typing import Any
 from unittest import mock
 
@@ -199,7 +200,8 @@ def _lab_control(publication: bool = True) -> FastAPI:
     env = {control.DATABASE_URL: "postgresql://export@127.0.0.1:1/export",
            control.SUPABASE_URL: "http://127.0.0.1:1", control.SUPABASE_KEY: "export",
            "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export",
-           "LAB_JUDGE_API": "1", "LAB_ARTIFACTS": "1"}                     # WR-1, WR-AP04-2
+           "LAB_JUDGE_API": "1", "LAB_ARTIFACTS": "1",                     # WR-1, WR-AP04-2
+           "IDENTITY_API": "1"}                                            # WR-AP01-4
     if publication:
         env["LAB_PUBLICATION"] = "1"                                       # WR-AP06-3
     # ponytail: the two families that connect at composition (ClickHouse, the key directory)
@@ -207,7 +209,8 @@ def _lab_control(publication: bool = True) -> FastAPI:
     with mock.patch.dict(os.environ, env, clear=True), \
             mock.patch.object(compose, "lab_traces", lambda *_: inert), \
             mock.patch.object(compose, "lab_checkpoints", lambda *_: {"lab_checkpoints": inert}), \
-            mock.patch.object(control, "_actors", lambda *_: inert), \
+            mock.patch.object(control, "_actors",                       # WR-AP01-4
+                              lambda *_: SimpleNamespace(identity=inert)), \
             mock.patch.object(workers, "lab_objects", lambda *_: inert), \
             mock.patch.object(artifacts, "surface", lambda *_, **__: inert):   # WR-AP04-2
         return control.create_app()

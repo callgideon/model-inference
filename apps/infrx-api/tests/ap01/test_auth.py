@@ -270,6 +270,47 @@ def test_auth__recovery_of_an_unknown_email_reads_sent():
     refused(limited, "rate_limited")
 
 
+def test_auth__resend_reads_sent_for_any_address_and_keeps_its_guards():
+    """Oracle: WR-AP09-RESEND - a new sign-up link (IdP `type=signup`, the allowlisted
+    `redirect_to` and the challenge forwarded) reads `sent` byte-identically for an unconfirmed,
+    an already confirmed and an unknown address (no enumeration, like recovery); a rate limit
+    and an outage keep their codes; a cross-origin POST or a foreign redirect never reaches the
+    IdP."""
+    stub = GoTrueStub()
+    stub.user("new@example.com", confirmed=False)
+    stub.user("done@example.com")
+    link = f"{APP}/auth/callback"
+
+    async def go():
+        async with api(stub) as c:
+            sent = [await c.post("/auth/v1/resend", json={
+                "email": email, "redirect_to": link, "captcha_token": "captcha-ok"})
+                for email in ("new@example.com", "done@example.com", "z@example.com")]
+            seen = len(stub.seen)
+            guarded = [await c.post("/auth/v1/resend", json={"email": "new@example.com"},
+                                    headers={"origin": "https://evil.example"}),
+                       await c.post("/auth/v1/resend", json={
+                           "email": "new@example.com",
+                           "redirect_to": "https://evil.example/auth/callback"})]
+            after = len(stub.seen)
+            stub.limited = True
+            limited = await c.post("/auth/v1/resend", json={"email": "z@example.com"})
+            stub.limited, stub.down = False, True
+            down = await c.post("/auth/v1/resend", json={"email": "new@example.com"})
+            return sent, seen, guarded, after, limited, down
+    sent, seen, (evil, foreign), after, limited, down = run(go())
+    for answer in sent:
+        assert answer.status_code == 200, answer.text
+        assert answer.content == sent[0].content and answer.json() == {"status": "sent"}
+    _, _, query, body = idp_calls(stub, "/auth/v1/resend")[0]
+    assert query == {"redirect_to": link}
+    assert (body.get("type"), body.get("email")) == ("signup", "new@example.com")
+    assert body.get("gotrue_meta_security") == {"captcha_token": "captcha-ok"}
+    assert evil.status_code == 403 and foreign.status_code == 422 and after == seen
+    refused(limited, "rate_limited")
+    refused(down, "unavailable")
+
+
 def test_auth__a_redirect_outside_the_allowlist_never_reaches_the_idp():
     """Oracle: open redirect - a `redirect_to` on any origin but the configured ones (or a
     look-alike) is a 422 and the IdP is never asked to email that link."""

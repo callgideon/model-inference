@@ -43,6 +43,10 @@ class Recovery(api.Wire):
     code_challenge: str | None = CHALLENGE
 
 
+class Resend(Recovery):
+    """WR-AP09-RESEND: a new sign-up verification link for this address."""
+
+
 class Refresh(api.Wire):
     refresh_token: SecretStr = SECRET
 
@@ -149,6 +153,13 @@ def register(app, rt) -> None:
         facade.check_origin(request.headers.get("origin"))
         await facade.recover(body.email, captcha_token=body.captcha_token,
                              redirect_to=body.redirect_to, code_challenge=body.code_challenge)
+        return control.ok(Sent())
+
+    @router.post("/auth/v1/resend", response_model=Sent, operation_id="auth_resend")
+    async def resend(body: Resend, request: Request):
+        facade.check_origin(request.headers.get("origin"))
+        await facade.resend(body.email, captcha_token=body.captcha_token,
+                            redirect_to=body.redirect_to, code_challenge=body.code_challenge)
         return control.ok(Sent())
 
     @router.post("/auth/v1/refresh", response_model=Session, operation_id="auth_refresh")

@@ -1,6 +1,6 @@
 """AP-01: the web API's identity half - who is calling (`session.SessionActors`, the
 `control.ActorSource` the composition root puts on `rt.actors`), their account and provider
-workspaces (`session.PgIdentity`), and the one route class every AP-01 router uses.
+workspaces (`state.identity.PgIdentity`), and the one route class every AP-01 router uses.
 
 `EnvelopeRoute` is how a route with FastAPI-declared bodies keeps R270's envelope: FastAPI's own
 422 (`{detail: [...]}`) echoes the submitted values - a password included - so a validation

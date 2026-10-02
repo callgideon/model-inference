@@ -14,9 +14,8 @@ commit in ONE transaction, so
 - the same key with another request is 409 `idempotency_conflict` and writes nothing;
 - a refused write (a 404/409 of the domain) claims no key: the caller may fix and retry.
 
-Racing first calls serialize on the key's primary key; the loser replays. Replaces the
-natural-key-only idempotency of `console.session.PgIdentity` (the direct-SQL fallback kept
-until 0065 merges).
+Racing first calls serialize on the key's primary key; the loser replays. Replaced the
+natural-key-only idempotency of the direct-SQL fallback (deleted at the 0065 merge, WR-AP01-5).
 """
 from __future__ import annotations
 

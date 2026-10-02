@@ -58,7 +58,7 @@ WEB_ACTIONS: tuple[tuple[str, str, str, str, str, tuple[str, ...]], ...] = (
     ("app", "signup", "signUp", "app/(auth)/signup/signup-form.tsx", IDP,
      ("POST /auth/v1/sign-up",)),
     ("app", "verify-email", "resend", "app/(auth)/verify-email/resend-form.tsx", IDP,
-     ("POST /auth/v1/sign-up",)),
+     ("POST /auth/v1/resend",)),                                  # WR-AP09-RESEND
     ("app", "forgot-password", "resetPasswordForEmail", "app/(auth)/forgot-password/page.tsx",
      IDP, ("POST /auth/v1/recovery",)),
     ("app", "update-password", "updateUser", "app/(auth)/update-password/page.tsx", IDP,
@@ -149,7 +149,8 @@ TARGETS: tuple[tuple[str, str, str], ...] = tuple(
     (op.partition(" ")[0], op.partition(" ")[2], surface) for surface, ops in (
         ("auth", ("POST /auth/v1/sign-in", "POST /auth/v1/sign-up", "POST /auth/v1/refresh",
                   "POST /auth/v1/sign-out", "POST /auth/v1/recovery", "POST /auth/v1/password",
-                  "GET /auth/v1/callback", "GET /auth/v1/availability")),
+                  "GET /auth/v1/callback", "GET /auth/v1/availability",
+                  "POST /auth/v1/resend")),                       # WR-AP09-RESEND
         ("app shell", ("GET /console/v1/me", "GET /console/v1/capabilities")),
         ("welcome", ("POST /console/v1/signup-grant/claim",)),
         ("api keys", ("GET /console/v1/keys", "POST /console/v1/keys",

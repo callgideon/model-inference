@@ -68,6 +68,18 @@
       "consumers": [],
       "envelope": "r270",
       "method": "POST",
+      "path": "/auth/v1/resend",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "identity transport",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
       "path": "/auth/v1/sign-in",
       "request_schema": "typed",
       "response_schema": "typed"
@@ -111,7 +123,8 @@
     {
       "audience": "consumer session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -255,7 +268,8 @@
     {
       "audience": "consumer session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -418,7 +432,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1449,7 +1464,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1461,7 +1477,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1473,7 +1490,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1485,7 +1503,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1921,6 +1940,12 @@
       "surface": "auth"
     },
     {
+      "method": "POST",
+      "path": "/auth/v1/resend",
+      "state": "existing",
+      "surface": "auth"
+    },
+    {
       "method": "GET",
       "path": "/console/v1/me",
       "state": "existing",
@@ -2305,7 +2330,7 @@
       "source": "app/(auth)/verify-email/resend-form.tsx",
       "surface": "verify-email",
       "targets": [
-        "POST /auth/v1/sign-up"
+        "POST /auth/v1/resend"
       ],
       "transport": "identity-provider"
     },

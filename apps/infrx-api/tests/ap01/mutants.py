@@ -42,6 +42,7 @@ FORWARD = "test_auth__sign_up_forwards_captcha_challenge_and_allowlisted_redirec
 CAPTCHA = "test_auth__a_required_challenge_guards_every_password_door_and_reveals_no_account"
 SIGNUP_FAILURES = "test_auth__sign_up_failures_map_like_the_app"
 RECOVERY = "test_auth__recovery_of_an_unknown_email_reads_sent"
+RESEND = "test_auth__resend_reads_sent_for_any_address_and_keeps_its_guards"
 REDIRECT = "test_auth__a_redirect_outside_the_allowlist_never_reaches_the_idp"
 CSRF = "test_auth__a_cross_origin_submission_never_reaches_the_idp"
 CALLBACK = "test_auth__callback_exchanges_the_code_with_the_forwarded_verifier"
@@ -118,6 +119,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unknown_recovery_is_refused", "flow.ts emailSettled: an unknown address reads sent",
        F, '            if reason != "invalid_credentials":\n',
        "            if True:\n", RECOVERY),
+    # --- WR-AP09-RESEND ------------------------------------------------------------------------
+    _m("unknown_resend_is_refused", "a resend to an unknown address reads sent",
+       F, '        unknown = failure(code, answer.status_code) == "invalid_credentials"\n',
+       "        unknown = False\n", RESEND),
+    _m("confirmed_resend_is_refused", "a resend to a confirmed address reads sent",
+       F, "and code not in EXISTING and not unknown:", "and not unknown:", RESEND),
+    _m("resend_failure_swallowed", "a rate limit or an outage keeps its code at resend",
+       F, "            raise AuthRefused(failure(code, answer.status_code))\n",
+       "            pass\n", RESEND),
+    _m("resend_not_a_signup_link", "the resent link is the sign-up verification",
+       F, '"type": "signup", "email": email,', '"email": email,', RESEND),
+    _m("resend_challenge_dropped", "the challenge reaches the IdP at resend too",
+       F, '"type": "signup", "email": email, **self._extras(captcha_token, code_challenge)})',
+       '"type": "signup", "email": email, **self._extras(None, code_challenge)})', RESEND),
     _m("redirect_unchecked", "redirect_to only on a configured web origin",
        F, '" " in url or f"{parts.scheme}://{parts.netloc}" \\\n                not in self.origins:',
        '" " in url or f"{parts.scheme}://{parts.netloc}" \\\n                in ():', REDIRECT),
@@ -172,6 +187,10 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "account = await rt.identity.account(actor.user_id)",
        'account = await rt.identity.account(request.query_params.get("user_id") '
        'or actor.user_id)', ME_OWN),
+    _m("me_email_dropped", "WR-AP09-ME-EMAIL: me carries the session's address",
+       M, "email=await rt.actors.email(request),", "email=None,", ME_OWN),
+    _m("me_email_not_the_address", "the address is the auth server's email field",
+       S, '.user(match.group(1))).get("email")', '.user(match.group(1))).get("aud")', ME_OWN),
     _m("operator_bit_for_everyone", "the operator bit is the profile's",
        S, "operator=account.operator)", "operator=True)", ME_STATES),
     _m("unverified_reads_ready", "an unconfirmed email is unverified",
@@ -245,35 +264,8 @@ MUTANTS: tuple[Mutant, ...] = (
 
 #: `PgIdentity`'s SQL and rules, killed on PostgreSQL by the same world cases (`-m pg`).
 PG_MUTANTS: tuple[Mutant, ...] = (
-    _m("pg_account_never_suspended", "suspension is the organization's",
-       S, "coalesce(o.suspended, false)", "false", ME_STATES),
-    _m("pg_account_always_verified", "verification is the auth server's confirmation",
-       S, "v.verification_evidence_ref is not null", "true", ME_STATES),
-    _m("pg_account_always_has_a_wallet", "onboarding until the grant made the wallet",
-       S, "w.wallet_id is not null", "true", ME_STATES),
-    _m("pg_account_never_operator", "the operator bit is profiles.is_operator",
-       S, "select p.is_operator,", "select false,", ME_STATES),
-    _m("pg_email_case_sensitive", "addresses fold case, as the auth server's do",
-       S, "where lower(email) = lower(%(email)s)", "where email = %(email)s", ADMIN_ADDS),
-    _m("pg_role_change_overwrites", "another current role is a 409, never an update",
-       ID, "        if member.role != role:\n", "        if False:\n", ADMIN_ADDS),
-    _m("pg_retry_reads_created", "a retry finds the first grant's row",
-       S, "created = bool(await fetch(conn, GRANT, a))", "created = True", ADMIN_ADDS),
     _m("pg_grant_always_created", "a grant reads created only when its statement made it",
        ID, "return member, row[6]", "return member, True", ADMIN_ADDS),
-    _m("pg_revocation_in_the_future", "a revocation takes effect at once",
-       S, "set revoked_at = greatest(infrx.now(), granted_at)",
-       "set revoked_at = greatest(infrx.now(), granted_at) + interval '1 day'", REVOKED),
-    _m("pg_revoked_listed", "the members list is the current members",
-       S, "and m.revoked_at is null order by", "order by", REVOKED),
-    _m("pg_repeat_revocation_refused", "a repeated revocation answers the same row",
-       S, "        return next(iter(await fetch(conn, LATEST, a)), None)",
-       "        return next(iter(await fetch(conn, MEMBERS, a)), None)", REVOKED),
-    _m("pg_existing_provider_renamed_through", "an existing slug under another name is 409",
-       ID, "            if provider.display_name != display_name:\n", "            if False:\n",
-       OPERATOR_CREATES),
-    _m("pg_provider_retry_reads_created", "a retried onboarding answers 200",
-       S, "                bool(made))", "                True)", OPERATOR_CREATES),
     _m("pg_provider_always_created", "onboarding reads created only when it made the row",
        ID, '"created": row[5],', '"created": True,', OPERATOR_CREATES, NEMO),
     _m("first_admin_is_a_developer", "the first member is the provider's administrator",

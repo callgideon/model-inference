@@ -4,6 +4,142 @@
  */
 
 export interface paths {
+    "/console/v1/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capabilities */
+        get: operations["getConsoleV1Capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/console/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["getConsoleV1Me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/artifacts/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Import */
+        post: operations["postLabV1ArtifactsImports"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/artifacts/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Upload */
+        post: operations["postLabV1ArtifactsUploads"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/artifacts/uploads/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Upload */
+        post: operations["postLabV1ArtifactsUploadsByUploadIdComplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/artifacts/uploads/{upload_id}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant Part */
+        post: operations["postLabV1ArtifactsUploadsByUploadIdParts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact */
+        get: operations["getLabV1ArtifactsByArtifactId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lab Capabilities */
+        get: operations["getLabV1Capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lab/v1/checkpoints": {
         parameters: {
             query?: never;
@@ -119,6 +255,42 @@ export interface paths {
         post?: never;
         /** Revoke */
         delete: operations["deleteLabV1ControlEndpointsByEndpointIdKeysByKeyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/control/model-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Projects */
+        get: operations["getLabV1ControlModelProjects"];
+        put?: never;
+        /** Create Project */
+        post: operations["postLabV1ControlModelProjects"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/control/model-projects/{project_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Revisions */
+        get: operations["getLabV1ControlModelProjectsByProjectIdRevisions"];
+        put?: never;
+        /** Create Revision */
+        post: operations["postLabV1ControlModelProjectsByProjectIdRevisions"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -478,6 +650,23 @@ export interface paths {
         };
         /** Results */
         get: operations["getLabV1JudgeRunsByRunIdResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Operation */
+        get: operations["getLabV1OperationsByOperationId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1030,6 +1219,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workspaces */
+        get: operations["getLabV1Workspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/workspaces/{provider_org_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Members */
+        get: operations["getLabV1WorkspacesByProviderOrgIdMembers"];
+        put?: never;
+        /** Grant */
+        post: operations["postLabV1WorkspacesByProviderOrgIdMembers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/workspaces/{provider_org_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke */
+        delete: operations["deleteLabV1WorkspacesByProviderOrgIdMembersByUserId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operator/v1/artifacts/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adopt */
+        post: operations["postOperatorV1ArtifactsAdopt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operator/v1/deployments/{deployment_revision_id}/dev-rate": {
         parameters: {
             query?: never;
@@ -1170,6 +1428,50 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Actor
+         * @description Who is acting, as the server established it. `session` = a verified Supabase session
+         *     (the web apps' transport); the key audiences come from `infrx.auth`.
+         */
+        Actor: {
+            /**
+             * Audience
+             * @enum {string}
+             */
+            audience: "consumer" | "operator" | "provider_dev" | "session";
+            /**
+             * Operator
+             * @default false
+             */
+            operator: boolean;
+            /** Org Id */
+            org_id?: string | null;
+            /** Provider Org Id */
+            provider_org_id?: string | null;
+            /** Role */
+            role?: string | null;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** AdoptRequest */
+        AdoptRequest: {
+            /**
+             * @default {
+             *       "license": "",
+             *       "summary": "",
+             *       "task": ""
+             *     }
+             */
+            card: components["schemas"]["Card"];
+            /** Evidence Ref */
+            evidence_ref: string;
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Provider Org Id */
+            provider_org_id: string;
+            /** Serving Version Id */
+            serving_version_id: string;
+        };
         /** Allocated */
         Allocated: {
             amount: components["schemas"]["Money"];
@@ -1204,6 +1506,46 @@ export interface components {
             rate_card_version: string;
             /** Reason */
             reason: string;
+        };
+        /** Artifact */
+        Artifact: {
+            /** Artifact Id */
+            artifact_id: string;
+            card: components["schemas"]["Card"];
+            compatibility: components["schemas"]["Compatibility"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string;
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Project Id */
+            project_id: string;
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Provider Org Id */
+            provider_org_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "upload" | "import" | "adopted";
+            /** Source Commit */
+            source_commit?: string | null;
+            /** Source Repo */
+            source_repo?: string | null;
+            /**
+             * Verified At
+             * Format: date-time
+             */
+            verified_at: string;
         };
         /**
          * Availability
@@ -1294,6 +1636,27 @@ export interface components {
             /** State */
             state: string;
         };
+        /**
+         * Card
+         * @description Untrusted display metadata: never an instruction, never a credential.
+         */
+        Card: {
+            /**
+             * License
+             * @default
+             */
+            license: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Task
+             * @default
+             */
+            task: string;
+        };
         /** CardDoc */
         CardDoc: {
             /** Deployment Revision Id */
@@ -1309,6 +1672,26 @@ export interface components {
              * @default false
              */
             replayed: boolean;
+        };
+        /** Compatibility */
+        Compatibility: {
+            /**
+             * Profile
+             * @default marlin2b-vllm-l40s-bf16-v1
+             */
+            profile: string;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: components["schemas"]["FieldError"][];
+            /** Supported */
+            supported: boolean;
+        };
+        /** CompleteRequest */
+        CompleteRequest: {
+            /** Manifest Sha256 */
+            manifest_sha256: string;
         };
         /** ConfigBody */
         ConfigBody: {
@@ -1340,6 +1723,17 @@ export interface components {
             rubric_version: number;
             /** Sample Size */
             sample_size: number;
+        };
+        /** ConsoleCapabilities */
+        ConsoleCapabilities: {
+            /** Actions */
+            actions: {
+                [key: string]: boolean;
+            };
+            /** Features */
+            features: {
+                [key: string]: components["schemas"]["Availability"];
+            };
         };
         /** CriterionDoc */
         CriterionDoc: {
@@ -1589,10 +1983,59 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** FileEntry */
+        FileEntry: {
+            /** Bytes */
+            bytes: number;
+            /** Media Type */
+            media_type: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Sha256 */
+            sha256: string;
+        };
+        /** GrantStatus */
+        GrantStatus: {
+            amount?: components["schemas"]["Money"] | null;
+            /** Granted At */
+            granted_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "granted" | "not_granted";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ImportRequest */
+        ImportRequest: {
+            /**
+             * @default {
+             *       "license": "",
+             *       "summary": "",
+             *       "task": ""
+             *     }
+             */
+            card: components["schemas"]["Card"];
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Project Id */
+            project_id: string;
+            /** Secret Ref */
+            secret_ref?: string | null;
+            source: components["schemas"]["ImportSource"];
+        };
+        /** ImportSource */
+        ImportSource: {
+            /** Commit */
+            commit: string;
+            /** Host */
+            host: string;
+            /** Repo */
+            repo: string;
         };
         /** JudgeModelDoc */
         JudgeModelDoc: {
@@ -1615,6 +2058,19 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** LabCapabilities */
+        LabCapabilities: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Features */
+            features: {
+                [key: string]: components["schemas"]["Availability"];
+            };
+            /** Provider Org Id */
+            provider_org_id: string;
+            /** Role */
+            role: string;
+        };
         /** ListPage[BudgetDoc] */
         ListPage_BudgetDoc_: {
             /** Data */
@@ -1636,10 +2092,31 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** ListPage[Member] */
+        ListPage_Member_: {
+            /** Data */
+            data: components["schemas"]["Member"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[Project] */
+        ListPage_Project_: {
+            /** Data */
+            data: components["schemas"]["Project"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** ListPage[Proposal] */
         ListPage_Proposal_: {
             /** Data */
             data: components["schemas"]["Proposal"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[RevisionDoc] */
+        ListPage_RevisionDoc_: {
+            /** Data */
+            data: components["schemas"]["RevisionDoc"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -1664,6 +2141,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** ListPage[Workspace] */
+        ListPage_Workspace_: {
+            /** Data */
+            data: components["schemas"]["Workspace"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** ListingDoc */
         ListingDoc: {
             /** Deployment Revision Id */
@@ -1679,6 +2163,48 @@ export interface components {
             replayed: boolean;
             /** Version */
             version: number;
+        };
+        /** Me */
+        Me: {
+            actor: components["schemas"]["Actor"];
+            /** Email */
+            email?: string | null;
+            signup_grant: components["schemas"]["GrantStatus"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unverified" | "onboarding" | "ready";
+            /** Suspended */
+            suspended: boolean;
+        };
+        /** Member */
+        Member: {
+            /** Email */
+            email: string;
+            /**
+             * Granted At
+             * Format: date-time
+             */
+            granted_at: string;
+            /** Granted By */
+            granted_by: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Role */
+            role: string;
+            /** User Id */
+            user_id: string;
+        };
+        /** MemberGrant */
+        MemberGrant: {
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "developer" | "administrator";
         };
         /** Model */
         Model: {
@@ -1734,6 +2260,94 @@ export interface components {
             state: "queued" | "running" | "succeeded" | "failed" | "cancel_requested" | "cancelled";
             /** Updated At */
             updated_at: string;
+        };
+        /** PartGrant */
+        PartGrant: {
+            /** Expires S */
+            expires_s: number;
+            /**
+             * Method
+             * @default PUT
+             */
+            method: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Url */
+            url: string;
+        };
+        /** PartRequest */
+        PartRequest: {
+            /** Relative Path */
+            relative_path: string;
+        };
+        /**
+         * ProfileRequest
+         * @description What a serving revision asks to run: compared with the supported profile.
+         */
+        ProfileRequest: {
+            /**
+             * Hardware
+             * @default L40S
+             */
+            hardware: string;
+            /**
+             * Input Schema Ref
+             * @default infrx.request.chat.v1
+             */
+            input_schema_ref: string;
+            /**
+             * Output Schema Ref
+             * @default infrx.response.chat.v1
+             */
+            output_schema_ref: string;
+            /**
+             * Precision
+             * @default bfloat16
+             */
+            precision: string;
+            /**
+             * Runtime Image Ref
+             * @default vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+             */
+            runtime_image_ref: string;
+        };
+        /** Project */
+        Project: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string;
+            /** Description */
+            description: string;
+            /** Model Uuid */
+            model_uuid?: string | null;
+            /** Name */
+            name: string;
+            /** Project Id */
+            project_id: string;
+            /** Provider Org Id */
+            provider_org_id: string;
+            /** Public Model Id */
+            public_model_id?: string | null;
+            /** Request Hash */
+            request_hash: string;
+            /** Slug */
+            slug: string;
+        };
+        /** ProjectRequest */
+        ProjectRequest: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
         };
         /** Proposal */
         Proposal: {
@@ -1866,6 +2480,55 @@ export interface components {
              * @enum {string}
              */
             verdict: "pass" | "fail" | "unsure";
+        };
+        /** RevisionDoc */
+        RevisionDoc: {
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model Revision */
+            model_revision: string;
+            /** Profile */
+            profile: {
+                [key: string]: unknown;
+            };
+            /** Project Id */
+            project_id: string;
+            /** Public Model Id */
+            public_model_id: string;
+            /** Revision Label */
+            revision_label: string;
+            /** Serving Version Id */
+            serving_version_id: string;
+        };
+        /** RevisionRequest */
+        RevisionRequest: {
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Preprocessor Profile Version
+             * @default marlin2b.video.v1
+             */
+            preprocessor_profile_version: string;
+            /**
+             * @default {
+             *       "hardware": "L40S",
+             *       "input_schema_ref": "infrx.request.chat.v1",
+             *       "output_schema_ref": "infrx.response.chat.v1",
+             *       "precision": "bfloat16",
+             *       "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
+             *     }
+             */
+            profile: components["schemas"]["ProfileRequest"];
+            /**
+             * Prompt Harness Ref
+             * @default marlin2b.chat.v1
+             */
+            prompt_harness_ref: string;
         };
         /** Rollback */
         Rollback: {
@@ -2016,6 +2679,68 @@ export interface components {
             /** Value */
             value: boolean | number | string;
         };
+        /** Upload */
+        Upload: {
+            /** Artifact Id */
+            artifact_id?: string | null;
+            card: components["schemas"]["Card"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Operation Id */
+            operation_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Provider Org Id */
+            provider_org_id: string;
+            /**
+             * Received
+             * @default []
+             */
+            received: string[];
+            /** Request Hash */
+            request_hash: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "verifying" | "verified" | "failed" | "expired";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Upload Id */
+            upload_id: string;
+        };
+        /** UploadRequest */
+        UploadRequest: {
+            /**
+             * @default {
+             *       "license": "",
+             *       "summary": "",
+             *       "task": ""
+             *     }
+             */
+            card: components["schemas"]["Card"];
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Project Id */
+            project_id: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2029,6 +2754,17 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** Workspace */
+        Workspace: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Provider Name */
+            provider_name: string;
+            /** Provider Org Id */
+            provider_org_id: string;
+            /** Role */
+            role: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2038,6 +2774,565 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getConsoleV1Capabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleCapabilities"];
+                };
+            };
+        };
+    };
+    getConsoleV1Me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+        };
+    };
+    postLabV1ArtifactsImports: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ArtifactsUploads: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ArtifactsUploadsByUploadIdComplete: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ArtifactsUploadsByUploadIdParts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartGrant"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1ArtifactsByArtifactId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artifact"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1Capabilities: {
+        parameters: {
+            query?: {
+                provider_org_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabCapabilities"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     postLabV1Checkpoints: {
         parameters: {
             query?: never;
@@ -2643,6 +3938,396 @@ export interface operations {
             };
             /** @description Gone */
             410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1ControlModelProjects: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_Project_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ControlModelProjects: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1ControlModelProjectsByProjectIdRevisions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_RevisionDoc_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ControlModelProjectsByProjectIdRevisions: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3722,6 +5407,100 @@ export interface operations {
             };
         };
     };
+    getLabV1OperationsByOperationId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getLabV1Optimizations: {
         parameters: {
             query?: never;
@@ -4594,6 +6373,222 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1Workspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_Workspace_"];
+                };
+            };
+        };
+    };
+    getLabV1WorkspacesByProviderOrgIdMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_Member_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1WorkspacesByProviderOrgIdMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberGrant"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deleteLabV1WorkspacesByProviderOrgIdMembersByUserId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_org_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postOperatorV1ArtifactsAdopt: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artifact"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

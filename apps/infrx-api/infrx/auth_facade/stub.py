@@ -164,6 +164,21 @@ class GoTrueStub:
                 return refuse(400, "user_not_found")     # reads it as sent
             return {}
 
+        @app.post("/auth/v1/resend")
+        async def resend(request: Request):
+            body = await request.json()
+            if stub.captcha and (body.get("gotrue_meta_security") or {}).get(
+                    "captcha_token") != "captcha-ok":
+                return refuse(400, "captcha_failed")
+            if body.get("type") != "signup":
+                return refuse(400, "validation_failed")
+            user = stub.users.get(body.get("email", ""))
+            if user is None:                          # an older server's answers: the App
+                return refuse(400, "user_not_found")  # reads both as sent
+            if user.confirmed:
+                return refuse(422, "email_exists")
+            return {}
+
         @app.post("/auth/v1/verify")
         async def verify(request: Request):
             body = await request.json()
@@ -184,7 +199,9 @@ class GoTrueStub:
             user_id = bearer(request)
             if user_id is None:
                 return refuse(401, "bad_jwt")
-            return {"id": user_id, "aud": "authenticated", "role": "authenticated"}
+            email = next((u.email for u in stub.users.values() if u.id == user_id), None)
+            return {"id": user_id, "aud": "authenticated", "role": "authenticated",
+                    "email": email}
 
         @app.put("/auth/v1/user")
         async def put_user(request: Request):

@@ -313,6 +313,10 @@ NOT_SETTABLE = {
                          "secret store with the deploy change, never an argument",
     "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
                              "decision recorded with the deploy change, not a --set",
+    "AUTH_CAPTCHA_PROVIDER": "the hosted CAPTCHA provider (LR-02, WR-AP01-3), recorded with "
+                             "the deploy change that enables it, not a --set",
+    "AUTH_CAPTCHA_SITE_KEY": "the hosted CAPTCHA's public site key (LR-02, WR-AP01-3), recorded "
+                             "with the deploy change that enables it, not a --set",
 }
 
 

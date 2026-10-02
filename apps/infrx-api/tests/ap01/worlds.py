@@ -1,7 +1,6 @@
-"""AP-01's identity world on three stores: in memory (`FakeIdentity` beside L2's
+"""AP-01's identity world on two stores: in memory (`FakeIdentity` beside L2's
 `FakeAccessStore`) and PostgreSQL on the ap1 harness - `state.identity.PgIdentity` over 0065's
-functions (`pg`) and its direct-SQL fallback `console.session.PgIdentity` (`pg-direct`, deleted
-at the 0065 merge), each with `PgAccessStore` and 0060's claims. The same people in all:
+functions (`pg`), with `PgAccessStore` and 0060's claims. The same people in all:
 
 - CONSUMER: verified, claimed the signup grant (a consumer wallet); SUSPENDED: the same, and
   its organization is suspended; FRESH: verified, no grant yet (onboarding); UNVERIFIED: the
@@ -18,7 +17,6 @@ import dataclasses
 from datetime import UTC, datetime, timedelta
 
 from infrx.auth_facade.stub import GoTrueStub
-from infrx.console import session
 from infrx.console.session import Account, Claim, Member, Provider
 from infrx.contracts import errors
 from infrx.state import identity as functions
@@ -224,12 +222,11 @@ def seed_pg(conn) -> None:
 
 class PgWorld:
     name = "pg"
-    STORES = {"pg": functions.PgIdentity, "pg-direct": session.PgIdentity}
 
-    def __init__(self, conn, dsn: str, store: str = "pg") -> None:
+    def __init__(self, conn, dsn: str) -> None:
         self.conn = conn
         self.stub = stub()
-        self.identity = self.STORES[store](connector(dsn))
+        self.identity = functions.PgIdentity(connector(dsn))
         self.access = LabAccess(PgAccessStore(connector(dsn)))
 
     @staticmethod

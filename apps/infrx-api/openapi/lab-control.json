@@ -1,6 +1,76 @@
 {
   "components": {
     "schemas": {
+      "Actor": {
+        "additionalProperties": false,
+        "description": "Who is acting, as the server established it. `session` = a verified Supabase session\n(the web apps' transport); the key audiences come from `infrx.auth`.",
+        "properties": {
+          "audience": {
+            "enum": [
+              "consumer",
+              "operator",
+              "provider_dev",
+              "session"
+            ],
+            "title": "Audience",
+            "type": "string"
+          },
+          "operator": {
+            "default": false,
+            "title": "Operator",
+            "type": "boolean"
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id"
+          },
+          "provider_org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Org Id"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "audience"
+        ],
+        "title": "Actor",
+        "type": "object"
+      },
       "AdoptRequest": {
         "additionalProperties": false,
         "properties": {
@@ -718,6 +788,31 @@
         "title": "ConfigDoc",
         "type": "object"
       },
+      "ConsoleCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Actions",
+            "type": "object"
+          },
+          "features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Availability"
+            },
+            "title": "Features",
+            "type": "object"
+          }
+        },
+        "required": [
+          "actions",
+          "features"
+        ],
+        "title": "ConsoleCapabilities",
+        "type": "object"
+      },
       "CriterionDoc": {
         "additionalProperties": false,
         "properties": {
@@ -1398,6 +1493,46 @@
         "title": "FileEntry",
         "type": "object"
       },
+      "GrantStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "state": {
+            "enum": [
+              "granted",
+              "not_granted"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "GrantStatus",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1556,6 +1691,41 @@
         "title": "JudgeModels",
         "type": "object"
       },
+      "LabCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "features": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Availability"
+            },
+            "title": "Features",
+            "type": "object"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "role",
+          "capabilities",
+          "features"
+        ],
+        "title": "LabCapabilities",
+        "type": "object"
+      },
       "ListPage_BudgetDoc_": {
         "additionalProperties": false,
         "properties": {
@@ -1638,6 +1808,34 @@
           "data"
         ],
         "title": "ListPage[DevKey]",
+        "type": "object"
+      },
+      "ListPage_Member_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Member]",
         "type": "object"
       },
       "ListPage_Project_": {
@@ -1808,6 +2006,34 @@
         "title": "ListPage[SampleResult]",
         "type": "object"
       },
+      "ListPage_Workspace_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Workspace]",
+        "type": "object"
+      },
       "ListingDoc": {
         "additionalProperties": false,
         "properties": {
@@ -1840,6 +2066,122 @@
           "rate_card_version"
         ],
         "title": "ListingDoc",
+        "type": "object"
+      },
+      "Me": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "signup_grant": {
+            "$ref": "#/components/schemas/GrantStatus"
+          },
+          "state": {
+            "enum": [
+              "unverified",
+              "onboarding",
+              "ready"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actor",
+          "state",
+          "suspended",
+          "signup_grant"
+        ],
+        "title": "Me",
+        "type": "object"
+      },
+      "Member": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "granted_by": {
+            "title": "Granted By",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "role",
+          "granted_by",
+          "granted_at"
+        ],
+        "title": "Member",
+        "type": "object"
+      },
+      "MemberGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "developer",
+              "administrator"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ],
+        "title": "MemberGrant",
         "type": "object"
       },
       "Model": {
@@ -3271,6 +3613,38 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "Workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "provider_name",
+          "role",
+          "capabilities"
+        ],
+        "title": "Workspace",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -3306,6 +3680,52 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/console/v1/capabilities": {
+      "get": {
+        "operationId": "getConsoleV1Capabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Capabilities"
+      }
+    },
+    "/console/v1/me": {
+      "get": {
+        "operationId": "getConsoleV1Me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Me"
+      }
+    },
     "/lab/v1/artifacts/imports": {
       "post": {
         "operationId": "postLabV1ArtifactsImports",
@@ -3929,6 +4349,51 @@
           }
         ],
         "summary": "Get Artifact"
+      }
+    },
+    "/lab/v1/capabilities": {
+      "get": {
+        "operationId": "getLabV1Capabilities",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Lab Capabilities"
       }
     },
     "/lab/v1/checkpoints": {
@@ -8025,6 +8490,179 @@
           }
         ],
         "summary": "Review"
+      }
+    },
+    "/lab/v1/workspaces": {
+      "get": {
+        "operationId": "getLabV1Workspaces",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_Workspace_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Workspaces"
+      }
+    },
+    "/lab/v1/workspaces/{provider_org_id}/members": {
+      "get": {
+        "operationId": "getLabV1WorkspacesByProviderOrgIdMembers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_Member_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Members"
+      },
+      "post": {
+        "operationId": "postLabV1WorkspacesByProviderOrgIdMembers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Grant"
+      }
+    },
+    "/lab/v1/workspaces/{provider_org_id}/members/{user_id}": {
+      "delete": {
+        "operationId": "deleteLabV1WorkspacesByProviderOrgIdMembersByUserId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_org_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke"
       }
     },
     "/operator/v1/artifacts/adopt": {

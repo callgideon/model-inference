@@ -82,6 +82,10 @@ class GoTrueSessions:
         self.client, self.apikey = client, apikey
 
     async def user_id(self, token: str) -> str:
+        return (await self.user(token))["id"]
+
+    async def user(self, token: str) -> dict[str, Any]:
+        """The live signed-in user as the auth server answers it (`/console/v1/me`'s email)."""
         try:
             answer = await self.client.get(USER_PATH, headers={
                 "apikey": self.apikey, "authorization": f"Bearer {token}"})
@@ -95,7 +99,7 @@ class GoTrueSessions:
         if user.get("aud") != SESSION or user.get("role") != SESSION \
                 or not isinstance(user.get("id"), str):
             raise errors.InvalidApiKey("not a signed-in user's session")
-        return user["id"]
+        return user
 
 
 class Actor(BaseModel):

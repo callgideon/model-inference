@@ -110,6 +110,7 @@ def test_identity__me_is_the_sessions_own_account(world):
     assert body["actor"] == {"audience": "session", "user_id": CONSUMER,
                              "org_id": world.org(CONSUMER), "provider_org_id": None,
                              "role": None, "operator": False}
+    assert body["email"] == EMAIL[CONSUMER]       # WR-AP09-ME-EMAIL: the auth server's
     assert (body["state"], body["suspended"]) == ("ready", False)
     assert body["signup_grant"]["state"] == "granted"
     assert body["signup_grant"]["amount"] == {"amount": GRANT, "unit": "CREDIT"}

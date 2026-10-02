@@ -462,6 +462,11 @@ class DeploymentSettings:
     auth_facade: bool = False
     supabase_anon_key: str = field(default="", repr=False)
     auth_captcha_required: bool = False
+    # AP-01 (WR-AP01-3, LR-02): the hosted bot protection's public half - its provider
+    # (`hcaptcha` | `turnstile`) and site key, the widget the App's forms render from
+    # `/auth/v1/availability`. Unset: a required challenge closes the password doors honestly.
+    auth_captcha_provider: str = ""
+    auth_captcha_site_key: str = ""
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

@@ -599,6 +599,9 @@ DEPLOYMENT_EXPECTED = {
     "AUTH_FACADE": False,
     "SUPABASE_ANON_KEY": "",
     "AUTH_CAPTCHA_REQUIRED": False,
+    # WR-AP01-3 (AP-01, LR-02): the CAPTCHA widget's public provider and site key (unset)
+    "AUTH_CAPTCHA_PROVIDER": "",
+    "AUTH_CAPTCHA_SITE_KEY": "",
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

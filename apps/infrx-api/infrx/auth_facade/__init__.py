@@ -6,8 +6,9 @@ Kept from `apps/app/app/(auth)/flow.ts` (A2), the behaviour the forms have today
 - every failure is one of the App's fixed `AuthFailure` codes (`failure`: the IdP's
   `error_code` table, a bare 429 is rate limited, anything else `unavailable`) with the App's
   own copy; the IdP's text never leaves;
-- enumeration-safe outcomes: signup of an existing address and recovery of an unknown one
-  read `sent`, and a wrong password reads like an unknown address;
+- enumeration-safe outcomes: signup of an existing address, recovery of an unknown one and a
+  resent verification for an unknown or already confirmed one read `sent`, and a wrong
+  password reads like an unknown address;
 - the email-link callback: an IdP `error_code` is read only as a fixed code, recovery lands on
   `/update-password`, `next` only as a same-site path.
 
@@ -240,6 +241,18 @@ class AuthFacade:
             reason = failure(_code(answer), answer.status_code)
             if reason != "invalid_credentials":
                 raise AuthRefused(reason)
+
+    async def resend(self, email: str, *, captcha_token: str | None = None,
+                     redirect_to: str | None = None, code_challenge: str | None = None) -> None:
+        """WR-AP09-RESEND: a new sign-up verification link. Like recovery, an unknown or an
+        already confirmed address reads `sent` (no enumeration)."""
+        params = self.redirect(redirect_to)
+        answer = await self._send("POST", "/auth/v1/resend", params=params, body={
+            "type": "signup", "email": email, **self._extras(captcha_token, code_challenge)})
+        code = _code(answer)
+        unknown = failure(code, answer.status_code) == "invalid_credentials"
+        if answer.status_code != 200 and code not in EXISTING and not unknown:
+            raise AuthRefused(failure(code, answer.status_code))
 
     async def refresh(self, refresh_token: str) -> Session:
         answer = await self._send("POST", TOKEN, params={"grant_type": "refresh_token"},
