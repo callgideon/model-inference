@@ -27,8 +27,9 @@ and `FakeControlOps` in memory obey the same rules, proven by one scenario set r
         state succeeded | failed | cancelled; `error` (api.ErrorBody) iff failed (else
         InvalidRequest); the live fence only (else Conflict); clears the lease.
     cancel(operation_id, actor) -> Operation
-        queued -> cancelled; running -> cancel_requested (first instant kept); cancelled or
-        cancel_requested answer as they are; succeeded/failed -> Conflict.
+        queued -> cancelled; running -> cancel_requested (first instant kept); any other
+        state answers as it is - a repeat, or a cancel that lost the race to the worker's
+        finish (0066, api-artifacts' request; 0060 refused succeeded/failed with Conflict).
     get(operation_id, actor) -> Operation
     pending(kinds, limit=25) -> tuple[operation_id, ...]
         The oldest unfinished operations of those kinds no live lease holds (a controller's
@@ -297,8 +298,6 @@ class FakeControlOps:
 
     async def cancel(self, operation_id: str, actor: api.Actor) -> Operation:
         row = self._visible(operation_id, actor)
-        if row.op.state in ("succeeded", "failed"):
-            raise errors.Conflict("the operation already finished")
         if row.op.state in ("queued", "running"):
             return self._put(row, cancel_requested_at=_ts(self.now()),
                              state="cancelled" if row.op.state == "queued" else "cancel_requested")

@@ -20,7 +20,7 @@ Files 0027–0059 carry a header such as `-- LOCAL-ONLY (R151/R201): never appli
 
 ## Wave 7 allocation (R271)
 
-R271 allocates the wave-7 numbers by owner; for these files it replaces rule 1's "only the lab-sql/D10 lane writes SQL" and R150's next-free-at-merge. Each file carries the `LOCAL-ONLY` header, ships its `tests/d` proof on its lane's task-local key, and leaves `infra/rollout/hosted-migrate.sh` alone until its window (R269). After the wave merges, api-schema re-proves the whole 0060+ set on the merged tree.
+R271 allocates the wave-7 numbers by owner; for these files it replaces rule 1's "only the lab-sql/D10 lane writes SQL" and R150's next-free-at-merge. Each file carries the `LOCAL-ONLY` header, ships its `tests/d` proof on its lane's task-local key, and leaves `infra/rollout/hosted-migrate.sh` alone until its window (R269). After the wave merges, api-schema re-proves the whole 0060+ set on the merged tree (batch 2: api-schema-2, `tests/d/test_control_ops_upgrade.py`, both images).
 
 | Number | Content | Owner (lane, task) | Condition |
 |---|---|---|---|
@@ -29,6 +29,8 @@ R271 allocates the wave-7 numbers by owner; for these files it replaces rule 1's
 | 0062 | deployment operations, readiness receipts, hosting allocations, dev endpoints | api-hosting, AP-05 (batch 2) | always |
 | 0063 | consumer data-use grants and capture settings | api-traces, AP-07 | only if 0057 does not already carry them |
 | 0064 | judge-API additions | api-judge, AP-08 | only if needed |
+| 0065 | the six SECURITY DEFINER identity doors (`infrx.identity_*`, SR-AP01-1) for the Lab control login | api-schema-2, AP-00 00d (batch 2; allocated at merge #87) | always |
+| 0066 | the batch's grants and reads: SR-AP10-1/2/3 (evaluation catalog, experiment run refs, pipeline listings, the control login's route reads), AP-07's revoke-only door, `control_op_cancel` answering a finished operation as it is | api-schema-2, AP-00 00d (batch 2) | always |
 
 A number whose condition does not hold stays unused (no placeholder file).
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""R32/R40 for api-schema (AP-00 00d): single-edit defects of `0060_control_operations.sql`,
-each killed by the named check of `test_control_ops.py` on a database built from the mutated
+"""R32/R40 for api-schema (AP-00 00d): single-edit defects of `0060_control_operations.sql`
+(and of the `control_op_cancel` that `0066_wave7_grants_and_reads.sql` re-creates), each killed by the named check of `test_control_ops.py` on a database built from the mutated
 set (needs Docker; skips visibly without it; D7's runner), and of `infrx/state/control_ops.py`,
 each killed by the named case of `test_control_ops_units.py` through the shared runner (no
 Docker).
@@ -44,6 +44,10 @@ GET_SEEN = ("     or not (coalesce((p_args->'actor'->>'operator')::boolean, fals
             "             or infrx.control_owner(r.actor) = infrx.control_owner(p_args->'actor'))")
 GRANT = "  to service_role, infrx_lab_control;"
 TS = """'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')"""
+
+
+def _s66(name, old, new, check, why, **kw):
+    return _d.Mutant(name, "0066_wave7_grants_and_reads.sql", old, new, "lab", check, why, **kw)
 
 
 def _s(name, old, new, check, why, **kw):
@@ -163,21 +167,22 @@ SQL_MUTANTS = (
        "  exception when division_by_zero then\n"
        "    perform infrx.refuse('invalid_request', 'a failed operation", FIN,
        "a failure without an error is a 500"),
-    # --- cancellation
-    _s("cto_cancel_any_tenant", CANCEL_SEEN,
-       CANCEL_SEEN.replace("  if not (coalesce(", "  if false and (coalesce("), READS,
-       "a stranger cancels another tenant's deployment"),
-    _s("cto_cancel_operator_refused", CANCEL_SEEN,
-       CANCEL_SEEN.replace("(coalesce((p_args->'actor'->>'operator')::boolean, false)",
-                           "(false"), READS, "an operator cannot stop a tenant's operation"),
-    _s("cto_cancel_finished", "  if r.state in ('succeeded', 'failed') then\n",
-       "  if false then\n", CANCEL, "cancelling a finished operation answers as if it worked"),
-    _s("cto_cancel_queued_waits", "case when state = 'queued' then 'cancelled' else "
-       "'cancel_requested' end", "'cancel_requested'", CANCEL,
-       "a never-started operation waits for a worker to cancel it"),
-    _s("cto_cancel_restamps", "  if r.state in ('queued', 'running') then",
-       "  if r.state in ('queued', 'running', 'cancel_requested') then", CANCEL,
-       "a repeated cancel moves the cancellation instant"),
+    # --- cancellation (0066 re-creates control_op_cancel: a finished operation answers as is)
+    _s66("cto_cancel_any_tenant", CANCEL_SEEN,
+         CANCEL_SEEN.replace("  if not (coalesce(", "  if false and (coalesce("), READS,
+         "a stranger cancels another tenant's deployment"),
+    _s66("cto_cancel_operator_refused", CANCEL_SEEN,
+         CANCEL_SEEN.replace("(coalesce((p_args->'actor'->>'operator')::boolean, false)",
+                             "(false"), READS, "an operator cannot stop a tenant's operation"),
+    _s66("cto_cancel_finished", "  if r.state in ('queued', 'running') then",
+         "  if r.state <> 'cancelled' then", CANCEL,
+         "a cancel that lost the race to the finish reopens a succeeded operation"),
+    _s66("cto_cancel_queued_waits", "       set state = case when state = 'queued' then "
+         "'cancelled' else 'cancel_requested' end,", "       set state = 'cancel_requested',",
+         CANCEL, "a never-started operation waits for a worker to cancel it"),
+    _s66("cto_cancel_restamps", "  if r.state in ('queued', 'running') then",
+         "  if r.state in ('queued', 'running', 'cancel_requested') then", CANCEL,
+         "a repeated cancel moves the cancellation instant"),
     # --- reads
     _s("cto_get_any_tenant", GET_SEEN, "     or false", READS,
        "any authenticated caller reads any tenant's operation"),
@@ -326,8 +331,6 @@ CODE_MUTANTS = (
     _p("cto_py_finish_keeps_lease", "finishing clears the lease",
        "state=state, error=error, lease_owner=None, lease_until=None)",
        "state=state, error=error)", FENCE),
-    _p("cto_py_cancel_finished", "a finished operation cannot be cancelled",
-       '        if row.op.state in ("succeeded", "failed"):\n', "        if False:\n", CANCELS),
     _p("cto_py_cancel_queued_waits", "a queued operation cancels at once",
        'state="cancelled" if row.op.state == "queued" else "cancel_requested"',
        'state="cancel_requested"', CANCELS),
