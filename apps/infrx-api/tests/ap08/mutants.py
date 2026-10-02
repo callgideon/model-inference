@@ -184,9 +184,8 @@ MUTANTS: tuple[Mutant, ...] = (
        RUB, "for v, (skeleton, why) in j.PENDING.items() if v not in stored})",
        "for v, (skeleton, why) in j.PENDING.items() if False})", V_LIST),
     _m("pending_has_identity", "a pending skeleton has no digest",
-       RUB, '**({"state": "definition_pending", "pending_reason": pending} if pending else',
-       '**({"state": "definition_pending", "pending_reason": pending, "digest": "x"} if pending '
-       'else', V_LIST),
+       RUB, "        digest=None if pending else j.digest(r))", "        digest=j.digest(r))",
+       V_LIST),
     _m("pending_configured", "a configuration of a pending version is 409",
        SVC, "            if version in j.PENDING:\n", "            if False:\n", V_LIST),
     _m("code_version_overwritten", "a reviewed code version is immutable",

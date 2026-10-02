@@ -131,8 +131,9 @@ def rubric_doc(r: Rubric, review_ref: str | None = None,
                      pass_at=c.pass_at, evidence=_evidence(c)) for c in r.criteria),
         sop_steps=r.sop_steps, max_rationale_chars=r.max_rationale_chars,
         max_notes_chars=r.max_notes_chars, review_ref=review_ref,
-        **({"state": "definition_pending", "pending_reason": pending} if pending else
-           {"output_schema": _schema(r), "digest": j.digest(r)}))
+        state="definition_pending" if pending else "active", pending_reason=pending,
+        output_schema=None if pending else _schema(r),
+        digest=None if pending else j.digest(r))
 
 
 def stored_doc(row: dict[str, Any]) -> RubricDoc:
