@@ -105,9 +105,11 @@ class SubscriptionRequest(lab.LabModel):
 class ExperimentStore(Protocol):
     """WR-B4-2 (lab-sql): the provider's experiments."""
 
-    async def put(self, provider_org_id: str, experiment: dict[str, Any]) -> dict[str, Any]:
+    async def put(self, provider_org_id: str, experiment: dict[str, Any], *,
+                  actor: str | None = None) -> dict[str, Any]:
         """Write once per `experiment_id`: the stored row. The same `launch` again is a replay
-        (the stored row, its first `created_at`); another launch `IdempotencyConflict`."""
+        (the stored row, its first `created_at`); another launch `IdempotencyConflict`.
+        `actor` is the launching session user (WR-AP10-2)."""
         ...
 
     async def experiments(self, provider_org_id: str) -> Sequence[dict[str, Any]]:
@@ -193,7 +195,8 @@ async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any
     now = await x.access.store.db_now()
     row = await x.port("experiments").put(who.provider_org_id, {
         "experiment_id": wanted.experiment_id, "created_at": iso_z(now),
-        "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None})
+        "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None},
+        actor=who.user_id)
     for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's (422)
         await held(runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,
                                                      row["created_at"]),

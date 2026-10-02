@@ -187,17 +187,19 @@ def lab_evaluations_pipelines_releases(deployment, connect, sessions, access, ob
     over D7 (`PgLabDataStore`, merged); the pipelines over D8's label log and run ledger
     (WR-P1-D8-C / WR-P3-D8-C), the Lab objects and P3's evaluation port over B3/B1
     (WR-E7L-1) with the production suites (WR-C4-B3-SUITES: D7's receipt, D8's subscription,
-    L3's dev deployer on this pool). The ports
-    whose tables are not merged (experiments, the B3 ledger listing, the catalog; the run
-    listings) are absent, so their routes answer 503; the release surface is WR-R4-2's
-    (`lab_releases`)."""
+    L3's dev deployer on this pool). The evaluation surface's experiments, ledger and
+    catalog ports are AP-10's (`lab.evaluation.evaluation_ports`, WR-AP10-1) over 0043/0034/
+    D8; the catalog listing answers 503 until SR-AP10-1. The pipeline run listings are still
+    absent (503); the release surface is WR-R4-2's (`lab_releases`)."""
     from ..evaluation import checkpoints
     from ..state.lab_data import PgLabDataStore
     from ..state.lab_pipeline import PgLabelLog, PgRunLedger
     from ..gateway.routes.lab_evaluations import LabEvaluations
     from ..gateway.routes.lab_pipelines import LabPipelines
+    from .evaluation import evaluation_ports
     store = PgLabDataStore(connect)
-    return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store)}
+    return {**({"lab_evaluations": LabEvaluations(sessions, access, store=store,
+                                                  **evaluation_ports(connect))}
                if deployment.lab_evals else {}),
             **({"lab_pipelines": LabPipelines(sessions, access, store=store, objects=objects,
                                               log=PgLabelLog(connect),
