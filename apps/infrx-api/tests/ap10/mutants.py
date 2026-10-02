@@ -22,7 +22,8 @@ from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
 SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
           "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py",
-          "tests/ap10/test_sop_benchmark.py", "tests/ap10/test_release.py")
+          "tests/ap10/test_sop_benchmark.py", "tests/ap10/test_release.py",
+          "tests/ap10/test_improve_routes.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -58,6 +59,12 @@ REL = "lab/improve/release.py"
 REL_TRAINER = "test_ap10_release_an_unsupported_trainer_is_an_explicit_refusal"
 REL_IMPORT = "test_ap10_release_a_candidate_is_registered_only_through_ap04s_import"
 REL_EVIDENCE = "test_ap10_release_evidence_pins_the_lineage_once_the_import_is_verified"
+IMP = "gateway/routes/lab_improve.py"
+IMP_EXPORT = "test_ap10_improve_the_export_is_one_finished_operation_per_key"
+IMP_REFUSED = "test_ap10_improve_export_refusals_are_r270_envelopes"
+IMP_TRANSIENT = "test_ap10_improve_a_transient_failure_finishes_nothing_and_the_key_runs_it_again"
+IMP_CANDIDATE = "test_ap10_improve_the_candidate_is_ap04s_import_and_the_evidence_follows_it"
+IMPORT_DOOR = '            await acting_provider(x.access, actor.user_id or "", provider)\n'
 IDENTITY = '"import", candidate["repo"], candidate["commit"], candidate["files"])'
 #: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
 PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
@@ -312,6 +319,51 @@ MUTANTS: tuple[Mutant, ...] = (
     m("rel_methods_dropped", "the record carries the labels' provenance",
       'methods = Counter(m for x in export.get("lineage", ()) for m in x["methods"])',
       "methods = Counter()", REL_EVIDENCE, file=REL),
+    # --- 10e: the R270 routes (routes/lab_improve.py)
+    m("imp_viewer_exports", "only a developer+ member exports",
+      IMPORT_DOOR + "            require_own_payer", "            require_own_payer",
+      IMP_REFUSED, file=IMP),
+    m("imp_any_payer", "the export names this provider's own payer",
+      "            require_own_payer(provider, body.payer_ref)\n", "", IMP_REFUSED, file=IMP),
+    m("imp_key_not_bound_to_run", "one key is one run's export",
+      '{"run_id": run_id, **body.model_dump(mode="json")}', 'body.model_dump(mode="json")',
+      IMP_EXPORT, file=IMP),
+    m("imp_export_left_running", "the export's operation is finished",
+      '            op = await x.ops.finish(op.operation_id, op.fence, "succeeded")\n', "",
+      IMP_EXPORT, IMP_TRANSIENT, file=IMP),
+    m("imp_held_refused", "a finished or held export answers its operation",
+      "            except errors.Conflict:   # finished, or another request holds it: as it "
+      "stands\n                return control.accepted(",
+      "            except ZeroDivisionError:\n                return control.accepted(",
+      IMP_EXPORT, IMP_TRANSIENT, file=IMP),
+    m("imp_refusal_unrecorded", "a refused export's operation is finished failed",
+      '                await x.ops.finish(op.operation_id, op.fence, "failed",\n'
+      "                                   _failure(refused, op.operation_id))\n", "",
+      IMP_REFUSED, file=IMP),
+    m("imp_refusal_reasons_dropped", "the failed operation names the refused fields",
+      '        body = body.model_copy(update={"field_errors": exc.reasons})\n', "        pass\n",
+      IMP_REFUSED, file=IMP),
+    m("imp_transient_failed", "a transient failure finishes nothing",
+      "            except (errors.ServerError, errors.RateLimitError):\n",
+      "            except ZeroDivisionError:\n", IMP_TRANSIENT, file=IMP),
+    m("imp_unscoped", "the actor acts in the path's workspace",
+      "            return await work(scoped(await actors.actor(request), provider))",
+      "            return await work(await actors.actor(request))", IMP_EXPORT, IMP_CANDIDATE,
+      file=IMP),
+    m("imp_actors_unwired", "no session actors is a 503, never a 500",
+      "            if actors is None:\n", "            if False:\n", IMP_REFUSED, file=IMP),
+    m("imp_run_id_any", "a path id is a UUID before anything is read",
+      'Id = Annotated[str, Path(pattern=f"^{UUID_RE.pattern}$")]', "Id = str", IMP_REFUSED,
+      file=IMP),
+    m("imp_viewer_registers", "only a developer+ member registers a candidate",
+      IMPORT_DOOR + "            op = await release.register_candidate(",
+      "            op = await release.register_candidate(", IMP_CANDIDATE, file=IMP),
+    m("imp_candidate_is_200", "a registration is 202 + Location at AP-04's operation",
+      'return control.accepted(op.doc, f"/lab/v1/operations/{op.doc.operation_id}")',
+      "return control.ok(op.doc)", IMP_CANDIDATE, file=IMP),
+    m("imp_evidence_unguarded", "a session of no member never reads the evidence",
+      "            await x.access.require(", "            0 and await x.access.require(",
+      IMP_CANDIDATE, file=IMP),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),
