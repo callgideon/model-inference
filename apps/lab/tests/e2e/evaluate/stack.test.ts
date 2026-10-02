@@ -12,7 +12,7 @@ import { REPORTS } from "../../b/real.ts";
 import { door, form, forms, record, SKIP, stack, type Browser } from "../harness.ts";
 
 type World = { A: string; B: string; dataset: string; servings: [string, string]; users: Record<string, string>; composed: Record<string, boolean>; stand_ins: string[] };
-const LAUNCH = { seed: "7", max_cases: "3", run_limit: "10", confidence: "0.95", margin: "0.05", min_cases: "2", slices: "safety 0 2" };
+const LAUNCH = { seed: "7", max_cases: "3", run_limit: "10", metric_source: "deterministic_metric", confidence: "0.95", margin: "0.05", min_cases: "2", slices: "safety 0 2" };
 
 test("E2E-E j10 the provider UI launches, compares and cancels", { skip: SKIP }, async (t) => {
   const s = await stack<World>("evaluate");

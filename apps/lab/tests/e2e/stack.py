@@ -87,27 +87,29 @@ class Switch:
 
 
 def unit_app(dsn: str, url: str, family: str, objects=None):
-    """R186's factory (`control_app`) with `family` (a `pilot._lab_2` key: lab_evaluations,
+    """R186's factory (`control_app`) with `family` (a `compose.lab_evaluations_pipelines_releases` key: lab_evaluations,
     lab_pipelines, lab_releases) mounted through a `Switch` over the unit's own composition
     of it (WR-LR6-E2E-SHADOW: the unit mounts every family first, WR-LDP-2). `objects` (in
     memory: l4 has no S3) reach the unit through `LAB_S3_BUCKET`'s seam (`lab_objects`).
     Answers (app, switch)."""
-    from infrx.gateway import pilot
+    from infrx.lab import compose
     from infrx.lab.workers import __main__ as lab_workers
     if objects is not None:
         lab_workers.lab_objects = lambda mode, env: objects
         os.environ["LAB_S3_BUCKET"] = "l4-in-memory"
-    lab_2, mounted = pilot._lab_2, {}
+    # Merge #84 (W6 api-L1) moved the composition to infrx.lab.compose; `pilot._lab_2` is only a
+    # re-export now, so the swap must happen on the compose module the control app resolves.
+    lab_2, mounted = compose.lab_evaluations_pipelines_releases, {}
 
     def swapped(*args, **kwargs):
         lab = lab_2(*args, **kwargs)
         mounted[family] = lab[family] = Switch(lab[family])
         return lab
-    pilot._lab_2 = swapped
+    compose.lab_evaluations_pipelines_releases = swapped
     try:
         app = control_app(dsn, url)
     finally:
-        pilot._lab_2 = lab_2
+        compose.lab_evaluations_pipelines_releases = lab_2
     return app, mounted[family]
 
 
