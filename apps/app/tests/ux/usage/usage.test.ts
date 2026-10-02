@@ -22,6 +22,8 @@ import {
   type Schedule,
   type Shown,
 } from "../../../app/(console)/usage/[requestId]/request-view-model.ts";
+import { jobRowView, jobsPageModel, parseJobFilters } from "../../../app/(console)/usage/credit-view-model.ts";
+import { creditCardState } from "../../../app/(console)/billing/credit-view-model.ts";
 import { settingsModel } from "../../../app/(console)/settings/view-model.ts";
 
 import { render, text } from "./render.ts";
@@ -206,4 +208,75 @@ test("UXU-05 Copy request ID and Copy result report a blocked clipboard instead 
   const panel = source("app/(console)/usage/[requestId]/result-panel.tsx");
   assert.match(panel, /<CopyButton text=\{text\} label="Copy result" \/>/);
   assert.match(source(DETAIL), /<CopyButton text=\{detail\.requestId\} label="Copy request ID" \/>/);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// Usage list (C-04 list)
+// ---------------------------------------------------------------------------------------------------
+
+const USAGE = "app/(console)/usage/page.tsx";
+const fixture = defaultCreditFixture();
+const page = <T,>(items: T[]) => ({ ok: true as const, value: { items, next_cursor: null } });
+const cells = (html: string) => [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((cell) => text(cell[1])));
+
+test("UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails", async () => {
+  const usage = source(USAGE);
+  assert.match(usage, /subtitle="Requests, results and credit charges\."/);
+  before(usage, "<RequestsTable", "<CreditSummary");
+  assert.doesNotMatch(usage, /<CreditBalanceCard/, "the full card lives on Credits");
+
+  const ready = text(await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }, null), href: "/usage" }));
+  assert.match(ready, /9,982\.67777779 credits/);
+  assert.match(ready, /10\.00 credits/);
+  const failedHtml = await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", {
+    card: creditCardState({ ok: false, error: { code: "dependency_unavailable", message: "x" } }, null),
+    href: "/usage?range=24h",
+  });
+  const failed = text(failedHtml);
+  assert.match(failed, /Credits unavailable/);
+  assert.doesNotMatch(failed, /\d+(\.\d+)? credits/, "no figure when the wallet could not be read");
+  assert.match(failedHtml, /<a [^>]*href="\/usage\?range=24h"[^>]*>Try again<\/a>/);
+  for (const html of [failedHtml, await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }, null), href: "/usage" })]) {
+    assert.match(html, /<a [^>]*href="\/billing"[^>]*>View credits<\/a>/);
+  }
+});
+
+test("UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward", () => {
+  const empty = jobsPageModel({ filters: parseJobFilters({}), jobs: page([]) });
+  assert.equal(empty.emptyText, "Your requests will appear here.");
+  assert.deepEqual(empty.emptyAction, { label: "Set up a call", href: "/models" });
+  for (const params of [{ range: "24h" }, { model: "m" }, { key: "c7000000-0000-4000-8000-0000000000f1" }]) {
+    const filtered = jobsPageModel({ filters: parseJobFilters(params), jobs: page([]) });
+    assert.equal(filtered.emptyText, "No requests match these filters.", JSON.stringify(params));
+    assert.deepEqual(filtered.emptyAction, { label: "Clear filters", href: "/usage" });
+  }
+  const usage = source(USAGE);
+  assert.match(usage, /<EmptyPanel>\s*<p>\{model\.emptyText\}<\/p>\s*<Link [^>]*href=\{model\.emptyAction\.href\}>\s*\{model\.emptyAction\.label\}/);
+  assert.match(usage, /title="We couldn’t load usage"/);
+});
+
+test("UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged", async () => {
+  const tiny = jobRowView({ ...fixture.jobs[0], charged: "0.00000001" });
+  const unknown = jobRowView({ ...fixture.jobs[0], state: "paused", outcomeCause: null });
+  const html = await render("app/(console)/usage/requests-table.tsx", "RequestsTable", {
+    rows: [tiny, jobRowView(fixture.jobs[2]), jobRowView(fixture.jobs[3]), jobRowView(fixture.jobs[5]), unknown],
+  });
+  const [settled, running, held, absorbed, odd] = cells(html);
+  // Columns: request, started, model, status, charge state, charged, held.
+  assert.match(settled[0], /^b1000000… details for request b1000000-0000-4000-8000-000000000001$/);
+  assert.equal(settled[3], "Succeeded");
+  assert.match(settled[4], /^Charged /);
+  assert.equal(settled[5], "0.00000001 credits", "a tiny debit is a charge, never free or zero");
+  assert.equal(running[3], "Running");
+  assert.match(running[4], /^Pending /);
+  assert.deepEqual([running[5], running[6]], ["—", "5.00 credits"], "a hold is held, not charged");
+  assert.match(held[3], /^Failed/);
+  assert.match(held[4], /^Awaiting reconciliation /);
+  assert.equal(held[5], "—");
+  assert.match(absorbed[4], /^No charge /);
+  assert.equal(odd[3], "Unknown status");
+  for (const row of [settled, running, held, absorbed, odd]) {
+    assert.doesNotMatch(row[3], /charge|held|credit|pending|reconcil/i, "the status cell carries no money state");
+    assert.doesNotMatch(row.join(" "), /\bspent\b/i, "a hold is never called spent");
+  }
 });

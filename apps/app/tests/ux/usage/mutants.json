@@ -161,6 +161,126 @@
       "cases": [
         "UXU-05 Copy request ID and Copy result report a blocked clipboard instead of claiming success"
       ]
+    },
+    {
+      "id": "UXU-X17",
+      "what": "Usage keeps the old subtitle",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "subtitle=\"Requests, results and credit charges.\"",
+      "replace": "subtitle=\"Your requests, newest first, with what each one charged or holds.\"",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X18",
+      "what": "the credit summary comes before the requests",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "      <h2 className=\"mb-3 font-heading text-base font-medium\">Requests</h2>",
+      "replace": "      <CreditSummary card={card} href={model.here} />\n      <h2 className=\"mb-3 font-heading text-base font-medium\">Requests</h2>",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X19",
+      "what": "a failed wallet read renders nothing instead of 'Credits unavailable'",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "  if (card.kind === \"error\") {",
+      "replace": "  if (false) {",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X20",
+      "what": "a failed wallet read offers no retry",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "{card.recovery === \"retry\" ? (",
+      "replace": "{false ? (",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X21",
+      "what": "a failed wallet read loses the way to Credits",
+      "file": "app/(console)/usage/credit-summary.tsx",
+      "find": "        {credits}\n      </p>\n    );",
+      "replace": "      </p>\n    );",
+      "cases": [
+        "UXU-06 Usage puts requests first and keeps credits a compact summary that is unavailable, never zero, when the wallet read fails"
+      ]
+    },
+    {
+      "id": "UXU-X22",
+      "what": "a window-only filter reads as an empty account",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": "filters.keyId !== null || filters.range !== DEFAULT_JOB_RANGE",
+      "replace": "filters.keyId !== null",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X23",
+      "what": "the empty page drops its way forward",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "          <Link className=\"mt-2 inline-block underline underline-offset-4\" href={model.emptyAction.href}>\n            {model.emptyAction.label}\n          </Link>\n",
+      "replace": "",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X24",
+      "what": "the failed request list keeps the old title",
+      "file": "app/(console)/usage/page.tsx",
+      "find": "title=\"We couldn’t load usage\"",
+      "replace": "title=\"Your requests could not be loaded\"",
+      "cases": [
+        "UXU-07 empty, filtered-empty and failed usage each say what happened and offer the one way forward"
+      ]
+    },
+    {
+      "id": "UXU-X25",
+      "what": "the status cell carries the money state again",
+      "file": "app/(console)/usage/requests-table.tsx",
+      "find": "<Badge variant=\"outline\">{row.status}</Badge>",
+      "replace": "<Badge variant=\"outline\">{row.charge.label}</Badge> {row.status}",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X26",
+      "what": "a hold fills the Charged cell",
+      "file": "app/(console)/usage/requests-table.tsx",
+      "find": "{row.charge.amount ?? \"—\"}",
+      "replace": "{row.charge.amount ?? row.charge.held ?? \"—\"}",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X27",
+      "what": "an unknown state reads 'Unknown state' instead of C-04's 'Unknown status'",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": ": \"Unknown status\";",
+      "replace": ": \"Unknown state\";",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
+    },
+    {
+      "id": "UXU-X28",
+      "what": "a settled charge is rounded to cents (a tiny debit reads as zero)",
+      "file": "app/(console)/usage/credit-view-model.ts",
+      "find": ": amount(job.charged, job.unit),",
+      "replace": ": amount(Number(job.charged).toFixed(2), job.unit),",
+      "cases": [
+        "UXU-08 a request row keeps execution and money apart: status is the request's state, the charge is authoritative or absent, a tiny debit is charged"
+      ]
     }
   ]
 }

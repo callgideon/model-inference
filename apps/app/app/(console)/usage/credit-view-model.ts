@@ -189,7 +189,7 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 export function jobStatus(job: ConsumerJob): string {
-  const state = Object.hasOwn(STATE_LABELS, job.state) ? STATE_LABELS[job.state] : "Unknown state";
+  const state = Object.hasOwn(STATE_LABELS, job.state) ? STATE_LABELS[job.state] : "Unknown status";
   const cause = job.outcomeCause;
   return cause === null || cause === "completed" ? state : `${state} · ${cause.replaceAll("_", " ")}`;
 }
@@ -253,6 +253,8 @@ export type JobsPageModel = {
   firstHref: string;
   rows: ViewState<JobRows>;
   emptyText: string;
+  /** The one way forward from an empty page: set up a first call, or drop the filters. */
+  emptyAction: { label: string; href: string };
 };
 
 export function jobsPageModel(input: { filters: JobFilters; jobs: Result<Page<ConsumerJob>> }): JobsPageModel {
@@ -269,11 +271,8 @@ export function jobsPageModel(input: { filters: JobFilters; jobs: Result<Page<Co
       previousHref: hasPreviousPage(filters) ? jobsHref(previousCursorState(filters)) : null,
       nextHref: page.next_cursor === null ? null : jobsHref(nextCursorState(filters, page.next_cursor)),
     })),
-    emptyText:
-      filters.model !== null || filters.keyId !== null
-        ? "No requests match this model or key. Clear the filters to see every request."
-        : filters.range === "all"
-          ? "No requests yet. Requests you send with an API key appear here, newest first."
-          : `No requests in the last ${filters.range}. Choose a longer window to see earlier requests.`,
+    ...(filters.model !== null || filters.keyId !== null || filters.range !== DEFAULT_JOB_RANGE
+      ? { emptyText: "No requests match these filters.", emptyAction: { label: "Clear filters", href: "/usage" } }
+      : { emptyText: "Your requests will appear here.", emptyAction: { label: "Set up a call", href: "/models" } }),
   };
 }

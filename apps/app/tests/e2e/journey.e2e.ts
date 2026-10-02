@@ -415,7 +415,7 @@ test("usage-balance: the console shows every request and the balance exactly as 
   for (const job of books.jobs) {
     const cells = row(page, job.request_id).locator("td");
     if (job.settlement === "settled") {
-      await expect(cells.nth(2)).toContainText("Charged");
+      await expect(cells.nth(4)).toContainText("Charged");
       expect(shown(await cells.nth(5).textContent()), `charged for ${job.request_id}`).toBe(exact(job.charged!));
     }
   }
@@ -473,7 +473,7 @@ test("accounting-uncertainty: usage the engine did not report is held for reconc
   await signIn(page, email);
   await page.goto("/usage");
   const cells = row(page, accepted.request_id).locator("td");
-  await expect(cells.nth(2)).toContainText("Awaiting reconciliation");
+  await expect(cells.nth(4)).toContainText("Awaiting reconciliation");
   expect((await cells.nth(5).textContent())?.trim(), "no charge is shown").toBe("—");
   expect(shown(await cells.nth(6).textContent())).toBe(exact(job.hold!));
   expect(await figure(page, "Reserved")).toBe(exact(books.wallet!.reserved));
