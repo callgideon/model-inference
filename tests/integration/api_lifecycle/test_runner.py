@@ -101,7 +101,7 @@ def test_ap11_restart_retries_the_original_key_and_counts_no_new_request(files, 
     run(files, gateway)
     code, verdict = run(files, gateway)
     keys = gateway.posts("/v1/jobs")
-    assert keys[0] == keys[1], "the retry must carry the original Idempotency-Key"
+    assert len(keys) >= 2 and keys[0] == keys[1], "the retry must carry the original key"
     assert stage(verdict, "09")["status"] == "PASS"
     assert gateway.created == 4             # 09's job, 11's sync and SSE, 12's capture: once
     inference = len(keys) + len(gateway.posts("/v1/chat/completions"))
@@ -308,6 +308,9 @@ def test_ap11_a_dependent_stage_is_blocked_while_its_predecessor_has_not_passed(
     assert "needs stage 09" in " ".join(stage(verdict, "10")["reasons"])
     assert stage(verdict, "09")["selected"] is False and gateway.sent == []
     earlier = st.State.open(files[2], target="fake-gateway")    # 09 ran but did not pass
+    earlier.data["minted"] = {"consumer_a": "consumer_a_key", "consumer_b": "consumer_b_key"}
+    st.write_private(files[2].with_name(files[2].name + ".keys"),     # its keys resolve
+                     {"consumer_a_key": SECRET_VALUES[0], "consumer_b_key": SECRET_VALUES[1]})
     earlier.checkpoint("09", "BLOCKED", {"job_handle": "job_stale"})
     code, verdict = run(files, gateway, "--only", "10")
     assert stage(verdict, "10")["status"] == "BLOCKED" and gateway.sent == []
@@ -495,9 +498,11 @@ def test_ap11_an_unmounted_route_is_blocked_by_name_never_failed(files, gateway)
 def test_ap11_keys_are_minted_through_the_api_and_kept_outside_the_state(files, gateway):
     """Broken: a minted secret written into the state or the verdict, a key file others can
     read, or a stage using a key nobody minted."""
+    config = json.loads(files[0].read_text())     # a declared fallback the minted key replaces
+    edit(files[0], fixtures={**config["fixtures"], "consumer_a_key": "fallback seed"})
     _, verdict = run(files, gateway)
     keys = files[2].with_name(files[2].name + ".keys")
-    assert stat.S_IMODE(keys.stat().st_mode) == 0o600
+    assert keys.exists() and stat.S_IMODE(keys.stat().st_mode) == 0o600
     minted = json.loads(keys.read_text())
     assert set(minted) == {"consumer_a_key", "consumer_b_key", "consumer_a_capture_key"}
     assert set(minted.values()) <= set(gateway.keys)
@@ -555,7 +560,8 @@ def test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol(files, gateway):
         {sid: (stage(verdict, sid)["reasons"], checks(stage(verdict, sid))) for sid in HOSTED}
     assert json.loads(files[2].read_text())["minted_ids"]["provider_dev"]
     eighteen = stage(verdict, "18")
-    assert eighteen["status"] == "BLOCKED" and "no runner implementation" in eighteen["reasons"][0]
+    assert eighteen["status"] == "BLOCKED"
+    assert any("no runner implementation" in reason for reason in eighteen["reasons"])
 
 
 @pytest.mark.parametrize("defect", sorted(HOSTING))
