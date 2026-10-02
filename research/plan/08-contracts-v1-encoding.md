@@ -590,3 +590,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-10-01: R267 on codex/w5-merge-68; R268 numbered at the lab-A merge on codex/w5-merge-69 (wave 6); next free R269
 - 2026-10-01: R268 on codex/w5-merge-69; R269 numbered at the lab-release-tool merge on codex/w5-merge-71; next free R270
 - 2026-10-01: R270–R271 numbered at the wave-7 base (the keystone commit after the lifecycle-plan merge 2eeff879); next free R272
+- 2026-10-02: R271 allocation extended by the coordinator: 0065 = api-identity's SR-AP01-1 (the six SECURITY DEFINER identity functions for the Lab control login), LOCAL-ONLY, batch 2; the migration pins' admitted range becomes 0060..0065 when that file lands; next free R272

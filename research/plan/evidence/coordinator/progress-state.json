@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "cd9f517c (wave-7 base; the keystone commit)",
- "integration_head": "cd9f517c",
+ "main": "377eabca (= claude/consumer-v1 tip)",
+ "integration_head": "377eabca",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,11 +40,11 @@
    }
   ]
  },
- "revision": 400,
- "updated": "2026-10-02T00:40:52Z",
+ "revision": 401,
+ "updated": "2026-10-02T01:01:23Z",
  "agent_slots": {
   "total": 16,
-  "active": 3,
+  "active": 1,
   "reserved": 2,
   "note": "Wave 7 batch 1: twelve Opus lanes dispatched 2026-10-01 from cd9f517c (lane-w7.js, fast mode); batch 2 waits on their merges."
  },
@@ -11578,7 +11578,7 @@
   {
    "id": "W7-api-contracts",
    "task": "AP-00",
-   "slice": "00a/00b/00c: route+action inventory, OpenAPI export + baseline, packages/api-client + thin transport ports (wf_6548cfca-1ff)",
+   "slice": "00a/00b/00c: route+action inventory, OpenAPI export + baseline, packages/api-client + thin transport ports (wf_6548cfca-1ff); merge #87 2a11d053 → 377eabca integrated",
    "agent": "opus",
    "branch": "codex/w7-api-contracts",
    "worktree": ".claude/worktrees/codex-w7-api-contracts",
@@ -11589,11 +11589,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -11624,17 +11624,17 @@
    "branch": "codex/w7-api-identity",
    "worktree": ".claude/worktrees/codex-w7-api-identity",
    "base": "cd9f517c",
-   "head": null,
+   "head": "dff977d9",
    "isolation": {
     "ports": "tasklocal key ap1",
     "prefix": "infrx-ap1-*",
     "db": "infrx_ap1"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "next_action": "merge #88 (chained)",
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -11643,7 +11643,9 @@
     "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
     "at": "2026-10-01T23:39:54Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-identity-a5c856d.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/console/session.py",
@@ -11659,7 +11661,7 @@
   {
    "id": "W7-api-reads",
    "task": "AP-02",
-   "slice": "02a–02c: console/operator read projections, cursors (wf_e645aea0-dd3)",
+   "slice": "02a–02c: console/operator read projections, cursors (wf_e645aea0-dd3); merge #87 integrated (the OpenAPI legacy rule corrected for R270 reads)",
    "agent": "opus",
    "branch": "codex/w7-api-reads",
    "worktree": ".claude/worktrees/codex-w7-api-reads",
@@ -11670,11 +11672,11 @@
     "prefix": "infrx-ap2-*",
     "db": "infrx_ap2"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -11711,9 +11713,9 @@
    },
    "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": "merge #88 (chained, running)",
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -11788,9 +11790,9 @@
    },
    "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": "merge #88 (chained, running)",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -11828,9 +11830,9 @@
    },
    "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": "merge #88 (chained, running)",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -11907,9 +11909,9 @@
    },
    "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": "merge #88 (chained, running)",
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -11937,17 +11939,17 @@
    "branch": "codex/w7-ux-foundations",
    "worktree": ".claude/worktrees/codex-w7-ux-foundations",
    "base": "cd9f517c",
-   "head": null,
+   "head": "72d4e5b7",
    "isolation": {
     "ports": "none (fake-only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "next_action": "merge #88 (chained)",
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -11956,7 +11958,9 @@
     "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
     "at": "2026-10-01T23:39:54Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-foundations-ab5dfc8.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/layout.tsx",
@@ -11989,9 +11993,9 @@
    },
    "activity": "integration",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-02T00:40:52Z",
+   "updated": "2026-10-02T01:01:23Z",
    "blocker": null,
-   "next_action": "merge #87 (chained, merge-fast)",
+   "next_action": "merge #88 (chained, running)",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -15515,6 +15519,12 @@
    "at": "2026-10-02T00:40:52Z",
    "by": "implementation coordinator (session 03)",
    "what": "rev 400: merge #86 api-schema integrated (0060, ControlOps); seven lanes handed back (api-contracts, api-reads, api-actions, api-traces, api-judge, api-lifecycle, ux-app) → merge #87 chained; register row 27 closed (j09 rerun PASS). Still implementing: api-identity, api-artifacts, ux-foundations.",
+   "source": "research/plan/evidence/w7/"
+  },
+  {
+   "at": "2026-10-02T01:01:23Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 401: merge #87 (api-contracts + api-reads) integrated at 377eabca; merge #88 chained for api-actions, api-traces, api-judge, api-lifecycle, ux-foundations, ux-app, api-identity; only api-artifacts still implementing. SR-AP01-1 allocated migration 0065 (batch 2).",
    "source": "research/plan/evidence/w7/"
   }
  ],
