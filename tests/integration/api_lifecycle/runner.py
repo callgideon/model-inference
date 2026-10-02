@@ -2,7 +2,7 @@
 """AP-11: the resumable API-only lifecycle runner (research/plan/api-lifecycle/verification.md).
 
     apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py \\
-        --mode inspect|isolated|live|cleanup --state <private dir>/state.json \\
+        --mode inspect|isolated|live|cleanup|hosted --state <private dir>/state.json \\
         [--config config.json --secrets secrets.json | --world ap11] [--only 09,10] [--out DIR]
 
 * **inspect** runs only read-only stages (01); a mutation is refused before it leaves.
@@ -13,7 +13,12 @@
   57569, the gateway and worker processes, tests/integration/fake_vllm.py). Declared fixtures
   (config `fixtures`) stand in for APIs not on the base and are named in the verdict.
 * **live** is refused (INVALID) unless the config names its origins, identities, target, an
-  exact budget and `max_requests` <= 6, and declares no fixture.
+  exact budget and `max_requests` <= 6, and declares no fixture; then it is BLOCKED, before
+  any request, naming each operator input it lacks (`live_inputs`, 11d: P-10 configured live
+  with its secret by SSM name, the approved `live_target`, an existing `window_record`).
+* **hosted** (11e) only prints its plan (`HOSTED_PLAN`: release identity, OpenAPI export and
+  generated clients, the coordinator's deploy, hosted smoke, thin-boundary check, consumer
+  regression, rollback) and reports NOT RUN: nothing is composed, sent or written.
 * **cleanup** removes only the resources the state file says this run created.
 
 Every product step is an HTTP request to FastAPI - never SQL, the operator CLI or a Supabase
@@ -59,12 +64,12 @@ from api_lifecycle.state import (InvalidRun, Secrets, State, digest, require_pri
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-TASK, GATE, BASE = "AP-11", "API-LIFECYCLE", "b05eb6f4"
+TASK, GATE, BASE = "AP-11", "API-LIFECYCLE", "49114933"
 RUNNER = "tests/integration/api_lifecycle/runner.py"
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
 EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
-MODES = ("inspect", "isolated", "live", "cleanup")
+MODES = ("inspect", "isolated", "live", "cleanup", "hosted")
 LIVE_MAX_REQUESTS = 6                 # verification.md: six accepted requests, not a load test
 ISOLATED_MAX_REQUESTS = 20
 
@@ -143,6 +148,31 @@ def load_config(path: Path | None, mode: str) -> dict:
         raise InvalidRun("the config names no target")
     return config
 
+
+#: AP-11 11e: what `--mode hosted` would do, in order. It only prints this plan: deploying is
+#: the coordinator's (an R151 window, the rollout runbooks), never this runner's.
+HOSTED_PLAN = (
+    {"what": "record the release identity: the merged SHA, a clean tree, the image digests",
+     "command": "git rev-parse HEAD && git status --porcelain", "by": "coordinator"},
+    {"what": "verify the OpenAPI export and the generated clients at that SHA",
+     "command": "cd apps/infrx-api && uv run --frozen pytest -q "
+                "tests/contracts/test_openapi_export.py && cd ../.. && make api-client-test",
+     "by": "coordinator"},
+    {"what": "deploy the verified API (consumer gateway and worker, then the Lab unit)",
+     "command": "infra/rollout/README.md section 1 through infra/rollout/ssm.sh; "
+                "infra/lab/rollout/lab-release.sh", "by": "coordinator, in its window"},
+    {"what": "hosted smoke: the read-only stages against the hosted origins",
+     "command": f"apps/infrx-api/.venv/bin/python {RUNNER} --mode inspect --config <hosted> "
+                "--secrets <0600 secrets> --state <0600 state>", "by": "coordinator"},
+    {"what": "UI thin-boundary check (R271): no product database or RPC in the App or the Lab",
+     "command": "cd apps/app && node --test tests/boundary/api-boundary.test.ts && cd ../lab "
+                "&& node --test tests/boundary/api.test.ts", "by": "coordinator"},
+    {"what": "existing consumer regression on the release",
+     "command": "make consumer-local backend-certify", "by": "coordinator"},
+    {"what": "rollback plan usable: the previous release restored on a failed smoke",
+     "command": "infra/rollout/steps/90-revert.sh (RELEASE, BACKUP) through infra/rollout/ssm.sh",
+     "by": "coordinator"},
+)
 
 SSM_NAME = re.compile(r"ssm:/[A-Za-z0-9_./-]+")
 
@@ -518,26 +548,29 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
     secrets, config, results, rows, reasons = Secrets({}), {}, [], None, []
     session = None
     try:
-        with sources(args) as (config_path, secrets_path):
-            config = load_config(config_path, args.mode)
-            secrets = Secrets.load(secrets_path)
-            reasons = live_inputs(config) if args.mode == "live" else []
-            if not reasons:
-                state = State.open(args.state, target=config.get("target"))
-                load_minted(args.state, secrets)
-                session = Session(args.mode, config, secrets, state, transport)
-            if reasons:
-                verdict = BLOCKED
-            elif args.mode == "cleanup":
-                rows = cleanup(session)
-                verdict = worst([FAIL if row["outcome"].startswith("failed") else PASS
-                                 for row in rows] or [PASS])
-            else:
-                selected = {s.sid for s in contracts.STAGES
-                            if (s.reads_only or args.mode != "inspect")
-                            and (not only or s.sid in only)}
-                run_stages(session, selected, results)
-                verdict = worst(r["status"] for r in results if r["selected"])
+        if args.mode == "hosted":                  # 11e: a dry plan - nothing composed or sent
+            verdict = NOT_RUN
+        else:
+            with sources(args) as (config_path, secrets_path):
+                config = load_config(config_path, args.mode)
+                secrets = Secrets.load(secrets_path)
+                reasons = live_inputs(config) if args.mode == "live" else []
+                if not reasons:
+                    state = State.open(args.state, target=config.get("target"))
+                    load_minted(args.state, secrets)
+                    session = Session(args.mode, config, secrets, state, transport)
+                if reasons:
+                    verdict = BLOCKED
+                elif args.mode == "cleanup":
+                    rows = cleanup(session)
+                    verdict = worst([FAIL if row["outcome"].startswith("failed") else PASS
+                                     for row in rows] or [PASS])
+                else:
+                    selected = {s.sid for s in contracts.STAGES
+                                if (s.reads_only or args.mode != "inspect")
+                                and (not only or s.sid in only)}
+                    run_stages(session, selected, results)
+                    verdict = worst(r["status"] for r in results if r["selected"])
     except InvalidRun as invalid:
         verdict, reasons = INVALID, [f"INVALID {invalid}"]
     except Blocked as missing:                     # the isolated world could not be composed
@@ -552,15 +585,18 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
         "reasons": reasons, "complete_lifecycle": complete,
         "verdicts": {"lifecycle": verdict, "api_boundary": NOT_RUN, "quality": NOT_RUN,
                      "operations": NOT_RUN},
-        "label": ("isolated: task-local services, a controlled engine and declared fixtures - "
-                  "never the real GPU, real judge or hosted gate" if args.mode != "live"
-                  else "live: the configured approved target"),
+        "label": {"live": "live: the configured approved target",
+                  "hosted": "hosted: a dry plan - nothing deployed, sent or written; the "
+                            "coordinator runs each step"}.get(
+            args.mode, "isolated: task-local services, a controlled engine and declared "
+                       "fixtures - never the real GPU, real judge or hosted gate"),
         "fixtures": config.get("fixtures") or {}, "pins": pins(config),
         "target": config.get("target"), "state_file": str(args.state),
         "counters": session.state.counters if session is not None else {},
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(time.monotonic() - clock, 1),
         "stages": results, **({"cleanup": rows} if rows is not None else {}),
+        **({"plan": list(HOSTED_PLAN)} if args.mode == "hosted" else {}),
         "reproduce": f"apps/infrx-api/.venv/bin/python {RUNNER} --mode {args.mode} --state "
                      "<state> " + ("--world ap11" if args.world else "--config <c> --secrets <s>"),
     }
@@ -569,6 +605,8 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
     for entry in payload["stages"]:
         label = f"  [{entry['label']}]" if entry.get("label") else ""
         print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}{label}")
+    for n, step in enumerate(payload.get("plan") or (), 1):
+        print(f"    PLAN  {n}  {step['what']} [{step['by']}]: {step['command']}")
     for reason in payload["reasons"]:
         print(reason)
     print(f"gate {verdict} -> {args.out / 'verdict.json'}")

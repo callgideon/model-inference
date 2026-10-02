@@ -650,3 +650,19 @@ def test_ap11_a_package_the_world_could_not_compose_is_blocked_with_its_cause(fi
         reasons = " ".join(stage(verdict, sid)["reasons"])
         assert stage(verdict, sid)["status"] == "BLOCKED" and why in reasons, (sid, reasons)
     assert not [p for _, p, _ in gateway.sent if p.startswith("/lab/v1/artifacts")]
+
+
+def test_ap11_hosted_mode_only_prints_its_plan(files, gateway, capsys):
+    """Broken (11e): a hosted run that deploys, sends a request, writes state or reports
+    anything but NOT RUN; or a plan that leaves out the verified API's deploy, the generated
+    clients, the hosted smoke, the thin-boundary check or the rollback."""
+    code, verdict = run(files, gateway, mode="hosted")
+    assert (code, verdict["verdict"]) == (3, "NOT RUN") and gateway.sent == []
+    assert not files[2].exists() and verdict["stages"] == []
+    plan = " ".join(step["what"] for step in verdict["plan"])
+    for needed in ("release identity", "OpenAPI", "generated clients", "deploy", "hosted smoke",
+                   "thin-boundary", "regression", "rollback"):
+        assert needed in plan, needed
+    printed = capsys.readouterr().out
+    assert all(step["command"] in printed for step in verdict["plan"])
+    assert "dry plan" in verdict["label"]

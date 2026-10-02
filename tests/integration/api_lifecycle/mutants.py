@@ -81,6 +81,7 @@ NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fai
 NO_TARGET = "test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite"
 UNCOMPOSED_CAUSE = "test_ap11_a_package_the_world_could_not_compose_is_blocked_with_its_cause"
 LIVE_INPUTS = "test_ap11_live_is_blocked_naming_each_missing_operator_input"
+HOSTED_PLAN = "test_ap11_hosted_mode_only_prints_its_plan"
 RUBRIC = "test_ap11_the_judge_pins_the_newest_reviewed_rubric_never_a_pending_one"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -335,6 +336,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("window_record_unread", "11d: the operator's window record exists", R,
        '    if not Path(str(config.get("window_record") or "")).is_file():',
        '    if not config.get("window_record"):', LIVE_INPUTS),
+    _m("hosted_mode_runs_stages", "11e: hosted mode is a dry plan, nothing composed or sent", R,
+       '        if args.mode == "hosted":                  # 11e: a dry plan - nothing composed or sent',
+       "        if False:", HOSTED_PLAN),
+    _m("hosted_plan_unprinted", "11e: the plan is printed, every step's command", R,
+       "        print(f\"    PLAN  {n}  {step['what']} [{step['by']}]: {step['command']}\")",
+       "        pass", HOSTED_PLAN),
+    _m("hosted_plan_without_boundary", "11e: the plan includes the UI thin-boundary check", R,
+       '    {"what": "UI thin-boundary check (R271)', '    {"what": "UI check (R271)', HOSTED_PLAN),
+    _m("hosted_plan_without_rollback", "11e: the plan includes a usable rollback", R,
+       '    {"what": "rollback plan usable', '    {"what": "plan usable', HOSTED_PLAN),
     _m("oldest_reviewed_rubric", "14 pins the NEWEST reviewed rubric version", L,
        '    rubric = max(reviewed, key=lambda r: r.get("version") or 0)',
        '    rubric = min(reviewed, key=lambda r: r.get("version") or 0)', RUBRIC),
