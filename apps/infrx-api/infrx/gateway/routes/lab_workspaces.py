@@ -9,7 +9,9 @@
 - `POST /lab/v1/workspaces/{id}/members` / `DELETE .../members/{user}`: an administrator
   (`manage_members`) grants or revokes - 0007's rules: one current row per pair, a role change
   is a revocation plus a new grant, never an update. No one changes their own membership, so
-  nobody self-promotes and an administrator cannot lock themself out by accident.
+  nobody self-promotes and an administrator cannot lock themself out by accident. Each
+  mutation's `Idempotency-Key` is scoped to the workspace (0060: the actor's tenant is the
+  provider) and the action, with the path + body as its input hash.
 
 Membership is read current on every call (`LabAccess`, the store clock): a revocation refuses
 the very next request. Mounted when the composition root provides `rt.actors`, `rt.identity`
@@ -24,9 +26,10 @@ from fastapi import APIRouter, Request
 from pydantic import Field
 
 from ...console import EnvelopeRoute, idempotency_key
-from ...console.session import Member, web_session
+from ...console.session import Claim, Member, web_session
 from ...contracts import api, errors
 from ...contracts.v2.records import ROLE_CAPABILITIES, ProviderCapability, ProviderRole
+from ...state.control_ops import input_hash
 from .. import control
 from .console_me import switched
 
@@ -71,11 +74,14 @@ def register(app, rt) -> None:
             role=w.membership.role.value, capabilities=capabilities(w.membership.role))
             for w in await access.workspaces(actor.user_id))
 
-    async def administrator(request: Request, provider_org_id: str) -> api.Actor:
+    async def administrator(request: Request, provider_org_id: str, kind: str,
+                            doc: dict) -> Claim:
+        """The administrator's claim on this workspace's `kind` mutation."""
         actor = web_session(await rt.actors.actor(request))
-        idempotency_key(request)
+        key = idempotency_key(request)
         await access.require(actor.user_id, provider_org_id, ProviderCapability.manage_members)
-        return actor
+        return Claim(kind, actor.model_copy(update={"provider_org_id": provider_org_id}), key,
+                     input_hash({"provider_org_id": provider_org_id, **doc}))
 
     @router.get("/lab/v1/workspaces", response_model=api.ListPage[Workspace],
                 operation_id="lab_workspaces")
@@ -107,22 +113,24 @@ def register(app, rt) -> None:
     @router.post("/lab/v1/workspaces/{provider_org_id}/members", response_model=Member,
                  status_code=201, operation_id="lab_member_grant")
     async def grant(provider_org_id: str, body: MemberGrant, request: Request):
-        actor = await administrator(request, provider_org_id)
+        claim = await administrator(request, provider_org_id, "lab.member_grant",
+                                    body.model_dump(mode="json"))
         user_id = await identity.user_by_email(body.email)
         if user_id is None:
             raise errors.NotFound("no account with that email")
-        if user_id == actor.user_id:
+        if user_id == claim.actor.user_id:
             raise errors.Forbidden("a member never changes their own membership")
         member, created = await identity.add_member(provider_org_id, user_id, body.role,
-                                                    f"session:{actor.user_id}")
+                                                    f"session:{claim.actor.user_id}", claim)
         return control.ok(member, 201 if created else 200)
 
     @router.delete("/lab/v1/workspaces/{provider_org_id}/members/{user_id}",
                    response_model=Member, operation_id="lab_member_revoke")
     async def revoke(provider_org_id: str, user_id: uuid.UUID, request: Request):
-        actor = await administrator(request, provider_org_id)
-        if str(user_id) == actor.user_id:
+        claim = await administrator(request, provider_org_id, "lab.member_revoke",
+                                    {"user_id": str(user_id)})
+        if str(user_id) == claim.actor.user_id:
             raise errors.Forbidden("a member never changes their own membership")
-        return control.ok(await identity.revoke_member(provider_org_id, str(user_id)))
+        return control.ok(await identity.revoke_member(provider_org_id, str(user_id), claim))
 
     app.router.routes.extend(router.routes)     # the app's own table, as every router (lab_datasets)

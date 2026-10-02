@@ -5,7 +5,8 @@ The operator is a session whose profile carries `is_operator`, or an operator-au
 created once (0007's unique slug): a retry answers the same provider, the same slug under
 another name is 409, and nothing existing is renamed or reassigned - an existing provider's
 models keep their owner. The optional first administrator is granted by the same rules as a
-member grant (`PgIdentity.add_member`). Replaces `infra/lab/rollout/lab-release.sh members`'
+member grant, in the same transaction as the provider and the `Idempotency-Key`'s claim
+(scoped to the operator and the action). Replaces `infra/lab/rollout/lab-release.sh members`'
 direct SQL for the API path. Mounted when `rt.actors` and `rt.identity` exist.
 """
 from __future__ import annotations
@@ -14,8 +15,9 @@ from fastapi import APIRouter, Request
 from pydantic import Field
 
 from ...console import EnvelopeRoute, idempotency_key
-from ...console.session import Member, Provider
+from ...console.session import Claim, Member, Provider
 from ...contracts import api, errors
+from ...state.control_ops import input_hash
 from .. import control
 
 
@@ -42,7 +44,8 @@ def register(app, rt) -> None:
         actor = await rt.actors.actor(request)
         if not actor.operator:
             raise errors.Forbidden("provider onboarding is the operator's")
-        idempotency_key(request)
+        claim = Claim("operator.provider_create", actor, idempotency_key(request),
+                      input_hash(body.model_dump(mode="json")))
         admin = None
         if body.administrator_email is not None:
             admin = await identity.user_by_email(body.administrator_email)
@@ -50,9 +53,8 @@ def register(app, rt) -> None:
                 raise errors.NotFound("no account with that email")
         by = f"operator:{actor.user_id}" if actor.audience == "session" \
             else f"operator-key:{actor.org_id}"
-        provider, created = await identity.create_provider(body.slug, body.display_name, by)
-        member = None if admin is None else (await identity.add_member(
-            provider.provider_org_id, admin, "administrator", by))[0]
+        provider, member, created = await identity.create_provider(
+            body.slug, body.display_name, by, admin, claim)
         return control.ok(ProviderCreated(provider=provider, administrator=member),
                           201 if created else 200)
 

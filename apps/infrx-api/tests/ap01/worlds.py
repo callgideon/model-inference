@@ -1,6 +1,7 @@
-"""AP-01's identity world on two stores: in memory (`FakeIdentity` beside L2's
-`FakeAccessStore`) and PostgreSQL (`PgIdentity` + `PgAccessStore` on the ap1 harness, migrations
-0001-0059 as hosted). The same people in both:
+"""AP-01's identity world on three stores: in memory (`FakeIdentity` beside L2's
+`FakeAccessStore`) and PostgreSQL on the ap1 harness - `state.identity.PgIdentity` over 0065's
+functions (`pg`) and its direct-SQL fallback `console.session.PgIdentity` (`pg-direct`, deleted
+at the 0065 merge), each with `PgAccessStore` and 0060's claims. The same people in all:
 
 - CONSUMER: verified, claimed the signup grant (a consumer wallet); SUSPENDED: the same, and
   its organization is suspended; FRESH: verified, no grant yet (onboarding); UNVERIFIED: the
@@ -17,8 +18,11 @@ import dataclasses
 from datetime import UTC, datetime, timedelta
 
 from infrx.auth_facade.stub import GoTrueStub
-from infrx.console.session import Account, Member, PgIdentity, Provider
+from infrx.console import session
+from infrx.console.session import Account, Claim, Member, Provider
 from infrx.contracts import errors
+from infrx.state import identity as functions
+from infrx.state.control_ops import owner_of
 from infrx.contracts.v2.records import ProviderMembership
 from infrx.lab.access import LabAccess
 from infrx.lab.access.fakes import FakeAccessStore
@@ -67,6 +71,21 @@ class FakeIdentity:
     emails: dict[str, str] = dataclasses.field(default_factory=lambda: dict(EMAIL))
     providers: dict[str, Provider] = dataclasses.field(default_factory=dict)
     flag: bool = True
+    claims: dict = dataclasses.field(default_factory=dict)
+
+    async def _once(self, claim: Claim, write):
+        """0060's rules in memory: a replay answers the first outcome without writing, another
+        request under the key is 409, a refused write claims nothing."""
+        scope = (owner_of(claim.actor), claim.kind, claim.key)
+        if scope in self.claims:
+            digest, outcome = self.claims[scope]
+            if digest != claim.input_hash:
+                raise errors.IdempotencyConflict("this Idempotency-Key was used with a "
+                                                 "different request")
+            return outcome, True
+        outcome = await write()
+        self.claims[scope] = (claim.input_hash, outcome)
+        return outcome, False
 
     async def account(self, user_id: str) -> Account | None:
         if user_id not in self.emails:
@@ -94,7 +113,13 @@ class FakeIdentity:
                                                         key=lambda kv: kv[1].granted_at)
                 if p == provider_org_id and m.revoked_at is None]
 
-    async def add_member(self, provider_org_id, user_id, role, granted_by):
+    async def add_member(self, provider_org_id, user_id, role, granted_by, claim):
+        async def write():
+            return await self._grant(provider_org_id, user_id, role, granted_by)
+        (member, created), replayed = await self._once(claim, write)
+        return member, created and not replayed
+
+    async def _grant(self, provider_org_id, user_id, role, granted_by):
         current = self.store.memberships.get((provider_org_id, user_id))
         created = current is None or current.revoked_at is not None
         if created:
@@ -106,7 +131,12 @@ class FakeIdentity:
             raise errors.Conflict("the user holds another current role in this workspace")
         return self._member(current), created
 
-    async def revoke_member(self, provider_org_id, user_id):
+    async def revoke_member(self, provider_org_id, user_id, claim):
+        async def write():
+            return await self._revoke(provider_org_id, user_id)
+        return (await self._once(claim, write))[0]
+
+    async def _revoke(self, provider_org_id, user_id):
         current = self.store.memberships.get((provider_org_id, user_id))
         if current is None:
             raise errors.NotFound("no such member")
@@ -115,7 +145,16 @@ class FakeIdentity:
             self.store.memberships[(provider_org_id, user_id)] = current
         return self._member(current)
 
-    async def create_provider(self, slug, display_name, created_by):
+    async def create_provider(self, slug, display_name, created_by, administrator, claim):
+        async def write():
+            provider, created = await self._create(slug, display_name, created_by)
+            admin = None if administrator is None else (await self._grant(
+                provider.provider_org_id, administrator, "administrator", created_by))[0]
+            return provider, admin, created
+        (provider, admin, created), replayed = await self._once(claim, write)
+        return provider, admin, created and not replayed
+
+    async def _create(self, slug, display_name, created_by):
         provider = self.providers.get(slug)
         created = provider is None
         if created:
@@ -185,11 +224,12 @@ def seed_pg(conn) -> None:
 
 class PgWorld:
     name = "pg"
+    STORES = {"pg": functions.PgIdentity, "pg-direct": session.PgIdentity}
 
-    def __init__(self, conn, dsn: str) -> None:
+    def __init__(self, conn, dsn: str, store: str = "pg") -> None:
         self.conn = conn
         self.stub = stub()
-        self.identity = PgIdentity(connector(dsn))
+        self.identity = self.STORES[store](connector(dsn))
         self.access = LabAccess(PgAccessStore(connector(dsn)))
 
     @staticmethod

@@ -64,7 +64,7 @@ class Captcha(api.Wire):
     """LR-02: whether the password doors need a challenge, and the widget a form renders."""
 
     required: bool
-    provider: Literal["hcaptcha", "turnstile"] | None = None
+    provider: str | None = None              # `auth_facade.CAPTCHA_PROVIDERS`
     site_key: str | None = None
     state: api.Availability
 

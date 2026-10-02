@@ -31,6 +31,7 @@ S = "console/session.py"
 M = "gateway/routes/console_me.py"
 W = "gateway/routes/lab_workspaces.py"
 OP = "gateway/routes/operator_providers.py"
+ID = "state/identity.py"
 
 SIGN_IN = "test_auth__sign_in_answers_tokens_in_the_body_no_store"
 ENUMERATION = "test_auth__a_wrong_password_and_an_unknown_email_read_the_same"
@@ -67,7 +68,13 @@ MUTATION_GUARDS = "test_identity__member_mutations_need_an_idempotency_key_and_t
 OPERATOR_CREATES = "test_identity__an_operator_creates_a_provider_once"
 ONLY_OPERATOR = "test_identity__only_an_operator_creates_providers"
 NEMO = "test_identity_pg__an_existing_provider_is_never_reassigned"
-FAKE_ONLY, PG_ONLY = (KEY_DOOR, MUTATION_GUARDS, ONLY_OPERATOR), (NEMO,)
+REUSED = "test_identity__a_reused_key_with_another_request_is_409_and_writes_nothing"
+REPLAY = "test_identity__a_replay_answers_the_first_outcome_and_never_redoes_it"
+REFUSED = "test_identity__a_refused_mutation_claims_no_key"
+CLAIMED = "test_identity_pg__a_first_mutation_is_one_finished_operation_under_its_key"
+LAB_LOGIN = "test_identity_pg__the_lab_login_runs_the_identity_doors_and_reads_no_table"
+FAKE_ONLY = (KEY_DOOR, MUTATION_GUARDS, ONLY_OPERATOR)
+PG_ONLY = (NEMO, CLAIMED, LAB_LOGIN)
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- 01a: the facade ---------------------------------------------------------------------
@@ -202,11 +209,17 @@ MUTANTS: tuple[Mutant, ...] = (
        W, "ProviderCapability.manage_members)", "ProviderCapability.read_aggregate_health)",
        ONLY_ADMIN),
     _m("self_grant", "no one grants themself (no self-elevation)",
-       W, "        if user_id == actor.user_id:\n", "        if False:\n", ONLY_ADMIN),
+       W, "        if user_id == claim.actor.user_id:\n", "        if False:\n", ONLY_ADMIN),
     _m("self_revoke", "no one revokes themself",
-       W, "        if str(user_id) == actor.user_id:\n", "        if False:\n", ONLY_ADMIN),
+       W, "        if str(user_id) == claim.actor.user_id:\n", "        if False:\n", ONLY_ADMIN),
     _m("mutation_without_key", "R270: a member mutation carries an Idempotency-Key",
-       W, "        idempotency_key(request)\n", "", MUTATION_GUARDS),
+       W, "        key = idempotency_key(request)\n",
+       '        key = request.headers.get("idempotency-key", "")\n', MUTATION_GUARDS),
+    _m("hash_ignores_the_body", "R270: the same key with another body is 409, never a replay",
+       W, '{"provider_org_id": provider_org_id, **doc}', '{"provider_org_id": provider_org_id}',
+       REUSED),
+    _m("one_scope_for_every_action", "the key is scoped to the action: grant != revocation",
+       W, '"lab.member_revoke",', '"lab.member_grant",', REUSED),
     _m("replay_reads_created", "a retried grant answers 200, the first 201",
        W, "return control.ok(member, 201 if created else 200)",
        "return control.ok(member, 201)", ADMIN_ADDS),
@@ -219,9 +232,10 @@ MUTANTS: tuple[Mutant, ...] = (
        S, 'operator=audience == "operator")', 'operator=audience != "session")',
        ONLY_OPERATOR),
     _m("onboarding_without_key", "R270: onboarding carries an Idempotency-Key",
-       OP, "        idempotency_key(request)\n", "", ONLY_OPERATOR),
-    _m("first_admin_is_a_developer", "the first member is the provider's administrator",
-       OP, 'admin, "administrator", by))[0]', 'admin, "developer", by))[0]', OPERATOR_CREATES),
+       OP, "actor, idempotency_key(request),", 'actor, request.headers.get("idempotency-key", ""),',
+       ONLY_OPERATOR),
+    _m("onboarding_hash_ignores_the_body", "another provider under the same key is 409",
+       OP, "input_hash(body.model_dump(mode=\"json\")))", "input_hash({}))", REUSED),
 )
 
 #: `PgIdentity`'s SQL and rules, killed on PostgreSQL by the same world cases (`-m pg`).
@@ -235,25 +249,48 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("pg_account_never_operator", "the operator bit is profiles.is_operator",
        S, "select p.is_operator,", "select false,", ME_STATES),
     _m("pg_email_case_sensitive", "addresses fold case, as the auth server's do",
-       S, "where lower(email) = lower(%s)", "where email = %s", ADMIN_ADDS),
+       S, "where lower(email) = lower(%(email)s)", "where email = %(email)s", ADMIN_ADDS),
     _m("pg_role_change_overwrites", "another current role is a 409, never an update",
-       S, "        if member.role != role:\n", "        if False:\n", ADMIN_ADDS),
+       ID, "        if member.role != role:\n", "        if False:\n", ADMIN_ADDS),
     _m("pg_retry_reads_created", "a retry finds the first grant's row",
-       S, "created = bool(await self._rows(GRANT,", "created = True or bool(await self._rows(GRANT,",
-       ADMIN_ADDS),
+       S, "created = bool(await fetch(conn, GRANT, a))", "created = True", ADMIN_ADDS),
+    _m("pg_grant_always_created", "a grant reads created only when its statement made it",
+       ID, "return member, row[6]", "return member, True", ADMIN_ADDS),
     _m("pg_revocation_in_the_future", "a revocation takes effect at once",
        S, "set revoked_at = greatest(infrx.now(), granted_at)",
        "set revoked_at = greatest(infrx.now(), granted_at) + interval '1 day'", REVOKED),
     _m("pg_revoked_listed", "the members list is the current members",
        S, "and m.revoked_at is null order by", "order by", REVOKED),
     _m("pg_repeat_revocation_refused", "a repeated revocation answers the same row",
-       S, "        if not latest:\n            raise errors.NotFound(\"no such member\")",
-       "        if True:\n            raise errors.NotFound(\"no such member\")", REVOKED),
+       S, "        return next(iter(await fetch(conn, LATEST, a)), None)",
+       "        return next(iter(await fetch(conn, MEMBERS, a)), None)", REVOKED),
     _m("pg_existing_provider_renamed_through", "an existing slug under another name is 409",
-       S, "        if provider.display_name != display_name:\n", "        if False:\n",
-       OPERATOR_CREATES, NEMO),
+       ID, "            if provider.display_name != display_name:\n", "            if False:\n",
+       OPERATOR_CREATES),
     _m("pg_provider_retry_reads_created", "a retried onboarding answers 200",
-       S, "return provider, bool(made)", "return provider, True", OPERATOR_CREATES, NEMO),
+       S, "                bool(made))", "                True)", OPERATOR_CREATES),
+    _m("pg_provider_always_created", "onboarding reads created only when it made the row",
+       ID, '"created": row[5],', '"created": True,', OPERATOR_CREATES, NEMO),
+    _m("first_admin_is_a_developer", "the first member is the provider's administrator",
+       ID, '"by": created_by}, "administrator"))[0]', '"by": created_by}, "developer"))[0]',
+       OPERATOR_CREATES, LAB_LOGIN),
+    # --- the Idempotency-Key bound to 0060 (API-KEYGRANT) -------------------------------------
+    _m("pg_replay_redoes_the_write", "a replay answers the first outcome, never writes again",
+       ID, '                        if started["replayed"]:\n',
+       "                        if False:\n", REPLAY),
+    _m("pg_refusal_claims_the_key", "a refused write stores no outcome under its key",
+       ID, "                        if refusal is not None:\n                            raise "
+          "refusal\n", "", REFUSED),
+    _m("pg_operation_left_unfinished", "the claim's operation finishes succeeded",
+       ID, '"state": "succeeded"})', '"state": "cancelled"})', CLAIMED),
+    _m("pg_replay_reads_created", "a replayed grant answers 200",
+       ID, 'outcome["created"] and not replayed\n', 'outcome["created"]\n', ADMIN_ADDS),
+    _m("pg_provider_replay_reads_created", "a replayed onboarding answers 200",
+       ID, 'outcome["created"] and not replayed)', 'outcome["created"])', OPERATOR_CREATES),
+    _m("pg_scope_is_the_admins_org", "a member mutation's key is the workspace's",
+       W, 'actor.model_copy(update={"provider_org_id": provider_org_id})', "actor", CLAIMED),
+    _m("pg_hash_without_the_path", "the input hash covers the workspace in the path",
+       W, '{"provider_org_id": provider_org_id, **doc}', "doc", CLAIMED),
 )
 
 
