@@ -57,7 +57,7 @@ export default async function Settings() {
             </Fragment>
           ))}
         </dl>
-        <p className={s.muted}>This page does not check services yet. Each page says when its own service couldn't be reached; this is not an uptime monitor.</p>
+        <p className={s.muted}>This page does not check services yet. Each page says when its own service could not be reached; this is not an uptime monitor.</p>
       </section>
     </>
   );
