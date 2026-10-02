@@ -28,8 +28,12 @@ for pair in "$@"; do
 done
 b64=$( { printf '%s' "$header"; cat -- "$step"; } | base64 -w0)
 . "$(dirname "${BASH_SOURCE[0]}")/host-lib.sh"
-params=$(printf '{"commands":["echo %s | base64 -d > /root/infrx-step.sh && bash /root/infrx-step.sh; rc=$?; rm -f /root/infrx-step.sh; exit $rc"],"executionTimeout":["%s"]}' \
-         "$b64" "${TIMEOUT_S:-3600}")
+# One file per invocation: two steps in flight at once (the E4C window plus a read-only
+# peek) once shared /root/infrx-step.sh - the second truncated the inode the first's bash was
+# still reading, so the first exited 0 mid-script (E4C run 2 prep76, 2026-10-02T00:01Z).
+f=/root/infrx-step.$(date -u +%Y%m%dT%H%M%SZ).$$.sh
+params=$(printf '{"commands":["echo %s | base64 -d > %s && bash %s; rc=$?; rm -f %s; exit $rc"],"executionTimeout":["%s"]}' \
+         "$b64" "$f" "$f" "$f" "${TIMEOUT_S:-3600}")
 id=$(aws ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \
        --comment "infrx rollout $(basename "$step")" --timeout-seconds 600 \
        --parameters "$params" --query Command.CommandId --output text)

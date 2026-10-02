@@ -105,7 +105,7 @@ def test_backend_deploy__ssm_carries_a_step_byte_for_byte(tmp_path):
     assert send[send.index("--instance-ids") + 1] == "i-0e8449a4ffca29bab"
     assert send[send.index("--document-name") + 1] == "AWS-RunShellScript"
     command = json.loads(send[send.index("--parameters") + 1])["commands"][0]
-    wrapped = re.fullmatch(r"echo (\S+) \| base64 -d > /root/infrx-step.sh && .*", command)
+    wrapped = re.fullmatch(r"echo (\S+) \| base64 -d > (/root/infrx-step\.\d{8}T\d{6}Z\.\d+\.sh) && bash \2; .*rm -f \2; .*", command)
     assert wrapped, command
     assert base64.b64decode(wrapped.group(1)) == b"export RELEASE=abc123\n" + step.read_bytes()
 
