@@ -335,7 +335,7 @@ def test_api_ops__the_operations_service_runs_on_the_postgres_adapters() -> None
             pins.deployment_revision_id == IDS_PROD, (pins, card)
         adjusted = await op.adjust(cc.CONSUMER_1, "5.00000000", idempotency_key="a1", reason=R)
         assert await op.adjust(cc.CONSUMER_1, "5.00000000", idempotency_key="a1",
-                               reason=R) == adjusted
+                               reason=R) == {**adjusted, "replayed": True}   # E4C H5: a replay says so
         assert (await tenant.balance()).available == before + Credit("5.00000000")
         await op.set_suspension(org, "abuse", idempotency_key="s1", reason=R)
         with pytest.raises(errors.OrgSuspended):

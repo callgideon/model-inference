@@ -12,7 +12,6 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from infrx.console import session as identity
 from infrx.state import migrations
 
 from ..ap01 import worlds as w
@@ -55,6 +54,28 @@ def _can(conn, role: str, fn: str) -> bool:
 
 
 # ------------------------------------------------------------------------ 0065 checks
+# The platform-role reference the doors are compared with. Until the 0065 merge this was
+# `infrx.console.session`'s direct-table SQL (deleted by WR-AP01-5: PgIdentity now calls the
+# doors themselves), so the check keeps its own copy — a door compared with itself kills
+# no mutant.
+REFERENCE_ACCOUNT = """
+select p.is_operator, v.verification_evidence_ref is not null,
+       coalesce(w.personal_org_id, v.personal_org_id)::text, w.wallet_id is not null,
+       coalesce(o.suspended, false), e.amount::text, e.granted_at
+  from public.profiles p
+  cross join lateral infrx.verified_user(p.id) v
+  left join infrx.credit_wallets w on w.owner_user_id = p.id and w.kind = 'consumer'
+  left join public.organizations o on o.id = coalesce(w.personal_org_id, v.personal_org_id)
+  left join infrx.signup_entitlements e
+         on e.user_id = p.id and e.entitlement = 'initial_signup_grant'
+ where p.id = %s::uuid"""
+REFERENCE_MEMBERS = (
+    "select m.user_id::text, p.email, m.role, m.granted_by, m.granted_at, m.revoked_at "
+    "from infrx.provider_memberships m join public.profiles p on p.id = m.user_id "
+    "where m.provider_org_id = %s::uuid and m.revoked_at is null "
+    "order by m.granted_at, m.membership_id")
+
+
 def check_the_identity_doors_answer_as_the_platform_sql(conn) -> str:
     """SR-AP01-1: on the control login, the account, email and member reads give exactly what
     PgIdentity's platform-role statements give for every person of AP-01's world - verified,
@@ -62,7 +83,7 @@ def check_the_identity_doors_answer_as_the_platform_sql(conn) -> str:
     nobody; a provider lists only its current members."""
     for user in [*w.USERS, w._id(98)]:
         door = as_login(conn, "select * from infrx.identity_account(%s)", (user,))
-        platform = conn.execute(identity.ACCOUNT, (user,)).fetchall()
+        platform = conn.execute(REFERENCE_ACCOUNT, (user,)).fetchall()
         assert [tuple(str(v) if i == 2 and v else v for i, v in enumerate(r)) for r in door] \
             == platform, (user, door, platform)
     for email, want in ((w.EMAIL[w.DEV_A].upper(), w.DEV_A), (w.EMAIL[w.CONSUMER], None),
@@ -71,7 +92,7 @@ def check_the_identity_doors_answer_as_the_platform_sql(conn) -> str:
         assert got == [(want,)], (email, got)
     for provider in (w.A, w.B, w.NEMO):
         door = as_login(conn, "select * from infrx.identity_members(%s)", (provider,))
-        platform = conn.execute(identity.MEMBERS, (provider,)).fetchall()
+        platform = conn.execute(REFERENCE_MEMBERS, (provider,)).fetchall()
         assert [(str(r[0]), *r[1:]) for r in door] == platform, (provider, door)
     return f"{len(w.USERS) + 1} accounts, 3 emails, 3 member lists = the platform SQL"
 

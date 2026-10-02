@@ -117,6 +117,9 @@ def pilotbox_module(monkeypatch):
     """E3B's pilot box (tests/integration/backend/pilotbox.py), as its own suite loads it."""
     backend = REPO / "tests" / "integration" / "backend"
     monkeypatch.syspath_prepend(str(backend))
+    # A full api-test run may already hold another suite's `stack` module (apps/lab/tests/e2e,
+    # apps/app/tests/c/feedback): pilotbox's `import stack` must resolve to backend/stack.py.
+    monkeypatch.delitem(sys.modules, "stack", raising=False)
     spec = importlib.util.spec_from_file_location("infrx_i2b_pilotbox", backend / "pilotbox.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
