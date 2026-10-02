@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """R32/R40/R83: every decision `tests/ap07` claims is killed by a named single edit.
 
-    INFRX_D_TASK=ap7 uv run --frozen pytest -q tests/ap07/test_mutants.py                    # subset
-    INFRX_D_TASK=ap7 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap07/test_mutants.py
+    uv run --frozen pytest -q tests/ap07/test_mutants.py                    # subset, fake half
+    INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap07/test_mutants.py
 """
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per invariant group (who decides, capture, grants, the projection).
 SUBSET = ("any_member_decides", "head_is_the_key_mode", "every_purpose_granted",
           "lapse_reads_metadata", "cursor_crosses_filters")
-SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
+SELECTED = tuple(m for m in (ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET))
+                 if mutation_list.PG or m.name not in mutation_list.PG_ONLY)
 
 
 def test_the_list_is_well_formed():
@@ -41,7 +42,7 @@ def test_every_case_is_covered_by_a_mutant():
 
 def test_the_named_cases_pass_on_the_pristine_tree():
     """R83 (b): a case that fails on its own would 'kill' every mutant naming it."""
-    cases = tuple(sorted({case for mutant in ALL for case in mutant.cases}))
+    cases = tuple(sorted({case for mutant in SELECTED or ALL for case in mutant.cases}))
     assert shared.pristine(cases, mutation_list.RUNNER) is None
 
 

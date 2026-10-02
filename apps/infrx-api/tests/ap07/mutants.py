@@ -3,15 +3,17 @@
 Lab trace projection claim, each killed by a named case of `tests/ap07`.
 
 The shared runner, one mutant at a time in a throwaway copy after a pristine baseline. The
-data-use cases are PostgreSQL's (the copy inherits `INFRX_D_TASK`; without Docker they skip and
-the runner reports `misdeclared`, never a pass).
+copies run the fake half of every `world` case; the PostgreSQL half (all of `test_data_use`)
+runs there only on request (`INFRX_AP7_PG=1`, the copy then inheriting `INFRX_D_TASK`) - inside
+a whole-suite run the parent process holds the key's container, so the PG-only mutants are
+selected only then (`PG_ONLY`).
 
-    INFRX_D_TASK=ap7 uv run --frozen pytest -q tests/ap07/test_mutants.py
-    INFRX_D_TASK=ap7 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap07/test_mutants.py
-    INFRX_D_TASK=ap7 uv run --frozen python -m tests.ap07.mutants --list
+    uv run --frozen pytest -q tests/ap07/test_mutants.py                                  # subset
+    INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap07/test_mutants.py
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 
@@ -184,7 +186,12 @@ def case_names() -> set[str]:
             for name in re.findall(r"^def (test_\w+)\(", (API_DIR / path).read_text(), re.M)}
 
 
-RUNNER = Runner(name="ap07", targets=SUITE_FILES, layout=_layout, env=("INFRX_D_TASK", "INFRX_D1_IMAGE"))
+PG = os.environ.get("INFRX_AP7_PG") == "1"
+#: Every case they name is PostgreSQL's (`test_data_use` is `pg` throughout).
+PG_ONLY = tuple(m.name for m in MUTANTS if all(c.startswith(U) for c in m.cases))
+RUNNER = Runner(name="ap07", targets=SUITE_FILES, layout=_layout,
+                env=("INFRX_D_TASK", "INFRX_D1_IMAGE") if PG else (),
+                extra_args=() if PG else ("-m", "not pg"))
 
 
 def run_mutant(mutant: Mutant) -> Result:
