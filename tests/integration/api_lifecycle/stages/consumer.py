@@ -385,7 +385,7 @@ def s12(ctx) -> None:
             if g.get("provider_org_id") == provider), default=0)
     grant = ctx.mutate("12.grant", "POST", "/console/v1/data-grants", actor=web, json={
         "provider_org_id": provider, "model_ids": [ctx.config["model_uuid"]],
-        "categories": ["request_content", "response_content"],
+        "categories": ["request_content", "response_content", "feedback"],   # 16 reviews it
         "purposes": ["provider_sharing", "external_judging"], "retention_days": 30,
         "grant_version": ctx.pinned("12.grant_version", current)},
         extract=lambda r: {"status": r.status_code, **_pick(r, "grant_id", "version", "state")})

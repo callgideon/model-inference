@@ -316,6 +316,7 @@ def console(fake, request, method, path, web, key, query):
         grant_id = str(uuid.uuid4())
         fake.grants[grant_id] = {"org": org, "version": body["grant_version"] + 1,
                                  "state": "active", "purposes": body["purposes"],
+                                 "categories": body["categories"],
                                  "provider_org_id": body["provider_org_id"]}
         return _ok(201, {"grant_id": grant_id, **fake.grants[grant_id]})
     if path == "/console/v1/data-grants":
@@ -437,6 +438,9 @@ def judge(fake, request, method, path, key, query):
         return _ok(body={"state": "calibrated" if calibrated else "insufficient",
                          "labels": 1, "required": 1 if calibrated else 20})
     if path.endswith("/reviews"):
+        if not any(g["state"] == "active" and "feedback" in g["categories"]
+                   for g in fake.grants.values()):          # 0064's lab_review_request_org
+            return _refused(404, "not_found")
         review = fake.objects.setdefault(("review", key if "review_twice" not in d
                                           else uuid.uuid4()), str(uuid.uuid4()))
         fake.objects.setdefault("reviews", {})[review] = path.split("/")[4]

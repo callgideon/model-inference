@@ -412,6 +412,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '              after.get("request_id") == out["request_id"] and "content" not in after\n'
        '              and after.get("access") == "metadata" and after.get("access_state") == "revoked",',
        '              after.get("request_id") == out["request_id"],', DEFECT),
+    _m("grant_without_feedback", "12's grant covers the feedback 16 reviews", C,
+       '        "categories": ["request_content", "response_content", "feedback"],',
+       '        "categories": ["request_content", "response_content"],', SERVED),
     _m("payer_not_version_4", "14's payer ref is 0029's lab ref (version-4 ids)", L,
        "payer_id = uuid.UUID(bytes=seed.digest()[:16], version=4)",
        "payer_id = uuid.uuid5(uuid.NAMESPACE_URL, seed.hexdigest())", SERVED),
