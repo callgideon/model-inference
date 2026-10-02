@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // UX lane mutant runner (R32; UX-00/01/02): every decision the UXA (foundations), UXR (UX-T01 truthful
-// retention) and UXN (UX-T02 mobile navigation) cases claim is one edit that a case it names must fail
+// retention), UXN (UX-T02 mobile navigation) and UXM (UX-11 matrix runner) cases claim is one edit that a case it names must fail
 // by ASSERTION. A stale `find`, a copy that fails to load, a failure only by exception or only in an
 // undeclared case is not a kill; every UXA/UXR/UXN case must be named by a mutant.
 //
@@ -17,10 +17,13 @@ import { fileURLToPath } from "node:url";
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
-const m = (id, what, file, find, replace, cases) => ({ id, what, file, find, replace, cases });
+const m = (id, what, file, find, replace, cases, suite = SUITE) => ({ id, what, file, find, replace, cases, suite });
 
 const SUITE = ["tests/ux/foundations.test.ts", "tests/ux/retention.test.ts", "tests/ux/shell/navigation.test.ts"];
-const PREFIX = /^UX[ARN]-\S+ /;
+// The UXM cases are pure: their mutants run only the matrix suite (no harness server per mutant).
+const MATRIX = ["tests/ux/matrix/matrix.test.ts"];
+const PREFIX = /^UX[ARNM]-\S+ /;
+const RUNNER = "tests/ux/matrix/run-matrix.mjs";
 
 const CONTENT = "app/(console)/docs/content.ts";
 const MODEL = "lib/contracts/v2/published-model.ts";
@@ -43,6 +46,15 @@ const C = {
   n04: "UXN-04 growing to desktop closes the open menu and leaves the persistent navigation usable",
   n05: "UXN-05 desktop: a skip link first, the nav in the agreed order, aria-current on the page, Docs internal",
   n06: "UXN-06 a long email, an unreadable balance and the operator entry fit the menu and the sidebar without overflow",
+  m01: "UXM-01 TAP: ok, not ok, SKIP and TODO are read; an escaped hash-SKIP inside a name is not a directive",
+  m02: "UXM-02 a declared-blocked part is BLOCKED with its cause and the lane that unblocks it, whatever a run says",
+  m03: "UXM-03 a part whose suite has not merged is BLOCKED naming the lane and the missing path",
+  m04: "UXM-04 a skip is never a pass: no case, or only skipped cases, is BLOCKED",
+  m05: "UXM-05 a failed case, or a suite that exits non-zero, is FAIL",
+  m06: "UXM-06 a part's match selects its cases: unmatched cases neither pass nor block it",
+  m07: "UXM-07 the verdict ranks FAIL > INVALID > BLOCKED > PASS; a dirty tree is INVALID; a dangling fixture fails it",
+  m08: "UXM-08 a fixture reference is COVERED only when its file exists and holds its symbol; a gap stays a GAP",
+  m09: "UXM-09 the matrix declares T01..T13 once each; every part names a lane and either suite paths or its blocking cause",
 };
 
 const MUTANTS = [
@@ -71,6 +83,22 @@ const MUTANTS = [
   m("UXN-X13", "the operator entry disappears", NAV, "{isOperator ? (", "{false ? (", [C.n06]),
   m("UXN-X14", "a long email widens the navigation", NAV, '<span className="min-w-0 flex-1 truncate">{email}</span>', '<span className="flex-1 whitespace-nowrap">{email}</span>', [C.n06]),
   m("UXN-X15", "an unreadable balance is not stated", NAV, "{balance === null ? (", "{false ? (", [C.n06]),
+  m("UXM-X01", "a skipped case counts as run", RUNNER, "skipped: directive !== undefined,", "skipped: false,", [C.m01, C.m04], MATRIX),
+  m("UXM-X02", "a TODO directive is read as a failure", RUNNER, "(SKIP|TODO)", "(SKIP)", [C.m01], MATRIX),
+  m("UXM-X03", "only top-level TAP lines are read: nested cases vanish", RUNNER, "/^ *(not )?ok", "/^(not )?ok", [C.m01], MATRIX),
+  m("UXM-X04", "a declared-blocked part runs anyway", RUNNER, "  if (part.blocked) return { status", "  if (false) return { status", [C.m02], MATRIX),
+  m("UXM-X05", "the blocked cause drops the unblocking lane", RUNNER, "cause: `${part.blocked} (unblocks: ${part.lane})`", "cause: part.blocked", [C.m02], MATRIX),
+  m("UXM-X06", "an unmerged suite is not named", RUNNER, "if (run.missing.length > 0) return", "if (false) return", [C.m03], MATRIX),
+  m("UXM-X07", "no case run reads as PASS", RUNNER, "if (counts.passed === 0) return", "if (false) return", [C.m04], MATRIX),
+  m("UXM-X08", "a non-zero exit with no failed case passes", RUNNER, "if (failed > 0 || run.code !== 0)", "if (failed > 0)", [C.m05], MATRIX),
+  m("UXM-X09", "a failed case is not FAIL", RUNNER, "if (failed > 0 || run.code !== 0)", "if (run.code !== 0)", [C.m05], MATRIX),
+  m("UXM-X10", "a part's match is ignored", RUNNER, "const match = part.match ? new RegExp(part.match) : null;", "const match = null;", [C.m06], MATRIX),
+  m("UXM-X11", "INVALID ranks below BLOCKED", RUNNER, 'export const RANK = ["PASS", "BLOCKED", "INVALID", "FAIL"];', 'export const RANK = ["PASS", "INVALID", "BLOCKED", "FAIL"];', [C.m07], MATRIX),
+  m("UXM-X12", "a dirty tree still yields a verdict for the SHA", RUNNER, '...(dirty ? ["INVALID"] : []),', "", [C.m07], MATRIX),
+  m("UXM-X13", "a dangling fixture reference is ignored", RUNNER, '...(fixtures.some((f) => f.status === "DANGLING") ? ["FAIL"] : []),', "", [C.m07], MATRIX),
+  m("UXM-X14", "a fixture file that exists counts without its symbol", RUNNER, ' && readFileSync(file, "utf8").includes(entry.contains)', "", [C.m08], MATRIX),
+  m("UXM-X15", "a gap reads as covered", RUNNER, 'if (entry.gap) return "GAP";', 'if (entry.gap) return "COVERED";', [C.m08], MATRIX),
+  m("UXM-X16", "the matrix loses a journey", "tests/ux/matrix/matrix.json", '      "id": "T13",', '      "id": "T13b",', [C.m09], MATRIX),
   m("UXR-X09", "an expired result claims its content was removed", PANEL, '"This result is no longer available. Request status and usage remain available."', "\"The result expired and its content was removed. The request's details and charge stay on this page.\"", [C.r07]),
 ];
 
@@ -86,9 +114,9 @@ function failed(out) {
   return cases;
 }
 
-function tap(cwd) {
+function tap(cwd, suite) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", ...SUITE], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, ["--test", "--test-reporter=tap", ...suite], { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (c) => (out += c));
     child.stderr.on("data", (c) => (out += c));
@@ -108,7 +136,7 @@ async function judge(mutant) {
     symlinkSync(join(app, "node_modules"), join(copy, "node_modules"), "dir");
     symlinkSync(resolve(app, "../infrx-api"), join(root, "apps/infrx-api"), "dir");
     writeFileSync(join(copy, mutant.file), pristine.replace(mutant.find, () => mutant.replace));
-    const { code, out } = await tap(copy);
+    const { code, out } = await tap(copy, mutant.suite);
     if (code === 0) return "SURVIVED (suite passed)";
     const fails = failed(out);
     if (fails.some((f) => /\.test\.ts$/.test(f.name))) return "RUNNER-ERROR (a test file did not load)";
@@ -120,7 +148,7 @@ async function judge(mutant) {
 }
 
 const declared = new Set(MUTANTS.flatMap((x) => x.cases));
-const baseline = await tap(app);
+const baseline = await tap(app, [...SUITE, ...MATRIX]);
 const passed = [...baseline.out.matchAll(/^ *ok \d+ - (.*)$/gm)].map((x) => x[1].trim());
 const cases = passed.filter((name) => PREFIX.test(name));
 const problems = [

@@ -1,0 +1,31 @@
+{
+  "task": "UX-11",
+  "lane": "ux-verify",
+  "slice": "UX-11 preparation complete (T01–T13 matrix runner + fixture register, UXM cases + 16 mutants, acceptance-report skeleton, prep run on the merged UX-00/01/02/04)",
+  "activity": "review",
+  "at": "2026-10-02T03:30:00Z",
+  "head": "e7a0961e",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-ux-verify",
+  "branch": "codex/w7-ux-verify",
+  "owned_paths": [
+    "apps/app/tests/ux/matrix/",
+    "apps/app/tests/ux/run-mutants.mjs",
+    "research/plan/evidence/ux/",
+    "research/plan/evidence/w7/ux-verify-e7a0961.md",
+    "research/plan/evidence/coordinator/updates/UX-11-20261002T0330Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/matrix/matrix.test.ts (before run-matrix.mjs)", "exit": 1, "summary": "red: ERR_MODULE_NOT_FOUND run-matrix.mjs"},
+    {"cmd": "node apps/app/tests/ux/matrix/run-matrix.mjs --out research/plan/evidence/ux/matrix-e7a0961.json", "exit": 3, "summary": "BLOCKED on a clean tree: 6 parts PASS, 21 BLOCKED with owners, 0 FAIL; fixtures 29 covered, 12 gaps, 0 dangling"},
+    {"cmd": "cd apps/app && node tests/ux/run-mutants.mjs", "exit": 0, "summary": "24 cases all named; 42 mutants, 42 killed (16 new UXM)"},
+    {"cmd": "make console-test", "exit": 0, "summary": "701 tests, 642 pass, 0 fail, 59 skipped"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "all preparation slices green; remaining = review findings and re-pointing matrix.json parts if batch-2 lanes merge suites under other directories; final acceptance (batch 3) separate at 4/6/10", "at": "2026-10-02T03:30:00Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-UXV-1 (optional) Makefile: `ux-matrix:` target running `node apps/app/tests/ux/matrix/run-matrix.mjs $(UX_MATRIX_ARGS)` outside check (composed: exits 3 BLOCKED at e7a0961e, 0 FAIL)"],
+  "evidence": ["research/plan/evidence/w7/ux-verify-e7a0961.md", "research/plan/evidence/ux/acceptance-skeleton.md", "research/plan/evidence/ux/matrix-e7a0961.json"]
+}
