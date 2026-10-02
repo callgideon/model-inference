@@ -158,3 +158,16 @@ def test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_b
     ready_s = journal.READY_TIMEOUT_MS / 1000
     assert connect_s + ready_s < readiness.PROBE_TIMEOUT_S
     assert journal.READY_TIMEOUT_MS < DEPLOYMENT_DEFAULTS.database_pool_statement_timeout_ms
+
+
+def test_probe_wiring__the_pilot_composes_the_journal_probe_on_ready():
+    """WR-PROBE-1 composed: `pilot`'s names are `readiness`'s objects, and the journal probe
+    `build_ingress_deps` registers answers from `ready()` while `usage()` hangs. Oracle: the
+    base's `journal_check` (on `usage()`) reads False here."""
+    from infrx.gateway import pilot
+
+    assert (pilot.Probe, pilot.journal_check, pilot.PROBE_TIMEOUT_S) == (
+        readiness.Probe, readiness.journal_check, readiness.PROBE_TIMEOUT_S)
+    stream = Stream()
+    assert pilot.Probe(pilot.journal_check(stream), timeout_s=0.5)() is True
+    assert stream.asked == ["ready"]

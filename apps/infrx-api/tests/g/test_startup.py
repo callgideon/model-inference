@@ -189,7 +189,7 @@ def pilot_app(config=None, routers=None):
     from unittest import mock
 
     world = relay_support.World()
-    world.stream.usage = lambda: asyncio.sleep(0, {})
+    world.stream.ready = lambda: asyncio.sleep(0, True)
     with mock.patch.object(composition, "ROUTERS", routers or composition.ROUTERS):
         return composition.create_app(
             config if config is not None else support.settings(), client=support.upstream(),
@@ -261,7 +261,7 @@ def test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_en
 
     def composed(on):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         config = support.settings(deployment=dataclasses.replace(support.BUILD, feedback_api=on))
         return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
                                       clock=world.now_s, catalog=world.catalog,
@@ -301,7 +301,7 @@ def test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enab
 
     def composed(on, export=Stub()):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         config = support.settings(deployment=dataclasses.replace(support.BUILD,
                                                                  trace_export_api=on))
         return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
@@ -342,7 +342,7 @@ def test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables
 
     def composed(**on):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
         return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
                                       clock=world.now_s, catalog=world.catalog,
@@ -430,7 +430,7 @@ def test_rollout_routing__admission_is_routed_only_when_the_deployment_enables_i
 
     def composed(on, router):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         world.during.append(lambda: world.clock.advance(3_600))    # a wait ends, never hangs
         config = support.settings(deployment=dataclasses.replace(support.BUILD,
                                                                  rollout_routing=on))
@@ -514,7 +514,7 @@ def test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enable
 
     def composed(**on):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
         return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
                                       clock=world.now_s, catalog=world.catalog,
@@ -849,7 +849,7 @@ def test_lab_data__the_datasets_and_checkpoint_routes_are_mounted_only_when_enab
 
     def composed(**on):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
         return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
                                       clock=world.now_s, catalog=world.catalog,

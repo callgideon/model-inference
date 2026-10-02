@@ -38,7 +38,7 @@ class Stub:
 
 def composed(**overrides):
     world = relay_support.World()
-    world.stream.usage = lambda: asyncio.sleep(0, {})
+    world.stream.ready = lambda: asyncio.sleep(0, True)
     on = {k: overrides.pop(k) for k in ("console_data_use",) if k in overrides}
     config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
     return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
