@@ -1,0 +1,57 @@
+{
+ "task": "UX-09",
+ "slice": "L-09/L-10 Review page header + catalog; training records gate (SR-AP10-2), lookup-only action for ambiguous runs, teacher section independent",
+ "owned_paths": [
+  "apps/lab/app/(provider)/annotations/",
+  "apps/lab/app/(provider)/training/",
+  "apps/lab/tests/ux/improve/"
+ ],
+ "commands": [
+  {
+   "cmd": "make lab-test",
+   "exit": 0,
+   "summary": "306 tests, 292 pass, 0 fail, 14 pre-existing skips (base 286; +20)"
+  },
+  {
+   "cmd": "make lab-lint lab-typecheck lab-build",
+   "exit": 0,
+   "summary": "clean; build OK"
+  },
+  {
+   "cmd": "cd apps/lab && node tests/ux/improve/run-mutants.mjs",
+   "exit": 0,
+   "summary": "static 15 cases 38/38 killed; browser 5 cases 12/12 killed (X44 rewritten, rerun --only)"
+  },
+  {
+   "cmd": "cd apps/lab && node tests/{p,n,l/shell,ux}/run-mutants.mjs",
+   "exit": 0,
+   "summary": "220/220, 45/45, 106/106, 16/16: no anchor stale"
+  },
+  {
+   "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+   "exit": 1,
+   "summary": "7 failed until WR-UXI-1 (7 passed with it applied temporarily)"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 3,
+  "likely_h": 5,
+  "pessimistic_h": 9,
+  "confidence": "medium",
+  "basis": "UI implemented + fixture-verified; remaining: member picker via AP-01 members API, capability gate from AP-09e, real workflow after AP-10e",
+  "at": "20261002T0417Z"
+ },
+ "activity": "review",
+ "head": "07bf1b6d",
+ "lane": "ux-lab-improve",
+ "worktree": ".claude/worktrees/codex-w7-ux-lab-improve",
+ "branch": "codex/w7-ux-lab-improve",
+ "blockers": [],
+ "wiring_requests": [
+  "WR-UXI-1 Makefile lab-mutants: `cd apps/lab && node tests/ux/run-mutants.mjs && node tests/ux/improve/run-mutants.mjs` (test_makefile_mutant_lists.py 7 failed -> 7 passed with it)",
+  "WR-UXI-2 (optional) tests/ux/browser.ts harness(dir = resolve(import.meta.dirname, 'harness')); then delete tests/ux/improve/browser.ts"
+ ],
+ "evidence": [
+  "research/plan/evidence/w7/ux-lab-improve-07bf1b6.md"
+ ]
+}
