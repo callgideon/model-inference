@@ -352,7 +352,7 @@ test(T.expiry, () => {
   assert.equal(expired.kind, "ready");
   if (expired.kind !== "ready") return;
   assert.equal(expired.value.result.access, "expired");
-  assert.match(expired.value.result.note, /expired at 2026-09-20 12:10 UTC/);
+  assert.match(expired.value.result.note, /stopped being available at 2026-09-20 12:10 UTC/);
   // Metadata and charge stay.
   assert.equal(expired.value.charge.amount, "1.23456789 credits");
   assert.equal(expired.value.requestId, ID);

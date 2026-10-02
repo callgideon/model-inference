@@ -100,6 +100,7 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
                           {row.kind}
                         </Link>
                       )}
+                      <span className="block font-mono text-xs text-muted-foreground">{row.code}</span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{row.reason}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.amount}</TableCell>

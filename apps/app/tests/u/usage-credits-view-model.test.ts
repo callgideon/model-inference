@@ -237,11 +237,11 @@ test(T.states, () => {
   assert.equal(stale.firstHref, "/usage");
   const empty = jobsPageModel({ filters: parseJobFilters({}), jobs: page([]) });
   assert.equal(empty.rows.kind, "empty");
-  assert.match(empty.emptyText, /no requests yet/i);
+  assert.match(empty.emptyText, /your requests will appear here/i);
   const emptyWindow = jobsPageModel({ filters: parseJobFilters({ range: "24h" }), jobs: page([]) });
-  assert.match(emptyWindow.emptyText, /last 24h/);
+  assert.match(emptyWindow.emptyText, /match these filters/);
   const emptyFilter = jobsPageModel({ filters: parseJobFilters({ range: "24h", model: "m" }), jobs: page([]) });
-  assert.match(emptyFilter.emptyText, /match this model or key/);
+  assert.match(emptyFilter.emptyText, /match these filters/);
 });
 
 test(T.walk, async () => {

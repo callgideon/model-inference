@@ -128,9 +128,9 @@ function resultNote(access: ReadOutcome, expiresAt: string | null): string {
   const at = expiresAt === null ? "" : instantLabel(expiresAt);
   switch (access) {
     case "available":
-      return `Kept until ${at}. After that the content is removed; this page keeps the request's details and charge.`;
+      return `Readable until ${at}. After that the result is no longer available; this page keeps the request's details and charge.`;
     case "expired":
-      return `The result expired at ${at} and its content was removed. The request's details and charge stay here.`;
+      return `The result stopped being available at ${at}. Request status and usage remain available.`;
     case "pending":
       return "The result appears here when the request finishes.";
     case "held_unknown":
@@ -329,6 +329,20 @@ export function watchExpiry(expiresAt: string, now: () => number, schedule: Sche
   };
   arm();
   return () => cancel();
+}
+
+/**
+ * One clipboard write. A refusal, or no clipboard API at all (an insecure origin), is "failed": the
+ * control then says so instead of claiming the text was copied.
+ */
+export async function copyText(text: string, clipboard: Pick<Clipboard, "writeText"> | undefined): Promise<"copied" | "failed"> {
+  try {
+    if (clipboard === undefined) return "failed";
+    await clipboard.writeText(text);
+    return "copied";
+  } catch {
+    return "failed";
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -67,13 +67,13 @@ const UNAVAILABLE = "Unavailable";
 export function creditFigures(wallet: CreditWallet, spent: Credit | null): CreditFigure[] {
   return [
     {
-      label: "Available",
+      label: "Available to use",
       value: credits(wallet.available),
       hint: "Spendable now: your balance minus what running requests hold.",
       emphasis: true,
     },
     {
-      label: "Reserved",
+      label: "Reserved for requests",
       value: credits(wallet.reservedTotal),
       hint: "Held for requests in progress or awaiting reconciliation. Charged or released when they settle; not spent.",
       emphasis: false,
@@ -140,10 +140,12 @@ export function creditAccountState(wallet: CreditWallet | null): CreditAccountSt
   return { kind: "funded" };
 }
 
+const GRANT = "10,000 promotional credits, granted once after verification.";
+
 export function grantLine(wallet: CreditWallet): string {
   return wallet.signupGrantedAt === null
-    ? "One-time 10,000 credit signup grant: not received yet."
-    : `One-time signup grant of 10,000 credits, received ${instantLabel(wallet.signupGrantedAt)}.`;
+    ? `${GRANT} Not received yet.`
+    : `${GRANT} Received ${instantLabel(wallet.signupGrantedAt)}.`;
 }
 
 /**
@@ -193,7 +195,7 @@ export function creditCardState(
 // ---------------------------------------------------------------------------
 
 const KIND_LABELS: Record<string, string> = {
-  signup_grant: "One-time signup grant",
+  signup_grant: "Promotional credit grant",
   operator_adjustment: "Adjustment",
   operator_allocation: "Allocation",
   inference_debit: "Request charge",
@@ -202,7 +204,10 @@ const KIND_LABELS: Record<string, string> = {
 export type LedgerEntryView = {
   id: string;
   when: string;
+  /** The fixed label for the event, "Other" for one this page does not know. */
   kind: string;
+  /** The ledger's own event code, shown beside the label. */
+  code: string;
   reason: string;
   amount: string;
   detailHref: string | null;
@@ -213,6 +218,7 @@ export function ledgerEntryView(entry: CreditLedgerEntry): LedgerEntryView {
     id: entry.id,
     when: instantLabel(entry.createdAt),
     kind: Object.hasOwn(KIND_LABELS, entry.kind) ? KIND_LABELS[entry.kind] : "Other",
+    code: entry.kind,
     reason: entry.reason === "" ? "—" : entry.reason,
     amount: signedAmount(entry.amount, "CREDIT"),
     detailHref: entry.requestId === null ? null : requestDetailHref(entry.requestId),
