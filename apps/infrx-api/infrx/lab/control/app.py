@@ -132,8 +132,27 @@ def _compose(lab: dict[str, str], store):
                            identity=actors and actors.identity,
                            lab_access=access if actors else None,
                            lab_publication=publication, lab_artifacts=artifacts,
-                           lab_hosting=hosting,
+                           lab_hosting=hosting, auth_facade=_auth_facade(settings, lab),
                            **_families(settings, lab, connect)), control, traces
+
+
+def _auth_facade(settings, lab: dict[str, str]):
+    """WR-AP09L-2 (AP-09 09c): the auth facade `/auth/v1/*` on the unit's own publishable key, only
+    with AUTH_FACADE (default off): the Lab web signs in, refreshes and signs out on LAB_API_URL.
+    WEB_ORIGINS names the Lab's origin (mutations and redirects)."""
+    deployment = settings.deployment
+    if deployment is None or not deployment.auth_facade:
+        return None
+    import httpx
+
+    from ...auth_facade import AuthFacade
+    origins = tuple(o.strip() for o in deployment.web_origins.split(",") if o.strip())
+    return AuthFacade(httpx.AsyncClient(base_url=lab[SUPABASE_URL].rstrip("/"),
+                                        timeout=httpx.Timeout(10, connect=2)),
+                      lab[SUPABASE_KEY], origins=origins,
+                      captcha_required=deployment.auth_captcha_required,
+                      captcha_provider=deployment.auth_captcha_provider,
+                      captcha_site_key=deployment.auth_captcha_site_key)
 
 
 def _actors(settings, sessions, connect):
@@ -180,14 +199,15 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return {"status": "ready"}
 
-    from ...gateway.routes import (console_me, lab_checkpoints, lab_control, lab_datasets,
+    from ...gateway.routes import (auth, console_me, lab_checkpoints, lab_control, lab_datasets,
                                    lab_evaluations, lab_judge, lab_pipelines, lab_releases,
                                    lab_reviews, lab_traces, lab_workspaces, operator_publication)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
-                   lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication):
+                   lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication,
+                   auth):
         family.register(app, rt)
     from ..artifacts.compose import WorkspaceActors, mount   # WR-AP04-2: nothing while off
     mount(app, rt)

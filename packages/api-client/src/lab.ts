@@ -4,6 +4,159 @@
  */
 
 export interface paths {
+    "/auth/v1/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Available */
+        get: operations["getAuthV1Availability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Callback */
+        get: operations["getAuthV1Callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Password */
+        post: operations["postAuthV1Password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recovery */
+        post: operations["postAuthV1Recovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh */
+        post: operations["postAuthV1Refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend */
+        post: operations["postAuthV1Resend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign In */
+        post: operations["postAuthV1SignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign Out */
+        post: operations["postAuthV1SignOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/sign-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign Up */
+        post: operations["postAuthV1SignUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/console/v1/capabilities": {
         parameters: {
             query?: never;
@@ -1670,6 +1823,14 @@ export interface components {
              */
             verified_at: string;
         };
+        /** AuthAvailability */
+        AuthAvailability: {
+            captcha: components["schemas"]["Captcha"];
+            recovery: components["schemas"]["Availability"];
+            sign_in: components["schemas"]["Availability"];
+            sign_up: components["schemas"]["Availability"];
+            signup_grant: components["schemas"]["Availability"];
+        };
         /**
          * Availability
          * @description A feature's availability as FastAPI states it. A failed fetch is `unknown` with a
@@ -1758,6 +1919,19 @@ export interface components {
             serving_version_id: string;
             /** State */
             state: string;
+        };
+        /**
+         * Captcha
+         * @description LR-02: whether the password doors need a challenge, and the widget a form renders.
+         */
+        Captcha: {
+            /** Provider */
+            provider?: string | null;
+            /** Required */
+            required: boolean;
+            /** Site Key */
+            site_key?: string | null;
+            state: components["schemas"]["Availability"];
         };
         /**
          * Card
@@ -2364,6 +2538,12 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** Landing */
+        Landing: {
+            /** Redirect */
+            redirect: string;
+            session: components["schemas"]["Session"];
+        };
         /** ListPage[BudgetDoc] */
         ListPage_BudgetDoc_: {
             /** Data */
@@ -2540,6 +2720,14 @@ export interface components {
              * @enum {string}
              */
             unit: "CREDIT" | "USD" | "PROVIDER_USD";
+        };
+        /** NewPassword */
+        NewPassword: {
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
         };
         /**
          * OperationDoc
@@ -2741,6 +2929,25 @@ export interface components {
             /** Serving Version Id */
             serving_version_id: string;
         };
+        /** Recovery */
+        Recovery: {
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /** Code Challenge */
+            code_challenge?: string | null;
+            /** Email */
+            email: string;
+            /** Redirect To */
+            redirect_to?: string | null;
+        };
+        /** Refresh */
+        Refresh: {
+            /**
+             * Refresh Token
+             * Format: password
+             */
+            refresh_token: string;
+        };
         /**
          * Refusal
          * @description Every failure of a Lab route (`REFUSALS`' reasons, `unavailable` for the rest).
@@ -2767,6 +2974,20 @@ export interface components {
         Rejection: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * Resend
+         * @description WR-AP09-RESEND: a new sign-up verification link for this address.
+         */
+        Resend: {
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /** Code Challenge */
+            code_challenge?: string | null;
+            /** Email */
+            email: string;
+            /** Redirect To */
+            redirect_to?: string | null;
         };
         /** ReviewBody */
         ReviewBody: {
@@ -3041,6 +3262,61 @@ export interface components {
              */
             state: "scored" | "quarantined";
         };
+        /** Sent */
+        Sent: {
+            /**
+             * Status
+             * @default sent
+             * @constant
+             */
+            status: "sent";
+        };
+        /**
+         * Session
+         * @description A signed-in session, for Next to set as its cookies. Never in a URL or a log.
+         */
+        Session: {
+            /** Access Token */
+            access_token: string;
+            /** Expires At */
+            expires_at?: number | null;
+            /** Expires In */
+            expires_in: number;
+            /** Refresh Token */
+            refresh_token: string;
+            /** Token Type */
+            token_type: string;
+            /** User Id */
+            user_id: string;
+        };
+        /** SignIn */
+        SignIn: {
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /** Email */
+            email: string;
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
+        };
+        /** SignUp */
+        SignUp: {
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /** Code Challenge */
+            code_challenge?: string | null;
+            /** Email */
+            email: string;
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
+            /** Redirect To */
+            redirect_to?: string | null;
+        };
         /**
          * Signal
          * @description A stored customer (or judge) signal shared with the provider (0038).
@@ -3197,6 +3473,278 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAuthV1Availability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthAvailability"];
+                };
+            };
+        };
+    };
+    getAuthV1Callback: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                token_hash?: string | null;
+                type?: string | null;
+                next?: string | null;
+                error?: string | null;
+                error_code?: string | null;
+            };
+            header?: {
+                "x-auth-code-verifier"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Landing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1Password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1Recovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Recovery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1Refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Refresh"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1Resend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Resend"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1SignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postAuthV1SignOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postAuthV1SignUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUp"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getConsoleV1Capabilities: {
         parameters: {
             query?: never;

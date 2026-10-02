@@ -203,7 +203,8 @@ def _lab_control(publication: bool = True) -> FastAPI:
            "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export",
            "LAB_JUDGE_API": "1", "LAB_ARTIFACTS": "1",                     # WR-1, WR-AP04-2
            "LAB_HOSTING": "1",              # WR-AP05-2: no HOSTING_SLOT, so the slot is inert
-           "IDENTITY_API": "1"}                                            # WR-AP01-4
+           "IDENTITY_API": "1",                                            # WR-AP01-4
+           "AUTH_FACADE": "1"}                                             # WR-AP09L-2
     if publication:
         env["LAB_PUBLICATION"] = "1"                                       # WR-AP06-3
     # ponytail: the two families that connect at composition (ClickHouse, the key directory)

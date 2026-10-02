@@ -379,6 +379,35 @@
         "title": "Artifact",
         "type": "object"
       },
+      "AuthAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha": {
+            "$ref": "#/components/schemas/Captcha"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "sign_in": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "sign_up": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "signup_grant": {
+            "$ref": "#/components/schemas/Availability"
+          }
+        },
+        "required": [
+          "sign_in",
+          "sign_up",
+          "recovery",
+          "signup_grant",
+          "captcha"
+        ],
+        "title": "AuthAvailability",
+        "type": "object"
+      },
       "Availability": {
         "additionalProperties": false,
         "description": "A feature's availability as FastAPI states it. A failed fetch is `unknown` with a\nreason; it is never rendered as a zero count or a disabled feature.",
@@ -646,6 +675,47 @@
           "state"
         ],
         "title": "Candidate",
+        "type": "object"
+      },
+      "Captcha": {
+        "additionalProperties": false,
+        "description": "LR-02: whether the password doors need a challenge, and the widget a form renders.",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "site_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Key"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Availability"
+          }
+        },
+        "required": [
+          "required",
+          "state"
+        ],
+        "title": "Captcha",
         "type": "object"
       },
       "Card": {
@@ -2158,6 +2228,24 @@
         "title": "LabCapabilities",
         "type": "object"
       },
+      "Landing": {
+        "additionalProperties": false,
+        "properties": {
+          "redirect": {
+            "title": "Redirect",
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        },
+        "required": [
+          "session",
+          "redirect"
+        ],
+        "title": "Landing",
+        "type": "object"
+      },
       "ListPage_BudgetDoc_": {
         "additionalProperties": false,
         "properties": {
@@ -2737,6 +2825,24 @@
         "title": "Money",
         "type": "object"
       },
+      "NewPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "NewPassword",
+        "type": "object"
+      },
       "OperationDoc": {
         "additionalProperties": false,
         "description": "A long operation: 202 + Location points at one of these. `phase` describes observed\nwork; percentage and ETA are deliberately absent (a lane may add nullable ones).",
@@ -3255,6 +3361,76 @@
         "title": "ReadinessReceipt",
         "type": "object"
       },
+      "Recovery": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "Recovery",
+        "type": "object"
+      },
+      "Refresh": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh_token": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Refresh Token",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "Refresh",
+        "type": "object"
+      },
       "Refusal": {
         "additionalProperties": false,
         "description": "Every failure of a Lab route (`REFUSALS`' reasons, `unavailable` for the rest).",
@@ -3329,6 +3505,59 @@
           "reason"
         ],
         "title": "Rejection",
+        "type": "object"
+      },
+      "Resend": {
+        "additionalProperties": false,
+        "description": "WR-AP09-RESEND: a new sign-up verification link for this address.",
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "Resend",
         "type": "object"
       },
       "ReviewBody": {
@@ -4051,6 +4280,163 @@
         "title": "SampleResult",
         "type": "object"
       },
+      "Sent": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "sent",
+            "default": "sent",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "Sent",
+        "type": "object"
+      },
+      "Session": {
+        "additionalProperties": false,
+        "description": "A signed-in session, for Next to set as its cookies. Never in a URL or a log.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "token_type": {
+            "title": "Token Type",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in",
+          "user_id"
+        ],
+        "title": "Session",
+        "type": "object"
+      },
+      "SignIn": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignIn",
+        "type": "object"
+      },
+      "SignUp": {
+        "additionalProperties": false,
+        "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "code_challenge": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{43,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Challenge"
+          },
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "redirect_to": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect To"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignUp",
+        "type": "object"
+      },
       "Signal": {
         "additionalProperties": false,
         "description": "A stored customer (or judge) signal shared with the provider (0038).",
@@ -4482,6 +4868,416 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/auth/v1/availability": {
+      "get": {
+        "operationId": "getAuthV1Availability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthAvailability"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Available"
+      }
+    },
+    "/auth/v1/callback": {
+      "get": {
+        "operationId": "getAuthV1Callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token_hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token Hash"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Code"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-auth-code-verifier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Auth-Code-Verifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Landing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Callback"
+      }
+    },
+    "/auth/v1/password": {
+      "post": {
+        "operationId": "postAuthV1Password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Password"
+      }
+    },
+    "/auth/v1/recovery": {
+      "post": {
+        "operationId": "postAuthV1Recovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Recovery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Recovery"
+      }
+    },
+    "/auth/v1/refresh": {
+      "post": {
+        "operationId": "postAuthV1Refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Refresh"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Refresh"
+      }
+    },
+    "/auth/v1/resend": {
+      "post": {
+        "operationId": "postAuthV1Resend",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Resend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Resend"
+      }
+    },
+    "/auth/v1/sign-in": {
+      "post": {
+        "operationId": "postAuthV1SignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign In"
+      }
+    },
+    "/auth/v1/sign-out": {
+      "post": {
+        "operationId": "postAuthV1SignOut",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Sign Out",
+        "x-infrx-no-body": true
+      }
+    },
+    "/auth/v1/sign-up": {
+      "post": {
+        "operationId": "postAuthV1SignUp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUp"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign Up"
+      }
+    },
     "/console/v1/capabilities": {
       "get": {
         "operationId": "getConsoleV1Capabilities",

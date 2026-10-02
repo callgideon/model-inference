@@ -12,9 +12,9 @@ C1 -> OTHER (OTHER's own model only). JOB_1 already carries an API signal and an
     cd apps/infrx-api && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase \\
         uv run --frozen python ../app/tests/c/feedback/stack.py [--mutants]
 
-Order: the `check_*` below as the browser roles (psycopg, `checks._jwt`), then the two adapters
-through PostgREST v13.0.4 + supabase-js (`apps/app/tests/c/feedback/feedback-postgrest.test.ts`,
-`apps/lab/tests/c/review/review-postgrest.test.ts`), then the committed revocation. `--mutants`
+Order: the `check_*` below as the browser roles (psycopg, `checks._jwt`), then the App adapter
+through PostgREST v13.0.4 + supabase-js (`apps/app/tests/c/feedback/feedback-postgrest.test.ts`;
+the Lab no longer reaches PostgREST, AP-09 09c), then the committed revocation. `--mutants`
 applies each SQL mutant of the doors to a fresh world and requires a named check to fail.
 Everything is labelled with this checkout and removed at exit; nothing hosted is touched.
 """
@@ -34,7 +34,7 @@ from pathlib import Path
 os.environ.setdefault("INFRX_D_TASK", "app-c3f")
 os.environ.setdefault("INFRX_D1_IMAGE", "supabase")
 APP = Path(__file__).resolve().parents[3]
-API, LAB = APP.parent / "infrx-api", APP.parent / "lab"
+API = APP.parent / "infrx-api"
 sys.path.insert(0, str(API))
 
 import httpx  # noqa: E402
@@ -448,9 +448,7 @@ def adapters(world: dict) -> int:
             json.dump({**world, "url": base, "jwt_secret": JWT_SECRET}, handle)
         env = {**os.environ, "INFRX_C3F_STACK": handle.name}
         codes = [subprocess.run(("node", "--test", test), cwd=root, env=env).returncode
-                 for root, test in ((APP, "tests/c/feedback/feedback-postgrest.test.ts"),
-                                    (LAB, "tests/c/review/review-postgrest.test.ts"),
-                                    (LAB, "tests/v/detail/feedback-postgrest.test.ts"))]
+                 for root, test in ((APP, "tests/c/feedback/feedback-postgrest.test.ts"),)]
         os.unlink(handle.name)
         return max(codes)
     finally:
