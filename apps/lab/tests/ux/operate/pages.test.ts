@@ -255,3 +255,22 @@ test("OP-P10 deployments: a failed proposal read keeps the records and withholds
   assert.match(empty, /No deployments yet/);
   assert.match(empty, /href="\/models\/new"/);
 });
+
+test("OP-P11 settings: the workspace, the role in words with what it allows, customer content apart from every role, services not verified here; no invented controls", async () => {
+  const dev = mainOf(await at("settings/page.tsx", "/settings", "developer"));
+  assert.match(dev, /Synthetic Lab/);
+  assert.match(dev, /Developer/);
+  assert.match(dev, /registers models/i);
+  const p = await open(await at("settings/page.tsx", "/settings", "developer"));
+  const shown = await text(p);
+  assert.match(shown, /Register models and manage private deployments Yes/);
+  assert.match(shown, /Request publication No/);
+  assert.match(shown, /Read customer content Not part of any role/);
+  for (const service of ["Control records", "Requests", "Model import", "Serving readiness"]) assert.match(shown, new RegExp(`${service} Not yet verified here`));
+  await p.close();
+  assert.doesNotMatch(dev, /<form|Invite|API key|CREDIT|quota/i, "settings has no controls of its own");
+  assert.equal((dev.match(/<button/g) ?? []).length, 1, "only the workspace id's copy button");
+  const admin = await (async () => { const q = await open(await at("settings/page.tsx", "/settings", "administrator")); const t = await text(q); await q.close(); return t; })();
+  assert.match(admin, /Request publication Yes/);
+  await laidOut(await at("settings/page.tsx", "/settings", "viewer"));
+});

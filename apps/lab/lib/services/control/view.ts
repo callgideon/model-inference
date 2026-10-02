@@ -201,3 +201,19 @@ export function recordedSmoke(d: Deployment): string {
 /** The actions a page offers. ponytail: "smoke" is withheld until AP-05's real, receipted smoke exists -
  *  the current stand-in can leave a record validating (L-04); return it when that API is mounted. */
 export const operateActions = (row: DeploymentRow): Action[] => row.actions.filter((a) => a !== "smoke");
+
+// ---- UX-03 L-06 Settings: the role in words. Capabilities stay lib/auth/access.ts's table.
+
+export const ROLE_COPY: Record<Role, { label: string; description: string }> = {
+  viewer: { label: "Viewer", description: "Reads this workspace's records and aggregate health." },
+  developer: { label: "Developer", description: "Reads this workspace, registers models and revisions, and manages private deployments and evaluations." },
+  administrator: { label: "Administrator", description: "Everything a developer does, plus requesting publication and managing members." },
+};
+/** The role-held capabilities a person can read; read_customer_content is shown apart (no role holds it). */
+export const CAPABILITY_COPY = {
+  read_aggregate_health: "Read aggregate health",
+  manage_dev_deployment: "Register models and manage private deployments",
+  run_evaluation: "Run evaluations",
+  propose_publication: "Request publication",
+  manage_members: "Manage members",
+} as const;
