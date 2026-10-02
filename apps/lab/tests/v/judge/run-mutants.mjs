@@ -49,7 +49,7 @@ const MUTANTS = [
   m("V3-X25", "another provider's runs are returned", FAKE, "r.providerId === actor.providerId && ", "", [C.j06]),
   m("V3-X26", "another request's runs are returned", FAKE, " && r.requestId === requestId", "", [C.j06]),
   m("V3-X27", "a viewer reads judge results", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j06]),
-  m("V3-X28", "the default judge port answers", PORT, "  return rpcJudgePort(async () => (await import(\"../../../lib/services/judge/session.ts\")).session());\n}", "  return { runs: async () => ({ ok: true, value: [] }) };\n}", [C.j06]),
+  m("V3-X28", "the default judge port answers", PORT, "  return judgeRunsPort();\n}", "  return { runs: async () => ({ ok: true, value: [] }) };\n}", [C.j06]),
   m("V3-X29", "the panel offers a paid run", PANEL, "      <p>\n        Judge consent", '      <form action="/judge"><button type="submit">Run judge</button></form>\n      <p>\n        Judge consent', [C.p01]),
   m("V3-X30", "a refusal is shown raw", PANEL, "{JUDGE_COPY[result.reason]}", "{result.reason}", [C.p01]),
   m("V3-X31", "consent is not linked to Settings", PANEL, '<Link href="/settings">Settings</Link>', "Settings", [C.p01]),

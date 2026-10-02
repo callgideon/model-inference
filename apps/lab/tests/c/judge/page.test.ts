@@ -50,9 +50,12 @@ test("C3P-03 a viewer gets no judge form; only an administrator gets the budget 
 test("C3P-04 every outcome has fixed copy, and a refusal never renders data", () => {
   assert.equal(outcomeText({ ok: false, reason: "denied" }), "Refused: this workspace may not do that.");
   assert.equal(outcomeText({ ok: false, reason: "invalid" }), "Check the fields: something is not in the expected form.");
+  assert.equal(outcomeText({ ok: false, reason: "conflict" }), "Already submitted with different values. Reload the page and try again.");
   assert.equal(outcomeText({ ok: false, reason: "unavailable" }), "The judge service is unavailable. Nothing was changed.");
-  assert.equal(outcomeText({ ok: true, data: { rows: [{ label_id: "x" }, {}], next: "x" } }), "Done: 2 calibration labels (more after x).");
-  assert.equal(outcomeText({ ok: true, data: { rows: [], next: null } }), "Done: 0 calibration labels.");
-  assert.equal(outcomeText({ ok: true, data: { run_id: "r" } }), "Done.");
+  assert.equal(outcomeText({ ok: true, data: { config_id: "c", state: "insufficient", labels: 3, required: 30, agreement: null, interval: null } }),
+    "Calibration: insufficient, 3 of 30 reviewed labels.");
+  assert.equal(outcomeText({ ok: true, data: { config_id: "c", state: "calibrated", labels: "x", required: 30 } }), "Done.");
+  assert.equal(outcomeText({ ok: true, data: { config_id: "c", state: "scored", labels: 3, required: 30 } }), "Done.");
+  assert.equal(outcomeText({ ok: true, data: { operation_id: "r", state: "queued" } }), "Done.");
   assert.match(read(FORM), /\{state && <p role="status">\{outcomeText\(state\)\}<\/p>\}/);
 });

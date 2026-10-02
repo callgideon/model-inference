@@ -63,7 +63,7 @@ test("V2-D05 feedback is labelled with its stored provenance and is never presen
   assert.equal(feedbackView({ ok: true, entries: [entry({ value: false })] } as ReviewResult).rows[0].what, "thumbs down");
   assert.equal(view.note, FEEDBACK_COPY.note);
   assert.match(FEEDBACK_COPY.note, /never a calibration label/);
-  assert.equal(feedbackView({ ok: true, entries: [] }).empty, FEEDBACK_COPY.empty);
+  assert.equal(feedbackView({ ok: true, entries: [], reviews: [] }).empty, FEEDBACK_COPY.empty);
   for (const reason of ["not_found", "forbidden", "unavailable"] as const)
     assert.deepEqual(feedbackView({ ok: false, reason }), { rows: [], note: FEEDBACK_COPY.note, empty: FEEDBACK_COPY[reason] });
 });
