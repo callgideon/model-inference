@@ -3,8 +3,8 @@
 through the shared runner (`tests/contracts/mutants.py`).
 
 `MUTANTS` run the fake world (`-m "not pg"`, no Docker). `PG_MUTANTS` edit
-`PgArtifactStore` and are killed on PostgreSQL + MinIO (`-m pg`, `INFRX_D_TASK=ap4`, a copy
-that carries the migrations). 0061's own SQL decisions are `tests/d/test_upgrade_0061_mutants.py`.
+`PgArtifactStore` and the composition's durable store and are killed on PostgreSQL + MinIO
+(`-m pg`, `INFRX_D_TASK=ap4`, a copy that carries the migrations). 0061's own SQL decisions are `tests/d/test_upgrade_0061_mutants.py`.
 
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap04/test_mutants.py
     INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
@@ -66,6 +66,11 @@ ADOPT = c("an_operator_adopts_existing_bytes_keeping_the_production_identity")
 ADOPT_NO = c("adoption_refuses_non_operators_foreign_resources_and_other_bytes")
 OPS = c("the_memory_operations_replay_and_cancel_by_the_protocol")
 UNWIRED = c("nothing_mounts_while_the_surface_is_unwired")
+WORKSPACE = c("a_session_names_its_workspace_and_every_door_checks_it")
+SECRETS = c("an_import_resolves_only_the_secret_refs_its_role_names")
+BOX = c("the_box_manifest_becomes_the_import_request")
+UNIT = c("the_lab_unit_surface_runs_on_its_own_login")
+KILLED = c("an_operation_survives_a_killed_worker_process")
 RP = "gateway/routes/lab_model_projects.py"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -178,6 +183,25 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("ops_cancel_never_terminal", "cancelling a queued operation is terminal at once",
        S, 'state="cancelled" if op.doc.state == "queued"',
        'state="cancel_requested" if op.doc.state == "queued"', OPS),
+    # --- WR-AP04-2: the Lab unit's composition and the worker role --------------------------
+    _m("workspace_never_named", "a web session's workspace is the request's provider_org_id",
+       CO, '"provider_org_id": request.query_params.get("provider_org_id") or None})',
+       '"provider_org_id": None})', WORKSPACE),
+    _m("query_overrides_a_credential", "a credential that carries its provider keeps it",
+       CO, '        if actor.audience != "session" or actor.provider_org_id is not None:\n',
+       "        if False:\n", WORKSPACE),
+    _m("unwired_actors_crash", "without session actors the families are a 503, not a 500",
+       CO, "        if self.actors is None:\n            raise", "        if False:\n            raise",
+       WORKSPACE),
+    _m("any_secret_ref", "only the references the role lists are resolved",
+       CO, "        if ref not in allowed:\n", "        if False:\n", SECRETS),
+    _m("ssm_not_decrypted", "an ssm: reference is read decrypted",
+       CO, "WithDecryption=True)", "WithDecryption=False)", SECRETS),
+    _m("manifest_keeps_hidden_files", "a hidden or code-bearing file is never declared",
+       CO, 'for e in doc["files"] if refuse_path(e["path"]) is None]',
+       'for e in doc["files"]]', BOX),
+    _m("import_at_a_branch", "the import is pinned to the manifest's commit",
+       CO, '"commit": doc["model"]["commit"]}}', '"commit": "main"}}', BOX),
     # --- 04c: imports -----------------------------------------------------------------------
     _m("mutable_ref_accepted", "an import is pinned to a 40-hex commit",
        I, "        if not re.fullmatch(COMMIT, commit):\n", "        if False:\n", REFS),
@@ -257,8 +281,11 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("pg_slug_conflict_untyped", "a taken slug is a 409 conflict (PostgreSQL)",
        S, "    if isinstance(failed, pg.UniqueViolation):\n",
        "    if isinstance(failed, ZeroDivisionError):\n", SLUG),
+    _m("surface_ops_in_memory", "the composed operations are 0060's durable store",
+       CO, "DurableOps(control_ops.PgControlOps(connect))",
+       "DurableOps(control_ops.FakeControlOps())", UNIT, KILLED),
 )
-FAKE_ONLY = (OPS, PROFILE, UNWIRED)
+FAKE_ONLY = (OPS, PROFILE, UNWIRED, WORKSPACE, SECRETS, BOX)
 
 
 def case_names() -> set[str]:
@@ -268,7 +295,8 @@ def case_names() -> set[str]:
 def _layout(root: pathlib.Path) -> pathlib.Path:
     """The default copy one level down as `apps/infrx-api`, beside copies of what the suite
     reads from the repository: the migrations (`infrx.state.migrations`), the measured Marlin
-    files and `models/marlin2b/serving-version.json` (the fixture of truth)."""
+    files, `models/marlin2b/serving-version.json` (the fixture of truth) and
+    `infra/runbooks/artifacts.py` (the box manifest the real import is built from)."""
     api = root / "apps" / "infrx-api"
     api.mkdir(parents=True)
     shared._copy(api, _PLAIN)
@@ -279,6 +307,9 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     (root / "models" / "marlin2b").mkdir(parents=True)
     shutil.copy(repo / "models" / "marlin2b" / "serving-version.json",
                 root / "models" / "marlin2b" / "serving-version.json")
+    (root / "infra" / "runbooks").mkdir(parents=True)     # the box manifest tool (WR-AP04-2)
+    shutil.copy(repo / "infra" / "runbooks" / "artifacts.py",
+                root / "infra" / "runbooks" / "artifacts.py")
     return api
 
 

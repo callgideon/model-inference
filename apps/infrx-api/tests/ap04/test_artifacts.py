@@ -583,3 +583,215 @@ def test_ap04__nothing_mounts_while_the_surface_is_unwired() -> None:
         ("GET", PROJECTS), ("POST", UPLOADS), ("POST", "/lab/v1/artifacts/imports"),
         ("POST", "/operator/v1/artifacts/adopt"))}
     assert set(answers.values()) == {404}, answers
+
+
+# ============================================ WR-AP04-2: the Lab unit's composition ===
+def _sessions(w) -> dict:
+    """Web sessions as `rt.actors` gives them on the Lab unit: a user, no workspace."""
+    from infrx.contracts import api
+    return {"dev": api.Actor(audience="session", user_id=w.w.BOTH),
+            "dev_b": api.Actor(audience="session", user_id=w.w.DEV_B),
+            "outsider": api.Actor(audience="session", user_id=w.w.CONSUMER_ONLY),
+            "key_b": api.Actor(audience="provider_dev", user_id=w.w.DEV_B, provider_org_id=w.B)}
+
+
+def _unit(rt):
+    """A bare app with the AP-04 families mounted the way the Lab unit mounts them."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from infrx.lab.artifacts.compose import mount
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    mount(app, rt)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def _as(client, method, path, actor, key=None, **kw):
+    headers = {"x-test-actor": actor}
+    if key:
+        headers["Idempotency-Key"] = key
+    return client.request(method, path, headers=headers, **kw)
+
+
+def test_ap04__a_session_names_its_workspace_and_every_door_checks_it(fake_world) -> None:
+    """On the Lab unit a web session names its workspace as every Lab request does
+    (`?provider_org_id=`); the name is a claim every AP-04 door checks (membership + role), a
+    credential that already carries a provider keeps it, and without composed session actors
+    the families answer 503, never a 500 or an open door."""
+    import types
+
+    from .conftest import TestActors
+    w = fake_world
+    c = _unit(types.SimpleNamespace(actors=TestActors(_sessions(w)), lab_artifacts=w.artifacts))
+    a, b = f"?provider_org_id={w.A}", f"?provider_org_id={w.B}"
+    made = _as(c, "POST", PROJECTS + a, "dev", w.key(), json={"name": "M", "slug": "m"})
+    assert made.status_code == 201 and made.json()["provider_org_id"] == w.A, made.text
+    assert _as(c, "GET", PROJECTS, "dev").status_code == 403          # no workspace named
+    assert _as(c, "GET", PROJECTS + a, "outsider").status_code == 404  # a claim, refused
+    assert _as(c, "GET", PROJECTS + b, "dev_b").json()["data"] == []
+    keyed = _as(c, "GET", PROJECTS + a, "key_b")
+    assert keyed.status_code == 200 and keyed.json()["data"] == [], "a query overrode a key"
+    off = _unit(types.SimpleNamespace(actors=None, lab_artifacts=w.artifacts))
+    r = _as(off, "GET", PROJECTS + a, "dev")
+    assert r.status_code == 503 and r.json()["error"]["code"] == "dependency_unavailable"
+
+
+def test_ap04__an_import_resolves_only_the_secret_refs_its_role_names(fake_world) -> None:
+    """The worker resolves a secret reference only when its role lists it
+    (`LAB_ARTIFACT_SECRET_REFS`): a provider cannot point an import at another platform
+    secret. `ssm:` is read decrypted at fetch time; the value is never stored or echoed."""
+    from infrx.lab.artifacts.compose import secrets
+
+    class Ssm:
+        def __init__(self) -> None:
+            self.read: list[tuple[str, bool]] = []
+
+        def get_parameter(self, Name: str, WithDecryption: bool) -> dict:   # noqa: N803
+            self.read.append((Name, WithDecryption))
+            return {"Parameter": {"Value": TOKEN}}
+    w, ssm = fake_world, Ssm()
+    w.artifacts.imports.secret = secrets("ssm:/model-inference/hf_token, env:UNSET_AP4", ssm)
+    p = project(w)
+    other = start_import(w, p, secret_ref="ssm:/model-inference/lab/eval_database_url").json()
+    unset = start_import(w, p, secret_ref="env:UNSET_AP4").json()
+    w.worker()
+    for op in (other, unset):
+        done = operation(w, op["operation_id"])
+        assert done["state"] == "failed" and [e["code"] for e in done["error"][
+            "field_errors"]] == ["secret_unavailable"], done
+    assert ssm.read == [] and w.stub.seen == []
+    good = start_import(w, p, secret_ref="ssm:/model-inference/hf_token")
+    w.worker()
+    assert operation(w, good.json()["operation_id"])["state"] == "succeeded"
+    assert ssm.read == [("/model-inference/hf_token", True)]
+    assert TOKEN not in good.text + w.tables_text()
+
+
+def test_ap04__the_box_manifest_becomes_the_import_request(fake_world, tmp_path) -> None:
+    """The coordinator's real import is built from `infra/runbooks/artifacts.py manifest` over
+    the served weights directory (here: the stub repository's files on disk): every safe file
+    is declared at the manifest's repo and commit, a hidden file is left out, and the import
+    verifies into an artifact holding exactly the manifest's digests."""
+    import importlib.util
+
+    from infrx.lab.artifacts.compose import import_request
+    from .conftest import REPO_ROOT
+    spec = importlib.util.spec_from_file_location(
+        "runbook_artifacts", REPO_ROOT / "infra" / "runbooks" / "artifacts.py")
+    runbook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runbook)
+    w = fake_world
+    for name, blob in {**marlin_files(), ".gitattributes": b"*.safetensors lfs"}.items():
+        (tmp_path / name).write_bytes(blob)
+    doc = {"model": {"repo": REPO, "commit": COMMIT}, "files": runbook.files(tmp_path)}
+    body = import_request(doc, project(w)["project_id"], "env:HF_STUB_TOKEN")
+    assert body["source"] == {"host": "huggingface.co", "repo": REPO, "commit": COMMIT}
+    r = w.call("POST", "/lab/v1/artifacts/imports", "dev_a", w.key(), json=body)
+    assert r.status_code == 202, r.text
+    w.worker()
+    assert operation(w, r.json()["operation_id"])["state"] == "succeeded"
+    art = w.call("GET", f"/lab/v1/artifacts/{r.json()['resource_id']}").json()
+    assert {(f["relative_path"], f["bytes"], f["sha256"]) for f in art["files"]} == {
+        (e["path"], e["bytes"], e["sha256"]) for e in doc["files"]
+        if e["path"] != ".gitattributes"}
+
+
+@pytest.mark.pg
+def test_ap04__the_lab_unit_surface_runs_on_its_own_login(pg_world) -> None:
+    """The Lab unit's composition (`surface` + `mount`) and the `artifacts` worker role, all
+    on the Lab control login over 0060/0061 and MinIO: a session names its workspace, uploads
+    real bytes, the role's worker verifies them, the artifact becomes a serving revision; a
+    member of another provider claiming this workspace is refused."""
+    import types
+
+    from infrx.lab.artifacts.compose import role, surface
+    from infrx.state.jobstore import connector
+
+    from .conftest import CASE, TestActors, login_dsn
+    w = pg_world
+    login = connector(login_dsn(CASE), set_role=False)
+    surf = surface(login, w.objects.store)
+    c = _unit(types.SimpleNamespace(actors=TestActors(_sessions(w)), lab_artifacts=surf))
+    q = f"?provider_org_id={w.A}"
+    made = _as(c, "POST", PROJECTS + q, "dev", w.key(), json={"name": "U", "slug": "unit"})
+    assert made.status_code == 201, made.text
+    pid, files = made.json()["project_id"], marlin_files()
+    up = _as(c, "POST", UPLOADS + q, "dev", w.key(),
+             json={"project_id": pid, "files": manifest(files)}).json()
+    for path, blob in files.items():
+        grant = _as(c, "POST", f"{UPLOADS}/{up['upload_id']}/parts{q}", "dev",
+                    json={"relative_path": path})
+        assert grant.status_code == 200, grant.text
+        w.put(grant.json(), blob)
+    op = _as(c, "POST", f"{UPLOADS}/{up['upload_id']}/complete{q}", "dev", w.key(),
+             json={"manifest_sha256": up["manifest_sha256"]}).json()
+    tasks, worker = role("lab-artifacts", {}, login, w.objects.store, "lab-artifacts-ap4")
+    assert set(tasks) == {"artifacts"}
+    assert run(worker.run_once()) == 1
+    done = _as(c, "GET", f"/lab/v1/operations/{op['operation_id']}{q}", "dev").json()
+    assert done["state"] == "succeeded", done
+    revision = _as(c, "POST", f"{PROJECTS}/{pid}/revisions{q}", "dev", w.key(),
+                   json={"artifact_id": op["resource_id"]})
+    assert revision.status_code == 201, revision.text
+    assert _as(c, "GET", f"/lab/v1/operations/{op['operation_id']}{q}",
+               "dev_b").status_code in (403, 404)
+
+
+KILLED_WORKER = """
+import asyncio, os, pathlib, time
+from infrx.lab.artifacts import ArtifactWorker
+from infrx.lab.artifacts.compose import surface
+from infrx.media.s3 import S3ObjectStore
+from infrx.state.jobstore import connector
+objects = S3ObjectStore.connect(os.environ["AP4_BUCKET"], os.environ["AP4_PREFIX"],
+                                os.environ["AP4_S3"])
+a = surface(connector(os.environ["AP4_DSN"], set_role=False), objects)
+digest = a.uploads.objects.digest
+async def hang(key):
+    pathlib.Path(os.environ["AP4_MARK"]).write_text(key)
+    await asyncio.sleep(3600)
+a.uploads.objects.digest = hang
+asyncio.run(ArtifactWorker(a, "doomed").run_once())
+"""
+
+
+@pytest.mark.pg
+def test_ap04__an_operation_survives_a_killed_worker_process(pg_world, tmp_path) -> None:
+    """A real worker process composed like the `artifacts` role is SIGKILLed while hashing:
+    the operation (0060, PostgreSQL) stays `running` under its dead lease, and once that
+    expires another process's pass finishes it - one artifact, no second operation."""
+    import os
+    import pathlib
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    from .conftest import BUCKET, CASE, S3, login_dsn
+    w = pg_world
+    files = marlin_files()
+    up = open_upload(w, files, project(w)["project_id"])
+    for path, blob in files.items():
+        put(w, up["upload_id"], path, blob)
+    op = complete(w, up).json()
+    mark = tmp_path / "hashing"
+    proc = subprocess.Popen(
+        [sys.executable, "-c", KILLED_WORKER], cwd=pathlib.Path(__file__).resolve().parents[2],
+        env={**os.environ, "AP4_DSN": login_dsn(CASE), "AP4_BUCKET": BUCKET,
+             "AP4_PREFIX": w.objects.store.prefix, "AP4_S3": f"http://127.0.0.1:{S3.host_port}",
+             "AP4_MARK": str(mark)})
+    try:
+        deadline = time.monotonic() + 60
+        while not mark.exists() and proc.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.2)
+        assert mark.exists(), f"the worker process never reached hashing (exit {proc.poll()})"
+    finally:
+        proc.send_signal(signal.SIGKILL)
+        proc.wait()
+    assert operation(w, op["operation_id"])["state"] == "running"
+    assert w.worker("restarted") == 0, "a dead process's live lease was taken over"
+    w.advance(601)
+    assert w.worker("restarted") == 1
+    assert operation(w, op["operation_id"])["state"] == "succeeded"
+    assert w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}").status_code == 200
+    assert w.w.conn.execute("select count(*) from infrx.artifacts").fetchone()[0] == 1
