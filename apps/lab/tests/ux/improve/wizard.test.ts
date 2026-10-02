@@ -38,7 +38,7 @@ async function open(viewport: { width: number; height: number }): Promise<Page> 
 const importButton = (page: Page) => page.getByRole("button", { name: "Import", exact: true });
 const current = (page: Page) => page.evaluate<string>(`document.querySelector('[aria-label="Import steps"] [aria-current="step"]')?.textContent ?? ""`);
 const spec = (page: Page) => field(page.getByRole("textbox", { name: /Import spec/ }));
-const file = (page: Page) => field(page.getByLabel("Rows (JSONL)") as Locator);
+const file = (page: Page) => field(page.locator(`input[type="file"][name="file"]`));
 
 async function previewed(page: Page) {
   await page.getByRole("button", { name: "Preview mapping" }).click();
