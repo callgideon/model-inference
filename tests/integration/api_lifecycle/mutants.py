@@ -79,6 +79,10 @@ HOSTED = "test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol"
 HOSTING_DEFECT = "test_ap11_a_hosting_defect_fails_its_stage"
 NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail"
 NO_TARGET = "test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite"
+UNCOMPOSED_CAUSE = "test_ap11_a_package_the_world_could_not_compose_is_blocked_with_its_cause"
+LIVE_INPUTS = "test_ap11_live_is_blocked_naming_each_missing_operator_input"
+HOSTED_PLAN = "test_ap11_hosted_mode_only_prints_its_plan"
+RUBRIC = "test_ap11_the_judge_pins_the_newest_reviewed_rubric_never_a_pending_one"
 
 MUTANTS: tuple[Mutant, ...] = (
     # ---- 11a: the two private files
@@ -303,12 +307,48 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("cleanup_stops_at_one_row", "one row's missing credential never stops the others", R,
        '                outcome = f"failed: {why}"', "                raise", CLEANUP),
     _m("label_before_outputs", "a stage BLOCKED on its predecessor carries no label", L,
-       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n'
-       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
-       '        ctx.label(DRY_RUN)\n',
-       '    if mode == "dry_run":                  # only a stage that runs carries the label\n'
-       '        ctx.label(DRY_RUN)\n'
+       '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n',
+       '    ctx.label(DRY_RUN) if mode == "dry_run" else None\n'
        '    q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]\n', DRY),
+    _m("label_before_rubric", "a stage BLOCKED on P-07 carries no dry-run label", L,
+       '    reviewed = [r for r in rubrics',
+       '    ctx.label(DRY_RUN) if mode == "dry_run" else None\n    reviewed = [r for r in rubrics',
+       RUBRIC),
+    _m("pending_rubric_pinned", "14 pins only a reviewed rubric (criteria + output schema)", L,
+       '    reviewed = [r for r in rubrics if r.get("criteria") and r.get("output_schema")]',
+       '    reviewed = [r for r in rubrics if r.get("criteria")]', SERVED, RUBRIC),
+    _m("no_reviewed_rubric_fails", "no reviewed rubric is BLOCKED[P-07], never a FAIL", L,
+       "    if not reviewed:\n", "    if False:\n", RUBRIC),
+    _m("uncomposed_cause_dropped", "a package the world could not compose names its cause", R,
+       "f\"({causes.get(owner) or 'config `composed`'})\"", "\"(config `composed`)\"",
+       UNCOMPOSED_CAUSE),
+    _m("live_inputs_skipped", "11d: a live run checks the operator's inputs first", R,
+       '            reasons = live_inputs(config) if args.mode == "live" else []',
+       "            reasons = []", LIVE_INPUTS),
+    _m("live_judge_mode_unchecked", "11d: P-10 means a judge configured live", R,
+       '    if config.get("judge") != "live" or not SSM_NAME.fullmatch(',
+       "    if not SSM_NAME.fullmatch(", LIVE_INPUTS),
+    _m("ssm_name_unchecked", "11d: P-10's secret is named by an SSM parameter, never a value", R,
+       'SSM_NAME = re.compile(r"ssm:/[A-Za-z0-9_./-]+")', 'SSM_NAME = re.compile(r".+")',
+       LIVE_INPUTS),
+    _m("live_target_unchecked", "11d: a live run names its approved target", R,
+       '    if not config.get("live_target"):', "    if False:", LIVE_INPUTS),
+    _m("window_record_unread", "11d: the operator's window record exists", R,
+       '    if not Path(str(config.get("window_record") or "")).is_file():',
+       '    if not config.get("window_record"):', LIVE_INPUTS),
+    _m("hosted_mode_runs_stages", "11e: hosted mode is a dry plan, nothing composed or sent", R,
+       '        if args.mode == "hosted":                  # 11e: a dry plan - nothing composed or sent',
+       "        if False:", HOSTED_PLAN),
+    _m("hosted_plan_unprinted", "11e: the plan is printed, every step's command", R,
+       "        print(f\"    PLAN  {n}  {step['what']} [{step['by']}]: {step['command']}\")",
+       "        pass", HOSTED_PLAN),
+    _m("hosted_plan_without_boundary", "11e: the plan includes the UI thin-boundary check", R,
+       '    {"what": "UI thin-boundary check (R271)', '    {"what": "UI check (R271)', HOSTED_PLAN),
+    _m("hosted_plan_without_rollback", "11e: the plan includes a usable rollback", R,
+       '    {"what": "rollback plan usable', '    {"what": "plan usable', HOSTED_PLAN),
+    _m("oldest_reviewed_rubric", "14 pins the NEWEST reviewed rubric version", L,
+       '    rubric = max(reviewed, key=lambda r: r.get("version") or 0)',
+       '    rubric = min(reviewed, key=lambda r: r.get("version") or 0)', RUBRIC),
     _m("dry_run_unlabelled", "14's dry run is labelled", L,
        "    if mode == \"dry_run\":                  # only a stage that runs carries the label\n"
        "        ctx.label(DRY_RUN)", "    if False:\n        ctx.label(DRY_RUN)",

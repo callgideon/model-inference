@@ -39,6 +39,16 @@ _V4 = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 PAYER = f"lab:payer:{PROVIDER}:{_V4}@sha256:[0-9a-f]{{64}}"
 
 
+#: GET /lab/v1/judge/rubrics on the base (api-judge-2): the reviewed code version and the
+#: SOP skeleton reserved for P-07 - listed, never configurable (no output schema, no digest).
+REVIEWED = {"rubric_id": "marlin-video", "version": 1, "state": "active",
+            "criteria": [{"name": "grounded"}], "output_schema": {"type": "object"},
+            "digest": "sha256:" + "1" * 64}
+PENDING = {"rubric_id": "sop-video", "version": 2, "state": "definition_pending",
+           "criteria": [{"name": "step_evidence"}], "output_schema": None, "digest": None,
+           "pending_reason": "P-07: the operator has not supplied the SOP definition"}
+RUBRICS = (REVIEWED, PENDING)
+
 #: Product defects the fake can be told to have, each one a stage's failure oracle.
 DEFECTS = ("replay_new_job", "conflict_accepted", "artifact_upload", "foreign_read",
            "result_model", "no_usage", "sse_no_done", "sse_plain", "sse_wrong_model",
@@ -83,6 +93,7 @@ class FakeGateway:
         self.grants: dict[str, dict] = {}    # grant id -> {org, version, state, purposes}
         self.objects: dict[str, dict] = {}   # id -> anything the AP-04/08 fakes keep
         self.runs: list[str] = []
+        self.rubrics = list(RUBRICS)         # the base's listing: v1 reviewed, v2 P-07 pending
 
     @property
     def transport(self) -> httpx.MockTransport:
@@ -490,11 +501,13 @@ def judge(fake, request, method, path, key, query):
         return _ok(body={"data": [], "availability": {"state": "unavailable",
                                                       "reason": "no approved judge rate (P-10)"}})
     if path == "/lab/v1/judge/rubrics":
-        return _ok(body={"data": [{"version": 1, "criteria": [{"name": "grounded"}],
-                                   "output_schema": {"type": "object"}}], "next_cursor": None})
+        return _ok(body={"data": fake.rubrics, "next_cursor": None})
     if path == "/lab/v1/judge/configs":
         if not _granted(fake, "external_judging"):
             return _refused(403, "forbidden")
+        if _body(request).get("rubric_version") not in {
+                r["version"] for r in fake.rubrics if r["state"] == "active"}:
+            return _refused(409, "conflict")        # a definition_pending version (P-07)
         return _ok(201, {"config_id": fake.objects.setdefault(("config", key), str(uuid.uuid4()))})
     if path == "/lab/v1/judge/estimates":
         return _ok(body={"authorizes_spend": False, "samples_max": 1, "priced": False})
