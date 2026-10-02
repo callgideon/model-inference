@@ -15,8 +15,9 @@ import binascii
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Literal
+from datetime import datetime, UTC
+from typing import Any, Literal
+from collections.abc import Callable
 
 from pydantic import Field
 
@@ -34,10 +35,10 @@ MAX_KEY_CHARS = 255
 
 DomainState = Literal["queued", "reserved", "submitting", "submitted", "ambiguous", "completed",
                       "failed", "cancelled"]
-_LEDGER = {"prepared": "reserved", "submitting": "submitting", "submitted": "submitted",
+_LEDGER: dict[str, DomainState] = {"prepared": "reserved", "submitting": "submitting", "submitted": "submitted",
            "ambiguous": "ambiguous", "completed": "completed", "failed": "failed",
            "cancelled": "cancelled"}
-_OPERATION = {"queued": "queued", "reserved": "running", "submitting": "running",
+_OPERATION: dict[DomainState, api.OperationState] = {"queued": "queued", "reserved": "running", "submitting": "running",
               "submitted": "running", "ambiguous": "running", "completed": "succeeded",
               "failed": "failed", "cancelled": "cancelled"}
 
@@ -181,8 +182,12 @@ class JudgeModels(Wire):
 
 
 # ----------------------------------------------------------------------------- helpers
+def _money(amount: Any) -> Money:
+    return Money(amount=str(amount), unit="PROVIDER_USD")
+
+
 def _usd(amount: Any) -> Money | None:
-    return None if amount is None else Money(amount=str(amount), unit="PROVIDER_USD")
+    return None if amount is None else _money(amount)
 
 
 def scoped_id(action: str, provider: str, user: str, key: str, *more: str) -> uuid.UUID:
@@ -235,7 +240,7 @@ def domain_state(row: dict[str, Any]) -> DomainState:
 def run_doc(row: dict[str, Any]) -> RunDoc:
     state = domain_state(row)
     cancel = row.get("cancel_requested_at") is not None
-    op_state = _OPERATION[state]
+    op_state: api.OperationState = _OPERATION[state]
     if cancel and op_state == "running":
         op_state = "cancel_requested"
     return RunDoc(
@@ -263,8 +268,8 @@ def config_doc(row: dict[str, Any]) -> ConfigDoc:
 
 
 def budget_doc(row: dict[str, Any]) -> BudgetDoc:
-    return BudgetDoc(payer_ref=row["payer_ref"], limit=_usd(row["limit"]),
-                     reserved=_usd(row["reserved"]), settled=_usd(row["settled"]),
+    return BudgetDoc(payer_ref=row["payer_ref"], limit=_money(row["limit"]),
+                     reserved=_money(row["reserved"]), settled=_money(row["settled"]),
                      version=row.get("version"))
 
 
@@ -280,14 +285,14 @@ class JudgeApi:
     """The judge and review operations, each as the session user `user` of `provider`."""
 
     def __init__(self, doors: SessionDoors, *, rates: RateTable = APPROVED_RATES,
-                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
+                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
         self.doors, self.rates, self.clock = doors, rates, clock
 
     def models(self) -> JudgeModels:
         rows = tuple(getattr(self.rates, "rows", ()))
         data = tuple(JudgeModelDoc(model=r.model, price_version=r.price_version,
-                                   input_per_million=_usd(r.input_per_million),
-                                   output_per_million=_usd(r.output_per_million),
+                                   input_per_million=_money(r.input_per_million),
+                                   output_per_million=_money(r.output_per_million),
                                    source=r.source, effective_at=r.effective_at.isoformat())
                      for r in rows)
         availability = api.Availability(state="configured") if data else api.Availability(
@@ -398,7 +403,7 @@ class JudgeApi:
     async def review(self, user: str, provider: str, request_id: str, key: str,
                      body: ReviewBody) -> ReviewDoc:
         request = _uuid(request_id, "request")
-        args = {"provider_org_id": _uuid(provider, "provider"), "request_id": request,
+        args: dict[str, Any] = {"provider_org_id": _uuid(provider, "provider"), "request_id": request,
                 "review_id": str(scoped_id("trace.review", provider, user, key, request)),
                 "input_hash": input_hash(body, request), "verdict": body.verdict}
         args.update({k: v for k, v in (("comment", body.comment), ("run_id", body.run_id),
@@ -407,6 +412,6 @@ class JudgeApi:
 
 
 def review_doc(row: dict[str, Any]) -> ReviewDoc:
-    return ReviewDoc(**{k: (str(v) if k in ("review_id", "request_id", "reviewer", "run_id",
-                                            "created_at") and v is not None else v)
-                        for k, v in row.items() if k != "replayed"})
+    return ReviewDoc.model_validate({
+        k: (str(v) if k in ("review_id", "request_id", "reviewer", "run_id", "created_at")
+            and v is not None else v) for k, v in row.items() if k != "replayed"})

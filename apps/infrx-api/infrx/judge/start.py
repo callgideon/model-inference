@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Awaitable, Callable, Sequence
+from typing import Any
+from collections.abc import Awaitable, Callable, Sequence
 
 from ..contracts import errors
 from .dryrun import MAX_CANDIDATES
