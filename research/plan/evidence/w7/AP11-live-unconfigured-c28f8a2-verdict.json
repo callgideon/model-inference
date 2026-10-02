@@ -1,0 +1,34 @@
+{
+  "task": "AP-11",
+  "gate": "API-LIFECYCLE",
+  "mode": "live",
+  "verdict": "BLOCKED",
+  "exit": 3,
+  "reasons": [
+    "BLOCKED[P-10] the approved media-capable judge, configured live with its secret by SSM parameter name (config `judge`: live, `judge_secret_ref`: ssm:/...), its payer and spend limit",
+    "BLOCKED[GPU-TARGET] the approved live target (config `live_target`: the isolated candidate slot and its resource budget; verification.md prerequisite 3)",
+    "BLOCKED[WINDOW] the operator's window record for this run (config `window_record`: an existing file; never overlapping E4C)"
+  ],
+  "complete_lifecycle": false,
+  "verdicts": {
+    "lifecycle": "BLOCKED",
+    "api_boundary": "NOT RUN",
+    "quality": "NOT RUN",
+    "operations": "NOT RUN"
+  },
+  "label": "live: the configured approved target",
+  "fixtures": {},
+  "pins": {
+    "base": "49114933",
+    "head": "c28f8a2c4f7732533f985ad489f6b22900fb0cb8",
+    "dirty": false,
+    "target": {}
+  },
+  "target": "live-unconfigured",
+  "state_file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/l3/live-state.json",
+  "counters": {},
+  "started": "2026-10-02T09:24:04+00:00",
+  "seconds": 0.0,
+  "stages": [],
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode live --state <state> --config <c> --secrets <s>"
+}

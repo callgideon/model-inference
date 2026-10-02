@@ -1,0 +1,4754 @@
+{
+  "task": "AP-11",
+  "gate": "API-LIFECYCLE",
+  "mode": "isolated",
+  "verdict": "FAIL",
+  "exit": 1,
+  "reasons": [],
+  "complete_lifecycle": false,
+  "verdicts": {
+    "lifecycle": "FAIL",
+    "api_boundary": "NOT RUN",
+    "quality": "NOT RUN",
+    "operations": "NOT RUN"
+  },
+  "label": "isolated: task-local services, a controlled engine and declared fixtures - never the real GPU, real judge or hosted gate",
+  "fixtures": {
+    "alpha_session": "world.py: a verified individual (GoTrue's sign-up and verification, by SQL) with an HS256 session of the world's GoTrue stand-in",
+    "beta_session": "world.py: a verified individual (GoTrue's sign-up and verification, by SQL) with an HS256 session of the world's GoTrue stand-in (a second tenant)",
+    "admin_session": "world.py: NemoStation administrator membership by SQL (operator onboarding) and an edge session",
+    "outsider_session": "world.py: a verified user without membership, edge session",
+    "flags": "world.py: signup_grant, credit_admission and lab_submission enabled by SQL (operator flags; no flag API)",
+    "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)",
+    "judge": "dry_run: JUDGE_MODE's default on the Lab unit; no judge worker or START job is composed, nothing is sent (live judging is P-10)"
+  },
+  "pins": {
+    "base": "b05eb6f4",
+    "head": "49114933cf8d4e86506affd2e40e29e5dd7f2df2",
+    "dirty": true,
+    "target": {
+      "release_label": "7e808c84a30e65752f1cc48c4ca583c59a623628",
+      "migrations": "0001_init.sql..0067_judge_rubrics.sql",
+      "migration_count": 66,
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372",
+      "engine": "fake_vllm.py",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "lab_unit": "infrx.lab.control.app (IDENTITY_API, LAB_JUDGE_API, LAB_ARTIFACTS, LAB_HOSTING without a hosting slot)",
+      "ports": {
+        "postgres": 57567,
+        "valkey": 57568,
+        "s3": 57569,
+        "clickhouse": 57570
+      }
+    }
+  },
+  "target": "ap11-isolated-7e808c84a30e",
+  "state_file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/l3/base-state.json",
+  "counters": {
+    "requests": 298,
+    "inference": 6
+  },
+  "started": "2026-10-02T09:10:47+00:00",
+  "seconds": 149.7,
+  "stages": [
+    {
+      "id": "01",
+      "title": "Auth/session APIs for each actor; workspace/account/capability reads",
+      "proves": "Correct roles and distinct audiences; fresh feature availability; no unauthorized membership/grants",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /lab/v1/control/models",
+        "GET /auth/v1/availability [AP-01]",
+        "GET /console/v1/me [AP-01]",
+        "GET /console/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces [AP-01]",
+        "GET /lab/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces/{id}/members [AP-01]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:11:00.908Z",
+        "ended": "2026-10-02T09:11:01.083Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-0df458fc-6db2-45e4-b5a9-402a982a93fb",
+            "inference_id": "9ec9ba74-a482-4a4d-87e1-29f848bbdcac",
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 7.0,
+            "at": "2026-10-02T09:11:00.915Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-30ae6dd1-55ba-405d-a846-b1f7bafbeeff",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 61.7,
+            "at": "2026-10-02T09:11:00.976Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-b7650aed-42f5-438e-ac6c-9e5aca8f29e2",
+            "inference_id": null,
+            "location": null,
+            "error": "denied",
+            "ms": 18.5,
+            "at": "2026-10-02T09:11:00.995Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 401,
+            "request_id": "ap11-504c591b-76fc-4523-a601-4398444e87c8",
+            "inference_id": null,
+            "location": null,
+            "error": "unauthenticated",
+            "ms": 9.5,
+            "at": "2026-10-02T09:11:01.005Z"
+          },
+          {
+            "method": "GET",
+            "route": "/auth/v1/availability",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-e3a00f7e-102d-4698-9984-87485b73e453",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 23.2,
+            "at": "2026-10-02T09:11:01.028Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-70269e40-9cb0-45c5-8990-1c8c7d3f452e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 9.2,
+            "at": "2026-10-02T09:11:01.037Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-9077bc45-e548-4fb0-98b5-2ce92f3185e9",
+            "inference_id": null,
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 11.4,
+            "at": "2026-10-02T09:11:01.049Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/capabilities",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-d5ba48da-da8f-4e0a-8f67-f20d5a3a0e3a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.7,
+            "at": "2026-10-02T09:11:01.053Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-f4ffa637-e68e-4db5-96be-979e4d4e67ff",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 5.8,
+            "at": "2026-10-02T09:11:01.059Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/capabilities",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-8bcd45b6-4e3c-438b-a656-1d3f8a1a065d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.3,
+            "at": "2026-10-02T09:11:01.064Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces/{id}/members",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-6b05a2b1-c28a-4e90-a60c-b95d9dcd95d3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.6,
+            "at": "2026-10-02T09:11:01.068Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-055f39b4-6abd-4a64-b4b4-5443a18ad9f0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.2,
+            "at": "2026-10-02T09:11:01.072Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-b06b5aaa-3616-473b-b6d4-66756f2383a6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 3.5,
+            "at": "2026-10-02T09:11:01.076Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/capabilities",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-32a3c3aa-bc25-4fc7-a24c-73f7110c9352",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 3.8,
+            "at": "2026-10-02T09:11:01.080Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces/{id}/members",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-67af3326-a079-4faa-ba68-8a6edf1fc7b9",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 3.6,
+            "at": "2026-10-02T09:11:01.083Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "a missing key is refused 401",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "a member session reads its workspace",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "a non-member session is refused",
+            "ok": true,
+            "detail": "403"
+          },
+          {
+            "name": "a forged session is refused 401",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "auth availability is a fresh read",
+            "ok": true,
+            "detail": "{'sign_in': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T09:11:01.027807+00:00'}, 'sign_up': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T09:11:01.027807+00:00'}, 'recovery': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T09:11:01.02780"
+          },
+          {
+            "name": "a consumer session reads its own account as a session",
+            "ok": true,
+            "detail": "{'actor': {'audience': 'session', 'user_id': '98d575a3-8986-4b46-96b2-a2ed8604b30d', 'org_id': 'b6c124fb-6ebb-44f8-a9ce-991799e0e563', 'provider_org_id': None, 'role': None, 'operator': False}, 'email': None, 'state': 'onboarding', 'suspended': False, 'signup_grant': {'state': 'not_granted', 'amount"
+          },
+          {
+            "name": "a key is never a web session (401)",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "the account's actions are the server's: no operator console for a consumer",
+            "ok": true,
+            "detail": "{'create_key': False, 'revoke_key': False, 'claim_signup_grant': True, 'operator_console': False}"
+          },
+          {
+            "name": "the administrator's workspace and role",
+            "ok": true,
+            "detail": "{'b0000001-0000-4000-8000-000000000001': 'administrator'}"
+          },
+          {
+            "name": "the administrator's capabilities include member management",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the member list names the administrator only by membership",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "outsider holds no workspace",
+            "ok": true,
+            "detail": "[]"
+          },
+          {
+            "name": "consumer_a_web holds no workspace",
+            "ok": true,
+            "detail": "[]"
+          },
+          {
+            "name": "an outsider has no capabilities there",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "an outsider cannot list the members",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 15,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "admin_session",
+          "outsider_session",
+          "alpha_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "02",
+      "title": "POST model project; start pinned import or upload parts/complete",
+      "proves": "Empty workspace succeeds; manifest hashes cover all actual model files; operation completes once",
+      "selected": true,
+      "status": "FAIL",
+      "reasons": [],
+      "routes": [
+        "POST /lab/v1/control/model-projects [AP-04]",
+        "POST /lab/v1/artifacts/uploads [AP-04]",
+        "POST /lab/v1/artifacts/uploads/{id}/complete [AP-04]",
+        "POST /lab/v1/artifacts/imports [AP-04]",
+        "GET /lab/v1/operations/{id} [AP-04]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:11:01.086Z",
+        "ended": "2026-10-02T09:13:01.560Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/lab/v1/control/model-projects",
+            "origin": "lab",
+            "status": 201,
+            "request_id": "ap11-854865e0-97e6-4be1-9bfc-5466f21887b5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 58.2,
+            "at": "2026-10-02T09:11:01.199Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/artifacts/uploads",
+            "origin": "lab",
+            "status": 201,
+            "request_id": "ap11-d27f0d4b-7ee3-4ce2-8e60-defba610c105",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 72.8,
+            "at": "2026-10-02T09:11:01.285Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/artifacts/uploads/{id}/parts",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-08358605-abf1-472f-8ef5-552da900cdd7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 54.7,
+            "at": "2026-10-02T09:11:01.342Z"
+          },
+          {
+            "method": "PUT",
+            "route": "{part}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c28f7aa9-530f-40ce-a83c-12948d8afac7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.0,
+            "at": "2026-10-02T09:11:01.346Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/artifacts/uploads/{id}/parts",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4cb2202e-9b26-4325-9bbf-4e64f72440da",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 54.8,
+            "at": "2026-10-02T09:11:01.401Z"
+          },
+          {
+            "method": "PUT",
+            "route": "{part}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2f3416d2-3988-4890-a1ac-fe85fc77c127",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.0,
+            "at": "2026-10-02T09:11:01.405Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/artifacts/uploads/{id}/parts",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-075daf51-135e-40f0-b900-80fd327f8aae",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 59.7,
+            "at": "2026-10-02T09:11:01.464Z"
+          },
+          {
+            "method": "PUT",
+            "route": "{part}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-5504eda2-7b25-4161-81b5-6aa35444f3c2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 3.4,
+            "at": "2026-10-02T09:11:01.468Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/artifacts/uploads/{id}/complete",
+            "origin": "lab",
+            "status": 202,
+            "request_id": "ap11-70a1ccd7-f3ff-4265-8862-e6fe1d4c6e48",
+            "inference_id": null,
+            "location": "/lab/v1/operations/97972c5f-ca97-4a80-8fc1-084d4225cdb1",
+            "error": null,
+            "ms": 65.4,
+            "at": "2026-10-02T09:11:01.536Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-112bb00b-82bb-4c9d-8a33-cf335686b513",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.3,
+            "at": "2026-10-02T09:11:01.578Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-39378337-c9bc-4cb4-8e28-09768c52c74d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.2,
+            "at": "2026-10-02T09:11:02.125Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-32bae16f-e81b-4caf-8e96-2f3e5f7391c8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:11:02.666Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6f9f033c-d4d4-450e-8bf9-fece6e91402a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:11:03.207Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-344f9524-1a63-41fd-9f70-c2b330e7c641",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.9,
+            "at": "2026-10-02T09:11:03.750Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-854239f4-2a55-47c8-b4a9-cd31b6e6f2fd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.6,
+            "at": "2026-10-02T09:11:04.298Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3ca35a7d-4a4d-4e97-b921-f8f6157cc957",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.3,
+            "at": "2026-10-02T09:11:04.840Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-e808b7b6-9fb1-4999-b47b-2288b8fd4870",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.5,
+            "at": "2026-10-02T09:11:05.383Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-344511b1-64e1-427a-99b9-a003aeff315e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.3,
+            "at": "2026-10-02T09:11:05.925Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-e70895ad-353d-4a12-8e95-05feebde2ecc",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.3,
+            "at": "2026-10-02T09:11:06.466Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a5ba2453-1bf8-4d31-a670-9eecf2d8f306",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.9,
+            "at": "2026-10-02T09:11:07.018Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ce01aa4f-c386-4b5a-96ae-3f5edde98b00",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 52.4,
+            "at": "2026-10-02T09:11:07.570Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-93d78a17-0bdc-4b58-83a8-4f11889ab11c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.2,
+            "at": "2026-10-02T09:11:08.117Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-37f010d0-5f26-4daf-8352-572f5da7e520",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.2,
+            "at": "2026-10-02T09:11:08.659Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-fe87e8f1-b8e3-4a89-8b1b-82178e17ebdd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.2,
+            "at": "2026-10-02T09:11:09.207Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-aabd0411-58f7-498d-9c7f-415fd76ce3f6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.0,
+            "at": "2026-10-02T09:11:09.755Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-66165690-2862-4068-b566-78942454bef8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 58.2,
+            "at": "2026-10-02T09:11:10.313Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6fad43a0-55b2-42d9-835d-1c268ee49c7b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.9,
+            "at": "2026-10-02T09:11:10.858Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2ad25bae-72d0-44ae-b4ed-e2137330d4c8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 67.3,
+            "at": "2026-10-02T09:11:11.426Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f41b93f9-76da-44ed-9e71-70a5e32dea99",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.9,
+            "at": "2026-10-02T09:11:11.975Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-1ea19199-9d23-434d-9166-ca15da5512d4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.4,
+            "at": "2026-10-02T09:11:12.517Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-109ef217-79ae-45ce-bcaa-08785eeb9767",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.0,
+            "at": "2026-10-02T09:11:13.058Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-774931e7-ff7c-4d20-a408-d8a0f89aea79",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.4,
+            "at": "2026-10-02T09:11:13.600Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-349330c3-d837-4e34-a94b-20f22f740ac6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.9,
+            "at": "2026-10-02T09:11:14.142Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ebef5c69-98df-426d-a7ba-8c5f8e8a72ac",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 56.5,
+            "at": "2026-10-02T09:11:14.699Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-5c1d4b16-aea6-4866-b9db-d7f7446d0706",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.7,
+            "at": "2026-10-02T09:11:15.246Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-68a85a38-4aa2-4226-8862-be97457aace6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.8,
+            "at": "2026-10-02T09:11:15.790Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4858f8ae-fe31-4875-9c92-8d1952aabd2c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.2,
+            "at": "2026-10-02T09:11:16.335Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ef988cd5-17a4-465e-9817-e19b252842fd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.6,
+            "at": "2026-10-02T09:11:16.882Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3c83c898-1e57-4593-ad0a-9430e0c35059",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.1,
+            "at": "2026-10-02T09:11:17.424Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0f79f4de-2739-4151-b79c-73cfdd78fc48",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.1,
+            "at": "2026-10-02T09:11:17.965Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-cf9c9751-4b5c-4a13-9ae0-5580db30a406",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 56.1,
+            "at": "2026-10-02T09:11:18.522Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2c7c832a-b9d0-43d0-a789-f249762bf497",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.1,
+            "at": "2026-10-02T09:11:19.069Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-37512416-acc5-425b-8682-fe1974419d67",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 58.0,
+            "at": "2026-10-02T09:11:19.627Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4353d33d-c15d-44a9-94f1-b2728962b03f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:11:20.167Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-68a6a256-f058-4d52-a2f7-40aedcccf898",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.1,
+            "at": "2026-10-02T09:11:20.712Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a2dca33a-9a29-4b87-854b-0d3f04efa53a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 49.0,
+            "at": "2026-10-02T09:11:21.261Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c6d3e0d6-489e-4a13-9bba-6d581eb8b428",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.1,
+            "at": "2026-10-02T09:11:21.811Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-abfecc8f-602a-49e0-b3de-7330a74480a4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.4,
+            "at": "2026-10-02T09:11:22.354Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c7ae133c-7a07-40f5-bb92-d0f6bd5b41d0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 53.6,
+            "at": "2026-10-02T09:11:22.907Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-854c4bea-cb0c-42c6-aa51-4b8b088eb01a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.0,
+            "at": "2026-10-02T09:11:23.450Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f5d44641-feb9-4dfd-a474-a56373c079d1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 51.4,
+            "at": "2026-10-02T09:11:24.001Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-30966339-e1c6-4c77-b67a-2bf8a297099f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.5,
+            "at": "2026-10-02T09:11:24.549Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7c05a879-3549-4cb0-ab05-4d6eb528d2ec",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.8,
+            "at": "2026-10-02T09:11:25.092Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-fdc94d58-ca5e-409a-b1de-936e6e035d04",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.0,
+            "at": "2026-10-02T09:11:25.635Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-85fb58e0-082d-479d-b58c-c201068d4fe0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.2,
+            "at": "2026-10-02T09:11:26.181Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4550412e-f5fd-4864-b8bc-46738786f27c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 55.1,
+            "at": "2026-10-02T09:11:26.736Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6ddff5b1-b5fc-415c-8c38-f6257a38aef1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 49.8,
+            "at": "2026-10-02T09:11:27.286Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0b43645b-4e60-4701-be34-cfbe64d4bb36",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 56.2,
+            "at": "2026-10-02T09:11:27.842Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d9a62b73-33a7-4cd9-a55d-43df35e13e74",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.0,
+            "at": "2026-10-02T09:11:28.393Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-fa027f24-5ec0-47c5-866b-918517ef62b9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.6,
+            "at": "2026-10-02T09:11:28.934Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-088fe5ee-00c3-441d-b2b6-31f681bd62d8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:11:29.475Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f199becd-8868-4fc6-9d88-3aac3d5bb95f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.6,
+            "at": "2026-10-02T09:11:30.019Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-aef732f1-3b0f-4cd6-8986-6f68458456d3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.8,
+            "at": "2026-10-02T09:11:30.563Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6ebc1a26-2021-4c8d-85e8-8ccd53eefc48",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.6,
+            "at": "2026-10-02T09:11:31.105Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7254db2b-7493-4d49-b75f-31836ff68cb5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 38.9,
+            "at": "2026-10-02T09:11:31.644Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9aad3a6e-d8fe-4be8-9fe4-e7d4b4efb3b1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:11:32.185Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-036574b2-aa42-4be8-b67b-d4a17174ec99",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.7,
+            "at": "2026-10-02T09:11:32.726Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7c7ec107-5038-4e4f-b6bc-5a5c76e98ce1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:11:33.266Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-474d6a63-f781-4caa-8681-95f843a0ab24",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.5,
+            "at": "2026-10-02T09:11:33.807Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-80ad959d-74cc-4e0a-9266-263e65c1ae4e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.1,
+            "at": "2026-10-02T09:11:34.348Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-205d42ee-dcf7-4d11-a99c-67f6272fdb29",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.2,
+            "at": "2026-10-02T09:11:34.895Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a02a63ba-af5e-43db-b3a1-3d256f7d674e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.3,
+            "at": "2026-10-02T09:11:35.436Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-87745ffd-3f25-48ef-9a80-57318d2d47d8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.8,
+            "at": "2026-10-02T09:11:35.976Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-e40f24da-ef01-4dd6-9f0f-869865549101",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.4,
+            "at": "2026-10-02T09:11:36.518Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ca4d2649-79e7-4f52-9650-d83a90ec5146",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.9,
+            "at": "2026-10-02T09:11:37.058Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-887ea26c-242b-42df-ad98-f2def44735d4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.9,
+            "at": "2026-10-02T09:11:37.598Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a9915f75-02b4-49d5-a0a5-32ae3cf6ec48",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.3,
+            "at": "2026-10-02T09:11:38.141Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4c341de6-fa4d-49d9-aea4-f2087e8e432e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.5,
+            "at": "2026-10-02T09:11:38.683Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-85cdb5f6-1a9b-4688-8e72-854c77678068",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.5,
+            "at": "2026-10-02T09:11:39.229Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a9bfeb71-59e8-43e1-be29-4ac22f58ef42",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.0,
+            "at": "2026-10-02T09:11:39.772Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ca1fc2ae-a84a-4209-a2fb-994622dce2d1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:11:40.313Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6c14ce54-9827-409e-9a85-ec6a7ba7cfac",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.8,
+            "at": "2026-10-02T09:11:40.854Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-87625ef9-c055-4513-b992-81371387b09e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.4,
+            "at": "2026-10-02T09:11:41.395Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3ecaa822-2359-4b4e-848b-6c9f7b9088fa",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.4,
+            "at": "2026-10-02T09:11:41.937Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-29ce1c1f-f330-4d6c-92d3-813a1d2a57f8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.7,
+            "at": "2026-10-02T09:11:42.477Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-29d8dafc-7359-455c-af67-cfd1b6948257",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.4,
+            "at": "2026-10-02T09:11:43.023Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-540f4daa-b853-4796-a078-9c42f7f32938",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.8,
+            "at": "2026-10-02T09:11:43.564Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c3704815-7411-4e01-942b-8314b1421e3f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.6,
+            "at": "2026-10-02T09:11:44.107Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-95e39473-ba15-4e37-b2c9-b4d74de70edb",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.2,
+            "at": "2026-10-02T09:11:44.648Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9628ad9e-a80a-497e-a1ad-d0630ae344b5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:11:45.188Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0905b3a6-8215-464c-adcd-a1230413ec1b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.4,
+            "at": "2026-10-02T09:11:45.728Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9375c0a1-272b-433b-a256-8792babb257b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.1,
+            "at": "2026-10-02T09:11:46.271Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-38b7e933-80bb-4079-8784-5c375f7489cd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.8,
+            "at": "2026-10-02T09:11:46.812Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6302d017-7b28-47f2-b9c2-b2d1158b5f21",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.2,
+            "at": "2026-10-02T09:11:47.355Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0616fae3-d557-4552-806c-0b0e6c28e69c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.2,
+            "at": "2026-10-02T09:11:47.895Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f0094245-b84c-4670-8b6b-733e902f4072",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.6,
+            "at": "2026-10-02T09:11:48.437Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-164cfd62-78f0-4092-b124-815097e416f2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.8,
+            "at": "2026-10-02T09:11:48.978Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-830bd8c2-e2c4-4721-a20e-9cf490a3bcd3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.7,
+            "at": "2026-10-02T09:11:49.520Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6c42ac2b-3f95-4675-8370-3b1e05d6e33e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 54.0,
+            "at": "2026-10-02T09:11:50.074Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d3281185-385b-4d80-b6ed-9680a54b60b4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.0,
+            "at": "2026-10-02T09:11:50.620Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0449c808-efd5-492f-8a6c-d5543d9f332f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 53.3,
+            "at": "2026-10-02T09:11:51.173Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-82895b41-54ef-4a07-a161-20332675077d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.0,
+            "at": "2026-10-02T09:11:51.718Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c0a90e9f-3093-4122-8ea5-9c1040907e48",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.8,
+            "at": "2026-10-02T09:11:52.257Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-313562e2-b4f8-4c1f-b1e1-bb51bb3cb1e7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 57.9,
+            "at": "2026-10-02T09:11:52.816Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f2d7e8a2-c92b-4d31-ad79-5ecf81ee3762",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.9,
+            "at": "2026-10-02T09:11:53.359Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-1ba0ab0c-4e72-4b01-90b1-f13cd2427aea",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.5,
+            "at": "2026-10-02T09:11:53.901Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d7086751-0312-4474-be9d-9fce551fcc63",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 49.8,
+            "at": "2026-10-02T09:11:54.451Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-63d612ee-00ee-4987-b943-b3b1e66d4db9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.2,
+            "at": "2026-10-02T09:11:54.997Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-77b6ef32-8056-44c1-adc1-82a41a5b13fb",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.5,
+            "at": "2026-10-02T09:11:55.545Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-58415f4d-b9b3-49f5-9605-c8dfa1bc7f0f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.9,
+            "at": "2026-10-02T09:11:56.088Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0d82a6f0-b8ba-4d16-acb1-ae7c357e1fac",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 53.4,
+            "at": "2026-10-02T09:11:56.642Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-5c510b13-2f72-4111-b51c-8aede4eba63a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.6,
+            "at": "2026-10-02T09:11:57.189Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-89f6b600-64f9-4ce7-8f4d-9bc8b45f5a9e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:11:57.729Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0f148b92-70d2-41fe-9798-60382e89976e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.4,
+            "at": "2026-10-02T09:11:58.275Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-483a5651-6fb5-4545-a2b1-cb0e1a71e06c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.8,
+            "at": "2026-10-02T09:11:58.817Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-596e94e6-6c64-4550-ab98-0b0364aeba08",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.1,
+            "at": "2026-10-02T09:11:59.361Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c0f2da01-e433-4c29-85a9-24b555553192",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.2,
+            "at": "2026-10-02T09:11:59.902Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-45e89b27-6a84-49bf-ba05-7a13f199c83c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:12:00.443Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ed9356c8-de1d-48a6-bd52-967538f4c744",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.8,
+            "at": "2026-10-02T09:12:00.983Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-da5b656d-1e9e-452e-8290-1ad5a0ee9b9f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.4,
+            "at": "2026-10-02T09:12:01.528Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0072fcd4-9466-419c-b2e2-fbe2925e53bd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.0,
+            "at": "2026-10-02T09:12:02.069Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-5cb82be9-0304-4b4f-a902-23ff3ef4cdfc",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.5,
+            "at": "2026-10-02T09:12:02.614Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0dab360a-7be6-4699-aadd-f950f5f05051",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.2,
+            "at": "2026-10-02T09:12:03.156Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-5f266dae-6e6c-42d6-abb5-cd2518d84b2a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.9,
+            "at": "2026-10-02T09:12:03.697Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-46381d94-3e91-4417-900e-2f17792710df",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.1,
+            "at": "2026-10-02T09:12:04.238Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0275696f-77be-429e-a3ce-7849db7dc5b1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.9,
+            "at": "2026-10-02T09:12:04.783Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d22a5377-d5e9-4720-b515-2ad11119929b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.0,
+            "at": "2026-10-02T09:12:05.326Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7ee57c57-7195-401e-9ae4-fd29ac578fe6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:05.866Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-71bdd170-c68f-4ada-b187-79109ff47208",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.0,
+            "at": "2026-10-02T09:12:06.408Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f7a9cbf8-4994-4694-a7e8-a486cb07ad1c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.2,
+            "at": "2026-10-02T09:12:06.950Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6605c112-1fb7-4733-9163-6bfb559e48b2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.3,
+            "at": "2026-10-02T09:12:07.498Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-40aadf28-d01c-4bde-b29f-d51a7f7e0419",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.8,
+            "at": "2026-10-02T09:12:08.049Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-26d3afb7-0f0a-4c2c-9598-eb50ce29e91f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.5,
+            "at": "2026-10-02T09:12:08.592Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-86b1849f-249c-4880-a074-d8bc662bd4d4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 65.5,
+            "at": "2026-10-02T09:12:09.158Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-81e12953-c431-4a2d-939c-6c69424c217b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.2,
+            "at": "2026-10-02T09:12:09.701Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3ff4d2b4-5e6b-4fbb-a0f4-2a658f34bc16",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:10.241Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-89c33a53-84fd-4374-9c86-e11f496095fe",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.3,
+            "at": "2026-10-02T09:12:10.783Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-17065bcf-e019-432f-b0ca-fc26407355b7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:12:11.324Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6f4c2400-f21f-44c6-834b-0e2eadf64929",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.1,
+            "at": "2026-10-02T09:12:11.863Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-8a92fc66-a722-4f98-b475-7b898544c238",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.6,
+            "at": "2026-10-02T09:12:12.406Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-78a37566-91a8-46ca-91e1-fda21c7aa961",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 49.7,
+            "at": "2026-10-02T09:12:12.955Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3e91faf3-4064-46f5-9e51-82fb6da7f660",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.7,
+            "at": "2026-10-02T09:12:13.497Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-e2e2fed9-bbf4-4034-a31c-2a2271bce18b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.1,
+            "at": "2026-10-02T09:12:14.038Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-24f3fb15-9814-4009-91a1-362aeb3c3539",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:14.578Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-98fcff8f-1a3a-4696-a780-c2f860cd5f64",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.8,
+            "at": "2026-10-02T09:12:15.119Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-fcadfd62-e6e9-418f-b248-5b064ce69acf",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.2,
+            "at": "2026-10-02T09:12:15.666Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-eeeb930f-7441-445d-9920-73f2ed89860d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.1,
+            "at": "2026-10-02T09:12:16.208Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4a56d9f0-cd07-4353-8095-7f2c9d87d918",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.2,
+            "at": "2026-10-02T09:12:16.751Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4a9917b0-f7d9-4acf-8b0f-41991059b303",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.2,
+            "at": "2026-10-02T09:12:17.291Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a77a7029-2eaa-4640-b276-125df620daaf",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.7,
+            "at": "2026-10-02T09:12:17.831Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-29bd3698-552e-4be5-aee4-8b8e7c3d920f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:18.371Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-dc843b87-e32f-494a-8573-c338a03fb154",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.1,
+            "at": "2026-10-02T09:12:18.910Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-12a7d4d3-ecb3-46c5-b25f-99bc85a608f7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.2,
+            "at": "2026-10-02T09:12:19.452Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-666d65a3-bbb9-4b5a-8069-6e95a567fca2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.2,
+            "at": "2026-10-02T09:12:19.995Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-355dc377-f26a-44c6-94bb-293706622aef",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.2,
+            "at": "2026-10-02T09:12:20.538Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ed478db4-b4b4-487c-b4a5-133deed15f3b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.2,
+            "at": "2026-10-02T09:12:21.078Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a3534d73-b568-454d-b330-da7824db932f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.7,
+            "at": "2026-10-02T09:12:21.624Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-cc6d66c2-0b53-4227-97fa-45448edf81a8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.7,
+            "at": "2026-10-02T09:12:22.165Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7b1976dc-5370-41b4-86f5-a8ec5448307c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.1,
+            "at": "2026-10-02T09:12:22.709Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0cf44531-1543-4a91-b9a7-9baa5f4f3c9a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.2,
+            "at": "2026-10-02T09:12:23.250Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-8e81420b-11b4-4f58-8918-ed319184984f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.6,
+            "at": "2026-10-02T09:12:23.799Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-bd3538b6-b553-4a7e-a28a-3b5e8400e1b9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.9,
+            "at": "2026-10-02T09:12:24.341Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9cb26d1e-2745-447e-9107-7335f6aa09d1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.5,
+            "at": "2026-10-02T09:12:24.883Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c1fbcb2e-35f4-4bb7-9f29-58921f886b3a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.4,
+            "at": "2026-10-02T09:12:25.424Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-fdcbd2d4-4fcc-4e78-b7bc-7e2fc873a63d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:25.964Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c2625fe4-aa6b-4334-8a16-f895a8d56dd2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.3,
+            "at": "2026-10-02T09:12:26.505Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4a275bf5-3368-4047-90eb-77dfdaaf0be0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:12:27.046Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-db35ed34-4189-4c8a-b57d-467f1543c9e2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.7,
+            "at": "2026-10-02T09:12:27.587Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6193762f-4fdb-4ec4-a32d-755b2fb0ec9d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.8,
+            "at": "2026-10-02T09:12:28.127Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f52a67a1-09fc-4f15-8da9-c16c76d16e06",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.2,
+            "at": "2026-10-02T09:12:28.668Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c0c82f7e-6b7e-496e-aa47-ff7c5f45af37",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.4,
+            "at": "2026-10-02T09:12:29.208Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2b8a51d4-aec6-45a6-abcf-d361d2e0dc41",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.6,
+            "at": "2026-10-02T09:12:29.757Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-961cbd01-9c17-4249-8007-8c5e7d38fe03",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:12:30.298Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3992bc1e-e8e9-4bed-aa84-9a8f1534151b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.6,
+            "at": "2026-10-02T09:12:30.844Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-a661ca0a-3803-47de-a142-e5ebbd6ce20d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.1,
+            "at": "2026-10-02T09:12:31.385Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2f3ece08-a05f-4a42-8385-45e637716b8c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.8,
+            "at": "2026-10-02T09:12:31.933Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2aca757c-94cc-44c2-8aef-444117eee7dd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.1,
+            "at": "2026-10-02T09:12:32.474Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-125faa85-ba40-4150-a5ae-160a4674f09b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.6,
+            "at": "2026-10-02T09:12:33.018Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-251dd070-7007-4fbc-86bd-cb4fc56d692a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.3,
+            "at": "2026-10-02T09:12:33.565Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-94d99da6-ad70-43dc-bb63-17dd9d003605",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.0,
+            "at": "2026-10-02T09:12:34.106Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-57a2dfa8-7eb3-42c2-bdff-8098c32765ce",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.4,
+            "at": "2026-10-02T09:12:34.649Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9b4422ff-967b-4918-aa87-dbdab809f055",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:12:35.190Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7575e09f-fbcc-4459-8e8d-f17221fd4405",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.0,
+            "at": "2026-10-02T09:12:35.731Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-708b1bdd-c67c-41c4-9ef2-d37f0a9ec537",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.8,
+            "at": "2026-10-02T09:12:36.273Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-8331c517-7bf1-4d6b-bd14-1c706457543c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.8,
+            "at": "2026-10-02T09:12:36.818Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4a90bb2a-c811-49c2-a4c1-5162fb24e877",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:37.358Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-86d52433-34a8-494c-b21d-06560bb3d836",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.3,
+            "at": "2026-10-02T09:12:37.898Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-451d2ae3-1058-42a2-ad94-93cbc4a1e587",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.1,
+            "at": "2026-10-02T09:12:38.440Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-48fc6da5-ad26-495b-bc2f-2097c1fca030",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.7,
+            "at": "2026-10-02T09:12:38.988Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-51b1d160-0c23-4541-9edc-90d5cd26c349",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.6,
+            "at": "2026-10-02T09:12:39.529Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-4c1e92be-7e19-41dd-ac2e-8570028ae95b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.8,
+            "at": "2026-10-02T09:12:40.073Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-20bf7462-e32e-49ab-9126-e83912dc78d3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.8,
+            "at": "2026-10-02T09:12:40.615Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-816eb788-1b72-4aeb-8f66-4a006d7dad6d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.9,
+            "at": "2026-10-02T09:12:41.159Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-bfaaee19-509a-4b63-916b-346a40025df5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.3,
+            "at": "2026-10-02T09:12:41.699Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f6a97d73-09b7-4e0a-b3b5-25432a291087",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.6,
+            "at": "2026-10-02T09:12:42.240Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-47d2a90e-475a-4b6d-b3db-f5a4d9d6dfe7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.4,
+            "at": "2026-10-02T09:12:42.789Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f58e8c92-dae0-4a34-b603-035a75638fd7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.4,
+            "at": "2026-10-02T09:12:43.330Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-696ada38-bdc6-409c-a739-bac3b4f2419b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T09:12:43.870Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-81245e5b-ee60-4975-ac54-59c8d5f0e412",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.4,
+            "at": "2026-10-02T09:12:44.411Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ac760191-96b4-46a1-8d1f-e04ab0c394e6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.0,
+            "at": "2026-10-02T09:12:44.955Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-193de7e4-44d1-4129-866a-2e7a11cbd686",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.2,
+            "at": "2026-10-02T09:12:45.497Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f8404c43-6a6c-42ca-8cae-3fdc533e5c51",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.5,
+            "at": "2026-10-02T09:12:46.040Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-86bacf03-40ee-4402-a742-3e22ee7cebb6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 42.0,
+            "at": "2026-10-02T09:12:46.583Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9c697f8d-c342-47b2-bfd8-3ddd3d63011d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.8,
+            "at": "2026-10-02T09:12:47.129Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c528ff19-7e75-41cf-9f9f-2edd9c9570a0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.8,
+            "at": "2026-10-02T09:12:47.676Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c051bd8a-46cd-44da-b735-f58084360085",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 96.0,
+            "at": "2026-10-02T09:12:48.272Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6af327d3-07e2-469f-aa24-1bc001982361",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.9,
+            "at": "2026-10-02T09:12:48.818Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0874ba38-080a-4e8c-8033-f89129cded5c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.5,
+            "at": "2026-10-02T09:12:49.368Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-991ef68c-1367-4f7e-ae89-34f29909f3d3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 87.4,
+            "at": "2026-10-02T09:12:49.957Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-68b00b28-df2e-4001-b1cb-5e8d28646369",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 86.1,
+            "at": "2026-10-02T09:12:50.544Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f6e5261f-0ee3-412f-bff7-824334ca208a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.5,
+            "at": "2026-10-02T09:12:51.088Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-21acf165-da4e-45b2-8f2d-946fa8208ba5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.9,
+            "at": "2026-10-02T09:12:51.633Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-749cede8-e1d0-4f3f-a043-5ac270498eed",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.5,
+            "at": "2026-10-02T09:12:52.181Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-732e95f7-0700-4379-9f71-988a9925222e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 44.3,
+            "at": "2026-10-02T09:12:52.726Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9bdd6df0-fc34-45da-86f9-932cf8b9b5ee",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.7,
+            "at": "2026-10-02T09:12:53.277Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7113057e-c218-4f86-98ff-a1fb51939171",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.5,
+            "at": "2026-10-02T09:12:53.823Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0793806c-6ee4-4436-ba60-7637029e4be6",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.7,
+            "at": "2026-10-02T09:12:54.369Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-6cf7d849-f950-4111-89fc-9d774be5108d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.2,
+            "at": "2026-10-02T09:12:54.918Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-671c8d9a-d7ec-40ea-b6bf-c877af3dee07",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 51.1,
+            "at": "2026-10-02T09:12:55.469Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d5a451f9-5dc9-4cb9-8d93-e53e1cafd62b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.2,
+            "at": "2026-10-02T09:12:56.014Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7a97d7d6-ca12-4367-a9f2-f63bac5e2a9d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.6,
+            "at": "2026-10-02T09:12:56.565Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-de49793d-6f4f-4b9e-8c18-42a197be72ab",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 46.6,
+            "at": "2026-10-02T09:12:57.112Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ee99e35d-0425-426c-8f46-d68f745fc60e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 43.5,
+            "at": "2026-10-02T09:12:57.656Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-91cb07da-686c-434b-ba7e-823007a7f35e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 52.7,
+            "at": "2026-10-02T09:12:58.209Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9b0b8e91-813f-4f4f-8894-f9ca79ba3f9b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 105.2,
+            "at": "2026-10-02T09:12:58.814Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-26aeaf49-6544-4ab7-846b-4c0d4775ab94",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 48.4,
+            "at": "2026-10-02T09:12:59.363Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-f82eae52-deb5-4960-8b24-799270c9def7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 47.4,
+            "at": "2026-10-02T09:12:59.911Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d8e77c41-6cad-42ff-9bec-7a26d4759238",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 52.4,
+            "at": "2026-10-02T09:13:00.464Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3266fb55-046f-488b-aeb4-37088abbe831",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 45.2,
+            "at": "2026-10-02T09:13:01.009Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/operations/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-b7dcbb78-e4c5-409e-a80f-290415504991",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 50.5,
+            "at": "2026-10-02T09:13:01.560Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the project is created in the workspace",
+            "ok": true,
+            "detail": "{'status': 201, 'project_id': '06fd620f-e0fe-48f0-925f-6c8b4024d28b'}"
+          },
+          {
+            "name": "the upload session is issued",
+            "ok": true,
+            "detail": "{'status': 201, 'upload_id': '25ae3247-a648-44ad-b3e9-75637dabb4be'}"
+          },
+          {
+            "name": "a scoped PUT is granted for config.json",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "config.json's bytes are stored",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "a scoped PUT is granted for model.safetensors",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "model.safetensors's bytes are stored",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "a scoped PUT is granted for tokenizer.json",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "tokenizer.json's bytes are stored",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the verification operation succeeds",
+            "ok": false,
+            "detail": "{'state': 'queued', 'phase': None, 'error': None}"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 230,
+          "inference": 0
+        },
+        "owned": [
+          {
+            "kind": "model_project",
+            "id": "06fd620f-e0fe-48f0-925f-6c8b4024d28b"
+          }
+        ],
+        "fixtures": [
+          "admin_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "03",
+      "title": "GET verified artifact; create immutable serving revision",
+      "proves": "Actual source commit, model/card/schema/harness/processor/runtime pins, supported hardware profile",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 02 to pass first (it is FAIL)"
+      ],
+      "routes": [
+        "GET /lab/v1/artifacts/{id} [AP-04]",
+        "POST /lab/v1/control/model-projects/{id}/revisions [AP-04]"
+      ],
+      "needs": [
+        "02"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.584Z",
+        "ended": "2026-10-02T09:13:01.584Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "04",
+      "title": "POST private deployment; poll its operation and detail",
+      "proves": "Isolated resource allocated; real engine reports matching identity; state is not inferred from record presence",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 03 to pass first (it is BLOCKED)"
+      ],
+      "routes": [
+        "GET /lab/v1/hosting-profiles",
+        "POST /lab/v1/control/deployments",
+        "GET /lab/v1/control/deployments/{id}",
+        "GET /lab/v1/control/deployments/{id}/readiness"
+      ],
+      "needs": [
+        "03"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.598Z",
+        "ended": "2026-10-02T09:13:01.598Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "05",
+      "title": "Operator private rate/funding API; bounded smoke; issue provider-dev key",
+      "proves": "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope correct; no public exposure",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 04 to pass first (it is BLOCKED)",
+        "BLOCKED[AP-06] POST /operator/v1/deployments/{id}/dev-rate, POST /operator/v1/dev-wallet-grants, GET /lab/v1/control/dev-wallet, POST /lab/v1/control/endpoints/{id}/keys: not served by the target (config `composed`)"
+      ],
+      "routes": [
+        "POST /operator/v1/deployments/{id}/dev-rate [AP-06]",
+        "POST /operator/v1/dev-wallet-grants [AP-06]",
+        "GET /lab/v1/control/dev-wallet [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/smoke",
+        "POST /lab/v1/control/endpoints/{id}/keys [AP-06]"
+      ],
+      "needs": [
+        "04"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.612Z",
+        "ended": "2026-10-02T09:13:01.612Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "06",
+      "title": "Call private endpoint with finite-video fixture",
+      "proves": "Real media processing and response; charge/usage receipt; no text-only substitute for modality smoke",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 05 to pass first (it is BLOCKED)"
+      ],
+      "routes": [
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [
+        "AP-06 a provider-dev key scoped to the private endpoint (stage 05)",
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.627Z",
+        "ended": "2026-10-02T09:13:01.627Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "07",
+      "title": "Provider administrator proposes; operator approves through API",
+      "proves": "Expected listing version, approved rates/limits and candidate receipts validated; decision audited",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 05 to pass first (it is BLOCKED)",
+        "BLOCKED[AP-06] GET /operator/v1/publication-proposals, POST /operator/v1/publication-proposals/{id}/approve: not served by the target (config `composed`)"
+      ],
+      "routes": [
+        "POST /lab/v1/control/proposals",
+        "GET /operator/v1/publication-proposals [AP-06]",
+        "POST /operator/v1/publication-proposals/{id}/approve [AP-06]"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.639Z",
+        "ended": "2026-10-02T09:13:01.639Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "08",
+      "title": "GET public catalog; GET account; claim grant; create consumer A key",
+      "proves": "Newly published test listing appears with truthful contract; one individual grant; one key despite retried creation",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/models",
+        "GET /console/v1/me [AP-01]",
+        "POST /console/v1/signup-grant/claim [AP-03]",
+        "POST /console/v1/keys [AP-03]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:01.653Z",
+        "ended": "2026-10-02T09:13:02.052Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/models",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-28d93778-559b-4e18-8f7d-85aa8fc38e35",
+            "inference_id": "b7806943-ac18-47ac-9942-6dc8e7fd4351",
+            "location": null,
+            "error": null,
+            "ms": 10.3,
+            "at": "2026-10-02T09:13:01.664Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-08e6c582-39da-4307-84f0-a4cb61f6ef6b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 19.1,
+            "at": "2026-10-02T09:13:01.705Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-91a3ac36-e4d8-4a67-8379-630fc9b717c7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 10.5,
+            "at": "2026-10-02T09:13:01.735Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-8e9acf26-8ad3-4a1c-abab-2881ffa1b46e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.6,
+            "at": "2026-10-02T09:13:01.743Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-9a9fccaf-8449-4ddb-b1ea-4f13d91c60a4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 14.0,
+            "at": "2026-10-02T09:13:01.775Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-cc3c86c2-d94d-4db4-9f3c-97079ac744eb",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 8.0,
+            "at": "2026-10-02T09:13:01.821Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-c779bb82-e106-4066-88bb-1fa99618faaa",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 18.5,
+            "at": "2026-10-02T09:13:01.840Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-36a92fe9-1e27-4301-8888-a93003b0b120",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 16.9,
+            "at": "2026-10-02T09:13:01.889Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-f7c8b202-7c4f-4e61-b304-89b286e6bf4c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 9.8,
+            "at": "2026-10-02T09:13:01.916Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-b2a589e9-5a1d-4a8f-98d3-edb8f9a9015f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.5,
+            "at": "2026-10-02T09:13:01.923Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-f168f30f-aedd-4402-ae12-1ab6c188913f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 10.8,
+            "at": "2026-10-02T09:13:01.953Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-890a9671-31c0-4032-9cd2-8b399f51694f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.4,
+            "at": "2026-10-02T09:13:01.999Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-f2259cdc-eee4-4c2b-9151-35140ac1c755",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 16.1,
+            "at": "2026-10-02T09:13:02.016Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-ef2b5c91-05a6-406f-8299-88da2e6fdcbe",
+            "inference_id": "b3acf8dc-f9df-4d3b-95c3-ff7fb3b77ce8",
+            "location": null,
+            "error": "not_found",
+            "ms": 12.5,
+            "at": "2026-10-02T09:13:02.044Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-c6f51a66-dc06-4b15-9ea2-430ea2334fe9",
+            "inference_id": null,
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 1.2,
+            "at": "2026-10-02T09:13:02.045Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-160ec54d-9bf6-42c5-88e1-52ec29559812",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 6.8,
+            "at": "2026-10-02T09:13:02.052Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the catalog lists the model under test",
+            "ok": true,
+            "detail": "['nemostation/marlin-2b']"
+          },
+          {
+            "name": "consumer_a's signup grant is claimed",
+            "ok": true,
+            "detail": "{'http': 200, 'status': 'granted', 'credit': {'amount': '10000.00000000', 'unit': 'CREDIT'}}"
+          },
+          {
+            "name": "consumer_a: a second claim replays, never a second grant",
+            "ok": true,
+            "detail": "replayed"
+          },
+          {
+            "name": "consumer_a: one individual grant in CREDIT on the account",
+            "ok": true,
+            "detail": "{'state': 'granted', 'amount': {'amount': '10000.00000000', 'unit': 'CREDIT'}, 'granted_at': '2026-10-02T09:13:01.691802Z'}"
+          },
+          {
+            "name": "consumer_a's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': 'e529e63f-fb8a-4abd-8ce8-c97ef7cb19b5', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_a: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_a: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "consumer_b's signup grant is claimed",
+            "ok": true,
+            "detail": "{'http': 200, 'status': 'granted', 'credit': {'amount': '10000.00000000', 'unit': 'CREDIT'}}"
+          },
+          {
+            "name": "consumer_b: a second claim replays, never a second grant",
+            "ok": true,
+            "detail": "replayed"
+          },
+          {
+            "name": "consumer_b: one individual grant in CREDIT on the account",
+            "ok": true,
+            "detail": "{'state': 'granted', 'amount': {'amount': '10000.00000000', 'unit': 'CREDIT'}, 'granted_at': '2026-10-02T09:13:01.877040Z'}"
+          },
+          {
+            "name": "consumer_b's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': '335d26b4-ce16-4a3d-95c4-9e25228dd9fe', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_b: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_b: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "a valid consumer key is authenticated",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "a consumer key is never a web session (401)",
+            "ok": true,
+            "detail": "401"
+          }
+        ],
+        "versions": {
+          "listing": {
+            "id": "nemostation/marlin-2b",
+            "created": 1788220800,
+            "owned_by": "nemostation",
+            "listing_version": 1
+          }
+        },
+        "counters": {
+          "requests": 16,
+          "inference": 0
+        },
+        "owned": [
+          {
+            "kind": "key",
+            "id": "e529e63f-fb8a-4abd-8ce8-c97ef7cb19b5"
+          },
+          {
+            "kind": "key",
+            "id": "335d26b4-ce16-4a3d-95c4-9e25228dd9fe"
+          }
+        ],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "09",
+      "title": "Allocate consumer upload; PUT bytes; complete; submit async video job",
+      "proves": "Upload not mistaken for model artifact; stable idempotency; result references the requested published serving version",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /v1/uploads",
+        "PUT /v1/uploads/{handle}",
+        "POST /v1/uploads/{handle}/complete",
+        "POST /v1/jobs"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:02.067Z",
+        "ended": "2026-10-02T09:13:02.484Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/uploads",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-ca1b04c8-9f43-4b4e-8a9c-1cb0f7383829",
+            "inference_id": "4a9af760-d3ee-4928-9de5-c7ef61d217dc",
+            "location": null,
+            "error": null,
+            "ms": 8.5,
+            "at": "2026-10-02T09:13:02.089Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/v1/uploads/{handle}",
+            "origin": "gateway",
+            "status": 204,
+            "request_id": "ap11-76565106-d944-4df4-8679-65fddd2871ab",
+            "inference_id": "afae6b32-d83e-435d-afda-f62035a117a5",
+            "location": null,
+            "error": null,
+            "ms": 31.5,
+            "at": "2026-10-02T09:13:02.160Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/uploads/{handle}/complete",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-3a99c4b1-8d05-42d6-8952-9d727f22495e",
+            "inference_id": "415ad057-49f4-4d5f-b696-8b17c1f7aa42",
+            "location": null,
+            "error": null,
+            "ms": 46.8,
+            "at": "2026-10-02T09:13:02.237Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-db11c9db-4c17-4ef5-b939-fe2422210d58",
+            "inference_id": "31b7a41e-4b29-43e2-bb56-c079c27db1c9",
+            "location": "/v1/jobs/job_f529dd4e2a754cc7a4cb2c339f481509",
+            "error": null,
+            "ms": 89.8,
+            "at": "2026-10-02T09:13:02.372Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-b32adc8d-070b-4e41-9e8d-288c8051621a",
+            "inference_id": "31b7a41e-4b29-43e2-bb56-c079c27db1c9",
+            "location": "/v1/jobs/job_f529dd4e2a754cc7a4cb2c339f481509",
+            "error": null,
+            "ms": 11.9,
+            "at": "2026-10-02T09:13:02.457Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 409,
+            "request_id": "ap11-19f80cc0-a5e5-470a-a02e-7ee0406a85e6",
+            "inference_id": "adf50ae0-d8af-49dc-914b-12d8b16d9daf",
+            "location": null,
+            "error": "idempotency_conflict",
+            "ms": 7.1,
+            "at": "2026-10-02T09:13:02.484Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the upload ticket is issued 201",
+            "ok": true,
+            "detail": "201"
+          },
+          {
+            "name": "the bytes are stored 204",
+            "ok": true,
+            "detail": "204"
+          },
+          {
+            "name": "the upload completes 200",
+            "ok": true,
+            "detail": "{'status': 200, 'state': 'finalized', 'fields': ['media', 'state', 'upload_handle']}"
+          },
+          {
+            "name": "the upload is consumer media, not a model artifact",
+            "ok": true,
+            "detail": "['media', 'state', 'upload_handle']"
+          },
+          {
+            "name": "the job is accepted 202",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a replay returns the same job",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a changed body under the key is 409",
+            "ok": true,
+            "detail": "409"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 6,
+          "inference": 3
+        },
+        "owned": [
+          {
+            "kind": "upload",
+            "id": "upl_PM98NBfN5KWNJBnl62DdvPK_j2AvFPAuyMYNL37zZ44"
+          },
+          {
+            "kind": "job",
+            "id": "job_f529dd4e2a754cc7a4cb2c339f481509"
+          }
+        ],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "10",
+      "title": "Poll status/result and console request/ledger APIs",
+      "proves": "Terminal result and one exact CREDIT settlement; reserve released correctly; request/deployment/listing/rate pins agree",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /v1/jobs/{handle}/result",
+        "GET /console/v1/requests/{id} [AP-02]",
+        "GET /console/v1/credit-ledger [AP-02]"
+      ],
+      "needs": [
+        "09"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:02.558Z",
+        "ended": "2026-10-02T09:13:03.142Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-5c1f8af8-8450-4984-8161-8a1005dc3aa0",
+            "inference_id": "31b7a41e-4b29-43e2-bb56-c079c27db1c9",
+            "location": null,
+            "error": null,
+            "ms": 4.4,
+            "at": "2026-10-02T09:13:02.562Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-96bf6af8-ec58-434e-adfd-3cf951f9a7cd",
+            "inference_id": "31b7a41e-4b29-43e2-bb56-c079c27db1c9",
+            "location": null,
+            "error": null,
+            "ms": 4.3,
+            "at": "2026-10-02T09:13:03.067Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}/result",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-c98a4714-afd1-4fb1-92df-f6e131c9e0df",
+            "inference_id": "31b7a41e-4b29-43e2-bb56-c079c27db1c9",
+            "location": null,
+            "error": null,
+            "ms": 5.3,
+            "at": "2026-10-02T09:13:03.072Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-b3a76727-8b48-473b-8d50-a5a89b3a0fff",
+            "inference_id": "bc585837-177a-4a45-b63b-0a501f32a9f7",
+            "location": null,
+            "error": "not_found",
+            "ms": 14.3,
+            "at": "2026-10-02T09:13:03.086Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-58bca27c-9afd-4021-b4d9-aaa52ad2cc3b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 19.9,
+            "at": "2026-10-02T09:13:03.106Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/credit-ledger",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-f0f32f14-031f-4da8-b5fc-d37983a6e96d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 17.9,
+            "at": "2026-10-02T09:13:03.124Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-08ec6a9b-ca80-4bad-a2b2-023cd2099093",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 17.8,
+            "at": "2026-10-02T09:13:03.142Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the job succeeded",
+            "ok": true,
+            "detail": "succeeded"
+          },
+          {
+            "name": "the result names the model under test",
+            "ok": true,
+            "detail": "nemostation/marlin-2b"
+          },
+          {
+            "name": "the result reports usage",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "consumer B cannot read A's job",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "the console reads the request",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the console's pins agree with the call",
+            "ok": true,
+            "detail": "{'requested_model': 'nemostation/marlin-2b', 'model_revision': 'nemostation/marlin-2b@2026-09-01', 'state': 'succeeded'}"
+          },
+          {
+            "name": "one CREDIT settlement, the reserve released",
+            "ok": true,
+            "detail": "{'settlement_state': 'settled', 'hold_state': 'settled'}"
+          },
+          {
+            "name": "the ledger holds exactly that one debit for the request",
+            "ok": true,
+            "detail": "[('inference_debit', '-0.54080000')]"
+          },
+          {
+            "name": "consumer B's console cannot read A's request",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 7,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "11",
+      "title": "Repeat bounded sync and SSE calls to cover supported modes",
+      "proves": "Correct sync behavior, stream journal/disconnect rules; no implicit async conversion; exact usage/settlement per request",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /v1/chat/completions",
+        "GET /console/v1/requests/{id} [AP-02]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:03.157Z",
+        "ended": "2026-10-02T09:13:03.953Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-195d82d3-1030-4b2d-a2b7-6788afdd9b38",
+            "inference_id": "90e53be0-6755-4a55-814e-fd460ae0a414",
+            "location": null,
+            "error": null,
+            "ms": 204.1,
+            "at": "2026-10-02T09:13:03.389Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-2a343ddc-74f7-4bea-9eca-a4b03091b220",
+            "inference_id": "0128e212-1b5f-4b0e-9020-7e32091610b1",
+            "location": null,
+            "error": null,
+            "ms": 417.8,
+            "at": "2026-10-02T09:13:03.859Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-d4a14ffd-81a8-4ddf-b3be-9b9fc46c47fc",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 19.1,
+            "at": "2026-10-02T09:13:03.915Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/credit-ledger",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-ce5a3d25-7b67-45f2-8250-cd1006439df7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 19.7,
+            "at": "2026-10-02T09:13:03.935Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-c6aa54d6-a5f5-4913-a9aa-bb6b9478f992",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 17.9,
+            "at": "2026-10-02T09:13:03.953Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "sync answers 200 in-line, never 202",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the answer names its request (Inference-Id)",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "sync names the model and reports usage",
+            "ok": true,
+            "detail": "{'status': 200, 'object': 'chat.completion', 'model': 'nemostation/marlin-2b', 'usage': True, 'request_id': '90e53be0-6755-4a55-814e-fd460ae0a414'}"
+          },
+          {
+            "name": "SSE is an event stream",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE ends with [DONE]",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE carries content for the model",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "the console reads the request",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the console's pins agree with the call",
+            "ok": true,
+            "detail": "{'requested_model': 'nemostation/marlin-2b', 'model_revision': 'nemostation/marlin-2b@2026-09-01', 'state': 'succeeded'}"
+          },
+          {
+            "name": "one CREDIT settlement, the reserve released",
+            "ok": true,
+            "detail": "{'settlement_state': 'settled', 'hold_state': 'settled'}"
+          },
+          {
+            "name": "the ledger holds exactly that one debit for the request",
+            "ok": true,
+            "detail": "[('inference_debit', '-0.54080000')]"
+          },
+          {
+            "name": "consumer B's console cannot read A's request",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 5,
+          "inference": 2
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "12",
+      "title": "Enable capture and scoped sharing/external_judging grants for test key/data; submit one captured request",
+      "proves": "Permission persisted through API; prior uncaptured request stays uncaptured; use remaining request budget",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "PUT /console/v1/keys/{id}/capture [AP-07]",
+        "POST /console/v1/data-grants [AP-07]",
+        "GET /console/v1/data-grants [AP-07]",
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "08"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:03.989Z",
+        "ended": "2026-10-02T09:13:04.862Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-11e38c6a-8171-42cc-815e-f1191ce07dc9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 11.0,
+            "at": "2026-10-02T09:13:04.037Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-2b843a5b-e0cf-4718-bba2-351a9eaf5fc7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 6.6,
+            "at": "2026-10-02T09:13:04.104Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-14fd9297-1c4b-4b47-bba4-81735a4b2140",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 14.2,
+            "at": "2026-10-02T09:13:04.119Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-use",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-cf69a70b-ae2e-4551-8e52-430fc9d7c751",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.4,
+            "at": "2026-10-02T09:13:04.149Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/console/v1/keys/{id}/capture",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-30342ee1-c528-4f10-b3cd-1616e3383f03",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 16.7,
+            "at": "2026-10-02T09:13:04.210Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-9a170cd5-5884-445c-bb86-9cc3f4dfa5f9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 6.0,
+            "at": "2026-10-02T09:13:04.241Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-1378e4ee-bbe2-4a99-a7e4-fc9e2bd638d9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 18.1,
+            "at": "2026-10-02T09:13:04.312Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-8840aad1-666f-4eee-8123-6ee884f13535",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 6.3,
+            "at": "2026-10-02T09:13:04.370Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-53010328-5e21-4610-a4d1-d6f4e329e216",
+            "inference_id": "90379746-df3a-4678-b3ff-9e9112400fbf",
+            "location": null,
+            "error": null,
+            "ms": 419.2,
+            "at": "2026-10-02T09:13:04.843Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "consumer_a_capture's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': '330ea00f-abb2-480c-9977-1dceaa23e27e', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_a_capture: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_a_capture: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "capture is enabled through the API",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "only the test key captures; the earlier key stays uncaptured",
+            "ok": true,
+            "detail": "{'e529e63f-fb8a-4abd-8ce8-c97ef7cb19b5': 'off', '330ea00f-abb2-480c-9977-1dceaa23e27e': 'full'}"
+          },
+          {
+            "name": "the grant is written",
+            "ok": true,
+            "detail": "{'status': 201, 'grant_id': 'e4b19585-f779-4205-860b-11abd03fe1eb', 'version': 1, 'state': 'active'}"
+          },
+          {
+            "name": "the grant is persisted with exactly the purposes asked",
+            "ok": true,
+            "detail": "[{'grant_id': 'e4b19585-f779-4205-860b-11abd03fe1eb', 'version': 1, 'provider_org_id': 'b0000001-0000-4000-8000-000000000001', 'model_ids': ['d0000001-0000-4000-8000-000000000001'], 'categories': ['request_content', 'response_content', 'feedback'], 'purposes': ['provider_sharing', 'external_judging'"
+          },
+          {
+            "name": "the captured request is answered in-line",
+            "ok": true,
+            "detail": "{'status': 200, 'request_id': '90379746-df3a-4678-b3ff-9e9112400fbf'}"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 9,
+          "inference": 1
+        },
+        "owned": [
+          {
+            "kind": "key",
+            "id": "330ea00f-abb2-480c-9977-1dceaa23e27e"
+          },
+          {
+            "kind": "data_grant",
+            "id": "e4b19585-f779-4205-860b-11abd03fe1eb"
+          }
+        ],
+        "fixtures": [
+          "alpha_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "13",
+      "title": "Poll Lab trace list/detail for that request; inspect authorized media",
+      "proves": "Same request ID/pins; real capture content/timing/usage; metadata-only and unavailable content distinguished",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /lab/v1/traces",
+        "GET /lab/v1/traces/{id}"
+      ],
+      "needs": [
+        "12"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:04.889Z",
+        "ended": "2026-10-02T09:13:11.292Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0fbfe3ec-34ad-4d46-95f8-0cebde4368e3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 35.1,
+            "at": "2026-10-02T09:13:04.925Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-2429ba34-b618-4a5f-a27c-2a3ec3851fa8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 36.3,
+            "at": "2026-10-02T09:13:06.961Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-1cb77469-5811-4bc3-a367-0782d9f1029f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 49.8,
+            "at": "2026-10-02T09:13:09.011Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-48e50a3b-3027-4cd1-b24d-4a93310652bd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 102.1,
+            "at": "2026-10-02T09:13:11.113Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-ab972fb2-be4f-45fe-988a-bf4e26b83050",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 121.1,
+            "at": "2026-10-02T09:13:11.235Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 404,
+            "request_id": "ap11-e0343934-d52d-477d-b240-d08a619ff7e3",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 36.2,
+            "at": "2026-10-02T09:13:11.271Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-3274d49b-457a-4e77-bd55-73b98dcd8673",
+            "inference_id": null,
+            "location": null,
+            "error": "denied",
+            "ms": 21.4,
+            "at": "2026-10-02T09:13:11.292Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the captured request is listed in the Lab",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "same request id and pins as the call",
+            "ok": true,
+            "detail": "{'serving_version_id': 'd0000003-0000-4000-8000-000000000003', 'model_revision': 'nemostation/marlin-2b', 'price_version': 'rc_marlin2b_2026_09_provisional', 'model_id': 'd0000001-0000-4000-8000-000000000001'}"
+          },
+          {
+            "name": "the authorized content is the request's real capture",
+            "ok": true,
+            "detail": "content"
+          },
+          {
+            "name": "timing is measured or labelled unavailable, never zero",
+            "ok": true,
+            "detail": "403"
+          },
+          {
+            "name": "the uncaptured earlier request has no content in the Lab",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "an outsider cannot read the trace",
+            "ok": true,
+            "detail": "403"
+          }
+        ],
+        "versions": {
+          "trace": {
+            "mode": "full",
+            "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "price_version": "rc_marlin2b_2026_09_provisional"
+          }
+        },
+        "counters": {
+          "requests": 7,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "admin_session",
+          "outsider_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "14",
+      "title": "Create rubric/config; estimate; set budget; POST judge run; poll results",
+      "proves": "Approved live adapter invoked once; video/SOP evidence available; real judge result or honest abstention; exact provider spend",
+      "selected": true,
+      "status": "FAIL",
+      "reasons": [],
+      "routes": [
+        "GET /lab/v1/judge/models [AP-08]",
+        "GET /lab/v1/judge/rubrics [AP-08]",
+        "POST /lab/v1/judge/configs [AP-08]",
+        "POST /lab/v1/judge/estimates [AP-08]",
+        "PUT /lab/v1/judge/budgets/{payer_id} [AP-08]",
+        "POST /lab/v1/judge/runs [AP-08]",
+        "GET /lab/v1/judge/runs/{id} [AP-08]",
+        "GET /lab/v1/judge/runs/{id}/results [AP-08]"
+      ],
+      "needs": [
+        "13"
+      ],
+      "prerequisites": [
+        "P-10 an approved media-capable judge, its secret reference, payer and spend limit"
+      ],
+      "resumed": false,
+      "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)",
+      "evidence": {
+        "started": "2026-10-02T09:13:11.317Z",
+        "ended": "2026-10-02T09:13:11.384Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/console/v1/credits",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-79a49018-4779-4683-b01a-71eb6694aa47",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 17.6,
+            "at": "2026-10-02T09:13:11.334Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/models",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-15495a75-03e7-4b4c-85f4-341d360217b9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 14.9,
+            "at": "2026-10-02T09:13:11.349Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/rubrics",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-10be4297-380b-40f4-ad7d-16e5eb9bccd5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 34.6,
+            "at": "2026-10-02T09:13:11.384Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the judge models are truthful: none listed means unavailable",
+            "ok": true,
+            "detail": "unavailable"
+          },
+          {
+            "name": "a reviewed rubric version with criteria and an output schema",
+            "ok": false,
+            "detail": "2"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 3,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "admin_session"
+        ],
+        "resumed": [],
+        "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)"
+      }
+    },
+    {
+      "id": "15",
+      "title": "Read consumer credits and provider budget after judge",
+      "proves": "Consumer not charged for provider judging; run replay does not duplicate spend; estimates separate from settled cost",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 14 to pass first (it is FAIL)"
+      ],
+      "routes": [
+        "GET /console/v1/credits [AP-02]",
+        "GET /lab/v1/judge/budgets [AP-08]"
+      ],
+      "needs": [
+        "14"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:11.437Z",
+        "ended": "2026-10-02T09:13:11.437Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "16",
+      "title": "Submit human review; read review/calibration",
+      "proves": "Immutable reviewed provenance; inadequate reference sample shows insufficient calibration",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 14 to pass first (it is FAIL)"
+      ],
+      "routes": [
+        "POST /lab/v1/traces/{id}/reviews [AP-08]",
+        "GET /lab/v1/traces/{id}/feedback [AP-08]",
+        "GET /lab/v1/judge/calibration [AP-08]"
+      ],
+      "needs": [
+        "13",
+        "14"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:11.490Z",
+        "ended": "2026-10-02T09:13:11.490Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "17",
+      "title": "Revoke sharing/judging grant; retry reads and enqueue a follow-up judge",
+      "proves": "Future prohibited content read/egress refused; no permanent content bypass; aggregate access follows its separate policy",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 14 to pass first (it is FAIL)"
+      ],
+      "routes": [
+        "DELETE /console/v1/data-grants/{id} [AP-07]",
+        "GET /lab/v1/traces/{id}",
+        "POST /lab/v1/judge/runs [AP-08]"
+      ],
+      "needs": [
+        "12",
+        "14"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T09:13:11.523Z",
+        "ended": "2026-10-02T09:13:11.523Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "18",
+      "title": "Roll back/retire test listing and candidate through operator/control APIs",
+      "proves": "Prior jobs keep original pins; new admissions use correct listing or refuse; task-owned resources drained and cleaned",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] POST /operator/v1/listings/{model_id}/rollback: not served by the target (config `composed`)",
+        "BLOCKED[AP-11] stage 18 has no runner implementation yet (AP-11 11d/11e)"
+      ],
+      "routes": [
+        "POST /operator/v1/listings/{model_id}/rollback [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/retire",
+        "POST /lab/v1/operations/{id}/cancel"
+      ],
+      "needs": [
+        "07"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    }
+  ],
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --state <state> --world ap11"
+}
