@@ -14,7 +14,6 @@ import pytest
 
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.lab.artifacts import verify
-from infrx.lab.artifacts.store import MemoryControlOps
 
 from .conftest import (COMMIT, REPO, SERVING_VERSION, TOKEN, entry, manifest, marlin_files,
                        run)
@@ -273,6 +272,32 @@ def test_ap04__a_duplicate_completion_returns_the_one_operation(world) -> None:
     assert third.status_code == 202 and third.json()["state"] == "succeeded"
     assert w.call("POST", f"{UPLOADS}/{up['upload_id']}/parts", json={
         "relative_path": "config.json"}).status_code == 409
+
+
+def test_ap04__a_completion_that_loses_the_race_keeps_the_winners_operation(world) -> None:
+    """Two concurrent completions under one key: the loser read the session `open`, its start
+    replays the winner's operation and the session CAS refuses it. It must not cancel that
+    operation (the session would sit at `verifying` with a cancelled operation)."""
+    from infrx.lab.artifacts.store import Upload
+    w = world
+    files = marlin_files()
+    up = open_upload(w, files, project(w)["project_id"])
+    for path, blob in files.items():
+        put(w, up["upload_id"], path, blob)
+    stale, key = run(w.store.get(Upload, w.A, up["upload_id"])), w.key()
+    winner = complete(w, up, key=key).json()
+    uploads, reads = w.artifacts.uploads, []
+    real = uploads._session
+
+    async def racing(actor, upload_id):              # the loser's read predates the winner
+        reads.append(upload_id)
+        return stale if len(reads) == 1 else await real(actor, upload_id)
+    uploads._session = racing
+    loser = complete(w, up, key=key)
+    assert loser.status_code == 202 and loser.json()["operation_id"] == winner["operation_id"]
+    assert len(reads) == 2, "the loser re-reads the session the winner moved"
+    assert w.worker() == 1
+    assert operation(w, winner["operation_id"])["state"] == "succeeded"
 
 
 def test_ap04__a_worker_killed_while_hashing_is_fenced_out(world) -> None:
@@ -545,26 +570,6 @@ def test_ap04__adoption_refuses_non_operators_foreign_resources_and_other_bytes(
     r = w.call("POST", "/operator/v1/artifacts/adopt", "ops", w.key(), json=other)
     assert r.status_code == 422 and reasons(r) == {"digest_mismatch"}
     assert w.call("GET", PROJECTS, "viewer_a").json()["data"] == []
-
-
-def test_ap04__the_memory_operations_replay_and_cancel_by_the_protocol() -> None:
-    """The in-memory `ControlOps` (until 0060): same key+hash replays, another hash is 409,
-    cancel of a queued operation is terminal and a terminal one is never leased."""
-    from datetime import UTC, datetime
-
-    from infrx.contracts import api, errors
-
-    async def clock():
-        return datetime(2026, 10, 1, tzinfo=UTC)
-    ops, actor = MemoryControlOps(clock), api.Actor(audience="session", user_id="u")
-    start = dict(kind="k", resource_kind="r", resource_id="x", actor=actor, scope="s", key="k1")
-    first, replayed = run(ops.start(**start, input_hash="h1"))
-    again, replayed_again = run(ops.start(**start, input_hash="h1"))
-    assert (replayed, replayed_again, again.doc) == (False, True, first.doc)
-    with pytest.raises(errors.IdempotencyConflict):
-        run(ops.start(**start, input_hash="h2"))
-    assert run(ops.cancel(first.doc.operation_id)).doc.state == "cancelled"
-    assert run(ops.lease(first.doc.operation_id, "w", 60)) is None
 
 
 def test_ap04__nothing_mounts_while_the_surface_is_unwired() -> None:

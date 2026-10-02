@@ -172,7 +172,7 @@ class Uploads:
             raise errors.UploadExpired("the upload session has expired")
         if body.manifest_sha256 != upload.manifest_sha256:
             raise errors.InvalidRequest("the declared manifest is not this session's")
-        op, _ = await self.ops.start(
+        op, replayed = await self.ops.start(
             kind="artifact.upload.verify", resource_kind="artifact",
             resource_id=stable_id("artifact", upload.upload_id), actor=actor,
             scope=f"artifact.upload.complete:{upload.provider_org_id}", key=key,
@@ -182,7 +182,8 @@ class Uploads:
                 "state": "verifying", "operation_id": op.doc.operation_id}),
                 expected_state="open")
         except errors.StateConflict:                 # a concurrent completion won the session
-            await self.ops.cancel(op.doc.operation_id)
+            if not replayed:                         # a replay is the winner's own operation
+                await self.ops.cancel(op.doc.operation_id)
             return await self.complete(actor, upload_id, body, key)
         return op
 

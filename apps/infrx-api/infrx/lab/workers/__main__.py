@@ -48,6 +48,10 @@ never runs in a consumer process.
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
 * `training`   no worker pass exists on this base (see `_training`); it refuses by name.
+* `artifacts`  LAB_S3_BUCKET (+ LAB_ARTIFACT_SECRET_REFS, the only secret references an import
+               may name, e.g. `ssm:/model-inference/hf_token`): AP-04's `ArtifactWorker` over
+               0060's operations and 0061 (`lab.artifacts.compose.role`, WR-AP04-2) - upload
+               verification, pinned imports and the expired-session sweep every 5 s.
 """
 from __future__ import annotations
 
@@ -81,7 +85,8 @@ from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
-ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")
+ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets",
+         "artifacts")
 REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
@@ -89,7 +94,7 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
          "rollout": (BUCKET, "LAB_OPERATOR_ID"),
-         "datasets": (BUCKET, *TRACES)}
+         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
 LAB_PREFIX = "infrx/"
@@ -540,9 +545,14 @@ def _training(mode, env, connect, objects, worker_id, **_):
                                "run is prepared, submitted and finished through the Lab route")
 
 
+def _artifacts(mode, env, connect, objects, worker_id, **sources):
+    from ..artifacts.compose import role
+    return role(mode, env, connect, objects, worker_id, **sources)
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
-         "datasets": _datasets}
+         "datasets": _datasets, "artifacts": _artifacts}
 
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:

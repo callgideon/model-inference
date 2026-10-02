@@ -2,7 +2,7 @@
 
 - `DurableOps`: AP-04's operation port (`store.ControlOps`, what `uploads`/`imports`/the
   routes call) over api-schema's 0060 store (`state.control_ops`: `PgControlOps`, and
-  `FakeControlOps` in tests). It replaces `store.MemoryControlOps` wherever AP-04 is
+  `FakeControlOps` in tests). It replaced the in-memory ops store (deleted) wherever AP-04 is
   composed: an operation outlives the process that started or worked it.
 - `surface(connect, objects)`: `LabArtifacts` on one login (the Lab unit's
   `INFRX_LAB_DATABASE_URL`, or the worker role's `LAB_DATABASE_URL`) over 0061

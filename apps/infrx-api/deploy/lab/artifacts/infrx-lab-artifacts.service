@@ -1,0 +1,44 @@
+[Unit]
+Description=infrx Lab artifacts worker - AP-04 upload verification and pinned imports - OFF unless /etc/infrx-lab/artifacts.env exists
+# WR-AP04-2 (AP-04). Disabled by default: nothing writes the env file below, so the unit does
+# not start (a skipped condition, not a failure) until the operator enables this one role
+# (infra/lab/rollout/steps/50-lab-role.sh ROLE=artifacts). No Requires=/PartOf= on the
+# consumer units, and none of them names this one: a Lab outage never touches inference.
+ConditionPathExists=/etc/infrx-lab/artifacts.env
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+User=ubuntu
+# Its own env file (mode 0600): LAB_DATABASE_URL (by SSM name), LAB_S3_BUCKET and
+# LAB_ARTIFACT_SECRET_REFS (the only secret references an import may name, e.g.
+# ssm:/model-inference/hf_token - resolved at fetch time on the instance role, never a value).
+EnvironmentFile=/etc/infrx-lab/artifacts.env
+ExecStartPre=-/usr/bin/docker rm -f infrx-lab-artifacts
+# An import spools one file at a time (a Marlin shard is ~5 GB): the spool is on the NVMe,
+# never the bounded tmpfs; emptied at every start (an interrupted import is re-fetched).
+ExecStartPre=+/bin/rm -rf /opt/dlami/nvme/infrx-lab-artifacts
+ExecStartPre=+/usr/bin/install -d -o 10005 -g 10000 -m 0700 /opt/dlami/nvme/infrx-lab-artifacts
+# The entry point exits 2 naming a missing setting, answers /readyz and /metrics on
+# 127.0.0.1:8018, and drains on SIGTERM (an unfinished lease expires and the next pass
+# re-runs the operation under a new fence).
+ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-artifacts --network host \
+  --user 10005:10000 --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
+  -v /opt/dlami/nvme/infrx-lab-artifacts:/spool:rw -e TMPDIR=/spool -e AWS_DEFAULT_REGION=us-east-1 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 2g --memory-swap 2g --cpus 1 --cpu-shares 256 --pids-limit 128 \
+  --env-file /etc/infrx-lab/artifacts.env -e LAB_WORKER_HEALTH_PORT=8018 \
+  ${INFRX_IMAGE} python -m infrx.lab.workers artifacts
+ExecStop=/usr/bin/docker stop -t 60 infrx-lab-artifacts
+TimeoutStopSec=90
+KillSignal=SIGTERM
+KillMode=mixed
+Restart=on-failure
+RestartPreventExitStatus=2
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

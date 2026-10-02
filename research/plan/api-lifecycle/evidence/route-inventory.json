@@ -353,7 +353,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -365,7 +366,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -377,7 +379,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -389,7 +392,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -401,7 +405,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -527,7 +532,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -539,7 +545,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -551,7 +558,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -563,7 +571,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -909,7 +918,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1512,7 +1522,8 @@
     {
       "audience": "operator",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",

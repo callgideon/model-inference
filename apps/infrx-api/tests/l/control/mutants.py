@@ -62,6 +62,7 @@ O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pin
 O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
 O_MOUNT = "test_control_app__mounts_only_the_lab_routers_on_its_own_settings"
 O_JUDGE = "test_control_app__mounts_the_judge_family_only_with_lab_judge_api"   # WR-1 AP-08
+O_ARTIFACTS = "test_control_app__mounts_the_artifact_families_only_with_lab_artifacts"
 O_REJECT = "test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing"
 O_TERMINAL = "test_operations__a_retired_proposal_lists_as_a_terminal_row"
 O_ROUTE = "test_control_route__only_an_operator_rejects_a_proposal"
@@ -268,6 +269,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "FastAPI(docs_url=None, redoc_url=None, openapi_url=None)", "FastAPI()", O_APP),
     _m("control_routes_unmounted", "the unit serves L3's routes (WR-I2L-2b)", APP,
        "    lab_control.register(app, rt, control)\n", "", O_MOUNT),
+    _m("artifacts_mounted_without_the_switch", "AP-04 is on the unit only with LAB_ARTIFACTS",
+       APP, "    if settings.deployment is not None and settings.deployment.lab_artifacts:\n"
+            "        from ..artifacts",
+       "    if settings.deployment is not None:\n        from ..artifacts", O_ARTIFACTS),
+    _m("artifacts_never_mounted", "the unit mounts AP-04's families (WR-AP04-2)", APP,
+       "    mount(app, rt)\n", "", O_ARTIFACTS),
     _m("lab_setting_waved_through", "a missing INFRX_LAB_* setting refuses startup", APP,
        "    if missing:\n        raise RuntimeMisconfigured", "    if False:\n        raise RuntimeMisconfigured",
        O_MOUNT),

@@ -108,8 +108,15 @@ def _compose(lab: dict[str, str], store):
         from ...gateway.routes.operator_publication import Publication
         from ...state.control_ops import PgControlOps
         publication = Publication(operations, PgControlOps(connect))
+    # WR-AP04-2 (AP-04): model projects and artifacts on the unit's login, only with
+    # LAB_ARTIFACTS; the Lab objects are required (a missing LAB_S3_BUCKET refuses startup).
+    artifacts = None
+    if settings.deployment is not None and settings.deployment.lab_artifacts:
+        from ..artifacts.compose import surface
+        from ..workers.__main__ import lab_objects
+        artifacts = surface(connect, lab_objects(MODE, os.environ))
     return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
-                           lab_publication=publication,
+                           lab_publication=publication, lab_artifacts=artifacts,
                            **_families(settings, lab, connect)), control, traces
 
 
@@ -158,4 +165,6 @@ def create_app() -> FastAPI:
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
                    lab_judge, lab_reviews, operator_publication):
         family.register(app, rt)
+    from ..artifacts.compose import mount          # WR-AP04-2: nothing while it is off
+    mount(app, rt)
     return app

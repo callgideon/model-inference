@@ -47,6 +47,7 @@ case "$role" in
   training) names="$common LAB_TRAINING_CONCURRENCY LAB_TRAINING_CONNECTOR LAB_TRAINING_CONNECTOR_URL LAB_TRAINING_CONNECTOR_TOKEN LAB_TRAINING_BUDGET_USD LAB_TRAINING_PAYER_REF"
             needs="LAB_S3_BUCKET" ;;
   rollout) names="$common LAB_ROLLOUT_CONCURRENCY LAB_OPERATOR_ID"; needs="LAB_S3_BUCKET LAB_OPERATOR_ID" ;;
+  artifacts) names="$common LAB_S3_PREFIX LAB_ARTIFACT_SECRET_REFS"; needs="LAB_S3_BUCKET" ;;
 esac
 # the roles whose work source is not on this release: each refuses by name (R198/R211)
 pending=" checkpoints training rollout "

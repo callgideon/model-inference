@@ -431,7 +431,7 @@ def test_i2l__a_lab_worker_that_refuses_to_start_is_not_restarted_in_a_loop():
              if "python -m infrx.lab.workers" in path.read_text()}
     assert {path.stem for path in units} == {
         f"infrx-lab-{role}" for role in ("eval", "checkpoints", "datasets", "judge",
-                                         "annotation", "training", "rollout")}
+                                         "annotation", "training", "rollout", "artifacts")}
     for path, text in units.items():
         service = text.split("[Service]", 1)[1].split("\n[", 1)[0]
         lines = [line.strip() for line in service.splitlines()]

@@ -64,7 +64,7 @@ LABELS = c("two_revisions_of_one_artifact_never_race_for_a_label")
 PROFILE = c("the_profile_is_the_measured_marlin_serving_version")
 ADOPT = c("an_operator_adopts_existing_bytes_keeping_the_production_identity")
 ADOPT_NO = c("adoption_refuses_non_operators_foreign_resources_and_other_bytes")
-OPS = c("the_memory_operations_replay_and_cancel_by_the_protocol")
+RACE = c("a_completion_that_loses_the_race_keeps_the_winners_operation")
 UNWIRED = c("nothing_mounts_while_the_surface_is_unwired")
 WORKSPACE = c("a_session_names_its_workspace_and_every_door_checks_it")
 SECRETS = c("an_import_resolves_only_the_secret_refs_its_role_names")
@@ -148,6 +148,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("completion_ignores_manifest", "completion confirms the session's own manifest",
        U, "        if body.manifest_sha256 != upload.manifest_sha256:\n", "        if False:\n",
        DUPLICATE),
+    _m("race_loser_cancels_the_winner", "a completion that loses the session race cancels only "
+       "an operation it started (never the winner's replayed one)",
+       U, "            if not replayed:", "            if True:", RACE),
     _m("artifact_id_random", "a rerun writes the same artifact, once",
        U, 'artifact_id=stable_id("artifact", row.key)',
        'artifact_id=str(__import__("uuid").uuid4())', RETRY, PARTS),
@@ -178,11 +181,6 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("operation_read_across_workspaces", "an operation is read only in its workspace",
        RA, "if op is None or op.actor.provider_org_id != actor.provider_org_id:",
        "if op is None:", OP_SCOPE),
-    _m("ops_replay_ignores_body", "same scope+key and another input is 409",
-       S, "            if op.input_hash != input_hash:\n", "            if False:\n", OPS),
-    _m("ops_cancel_never_terminal", "cancelling a queued operation is terminal at once",
-       S, 'state="cancelled" if op.doc.state == "queued"',
-       'state="cancel_requested" if op.doc.state == "queued"', OPS),
     # --- WR-AP04-2: the Lab unit's composition and the worker role --------------------------
     _m("workspace_never_named", "a web session's workspace is the request's provider_org_id",
        CO, '"provider_org_id": request.query_params.get("provider_org_id") or None})',
@@ -285,7 +283,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        CO, "DurableOps(control_ops.PgControlOps(connect))",
        "DurableOps(control_ops.FakeControlOps())", UNIT, KILLED),
 )
-FAKE_ONLY = (OPS, PROFILE, UNWIRED, WORKSPACE, SECRETS, BOX)
+FAKE_ONLY = (PROFILE, UNWIRED, WORKSPACE, SECRETS, BOX)
 
 
 def case_names() -> set[str]:
