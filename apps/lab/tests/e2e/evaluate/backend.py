@@ -4,8 +4,8 @@ as the Lab's control unit composes it (R186's factory, WR-LDP-2: `pilot._lab`, D
 `PgLabDataStore`, B1's freeze, the REAL L2; WR-LR6-E2E-SHADOW: the unit's own route, served
 through `stack.unit_app`), on the task-local PostgreSQL (l4), D7's seeded world.
 
-That composition carries no experiments, catalog or B3 ledger port yet (WR-B4-2, WR-LAB2-2,
-WR-B3-1: their SQL is 0043's, their adapters are not written):
+That composition carries the experiments and B3 ledger ports since WR-AP10-1 and a catalog
+whose listing is SR-AP10-1's honest 503 (`carried` asks it, so the catalog is not carried):
 `/_test/composition {"as": "gateway"}` serves exactly it; `{"as": "journey"}` fills those three
 with the route suite's own fakes (`tests/g/lab_evaluations`, as `tests/b/backend.py`) over the
 same real D7/B1/L2. `world.composed` says which ports the unit's own composition carries, so
@@ -26,6 +26,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import stack  # noqa: E402
 
 PORTS = ("store", "experiments", "catalog", "ledger")
+
+
+async def carried(composition, provider_org_id: str) -> dict[str, bool]:
+    """Which ports the unit's own composition answers through: present, and for the catalog
+    a listing that answers (AP-10: SR-AP10-1's honest 503, `DependencyUnavailable`, is not
+    carried - j10 stays NOT RUN rather than binding over the route suite's fake catalog)."""
+    from infrx.contracts import errors
+    got = {name: getattr(composition, name) is not None for name in PORTS}
+    if got["catalog"]:
+        try:
+            await composition.catalog.catalog(provider_org_id)
+        except errors.DependencyUnavailable:
+            got["catalog"] = False
+    return got
 
 
 def main() -> None:
@@ -77,7 +91,7 @@ def main() -> None:
     users = {"dev": DEV, "viewer": l2.VIEWER, "other_dev": l2.BOTH, "consumer": l2.C1}
     stack.door(app, dsn, users)
     gateway = switch.own
-    composed = {name: getattr(gateway, name) is not None for name in PORTS}
+    composed = asyncio.run(carried(gateway, NEMO))
     experiments = Experiments()
     journey = dataclasses.replace(gateway, experiments=experiments, ledger=Ledger(),
                                   catalog=Catalog())

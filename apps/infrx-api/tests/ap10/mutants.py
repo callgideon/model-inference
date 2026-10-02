@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import shutil
 import sys
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
@@ -42,6 +43,10 @@ KEYREUSE = "test_ap10_a_key_reused_with_another_body_conflicts_even_after_a_cras
 RESUME = "test_ap10_a_crash_mid_materialisation_resumes_to_the_same_refs_once"
 CANCEL = "test_ap10_a_cancelled_operation_publishes_nothing"
 C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
+#: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
+PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
+BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
+J10 = "test_ap10_j10_a_catalog_answering_503_is_not_carried"
 
 
 def m(name, invariant, old, new, *cases, file=P, dies_by=(), occurrences=1):
@@ -153,6 +158,8 @@ MUTANTS: tuple[Mutant, ...] = (
       file=FT),
     m("ft_c2_purpose", "C2 refs are issued for training",
       "purpose=DataPurpose.training)", "purpose=DataPurpose.provider_sharing)", C2, file=FT),
+    m("j10_catalog_presence_is_carried", "a catalog answering 503 is not carried (j10 NOT RUN)",
+      '    if got["catalog"]:\n', "    if False:\n", J10, file=BACKEND),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),
@@ -161,7 +168,7 @@ MUTANTS: tuple[Mutant, ...] = (
 
 def case_names() -> set[str]:
     names = set()
-    for suite in SUITES:
+    for suite in (*SUITES, PROBE_SUITE):
         tree = ast.parse((API_DIR / suite).read_text())
         names |= {node.name for node in tree.body
                   if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
@@ -171,8 +178,26 @@ def case_names() -> set[str]:
 RUNNER = Runner(name="ap10", targets=SUITES, require_every_case=True)
 
 
+def _with_backend(tmp: pathlib.Path) -> pathlib.Path:
+    """The default copy under `infrx-api/`, plus the e2e backend (and the `stack` it
+    imports) where the probe case finds it, `../lab/tests/e2e/`."""
+    root = tmp / "infrx-api"
+    root.mkdir()
+    shared._copy(root, RUNNER)
+    e2e = tmp / "lab/tests/e2e"
+    (e2e / "evaluate").mkdir(parents=True)
+    source = API_DIR.parent / "lab/tests/e2e"
+    shutil.copy2(source / "stack.py", e2e / "stack.py")
+    shutil.copy2(source / "evaluate/backend.py", e2e / "evaluate/backend.py")
+    return root
+
+
+PROBE = Runner(name="ap10-probe", targets=(PROBE_SUITE,), require_every_case=True,
+               layout=_with_backend)
+
+
 def run_mutant(mutant: Mutant) -> Result:
-    return shared.run_mutant(mutant, RUNNER)
+    return shared.run_mutant(mutant, PROBE if mutant.file == BACKEND else RUNNER)
 
 
 if __name__ == "__main__":
