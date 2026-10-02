@@ -17,6 +17,7 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
 | [observe.md](observe.md) — continuous monitoring, the canary, alert delivery (I8) | every `infra/alerts/operations.json` rule; ScrapeFailed | `tests/i/test_observe.py`, `test_ops_steps.py` | steps 72/73/74, coordinator; delivery BLOCKED on P-25 |
 | [08-lab-internal-testing-rollout.md](../../research/plan/consumer-v1/08-lab-internal-testing-rollout.md) — the Lab on the box and on Vercel: migrations, units, switches, memberships, checklist, rollback | — | `make lab-local` (E4-ON), `apps/infrx-api/tests/i/lab/` | ran 2026-09-30/10-01 (windows, box, Vercel); members and the checklist pending |
 | [../app/operations.md](../app/operations.md) — the App: combined checks, auth/credit cutover, browser error monitoring, App rollback (I3) | AppDown (`infra/alerts/app.json`, once WR-I3-3 merges it) | `tests/integration/ops/`, `apps/app/tests/i3/` | pending operator (Vercel, hosted) |
+| [api-lifecycle.md](api-lifecycle.md) — the API-only lifecycle runner: modes, resume, cleanup (AP-11) | — | `tests/integration/api_lifecycle` (layer 1 + isolated ap11) | live runs: AP-11 11c-11e, coordinator |
 
 I8's tools beside the runbooks (each read-only unless its runbook says otherwise):
 [`pool_budget.py`](pool_budget.py) (the pooler budget from the deployed knobs; step 71),
@@ -90,3 +91,4 @@ infrx.gateway.app:create_app`, `127.0.0.1:8001`), `infrx-worker.service` (readyz
 - 2026-09-24 (I8): observe.md indexed; rules 4 (single-GPU outage in numbers) and 6 (target
   allowlist) added; the I8 tools listed. Nothing run on the box or hosted by the lane.
 - 2026-10-01 (W6 docs-state): the inline `ssm()` copy replaced by `infra/rollout/ssm.sh`; the unit list brought to the post-cutover box (deploy/ and deploy/lab/ units); the Lab runbook 08 row added; the restore row cites the windows' verified dumps (session-03 lines 525/591/593). Doc only.
+- 2026-10-02 (merge #88, WR-AP11-4): api-lifecycle.md indexed (AP-11's runner: modes, resume, cleanup). Doc only.

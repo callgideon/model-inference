@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -51,6 +51,8 @@ api-mutants:
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_observe/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_rollout/test_mutants.py
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_improve/test_mutants.py
+	# AP-11's lifecycle-runner list (api-lifecycle, LW7): layer 1 on the contract fake, no Docker
+	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/api_lifecycle/test_mutants.py
 	# LAB-LOCAL's (E4-ON) list: its stack half skips visibly without a kept e3l stack (lab-local.sh --keep)
 	cd $(CURDIR) && INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/lab_local/test_mutants.py
 	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/lab_pipeline/test_mutants.py tests/i/lab_rollout/test_mutants.py tests/i/lab_control/test_mutants.py
@@ -273,3 +275,8 @@ lab-improve:
 # Lab web); not in check. verdict.json lands in the evidence dir. GATE_ARGS: "--keep", "--only scenarios".
 lab-local:
 	tests/integration/lab-local.sh --out $(CURDIR)/research/plan/evidence/e/E4ON-raw-$(shell git rev-parse --short HEAD) $(GATE_ARGS)
+
+# AP-11: the API-only lifecycle runner, isolated mode on task-local key ap11 (tests/integration/api_lifecycle); not in check.
+# Its 0700 state dir is under $TMPDIR; verdict.json lands in the evidence dir.
+api-lifecycle:
+	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $(CURDIR)/research/plan/evidence/w7/AP11-raw-$(shell git rev-parse --short HEAD)
