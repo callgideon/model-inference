@@ -15,59 +15,26 @@ CURRENT membership and role in SQL. The actor comes only from `rt.actors`: a ver
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Header, Query, Request, Response
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
+from fastapi import APIRouter, FastAPI, Header, Query, Request
 
 from ...contracts import api, errors
 from ...lab.judge_api import rubric
 from ...lab.judge_api import service as s
 from .. import control
+from ..control import R270Route
 
-log = logging.getLogger(__name__)
 PREFIX = "/lab/v1/judge"
 KEY = Header(alias="Idempotency-Key", min_length=1, max_length=s.MAX_KEY_CHARS)
 LIMIT = Query(api.DEFAULT_PAGE_SIZE, ge=1, le=api.MAX_PAGE_SIZE)
 
 
-def invalid(exc: RequestValidationError, rid: str) -> JSONResponse:
-    """FastAPI's request validation as R270's 422 (`field_errors` name the field; pydantic's
-    message, never the input)."""
-    fields = tuple(api.FieldError(field=".".join(str(p) for p in e["loc"][1:]) or str(e["loc"][0]),
-                                  code=e["type"], message=e["msg"][:200])
-                   for e in exc.errors()[:20])
-    body = api.ErrorEnvelope(error=api.ErrorBody(
-        code="invalid_request", message=errors.InvalidRequest().message, request_id=rid,
-        retryable=False, field_errors=fields))
-    return JSONResponse(body.model_dump(mode="json"), 422, headers=control.NO_STORE)
-
-
-class R270Route(APIRoute):
-    """Every failure of a typed handler - request validation, a domain refusal, a bug - as an
-    R270 envelope, while the pydantic parameters still document the route (AP-00's export).
-    Proposed for `infrx.gateway.control` (WIRING REQUEST): every new family needs it."""
-
-    def get_route_handler(self):
-        handler = super().get_route_handler()
-
-        async def guarded(request: Request) -> Response:
-            try:
-                return await handler(request)
-            except RequestValidationError as exc:
-                return invalid(exc, control.request_id(request))
-            except Exception as exc:          # noqa: BLE001 - every failure is an envelope
-                if not isinstance(exc, errors.DomainError):
-                    log.error("judge route failed: %s", type(exc).__name__)
-                return control.error_response(exc, control.request_id(request))
-        return guarded
-
-
 async def session_user(rt: Any, request: Request) -> str:
-    """The verified session's user id (R270 actor seam); a key audience is refused."""
+    """The verified session's user id (R270 actor seam); a key audience is refused, and
+    without composed session actors (AP-01) the family answers 503."""
+    if getattr(rt, "actors", None) is None:
+        raise errors.DependencyUnavailable("the Lab session actors are not composed (AP-01)")
     actor = await rt.actors.actor(request)
     if actor.audience != "session" or not actor.user_id:
         raise errors.Forbidden("the judge API acts for a signed-in Lab session")

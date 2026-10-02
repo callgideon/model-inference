@@ -78,6 +78,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
 	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 uv run --frozen pytest -q tests/ap07/test_mutants.py
+	# AP-08's lists (api-judge, LW7): Python mutants + 0064's SQL list (needs Docker, skips visibly without it); task-local key ap8
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test

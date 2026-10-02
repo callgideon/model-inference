@@ -544,19 +544,33 @@ def test_ldp__the_hosted_lab_apply_needs_all_three_r151_conditions(tmp_path):
         ["hosted-migrate", "--release", "a" * 40, "--through", "w6b"]
 
 
-def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch():
+def test_ldp__todays_hosted_migrate_carries_the_reviewed_patch(tmp_path):
     """LDP-R1, the tree as it stands: hosted-migrate.sh carries the reviewed R151 patch
     (--hosted-at is read from hosted-migrate.sh's HOSTED_APPLIED anchor, so the case follows
     each window's reviewed edit without a sed), so condition 2
     holds and the gate stops only at condition 1 here (a KNOWN_GOOD that refuses: nothing
-    after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's)."""
-    newest = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))[-1]
-    hosted_at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ',
-                          (REPO / "infra/rollout/hosted-migrate.sh").read_text())[1]
+    after it can run; the real known-good.py's answer is KNOWN-GOOD-REPROOF's, not this case's).
+    R269/R271 (merge #88 WR-4, as merge #86's W3 for test_known_good_proof): the files after
+    EXPECTED_PENDING may be exactly the LOCAL-ONLY wave-7 range 0060-0064 until their own window
+    edits hosted-migrate.sh; the gate runs on the tree without them (its MIGRATIONS seam)."""
+    text = (REPO / "infra/rollout/hosted-migrate.sh").read_text()
+    hosted_at = re.search(r'case "\$HOSTED_APPLIED" in \*"(\d{4}) ', text)[1]
+    expected = re.search(r'^EXPECTED_PENDING="([^"]*)"', text, re.M)[1].split(", ")
+    files = sorted((REPO / "apps/app/supabase/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))
+    after = [f for f in files if f.name[:4] > hosted_at]
+    local_only = after[len(expected):]
+    assert all("0060" <= f.name[:4] <= "0064" for f in local_only), local_only
+    released = tmp_path / "migrations"
+    released.mkdir()
+    for f in files:
+        if f not in local_only:
+            (released / f.name).symlink_to(f)
+    newest = sorted(released.iterdir())[-1]
     done = subprocess.run(["bash", str(ROLLOUT / "lab-migrate.sh"), "--release", "a" * 40,
                            "--hosted-at", hosted_at, "--window", "P-08:dry"], capture_output=True,
                           text=True, cwd=REPO, env={**os.environ, "KNOWN_GOOD": "/bin/false",
-                                                    "PY": "/usr/bin/env"})
+                                                    "PY": "/usr/bin/env",
+                                                    "MIGRATIONS": str(released)})
     assert done.returncode == 2 and "condition 1" in done.stderr, done.stderr
     assert f"at {newest.name[:4]}" in done.stderr, done.stderr
 

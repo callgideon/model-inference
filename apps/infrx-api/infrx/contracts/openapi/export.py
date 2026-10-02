@@ -13,7 +13,8 @@ matters and nothing connects anywhere:
   data-use stand-in);
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
-- `lab-control`: the Lab control unit with its optional families (traces, checkpoints) on.
+- `lab-control`: the Lab control unit with its optional families (traces, checkpoints,
+  `LAB_JUDGE_API`'s judge and trace reviews) on.
 
 `document` adds what FastAPI does not: an operationId derived from method + path (unique by
 construction), and a security declaration per operation from `FAMILIES` unless the route
@@ -161,7 +162,8 @@ def _lab_control() -> FastAPI:
     inert = object()
     env = {control.DATABASE_URL: "postgresql://export@127.0.0.1:1/export",
            control.SUPABASE_URL: "http://127.0.0.1:1", control.SUPABASE_KEY: "export",
-           "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export"}
+           "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export",
+           "LAB_JUDGE_API": "1"}                                           # WR-1 api-judge
     # ponytail: the two families that connect at composition (ClickHouse, the key directory)
     # are patched to inert stand-ins; the rest compose lazily over an unreachable DSN.
     with mock.patch.dict(os.environ, env, clear=True), \

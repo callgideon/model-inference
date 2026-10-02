@@ -442,3 +442,29 @@ def test_control_app__mounts_only_the_lab_routers_on_its_own_settings(world, lab
             with pytest.raises(RuntimeMisconfigured) as refused:
                 control_app.create_app()
         assert refused.value.missing == (name,)
+
+
+def test_control_app__mounts_the_judge_family_only_with_lab_judge_api(world, lab_env):
+    """Oracle (WR-1, AP-08): with `LAB_JUDGE_API` the unit mounts `/lab/v1/judge/*` and the
+    trace reviews; until AP-01's session actors are composed they answer 503, never act. Off
+    (the default), neither path exists."""
+    w, monkeypatch = world, lab_env
+    monkeypatch.setattr(control_app, "_store", lambda: w.control.store)
+    judge, reviews = "/lab/v1/judge/runs", "/lab/v1/traces/{request_id}/reviews"
+
+    def paths(app):   # FastAPI 0.141 keeps an included router as one `_IncludedRouter` entry
+        return {getattr(r, "path", "") for entry in app.routes
+                for r in getattr(getattr(entry, "original_router", None), "routes", [entry])}
+    monkeypatch.delenv("LAB_JUDGE_API", raising=False)
+    off = control_app.create_app()
+    assert {judge, reviews}.isdisjoint(paths(off))
+    client = TestClient(off)
+    assert client.get(judge, params={"provider_org_id": w.A}).status_code == 404
+    assert client.post("/lab/v1/traces/r1/reviews", params={"provider_org_id": w.A},
+                       headers={"Idempotency-Key": "k"}, json={}).status_code == 404
+    monkeypatch.setenv("LAB_JUDGE_API", "1")
+    on = control_app.create_app()
+    assert {judge, reviews} <= paths(on)
+    unavailable = TestClient(on).get(judge, params={"provider_org_id": w.A})
+    assert unavailable.status_code == 503
+    assert unavailable.json()["error"]["code"] == "dependency_unavailable"

@@ -1894,6 +1894,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r270_error_response_is_cacheable", "an error response is no-store",
        "gateway/control.py", "    headers = dict(NO_STORE)\n", "    headers = {}\n",
        "test_r270_error_response_is_no_store_with_the_status"),
+    _m("r270_validation_not_enveloped", "request validation on an R270Route is the R270 422 envelope",
+       "gateway/control.py", "                return invalid(exc, request_id(request))",
+       "                raise",
+       "test_r270_route_renders_request_validation_as_the_422_envelope"),
     # AP-00 00a/00b (wave 7): the OpenAPI export and the route inventory
     # (infrx/contracts/openapi/), and the lab_control family typed behind the refusal adapter.
     _m("ap00_operation_id_drops_the_method", "an operationId is unique per (method, path)",

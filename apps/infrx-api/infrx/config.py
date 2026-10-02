@@ -429,6 +429,11 @@ class DeploymentSettings:
     # infrx.console.data_use.DataUse on the gateway pool (service_role). Off by default: no
     # such route exists; on, it needs AP-01's session actors.
     console_data_use: bool = False
+    # WR-1 (AP-08, api-judge): the Lab control unit mounts `/lab/v1/judge/*` and
+    # `/lab/v1/traces/{id}/feedback|reviews` over `JudgeApi(SessionDoors)` on its own login. Off
+    # by default: no such route exists. On, the routes answer 503 until AP-01's session actors
+    # are composed on the unit; JUDGE_MODE stays dry_run (live judging waits on P-10).
+    lab_judge_api: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

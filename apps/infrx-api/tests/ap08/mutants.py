@@ -28,6 +28,7 @@ from tests.d import migration_mutants as _d  # noqa: E402
 SUITE = "tests/ap08"
 SVC, RUB, DOORS = "lab/judge_api/service.py", "lab/judge_api/rubric.py", "lab/judge_api/doors.py"
 ROUTE, SUB, START = "gateway/routes/lab_judge.py", "judge/submit.py", "judge/start.py"
+CONTROL = "gateway/control.py"   # WR-5: R270Route moved from lab_judge.py
 
 KEYED = "test_ap08_routes__run_identity_comes_from_the_idempotency_key"
 ACTOR = "test_ap08_routes__only_a_verified_session_acts_and_identity_is_never_read_from_the_body"
@@ -87,10 +88,10 @@ MUTANTS: tuple[Mutant, ...] = (
        ROUTE, 'if actor.audience != "session" or not actor.user_id:',
        "if not actor.user_id:", ACTOR),
     _m("validation_not_enveloped", "request validation is an R270 422 naming the field",
-       ROUTE, "                return invalid(exc, control.request_id(request))",
+       CONTROL, "                return invalid(exc, request_id(request))",
        "                raise", KEYED),
     _m("bug_message_leaks", "a bug's message never reaches the wire",
-       ROUTE, "                return control.error_response(exc, control.request_id(request))",
+       CONTROL, "                return error_response(exc, request_id(request))",
        '                return JSONResponse({"error": str(exc)}, 500)', ENVELOPE),
     _m("models_without_session", "every read takes the verified session",
        ROUTE, "        await session_user(rt, request)\n        return control.ok(judge.models())",

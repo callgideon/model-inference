@@ -8,18 +8,25 @@ render every failure through `error_response` (never a bare 500, never a traceba
 The actor seam: a route never reads identity from the body. It asks `rt.actors`, an
 `ActorSource` the composition root provides (AP-01's session resolver in production,
 `StaticActors` in tests), and receives an `infrx.contracts.api.Actor` or a domain error.
+
+`R270Route` (an `APIRouter(route_class=R270Route)`) renders request validation as R270's 422
+(`invalid`) and every other failure through `error_response` (WR-5, from AP-08's lab_judge).
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Protocol
 
-from fastapi import Request
+from fastapi import Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
 from infrx.contracts import api, errors
 
+log = logging.getLogger(__name__)
 NO_STORE = {"Cache-Control": "no-store"}
 REQUEST_ID_HEADER = "X-Request-Id"
 
@@ -67,3 +74,34 @@ def error_response(exc: BaseException, rid: str, **refs: str | None) -> JSONResp
     if retry_after:
         headers["Retry-After"] = str(retry_after)
     return JSONResponse(body, status_code=status, headers=headers)
+
+
+def invalid(exc: RequestValidationError, rid: str) -> JSONResponse:
+    """FastAPI's request validation as R270's 422 (`field_errors` name the field; pydantic's
+    message, never the input)."""
+    fields = tuple(api.FieldError(field=".".join(str(p) for p in e["loc"][1:]) or str(e["loc"][0]),
+                                  code=e["type"], message=e["msg"][:200])
+                   for e in exc.errors()[:20])
+    body = api.ErrorEnvelope(error=api.ErrorBody(
+        code="invalid_request", message=errors.InvalidRequest().message, request_id=rid,
+        retryable=False, field_errors=fields))
+    return JSONResponse(body.model_dump(mode="json"), 422, headers=NO_STORE)
+
+
+class R270Route(APIRoute):
+    """Every failure of a typed handler - request validation, a domain refusal, a bug - as an
+    R270 envelope, while the pydantic parameters still document the route (AP-00's export)."""
+
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def guarded(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                return invalid(exc, request_id(request))
+            except Exception as exc:          # noqa: BLE001 - every failure is an envelope
+                if not isinstance(exc, errors.DomainError):
+                    log.error("control route failed: %s", type(exc).__name__)
+                return error_response(exc, request_id(request))
+        return guarded

@@ -585,6 +585,8 @@ DEPLOYMENT_EXPECTED = {
     "CONSOLE_ACTIONS_API": False,
     # W1 (AP-07a, api-traces): the grantor's data-use routes switch, off
     "CONSOLE_DATA_USE": False,
+    # WR-1 (AP-08, api-judge): the Lab unit's judge/review routes switch, off
+    "LAB_JUDGE_API": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

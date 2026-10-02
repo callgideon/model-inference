@@ -17,7 +17,8 @@ from fastapi import APIRouter, FastAPI, Query, Request
 
 from ...lab.judge_api import service as s
 from .. import control
-from .lab_judge import KEY, R270Route, session_user
+from ..control import R270Route
+from .lab_judge import KEY, session_user
 
 PREFIX = "/lab/v1/traces"
 

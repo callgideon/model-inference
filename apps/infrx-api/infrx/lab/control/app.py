@@ -88,7 +88,14 @@ def _compose(lab: dict[str, str], store):
     pilot = settings.pilot
     traces = lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
-    return SimpleNamespace(settings=settings, clock=time.time,
+    # WR-1 (AP-08): the judge/review family on the unit's login, only with LAB_JUDGE_API; `actors`
+    # stays None until AP-01's SessionActors is composed here (the routes answer 503 meanwhile).
+    judge = None
+    if settings.deployment.lab_judge_api:
+        from ..judge_api.doors import SessionDoors
+        from ..judge_api.service import JudgeApi
+        judge = JudgeApi(SessionDoors(connect))
+    return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=None,
                            **_families(settings, lab, connect)), control, traces
 
 
@@ -122,11 +129,13 @@ def create_app() -> FastAPI:
             return JSONResponse({"status": "unavailable"}, status_code=503)
         return {"status": "ready"}
 
-    from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets,
-                                   lab_evaluations, lab_pipelines, lab_releases, lab_traces)
+    from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
+                                   lab_judge, lab_pipelines, lab_releases, lab_reviews,
+                                   lab_traces)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
-    for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints):
+    for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
+                   lab_judge, lab_reviews):
         family.register(app, rt)
     return app
