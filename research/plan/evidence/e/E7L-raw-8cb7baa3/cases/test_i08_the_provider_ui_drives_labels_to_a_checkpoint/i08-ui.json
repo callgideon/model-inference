@@ -1,0 +1,23 @@
+{
+ "cancelled": 0,
+ "command": "cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/improve/stack.test.ts",
+ "exit": 0,
+ "fail": 0,
+ "harness": null,
+ "pass": 7,
+ "record": {
+  "cell": "E7L i08 (UI)",
+  "composed": {
+   "listings": false,
+   "suites": true
+  },
+  "stand_ins": [
+   "session verifier and PostgREST RPC door (stack.door)",
+   "Lab objects in memory (no S3 on l4)",
+   "run and checkpoint listings over D8/D7 rows (WR-LAB2-4 to compose)",
+   "B3's suite subscription and L3's ready private dev revision seeded by /_test/artifact when the production suites are composed"
+  ],
+  "suite": "improve"
+ },
+ "skipped": 0
+}

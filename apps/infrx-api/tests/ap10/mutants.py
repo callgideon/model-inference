@@ -21,7 +21,8 @@ from tests.contracts import mutants as shared  # noqa: E402
 from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
 SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
-          "tests/ap10/test_from_traces.py")
+          "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py",
+          "tests/ap10/test_sop_benchmark.py", "tests/ap10/test_release.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -43,6 +44,20 @@ KEYREUSE = "test_ap10_a_key_reused_with_another_body_conflicts_even_after_a_cras
 RESUME = "test_ap10_a_crash_mid_materialisation_resumes_to_the_same_refs_once"
 CANCEL = "test_ap10_a_cancelled_operation_publishes_nothing"
 C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
+RT = "gateway/routes/lab_datasets.py"
+RT_START = "test_ap10_route_a_session_starts_one_operation_and_a_replay_is_the_same"
+RT_REFUSED = "test_ap10_route_refusals_are_r270_envelopes"
+SOP = "lab/improve/sop.py"
+SOP_REPORT = "test_ap10_sop_the_report_pins_identity_and_lists_every_failure_and_abstention"
+SOP_BLOCKED = "test_ap10_sop_quality_is_blocked_on_p07_and_validity_is_counted_apart"
+SOP_AGREE = "test_ap10_sop_agreement_is_computed_only_from_reviewed_gold_within_tolerance"
+SOP_PERF = ("test_ap10_sop_performance_is_meas_only_for_a_declared_candidate_without_the_"
+            "fake_surface")
+REL = "lab/improve/release.py"
+REL_TRAINER = "test_ap10_release_an_unsupported_trainer_is_an_explicit_refusal"
+REL_IMPORT = "test_ap10_release_a_candidate_is_registered_only_through_ap04s_import"
+REL_EVIDENCE = "test_ap10_release_evidence_pins_the_lineage_once_the_import_is_verified"
+IDENTITY = '"import", candidate["repo"], candidate["commit"], candidate["files"])'
 #: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
 PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
 BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
@@ -160,6 +175,119 @@ MUTANTS: tuple[Mutant, ...] = (
       "purpose=DataPurpose.training)", "purpose=DataPurpose.provider_sharing)", C2, file=FT),
     m("j10_catalog_presence_is_carried", "a catalog answering 503 is not carried (j10 NOT RUN)",
       '    if got["catalog"]:\n', "    if False:\n", J10, file=BACKEND),
+    # --- row 92: the R270 from-traces route (WR-AP10C-4)
+    m("rt_session_not_scoped", "a web session acts in the path's workspace",
+      'if actor.audience == "session" and actor.provider_org_id is None:', "if False:",
+      RT_START, file=RT),
+    m("rt_foreign_workspace", "an actor of another workspace never starts in its own",
+      "elif actor.provider_org_id != provider:", "elif False:", RT_REFUSED, file=RT),
+    m("rt_ops_unwired_crashes", "no composed ControlOps is a 503, never a 500",
+      "if x.ops is None or actors is None:", "if actors is None:", RT_REFUSED, file=RT),
+    m("rt_actors_unwired_crashes", "no session actors is a 503, never a 500",
+      "if x.ops is None or actors is None:", "if x.ops is None:", RT_REFUSED, file=RT),
+    m("rt_start_is_200", "a start is 202 + Location at the operation",
+      'return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")',
+      "return control.ok(doc)", RT_START, file=RT),
+    # --- 10d: the SOP benchmark report
+    m("sop_no_media_sent", "an item without its video is an abstention, never sent",
+      "        if item.video is None:\n", "        if False:\n", SOP_REPORT, file=SOP,
+      dies_by=("AssertionError",)),
+    m("sop_sampled", "every request is greedy (temperature 0)",
+      '"temperature": 0, "seed": seed}', '"temperature": 1, "seed": seed}', SOP_REPORT,
+      file=SOP),
+    m("sop_seed_unpinned", "every request carries the run's seed",
+      '"temperature": 0, "seed": seed}', '"temperature": 0, "seed": 0}', SOP_REPORT, file=SOP),
+    m("sop_status_unclassed", "a refused request is a failure by its status",
+      "        if response.status_code != 200:\n", "        if False:\n", SOP_REPORT,
+      file=SOP),
+    m("sop_identity_unchecked", "an answer from another model is a failure",
+      'elif reply.get("model") != model:', "elif False:", SOP_REPORT, file=SOP),
+    m("sop_untimed_answered", "an answer with no timed event is an abstention",
+      '"outcome": "answered" if events else "abstained"', '"outcome": "answered"',
+      SOP_REPORT, file=SOP),
+    m("sop_find_mode_unparsed", "find mode's `From a to b.` is parsed",
+      'r"From\s+(', 'r"Fromm\s+(', SOP_REPORT, file=SOP),
+    m("sop_quality_without_definition", "no SOP definition is BLOCKED[P-07]",
+      "if definition is None or gold is None:", "if gold is None:", SOP_BLOCKED, file=SOP,
+      dies_by=("AssertionError",)),
+    m("sop_quality_without_gold", "no gold set is BLOCKED[P-07]",
+      "if definition is None or gold is None:", "if definition is None:", SOP_BLOCKED,
+      file=SOP, dies_by=("AttributeError",)),
+    m("sop_teacher_labels_graded", "teacher/model labels are not ground truth",
+      'elif gold.provenance != "human_reviewed":', "elif False:", SOP_BLOCKED, file=SOP),
+    m("sop_other_manifest_graded", "a gold set of another manifest is refused",
+      "elif (gold.dataset_version, gold.manifest_sha256) != (dataset_version, manifest_sha256):",
+      "elif False:", SOP_BLOCKED, file=SOP),
+    m("sop_unknown_items_graded", "a gold set naming unknown items is refused",
+      'elif set(gold.labels) - {r["id"] for r in rows}:', "elif False:", SOP_BLOCKED,
+      file=SOP, dies_by=("KeyError",)),
+    m("sop_validity_is_answers", "validity counts answers WITH timed events",
+      '"with_timed_events": len(answered)}', '"with_timed_events": len(sent)}', SOP_BLOCKED,
+      file=SOP),
+    m("sop_end_unchecked", "a match needs the end within the tolerance too",
+      " and abs(end - g.end_s) <= tolerance_s:", ":", SOP_AGREE, file=SOP),
+    m("sop_prediction_reused", "matching is one-to-one",
+      "matched, at = matched + 1, k + 1", "matched, at = matched + 1, at", SOP_AGREE,
+      file=SOP),
+    m("sop_hallucinations_dropped", "unmatched predictions are counted",
+      "hallucinated += len(predicted) - hit", "hallucinated += 0", SOP_AGREE, file=SOP),
+    m("sop_unanswered_unlisted", "a gold item without an answer is listed",
+      'if by_id[item_id]["outcome"] != "answered":', "if False:", SOP_AGREE, file=SOP),
+    m("sop_fake_probe_ignored", "the fake engine's surface labels the run fake",
+      'fake = target == "fake" or await is_fake(client)', 'fake = target == "fake"',
+      SOP_PERF, file=SOP),
+    m("sop_declared_fake_measured", "a declared fake target is never meas.",
+      'fake = target == "fake" or await is_fake(client)', "fake = await is_fake(client)",
+      SOP_PERF, file=SOP),
+    m("sop_p50_guessed", "p50 is refused below 6 samples",
+      "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 1, 60", SOP_PERF, file=SOP),
+    m("sop_p95_guessed", "p95 is refused below 60 samples",
+      "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 6, 6", SOP_PERF, file=SOP),
+    # --- 10e: reviewed labels -> external training -> AP-04 import -> release evidence
+    m("rel_any_trainer", "only the supported trainer bundles",
+      "    if trainer not in SUPPORTED:\n", "    if False:\n", REL_TRAINER, file=REL),
+    m("rel_objective_unchecked", "the objective is the reviewed export's adapter",
+      'if OBJECTIVE.get(json.loads(stored)["adapter"]) != config.get("objective"):',
+      "if False:", REL_TRAINER, file=REL),
+    m("rel_export_id_unchecked", "a label export is named by its id only",
+      "    if not UUID_RE.fullmatch(label_export_id):\n", "    if False:\n", REL_TRAINER,
+      file=REL),
+    m("rel_not_eligible_registered", "only an approved checkpoint of this run registers",
+      '        raise errors.StateConflict("not an approved checkpoint of this run")',
+      "        return bundle, eligible", REL_IMPORT, file=REL),
+    m("rel_foreign_workspace", "a candidate is registered in its run's workspace",
+      "    if actor.provider_org_id != provider_org_id:\n", "    if False:\n", REL_IMPORT,
+      file=REL),
+    m("rel_descriptor_unbound", "the descriptor is the receipt's bytes",
+      '"sha256:" + hashlib.sha256(data).hexdigest() != receipt[1]', "False", REL_IMPORT,
+      file=REL, dies_by=("Unsupported",)),
+    m("rel_descriptor_anywhere", "the descriptor is read under its run's prefix only",
+      'if artifact_key.startswith(f"lab/{provider_org_id}/training/{external_run_id}/") else None',
+      "if True else None", REL_IMPORT, file=REL),
+    m("rel_files_unchecked", "the import declares exactly the checkpoint's files",
+      "    if sorted(f.relative_path for f in body.files) != declared:\n", "    if False:\n",
+      REL_IMPORT, file=REL),
+    m("rel_many_imports", "one import per checkpoint",
+      'await ledger.note(f"candidate:{checkpoint_id}", {',
+      'await ledger.note(f"candidate:{checkpoint_id}:{key}", {', REL_IMPORT, REL_EVIDENCE,
+      file=REL),
+    m("rel_unverified_recorded", "evidence waits for AP-04's verification",
+      '    if op.doc.state != "succeeded":\n', "    if False:\n", REL_EVIDENCE, file=REL),
+    m("rel_commit_unchecked", "the verified artifact is the registered commit",
+      IDENTITY, '"import", candidate["repo"], artifact.source_commit, candidate["files"])',
+      REL_EVIDENCE, file=REL),
+    m("rel_files_unbound", "the verified artifact is the registered files",
+      IDENTITY, '"import", candidate["repo"], candidate["commit"], '
+      "sorted(f.relative_path for f in artifact.files))", REL_EVIDENCE, file=REL),
+    m("rel_evidence_rewritten", "the evidence record is written once",
+      "    if stored is not None:\n        return json.loads(stored)\n",
+      "    if False:\n        return json.loads(stored)\n", REL_EVIDENCE, file=REL),
+    m("rel_self_qualified", "a new revision is qualified elsewhere, never here",
+      '"qualification": {"state": "pending"', '"qualification": {"state": "qualified"',
+      REL_EVIDENCE, file=REL),
+    m("rel_methods_dropped", "the record carries the labels' provenance",
+      'methods = Counter(m for x in export.get("lineage", ()) for m in x["methods"])',
+      "methods = Counter()", REL_EVIDENCE, file=REL),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),
