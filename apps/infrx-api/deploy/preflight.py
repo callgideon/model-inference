@@ -286,6 +286,9 @@ NOT_SETTABLE = {
                            "enabling it needs AP-01's session actors, a pool login that may set "
                            "role authenticated and the E4 regression rerun, a deploy change, "
                            "not a --set",
+    "CONSOLE_DATA_USE": "mounts the grantor's data-use routes (W1 AP-07a, off by default): "
+                        "enabling it needs AP-01's session actors and the E4 regression rerun, "
+                        "a deploy change, not a --set",
 }
 
 

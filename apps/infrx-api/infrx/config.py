@@ -424,6 +424,11 @@ class DeploymentSettings:
     # exists. The pool's login must be able to `set role service_role` and `set local role
     # authenticated` (not `infrx_runtime`, which has no such grant).
     console_actions_api: bool = False
+    # W1 (AP-07a, api-traces): mount the grantor's data-use routes (/console/v1/data-use,
+    # PUT /console/v1/keys/{id}/capture, /console/v1/data-grants) over
+    # infrx.console.data_use.DataUse on the gateway pool (service_role). Off by default: no
+    # such route exists; on, it needs AP-01's session actors.
+    console_data_use: bool = False
     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):

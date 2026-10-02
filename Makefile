@@ -76,6 +76,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
 	# AP-02's console reads (wave 7): PostgreSQL half needs Docker, skips visibly without it; task-local key ap2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
+	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 uv run --frozen pytest -q tests/ap07/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -239,6 +241,8 @@ lab-compositions:
 	# WR-LC-MAKE: the trace pumps + WR-C6-CAPTURE on real PostgreSQL/ClickHouse/MinIO (the t2f block)
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/w/test_worker_traces_pg.py
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/t/capture/test_capture_stack.py
+	# AP-07b/07d: the composed trace proof on the ap7 block (PG + ClickHouse + MinIO; containers per the file's header)
+	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:

@@ -335,7 +335,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
-         "operator_actions", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
+         "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
          "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "console_reads",
          "route"]
     for module in composition_root.ROUTERS:
@@ -583,6 +583,8 @@ DEPLOYMENT_EXPECTED = {
     "CONSOLE_DATABASE_URL": "",
     # WR-AP03-2 (AP-03): the console/operator mutations switch, off
     "CONSOLE_ACTIONS_API": False,
+    # W1 (AP-07a, api-traces): the grantor's data-use routes switch, off
+    "CONSOLE_DATA_USE": False,
 }
 
 # Everything except the text values (the secret, the accounting regime) and the switch.

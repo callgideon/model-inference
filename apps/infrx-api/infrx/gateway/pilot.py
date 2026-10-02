@@ -46,6 +46,7 @@ from typing import Any
 
 from ..config import RuntimeMisconfigured, runtime_mode
 from ..console.actions import ConsoleActions
+from ..console.data_use import DataUse
 from ..contracts import errors
 from ..contracts.limits import env_name
 from ..contracts.v2.lifecycle import AdmissionExpectation, ReadinessStore
@@ -256,6 +257,9 @@ def adapters_from_env(settings, **injected):
                     # AP-03 (WR-AP03-3): only when the deployment enables CONSOLE_ACTIONS_API
                     **({"console_actions": ConsoleActions(connect)}
                        if settings.deployment.console_actions_api else {}),
+                    # AP-07a (W1): only when the deployment enables CONSOLE_DATA_USE
+                    **({"data_use": DataUse(connect)}
+                       if settings.deployment.console_data_use else {}),
                     **adapters}
     return adapters
 
@@ -340,7 +344,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
                        lab_pipelines=None, lab_releases=None, lab_checkpoints=None,  # noqa: F811
-                       lab_datasets=None, capture=None, console_actions=None) -> IngressDeps:
+                       lab_datasets=None, capture=None, console_actions=None,
+                       data_use=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -406,6 +411,12 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         raise RuntimeMisconfigured(rt.mode, ("SESSION_ACTORS",),
                                    detail="CONSOLE_ACTIONS_API needs AP-01's session actors")
     rt.console_actions = console_actions if deployment.console_actions_api else None
+    # AP-07a (W1): the grantor's data-use routes mount over this, only when enabled, and
+    # never without the session actors.
+    if deployment.console_data_use and rt.actors is None:
+        raise RuntimeMisconfigured(rt.mode, ("SESSION_ACTORS",),
+                                   detail="CONSOLE_DATA_USE needs AP-01's session actors")
+    rt.data_use = data_use if deployment.console_data_use else None
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
                            relay=relay, capture=capture)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,

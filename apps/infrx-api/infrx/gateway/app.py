@@ -20,9 +20,10 @@ from ..config import (SUPABASE_CONNECT_S, SUPABASE_TIMEOUT_S, UPSTREAM_CONNECT_S
                       UPSTREAM_TIMEOUT_S, from_env, validate_runtime)
 from . import pilot
 from ..observe import route as metrics
-from .routes import (console_actions, console_reads, feedback, health, ingress, jobs,
-                     lab_checkpoints, lab_control, lab_datasets, lab_evaluations, lab_pipelines,
-                     lab_releases, lab_traces, models, operator_actions, trace_export, uploads)
+from .routes import (console_actions, console_data_use, console_reads, feedback, health,
+                     ingress, jobs, lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
+                     lab_pipelines, lab_releases, lab_traces, models, operator_actions,
+                     trace_export, uploads)
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
 # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
@@ -41,7 +42,8 @@ from .routes import (console_actions, console_reads, feedback, health, ingress, 
 # and checkpoint receiver (`LAB_DATASETS`, `LAB_CHECKPOINTS`, default off; WR-N4-1, WR-B3-2).
 # AP-02's console reads (`CONSOLE_READS`, default off; WR-AP02-1). AP-03's console and operator
 # mutations right after feedback (`CONSOLE_ACTIONS_API`, default off; WR-AP03-3).
-ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, console_reads, metrics)
+# AP-07a's data-use routes after them (`CONSOLE_DATA_USE`, default off; W1 api-traces).
+ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, console_reads, metrics)
 
 
 def upstream_client(settings):
