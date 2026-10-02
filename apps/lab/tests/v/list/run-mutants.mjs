@@ -66,6 +66,7 @@ const MUTANTS = [
   m("V1M-X28", "a malformed row is dropped silently", PORT, "      if (items.some((x) => x === null)) return UNAVAILABLE;\n", "", [C.a04]),
   m("V1M-X29", "an unconfigured service answers empty", PORT, "return { list: async () => UNAVAILABLE,", "return { list: async () => ({ ok: true, value: { items: [], next_cursor: null } }) as const,", [C.a02]),
   // the server composition and the WR-V2-1 wiring
+  m("V1M-X30", "an unconfigured Lab still reads", SERVER, "if (config === null) return offlineTraces();", 'if (config === null) return httpTraces({ baseUrl: "http://x.invalid", token: sessionToken });', [C.w02]),
   m("V1M-X31", "a session without a token still sends", SESSION, "get(AUTH_COOKIE)?.value || null", "get(AUTH_COOKIE)?.value || \"eyJ0.x.y\"", [C.w01]),
   m("V1M-X32", "the Lab session cookie is not the one read", SESSION, "get(AUTH_COOKIE)?.value || null", "get(REFRESH_COOKIE)?.value || null", [C.w01]),
   m("V1M-X72", "the trace adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken", "token: async () => \"anon\"", [C.w01]),
