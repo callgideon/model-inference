@@ -11,7 +11,8 @@ const MESSAGES: Record<Exclude<Shown["state"], "ready" | "signed_out">, string> 
   withheld: "This result is not served while the request's usage awaits reconciliation.",
   no_result: "This request did not produce a result.",
   not_found: "We could not find a result for this request in your account.",
-  expired: "The result expired and its content was removed. The request's details and charge stay on this page.",
+  // Read expiry is not physical deletion (UX-01): say what the reader can and cannot do.
+  expired: "This result is no longer available. Request status and usage remain available.",
   unavailable: "The result could not be loaded right now.",
 };
 

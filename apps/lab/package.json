@@ -13,10 +13,12 @@
     "node": ">=22.18"
   },
   "dependencies": {
+    "@base-ui/react": "1.8.0",
     "@infrx/api-client": "link:../../packages/api-client",
     "@infrx/shared": "link:../../packages/shared",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "lucide-react": "1.47.0",
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"

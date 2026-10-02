@@ -1,0 +1,50 @@
+{
+ "task": "UX-01",
+ "lane": "ux-foundations",
+ "slice": "wire null -> unknown deletion bound through catalog -> Docs; expiry says unavailable; copy audit",
+ "owned_paths": [
+  "apps/app/app/(console)/docs/content.ts",
+  "apps/app/lib/contracts/v2/published-model.ts",
+  "apps/app/app/(console)/usage/[requestId]/result-panel.tsx",
+  "apps/app/tests/ux/retention.test.ts"
+ ],
+ "commands": [
+  {
+   "cmd": "cd apps/app && node --test tests/ux/retention.test.ts (before fix)",
+   "exit": 1,
+   "summary": "UXR-01/02/06/07 red; actual text 'physically deleted within 0 hours'"
+  },
+  {
+   "cmd": "make console-test console-lint console-typecheck console-built",
+   "exit": 0,
+   "summary": "665 tests 0 fail; 0 lint errors; tsc clean; build + i2a 22/22"
+  },
+  {
+   "cmd": "cd apps/app && node tests/ux/run-mutants.mjs",
+   "exit": 0,
+   "summary": "UXR 9/9 killed (26/26 overall)"
+  }
+ ],
+ "wiring_requests": [
+  "UX-07: request-view-model.ts resultNote drops 'content is removed/was removed'",
+  "UX-07: settings/view-model.ts serving-retention row drops 'then delete it'"
+ ],
+ "activity": "review",
+ "head": "ab5dfc80",
+ "base": "cd9f517c",
+ "worktree": ".claude/worktrees/codex-w7-ux-foundations",
+ "branch": "codex/w7-ux-foundations",
+ "at": "2026-10-02T00:45:00Z",
+ "blockers": [],
+ "evidence": [
+  "research/plan/evidence/w7/ux-foundations-ab5dfc8.md"
+ ],
+ "estimate": {
+  "optimistic_h": 0.25,
+  "likely_h": 0.5,
+  "pessimistic_h": 1,
+  "confidence": "high",
+  "basis": "review only; UX-07 owns the two remaining copy rows",
+  "at": "2026-10-02T00:45:00Z"
+ }
+}
