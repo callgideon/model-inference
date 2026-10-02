@@ -342,8 +342,9 @@ def s11(ctx) -> None:
                       inference=True, extract=lambda r: {
                           "status": r.status_code, "object": _json(r).get("object"),
                           "model": _json(r).get("model"), "usage": bool(_json(r).get("usage")),
-                          "request_id": r.headers.get("X-Inference-Id")})
+                          "request_id": r.headers.get("Inference-Id")})
     ctx.check("sync answers 200 in-line, never 202", sync["status"] == 200, sync["status"])
+    ctx.check("the answer names its request (Inference-Id)", bool(sync["request_id"]), None)
     ctx.check("sync names the model and reports usage",
               sync["model"] == ctx.config["model"] and sync["usage"], sync)
     sse = ctx.mutate("11.sse", "POST", "/v1/chat/completions", actor=actor,
@@ -353,7 +354,7 @@ def s11(ctx) -> None:
     ctx.check("SSE carries content for the model",
               sse["content"] and sse["models"] == [ctx.config["model"]], sse)
     ctx.publish(sync_request_id=sync["request_id"])
-    if ctx.composed("AP-02"):
+    if ctx.composed("AP-02") and sync["request_id"]:
         settled(ctx, sync["request_id"])
 
 
@@ -405,6 +406,6 @@ def s12(ctx) -> None:
     body = {"model": ctx.config["model"], "messages": TEXT, "max_tokens": 16}
     sent = ctx.mutate("12.captured", "POST", "/v1/chat/completions", actor="consumer_a_capture",
                       json=body, inference=True, extract=lambda r: {
-                          "status": r.status_code, "request_id": r.headers.get("X-Inference-Id")})
+                          "status": r.status_code, "request_id": r.headers.get("Inference-Id")})
     ctx.require("the captured request is answered in-line", sent["status"] == 200, sent)
     ctx.publish(captured_request_id=sent["request_id"])

@@ -59,8 +59,8 @@ def test_mutant_is_killed(mutant):
 R = mutation_list.R
 SELF_TESTS = (
     (Outcome.survived, Mutant("self_no_op", "a comment changes nothing", R,
-                              'BASE = "AP-11", "API-LIFECYCLE", "cd9f517c"',
-                              'BASE = "AP-11", "API-LIFECYCLE", "cd9f517c"  # no-op',
+                              'BASE = "AP-11", "API-LIFECYCLE", "b05eb6f4"',
+                              'BASE = "AP-11", "API-LIFECYCLE", "b05eb6f4"  # no-op',
                               (mutation_list.EXITS,))),
     (Outcome.misdeclared, Mutant("self_missing_anchor", "the list matches the code", R,
                                  "not in the runner", "x", (mutation_list.EXITS,))),

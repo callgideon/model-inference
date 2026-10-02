@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -39,13 +41,14 @@ DEFECTS = ("replay_new_job", "conflict_accepted", "artifact_upload", "foreign_re
            "anon_allowed", "key_unauthenticated",
            # 11c: the wave-7 families
            "key_is_session", "consumer_operator", "outsider_workspace", "outsider_members",
-           "grant_twice", "key_twice", "secret_rerevealed", "hold_left", "double_debit",
+           "grant_twice", "key_twice", "secret_rerevealed", "replay_other_key",
+           "grant_not_on_account", "hold_left", "double_debit",
            "console_foreign", "capture_all_keys", "grant_not_persisted", "uncaptured_traced",
            "trace_no_content", "trace_wrong_pins", "content_after_revoke",
            "judge_after_revoke", "dry_run_sends", "dry_run_scored", "run_replay_new",
            "judge_charges_consumer", "budget_spent", "review_twice", "review_not_human",
            "calibrated_on_one", "op_fails", "op_replay_new", "artifact_missing_file",
-           "revision_mutable", "revision_unpinned", "zero_elapsed")
+           "revision_mutable", "revision_unpinned", "zero_elapsed", "no_inference_id")
 
 
 class FakeGateway:
@@ -190,7 +193,8 @@ class FakeGateway:
             kind = "application/json" if "sse_plain" in self.defects else "text/event-stream"
             return httpx.Response(200, text=text, headers={"content-type": kind})
         return httpx.Response(202 if "sync_async" in self.defects else 200, headers={
-            "X-Inference-Id": job["request_id"]}, json={
+            "Inference-Id": "" if "no_inference_id" in self.defects else job["request_id"]},
+            json={
             "object": "chat.completion", "model": job["model"],
             "choices": [{"message": {"content": "a van"}}],
             **({} if "sync_no_usage" in self.defects
@@ -242,7 +246,7 @@ def console(fake, request, method, path, web, key, query):
     d, (user, org) = fake.defects, web
     owned = {i: k for i, k in fake.minted.items() if k["org"] == org}
     if path == "/console/v1/me":
-        granted = org in fake.granted
+        granted = org in fake.granted and "grant_not_on_account" not in d
         return _ok(body={"actor": {"audience": "session", "user_id": user, "org_id": org},
                          "state": "ready" if granted else "onboarding", "suspended": False,
                          "signup_grant": {"state": "granted", "amount": _money(10000)}
@@ -258,9 +262,12 @@ def console(fake, request, method, path, web, key, query):
                          "credit": None if again else _money(10000)})
     if path == "/console/v1/keys" and method == "POST":
         seen = fake.key_idem.get((org, key))
-        if seen is not None and "key_twice" not in d:
+        if seen is not None:
             row = fake.minted[seen]
-            return _ok(200, {"key": {"key_id": seen, "name": row["name"]}, "replayed": True,
+            if "key_twice" in d:                    # a second live row behind a true replay
+                fake.minted[str(uuid.uuid4())] = {**row, "secret": f"sk-infrx-{uuid.uuid4().hex}"}
+            shown = str(uuid.uuid4()) if "replay_other_key" in d else seen
+            return _ok(200, {"key": {"key_id": shown, "name": row["name"]}, "replayed": True,
                              "secret": row["secret"] if "secret_rerevealed" in d else None,
                              "secret_returned": "secret_rerevealed" in d})
         key_id, secret = str(uuid.uuid4()), f"sk-infrx-{uuid.uuid4().hex}"
@@ -483,8 +490,24 @@ def private(path: Path, payload: dict) -> Path:
 
 
 @pytest.fixture
-def files(tmp_path):
+def fast_tmp(tmp_path):
+    """tmp_path, on tmpfs when the host has one: a full run saves its 0600 state ~90 times
+    and an atomic rename on a disk filesystem costs ~10 ms (4x the whole run)."""
+    shm = Path("/dev/shm")
+    if not shm.is_dir():
+        yield tmp_path
+        return
+    path = Path(tempfile.mkdtemp(prefix="infrx-ap11-l1-", dir=shm))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+@pytest.fixture
+def files(fast_tmp):
     """(config, secrets, state, out) for an isolated run against the fake; each a path."""
+    tmp_path = fast_tmp
     clip = tmp_path / "clip.mp4"
     clip.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
     artifact = tmp_path / "artifact"

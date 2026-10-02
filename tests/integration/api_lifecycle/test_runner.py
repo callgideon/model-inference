@@ -208,9 +208,12 @@ def test_ap11_cleanup_touches_only_state_owned_resources(files, gateway):
     owned.own("job", "job_ours", {"method": "DELETE", "origin": "gateway",
                                   "route": "/v1/jobs/{id}", "actor": "consumer_a"})
     owned.own("upload", "up_ours", None)
+    owned.own("key", "key_unreachable", {"method": "DELETE", "route": "/console/v1/keys/{id}",
+                                         "actor": "consumer_b"})        # its key was never minted
     code, verdict = run(files, gateway, mode="cleanup")
-    assert [s[:2] for s in gateway.sent] == [("DELETE", "/v1/jobs/job_ours")] and code == 0
+    assert [s[:2] for s in gateway.sent] == [("DELETE", "/v1/jobs/job_ours")] and code == 1
     rows = {row["id"]: row["outcome"] for row in verdict["cleanup"]}
+    assert rows.pop("key_unreachable").startswith("failed: BLOCKED[AP-03]")
     assert rows == {"job_ours": "gone", "up_ours": "nothing to clean (expires by retention)"}
 
 
@@ -361,7 +364,8 @@ FAILS = {"replay_new_job": "09", "conflict_accepted": "09", "artifact_upload": "
          # 11c
          "key_is_session": "01", "consumer_operator": "01", "outsider_workspace": "01",
          "outsider_members": "01", "grant_twice": "08", "key_twice": "08",
-         "secret_rerevealed": "08", "hold_left": "10", "double_debit": "10",
+         "secret_rerevealed": "08", "replay_other_key": "08", "grant_not_on_account": "08",
+         "hold_left": "10", "double_debit": "10",
          "console_foreign": "10", "op_fails": "02", "op_replay_new": "02",
          "artifact_missing_file": "03", "revision_mutable": "03", "revision_unpinned": "03",
          "capture_all_keys": "12", "grant_not_persisted": "12", "uncaptured_traced": "13",
@@ -369,7 +373,7 @@ FAILS = {"replay_new_job": "09", "conflict_accepted": "09", "artifact_upload": "
          "dry_run_sends": "14", "dry_run_scored": "14", "run_replay_new": "14",
          "judge_charges_consumer": "15", "budget_spent": "15", "review_twice": "16",
          "review_not_human": "16", "calibrated_on_one": "16", "content_after_revoke": "17",
-         "judge_after_revoke": "17"}
+         "judge_after_revoke": "17", "no_inference_id": "11"}
 
 
 @pytest.mark.parametrize("defect", sorted(FAILS))
@@ -513,3 +517,15 @@ def test_ap11_a_lost_key_acknowledgement_revokes_it_and_mints_once_more(files, g
     assert [k["revoked"] for k in alpha] == [True, False]
     kept = json.loads(files[2].with_name(files[2].name + ".keys").read_text())
     assert kept["consumer_a_key"] == alpha[1]["secret"]
+
+
+def test_ap11_a_cas_write_resumes_with_the_version_it_first_read(files, gateway):
+    """Broken: a resumed grant re-reading the (now advanced) version, so the original
+    Idempotency-Key is refused as another request instead of replayed."""
+    gateway.lose_ack.add("POST /console/v1/data-grants")
+    code, verdict = run(files, gateway)
+    assert code == 3 and stage(verdict, "12")["status"] == "NOT RUN"
+    code, verdict = run(files, gateway)
+    assert verdict["verdict"] != "INVALID" and stage(verdict, "12")["status"] == "PASS", \
+        verdict["reasons"]
+    assert json.loads(files[2].read_text())["pinned"]["12.grant_version"] == 0

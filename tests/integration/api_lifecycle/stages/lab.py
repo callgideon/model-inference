@@ -118,10 +118,10 @@ def s02(ctx) -> None:
                      headers={"Idempotency-Key": ctx.key("02.complete")})
     later = _json(ctx.call("GET", "/lab/v1/operations/{id}", origin="lab", actor=ADMIN,
                            params=op, query=_workspace(ctx)))
-    ctx.check("the operation completes once: a replay is the same operation, still finished",
+    ctx.check("the operation completes once: a replay is the same operation, unchanged",
               _json(again).get("operation_id") == done["operation_id"]
-              and later.get("state") == "succeeded"
-              and later.get("resource_id") == final.get("resource_id"), later.get("state"))
+              and (later.get("state"), later.get("resource_id"))
+              == (final.get("state"), final.get("resource_id")), later.get("state"))
     ctx.publish(project_id=project["project_id"], artifact_id=final.get("resource_id"),
                 manifest=files, manifest_sha256=digest)
 

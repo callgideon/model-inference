@@ -277,7 +277,7 @@ class Context:
         self.ev["exchanges"].append({
             "method": method, "route": route, "origin": origin, "status": response.status_code,
             "request_id": response.headers.get("X-Request-Id") or sent["X-Request-Id"],
-            "inference_id": response.headers.get("X-Inference-Id"),
+            "inference_id": response.headers.get("Inference-Id"),
             "location": response.headers.get("Location"),
             "ms": round((time.monotonic() - began) * 1000, 1), "at": utc_now()})
         return response
