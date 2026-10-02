@@ -1,0 +1,81 @@
+{
+ "task": "AP-01",
+ "slice": "01a-01d",
+ "activity": "review",
+ "head": "a5c856d5",
+ "worktree": ".claude/worktrees/codex-w7-api-identity",
+ "branch": "codex/w7-api-identity",
+ "owned_paths": [
+  "apps/infrx-api/infrx/auth_facade/",
+  "apps/infrx-api/infrx/console/",
+  "apps/infrx-api/infrx/gateway/routes/auth.py",
+  "apps/infrx-api/infrx/gateway/routes/console_me.py",
+  "apps/infrx-api/infrx/gateway/routes/lab_workspaces.py",
+  "apps/infrx-api/infrx/gateway/routes/operator_providers.py",
+  "apps/infrx-api/tests/ap01/"
+ ],
+ "commands": [
+  {
+   "cmd": "uv run --frozen pytest -q tests/ap01/test_auth.py (red, before 01a)",
+   "exit": 2,
+   "summary": "ImportError: FAILURES absent"
+  },
+  {
+   "cmd": "uv run --frozen pytest -q tests/ap01/test_identity.py (red, before 01b-01d)",
+   "exit": 2,
+   "summary": "ImportError: console_me absent"
+  },
+  {
+   "cmd": "INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_auth.py tests/ap01/test_identity.py",
+   "exit": 0,
+   "summary": "43 passed"
+  },
+  {
+   "cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_identity.py -m pg",
+   "exit": 0,
+   "summary": "11 passed on supabase/postgres"
+  },
+  {
+   "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_mutants.py",
+   "exit": 0,
+   "summary": "67 passed: 49 memory + 12 PostgreSQL mutants killed, 0 survivors; every-case green"
+  },
+  {
+   "cmd": "make api-lint",
+   "exit": 0,
+   "summary": "All checks passed"
+  },
+  {
+   "cmd": "uvx pyright@1.1.414 -p pyproject.toml",
+   "exit": 0,
+   "summary": "458 errors = baseline; 0 in lane files"
+  },
+  {
+   "cmd": "python -m pytest -q tests/integration/test_makefile_mutant_lists.py",
+   "exit": 1,
+   "summary": "7 failed until WR-AP01-1's Makefile line (7 passed with it)"
+  },
+  {
+   "cmd": "WR-AP01-1 applied in a scratch worktree: pytest tests/g tests/i tests/ap01 tests/contracts (pins updated)",
+   "exit": 0,
+   "summary": "482 passed on the touched files incl. composed test 5/5"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 7,
+  "confidence": "medium",
+  "basis": "01a-01d took ~1 h wall clock; remaining = SR-AP01-1 functions + tests/d proof + PgIdentity switch (1.5-3 h), Idempotency-Key bound to 0060 after api-schema (0.5-2 h), Lab-unit mount WR (0.5-1 h), re-proof after WR-AP01-1 (0.5-1 h)",
+  "at": "2026-10-02T00:40Z"
+ },
+ "blockers": [],
+ "wiring_requests": [
+  "WR-AP01-1: config switches IDENTITY_API/WEB_ORIGINS/AUTH_FACADE/SUPABASE_ANON_KEY/AUTH_CAPTCHA_REQUIRED (default off), pilot.py rt.identity/rt.lab_access/rt.actors (SessionActors)/rt.auth_facade, app.py ROUTERS + 4 modules, Makefile api-mutants line (INFRX_D_TASK=ap1), pins in tests/g/test_startup.py, tests/contracts/test_config_and_imports.py, deploy/preflight.py NOT_SETTABLE; composed test tests/ap01/test_composed.py - exact patch research/plan/evidence/w7/api-identity-a5c856d-WR-AP01-1.patch",
+  "SR-AP01-1 (schema): six SECURITY DEFINER identity functions granted to service_role + infrx_lab_control so lab_workspaces can mount on the Lab control unit - DDL in the evidence file"
+ ],
+ "evidence": [
+  "research/plan/evidence/w7/api-identity-a5c856d.md",
+  "research/plan/evidence/w7/api-identity-a5c856d-WR-AP01-1.patch"
+ ]
+}

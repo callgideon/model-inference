@@ -1,0 +1,347 @@
+diff --git a/Makefile b/Makefile
+index 39b333d6..34c4332a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -70,6 +70,8 @@ api-mutants:
+ 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw7.py tests/l3sql/test_mutants.py
+ 	# 0058's SQL list (lab-sql LW9: WR-LW7-3a, WR-C7-TALLY): needs Docker, skips visibly without it; task-local key l3
+ 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=l3 uv run --frozen pytest -q tests/d/test_code_mutants_lw9.py
++	# AP-01's list (api-identity, LW7, WR-AP01-1): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap1
++	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_mutants.py
+ 
+ console-test:
+ 	cd apps/app && pnpm test
+diff --git a/apps/infrx-api/deploy/preflight.py b/apps/infrx-api/deploy/preflight.py
+index ee97315f..98a08d86 100644
+--- a/apps/infrx-api/deploy/preflight.py
++++ b/apps/infrx-api/deploy/preflight.py
+@@ -277,6 +277,17 @@ NOT_SETTABLE = {
+                     "hosted, P-10 and the E4 regression rerun, a deploy change, not a --set",
+     "LAB_TEACHER_URL": "the teacher's endpoint, the local teacher fake only until P-10: a new "
+                        "egress host is an approval, not a --set",
++    "IDENTITY_API": "mounts /console/v1/me|capabilities, /lab/v1/workspaces|capabilities|"
++                    "members and /operator/v1/providers (WR-AP01-1, off by default): enabling "
++                    "it is AP-09's frontend switch, a deploy change, not a --set",
++    "WEB_ORIGINS": "the App/Lab browser origins a mutation or a redirect may come from "
++                   "(WR-AP01-1): a new origin is an approval, not a --set",
++    "AUTH_FACADE": "mounts /auth/v1/* over the project's auth server (WR-AP01-1, off by "
++                   "default): enabling it is AP-09's frontend switch, a deploy change, not a --set",
++    "SUPABASE_ANON_KEY": "the project's publishable key for the auth facade: by name from the "
++                         "secret store with the deploy change, never an argument",
++    "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
++                             "decision recorded with the deploy change, not a --set",
+ }
+ 
+ 
+diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
+index f808b85d..1424a794 100644
+--- a/apps/infrx-api/infrx/config.py
++++ b/apps/infrx-api/infrx/config.py
+@@ -409,6 +409,21 @@ class DeploymentSettings:
+     # start until P-10). Off by default; an approval stays a 503 while JUDGE_MODE is not live.
+     lab_teachers: bool = False
+     lab_teacher_url: str = ""
++    # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
++    # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
++    # `console.session.SessionActors` (the verified Supabase session, or an operator key at
++    # the operator door) and `PgIdentity` on the job store's pool. Off by default: no such
++    # route exists. `WEB_ORIGINS` (comma-separated, e.g. https://app.callbill.ai) are the only
++    # browser origins a mutation may come from and the only `redirect_to` origins.
++    identity_api: bool = False
++    web_origins: str = ""
++    # AP-01 (WR-AP01-1): the auth facade `/auth/v1/*` over the project's auth server with its
++    # publishable key `SUPABASE_ANON_KEY` (never the service-role key, which the auth server
++    # lets past its CAPTCHA); `AUTH_CAPTCHA_REQUIRED` reports the hosted CAPTCHA policy (LR-02).
++    # Off by default; on without `SUPABASE_ANON_KEY` refuses to start.
++    auth_facade: bool = False
++    supabase_anon_key: str = field(default="", repr=False)
++    auth_captcha_required: bool = False
+     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
+     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
+diff --git a/apps/infrx-api/infrx/gateway/app.py b/apps/infrx-api/infrx/gateway/app.py
+index 99780197..fb5602f7 100644
+--- a/apps/infrx-api/infrx/gateway/app.py
++++ b/apps/infrx-api/infrx/gateway/app.py
+@@ -20,9 +20,10 @@ from ..config import (SUPABASE_CONNECT_S, SUPABASE_TIMEOUT_S, UPSTREAM_CONNECT_S
+                       UPSTREAM_TIMEOUT_S, from_env, validate_runtime)
+ from . import pilot
+ from ..observe import route as metrics
+-from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_control, lab_datasets,
+-                     lab_evaluations, lab_pipelines, lab_releases, lab_traces, models,
+-                     trace_export, uploads)
++from .routes import (auth, console_me, feedback, health, ingress, jobs, lab_checkpoints,
++                     lab_control, lab_datasets, lab_evaluations, lab_pipelines, lab_releases,
++                     lab_traces, lab_workspaces, models, operator_providers, trace_export,
++                     uploads)
+ 
+ # The composition root's router list, fixed and documented (r1 R44). A track's router is
+ # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
+@@ -39,7 +40,9 @@ from .routes import (feedback, health, ingress, jobs, lab_checkpoints, lab_contr
+ # default off; WR-LAB-API-1), then its evaluation, pipeline and release surfaces the same way
+ # (`LAB_EVALS`, `LAB_PIPELINES`, `LAB_RELEASES`, default off; WR-LAB2-1), and its datasets
+ # and checkpoint receiver (`LAB_DATASETS`, `LAB_CHECKPOINTS`, default off; WR-N4-1, WR-B3-2).
+-ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)
++# AP-01's auth facade and identity routes after the Lab's, each mounted only when its switch
++# is on (`AUTH_FACADE`, `IDENTITY_API`, default off; WR-AP01-1).
++ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, metrics)
+ 
+ 
+ def upstream_client(settings):
+diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
+index 47a89b95..593b75cd 100644
+--- a/apps/infrx-api/infrx/gateway/pilot.py
++++ b/apps/infrx-api/infrx/gateway/pilot.py
+@@ -252,6 +252,8 @@ def adapters_from_env(settings, **injected):
+                     **trace_capture.adapters(settings, connect),
+                     **({"feedback": _pg_feedback(connect)}
+                        if settings.deployment.feedback_api else {}),
++                    # AP-01 (WR-AP01-1): only when the deployment enables the identity routes
++                    **_identity(settings, connect),
+                     **adapters}
+     return adapters
+ 
+@@ -278,6 +280,55 @@ def _rollouts(settings, connect) -> dict:
+     return {"rollouts": Router(PgRoutingReleases(connect), NoShadows())}
+ 
+ 
++def _identity(settings, connect) -> dict:
++    """WR-AP01-1: AP-01's identity store and L2's `LabAccess` on this pool, only when
++    `IDENTITY_API` is on."""
++    if not settings.deployment.identity_api:
++        return {}
++    from ..console.session import PgIdentity
++    from ..lab.access import LabAccess
++    from ..state.lab_access import PgAccessStore
++    return {"identity": PgIdentity(connect), "lab_access": LabAccess(PgAccessStore(connect))}
++
++
++def _web_origins(deployment) -> tuple[str, ...]:
++    return tuple(o.strip() for o in deployment.web_origins.split(",") if o.strip())
++
++
++def _actors(rt, identity, lab_access):
++    """WR-AP01-1: `rt.actors` - the verified Supabase session (the Lab's own session check,
++    `GoTrueSessions`) and, at the operator door, an operator-audience key (`AuthResolver`)."""
++    if identity is None or lab_access is None:
++        raise RuntimeMisconfigured(rt.mode, detail="IDENTITY_API needs AP-01's identity store "
++                                                   "and L2's access: identity, lab_access")
++    import httpx
++
++    from ..auth.context import AuthResolver
++    from ..console.session import SessionActors
++    from .lab_auth import GoTrueSessions
++    # ponytail: process-lifetime client, as in `compose.lab_surfaces`.
++    sessions = GoTrueSessions(httpx.AsyncClient(base_url=rt.settings.supabase_url,
++                                                timeout=httpx.Timeout(5, connect=2)),
++                              rt.settings.supabase_key)
++    return SessionActors(sessions, identity, keys=AuthResolver(rt),
++                         origins=_web_origins(rt.settings.deployment))
++
++
++def _auth_facade(rt):
++    """WR-AP01-1: the auth facade on the project's publishable key, or a refusal to start."""
++    deployment = rt.settings.deployment
++    if not deployment.supabase_anon_key.strip():
++        raise RuntimeMisconfigured(rt.mode, ("SUPABASE_ANON_KEY",),
++                                   detail="AUTH_FACADE needs SUPABASE_ANON_KEY")
++    import httpx
++
++    from ..auth_facade import AuthFacade
++    return AuthFacade(httpx.AsyncClient(base_url=rt.settings.supabase_url,
++                                        timeout=httpx.Timeout(10, connect=2)),
++                      deployment.supabase_anon_key, origins=_web_origins(deployment),
++                      captcha_required=deployment.auth_captcha_required)
++
++
+ def _pg_feedback(connect):
+     """D6F's `PgFeedbackService` on the api channel (G4F's route)."""
+     from ..state.feedback import PgFeedbackService
+@@ -336,7 +387,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
+                        lifecycle=None, readiness=None, feedback=None, lab_control=None,
+                        lab_traces=None, rollouts=None, trace_export=None, lab_evaluations=None,
+                        lab_pipelines=None, lab_releases=None, lab_checkpoints=None,  # noqa: F811
+-                       lab_datasets=None, capture=None) -> IngressDeps:
++                       lab_datasets=None, capture=None, identity=None,
++                       lab_access=None) -> IngressDeps:
+     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
+     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
+     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
+@@ -392,6 +444,11 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
+     rt.lab_releases = lab_releases if deployment.lab_releases else None
+     rt.lab_checkpoints = lab_checkpoints if deployment.lab_checkpoints else None
+     rt.lab_datasets = lab_datasets if deployment.lab_datasets else None
++    # AP-01 (WR-AP01-1): the web API's actor source and identity routes, only when enabled.
++    rt.identity = identity if deployment.identity_api else None
++    rt.lab_access = lab_access if deployment.identity_api else None
++    rt.actors = _actors(rt, identity, lab_access) if deployment.identity_api else None
++    rt.auth_facade = _auth_facade(rt) if deployment.auth_facade else None
+     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
+                            relay=relay, capture=capture)
+     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
+diff --git a/apps/infrx-api/tests/ap01/test_composed.py b/apps/infrx-api/tests/ap01/test_composed.py
+new file mode 100644
+index 00000000..f97f98d0
+--- /dev/null
++++ b/apps/infrx-api/tests/ap01/test_composed.py
+@@ -0,0 +1,106 @@
++#!/usr/bin/env python3
++"""WR-AP01-1: the pilot composition mounts AP-01's routes only when their switches are on.
++
++    uv run --frozen pytest -q tests/ap01/test_composed.py
++
++Composed as the gateway composes them (`pilot.build_ingress_deps`, then every module in
++`app.ROUTERS`), over the g track's fakes for the four durable adapters and AP-01's in-memory
++world for the identity store.
++"""
++from __future__ import annotations
++
++import pytest
++from fastapi import FastAPI
++
++from infrx.auth.context import AuthResolver
++from infrx.auth_facade import AuthFacade
++from infrx.config import RuntimeMisconfigured
++from infrx.console.session import SessionActors
++from infrx.contracts.fakes.factories import credit_jobstore_factory
++from infrx.gateway import app as gateway_app, pilot
++from infrx.media.store import InMemoryObjectStore
++from infrx.scheduling.memory import MemoryScheduler
++
++from tests.ap01.worlds import FakeWorld
++from tests.g import support
++from tests.g.test_composition import Journal
++
++AP01 = {"/auth/v1/sign-in", "/auth/v1/availability", "/console/v1/me",
++        "/console/v1/capabilities", "/lab/v1/workspaces", "/lab/v1/capabilities",
++        "/lab/v1/workspaces/{provider_org_id}/members", "/operator/v1/providers"}
++
++
++def composed(*, with_identity=True, **switches):
++    harness = credit_jobstore_factory()
++    jobs, clock = harness.port, harness.clock
++    jobs.catalog = catalog = support.catalog()
++    config = support.settings()
++    config.deployment = config.deployment.replace(**switches)
++    rt = support.runtime(config, sb=support.supabase(), clock=lambda: clock.now().timestamp())
++    world = FakeWorld()
++    identity = dict(identity=world.identity, lab_access=world.access) if with_identity else {}
++    pilot.build_ingress_deps(rt, catalog=catalog, stream=Journal(jobs),
++                             objects=InMemoryObjectStore(), jobs=jobs,
++                             index=MemoryScheduler(clock.now), **identity)
++    return rt
++
++
++def paths(rt) -> set[str]:
++    app = FastAPI()
++    for module in (m for m in gateway_app.ROUTERS
++                   if m.__name__.rsplit(".", 1)[-1] in ("auth", "console_me", "lab_workspaces",
++                                                        "operator_providers")):
++        module.register(app, rt)
++    return {route.path for route in app.routes}
++
++
++def test_wr_ap01__off_by_default_nothing_mounts():
++    """Oracle: the launched API is unchanged - no switch, no actor source, no route."""
++    rt = composed()
++    assert (rt.actors, rt.identity, rt.lab_access, rt.auth_facade) == (None,) * 4
++    assert paths(rt) & AP01 == set()
++
++
++def test_wr_ap01__identity_api_composes_the_session_actor_source():
++    """Oracle: IDENTITY_API on puts `SessionActors` on `rt.actors` (the session verifier on the
++    project's auth server, the operator-key door through `AuthResolver`, the configured web
++    origins) and mounts the identity routes; the four modules are in ROUTERS."""
++    rt = composed(identity_api=True, web_origins=" https://app.example ,https://lab.example")
++    assert isinstance(rt.actors, SessionActors) and isinstance(rt.actors.keys, AuthResolver)
++    assert rt.actors.origins == ("https://app.example", "https://lab.example")
++    assert rt.identity is not None and rt.lab_access is not None and rt.auth_facade is None
++    assert {"/console/v1/me", "/lab/v1/workspaces", "/operator/v1/providers"} <= paths(rt)
++    assert not any(p.startswith("/auth/v1/") for p in paths(rt))
++
++
++def test_wr_ap01__identity_api_without_its_store_refuses_to_start():
++    with pytest.raises(RuntimeMisconfigured, match="identity"):
++        composed(with_identity=False, identity_api=True)
++
++
++def test_wr_ap01__the_auth_facade_needs_the_publishable_key():
++    """Oracle: AUTH_FACADE on without SUPABASE_ANON_KEY refuses to start naming the setting
++    (never its value); with it, the facade uses that key - never the service-role key."""
++    with pytest.raises(RuntimeMisconfigured, match="SUPABASE_ANON_KEY"):
++        composed(auth_facade=True)
++    rt = composed(auth_facade=True, supabase_anon_key="anon-publishable",
++                  auth_captcha_required=True, web_origins="https://app.example")
++    assert isinstance(rt.auth_facade, AuthFacade)
++    assert rt.auth_facade.apikey == "anon-publishable" != rt.settings.supabase_key
++    assert rt.auth_facade.captcha_required and rt.auth_facade.origins == ("https://app.example",)
++    assert {"/auth/v1/sign-in", "/auth/v1/availability"} <= paths(rt)
++    assert "anon-publishable" not in repr(rt.settings.deployment)
++
++
++def test_wr_ap01__adapters_from_env_builds_the_identity_store_only_when_enabled():
++    from infrx.console.session import PgIdentity
++    from infrx.lab.access import LabAccess
++
++    async def connect():
++        raise AssertionError("nothing connects while composing")
++    off = support.settings()
++    on = support.settings(deployment=off.deployment.replace(identity_api=True))
++    assert pilot._identity(off, connect) == {}
++    built = pilot._identity(on, connect)
++    assert isinstance(built["identity"], PgIdentity) and isinstance(built["lab_access"],
++                                                                      LabAccess)
+diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+index d1699629..122d4767 100644
+--- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
++++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+@@ -336,7 +336,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
+     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
+         ["health", "models", "ingress", "uploads", "jobs", "feedback", "trace_export",
+          "lab_control", "lab_traces", "lab_evaluations", "lab_pipelines", "lab_releases",
+-         "lab_datasets", "lab_checkpoints", "route"]
++         "lab_datasets", "lab_checkpoints", "auth", "console_me", "lab_workspaces",
++         "operator_providers", "route"]
+     for module in composition_root.ROUTERS:
+         assert callable(getattr(module, "register"))
+ 
+@@ -577,6 +578,11 @@ DEPLOYMENT_EXPECTED = {
+     # teacher fake's URL (unset)
+     "LAB_TEACHERS": False,
+     "LAB_TEACHER_URL": "",
++    "IDENTITY_API": False,
++    "WEB_ORIGINS": "",
++    "AUTH_FACADE": False,
++    "SUPABASE_ANON_KEY": "",
++    "AUTH_CAPTCHA_REQUIRED": False,
+ }
+ 
+ # Everything except the text values (the secret, the accounting regime) and the switch.
+diff --git a/apps/infrx-api/tests/g/test_startup.py b/apps/infrx-api/tests/g/test_startup.py
+index 8a9ac474..195246b3 100644
+--- a/apps/infrx-api/tests/g/test_startup.py
++++ b/apps/infrx-api/tests/g/test_startup.py
+@@ -18,9 +18,10 @@ from fastapi.testclient import TestClient
+ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
+ from infrx.contracts import errors, wire
+ from infrx.gateway import app as composition
+-from infrx.gateway.routes import (feedback, health, ingress, jobs, lab_checkpoints,
+-                                  lab_control, lab_datasets, lab_evaluations, lab_pipelines,
+-                                  lab_releases, lab_traces, models, trace_export, uploads)
++from infrx.gateway.routes import (auth, console_me, feedback, health, ingress, jobs,
++                                  lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
++                                  lab_pipelines, lab_releases, lab_traces, lab_workspaces, models,
++                                  operator_providers, trace_export, uploads)
+ from infrx.observe import host
+ from infrx.observe import route as metrics
+ from infrx.scheduling.memory import MemoryScheduler
+@@ -218,7 +219,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
+     slash redirects) is served."""
+     assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
+                                    lab_control, lab_traces, lab_evaluations, lab_pipelines,
+-                                   lab_releases, lab_datasets, lab_checkpoints, metrics)
++                                   lab_releases, lab_datasets, lab_checkpoints, auth,
++                                   console_me, lab_workspaces, operator_providers, metrics)
+     app = pilot_app()
+     rt = app.state.runtime
+     paths = {route.path for route in app.routes if hasattr(route, "path")}
