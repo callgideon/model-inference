@@ -48,6 +48,8 @@ case "$role" in
             needs="LAB_S3_BUCKET" ;;
   rollout) names="$common LAB_ROLLOUT_CONCURRENCY LAB_OPERATOR_ID"; needs="LAB_S3_BUCKET LAB_OPERATOR_ID" ;;
   artifacts) names="$common LAB_S3_PREFIX LAB_ARTIFACT_SECRET_REFS"; needs="LAB_S3_BUCKET" ;;
+  hosting) names="$common HOSTING_SLOT HOSTING_PORT HOSTING_MODEL_ROOT HOSTING_SOURCE_DIR HOSTING_SMOKE_VIDEO"
+           needs="HOSTING_SLOT HOSTING_PORT HOSTING_MODEL_ROOT HOSTING_SOURCE_DIR HOSTING_SMOKE_VIDEO" ;;
 esac
 # the roles whose work source is not on this release: each refuses by name (R198/R211)
 pending=" checkpoints training rollout "
