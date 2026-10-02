@@ -43,9 +43,9 @@ const HARNESS_MUTANTS = [
 const S = {
   O: "E2E-O o10 the Lab review panel renders the provider trace route's answer",
   o01: "E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else",
-  o02: "E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door",
+  o02: "E2E-O02 the review page shows the record, then each panel's own answer: granted content inline with its provenance, the feedback door, the judge door",
   o03: "E2E-O03 a viewer, another provider, a consumer-only account and a signed-out visitor see no request",
-  o04: "E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer",
+  o04: "E2E-O04 the grantor revokes: the same request reads as revoked, with no organization or content",
   r01: "E2E-R01 as the gateway composes LAB_RELEASES today, the page fails closed: no rows, no form, no success",
   r02: "E2E-R02 a guardrail breach is one D9 rollback the page shows from the records, with nothing left to propose",
   r03: "E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence",
@@ -69,12 +69,12 @@ const ACCESS = "lib/auth/access.ts";
 const EMPTY = "{ ok: true, value: [] as unknown as T }";
 const stackMutant = (suite, ...args) => ({ suite, ...m(...args) });
 const STACK_MUTANTS = [
-  stackMutant("observe", "E2E-S01", "a lost capture loses its reason in the list", LIST, "content: state === \"lost\" ? `${CONTENT_LABEL.lost}: ${reason}` : CONTENT_LABEL[state],", "content: CONTENT_LABEL[state],", [S.o01]),
-  stackMutant("observe", "E2E-S02", "an ungranted request reads as expired content", DETAIL, 'if (d.access === "metadata") return "metadata_only";', 'if (d.access === "metadata") return "expired";', [S.o01, S.o04]),
-  stackMutant("observe", "E2E-S03", "the content panel ignores the record's state", "components/traces/detail/panels.tsx", "{CONTENT_COPY[contentState(detail)]}", "{CONTENT_COPY.not_captured}", [S.o02]),
-  stackMutant("observe", "E2E-S04", "a refused list reads as not found, whatever the reason", LIST, 'message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason]', "message: LIST_COPY.not_found", [S.o03]),
+  stackMutant("observe", "E2E-S01", "a lost capture loses its reason in the list", LIST, "loss: lossDetail(d.loss_reason),", "loss: null,", [S.o01]),
+  stackMutant("observe", "E2E-S02", "a withdrawn grant reads as never granted", LIST, 'revoked: { label: "Access revoked", tone: "neutral" },', 'revoked: { label: "Metadata only", tone: "neutral" },', [S.o04]),
+  stackMutant("observe", "E2E-S03", "the content panel ignores the record's state", DETAIL, 'return { kind: "none", copy: Object.hasOwn(CONTENT_COPY, state) ? CONTENT_COPY[state] : CONTENT_COPY.unknown };', 'return { kind: "none", copy: CONTENT_COPY.unknown };', [S.o02, S.o04]),
+  stackMutant("observe", "E2E-S04", "a refused list reads as not found, whatever the reason", LIST, "if (!result.ok) return refused(result.reason);", 'if (!result.ok) return refused("not_found");', [S.o03]),
   stackMutant("observe", "E2E-S05", "a consumer-only account gets a workspace chooser", ACCESS, '  if (workspaces.length === 0) return { kind: "denied" };\n', "", [S.o03]),
-  stackMutant("observe", "E2E-S06", "a metadata-only record shows an organization", DETAIL, 'if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', 'rows.push(["Organization", "—"]);\n  if (d.access === "content") rows.push(["Organization", d.grantor_org_id]', [S.o04]),
+  stackMutant("observe", "E2E-S06", "content access is decided by the record's grant, not its state", DETAIL, 'if (state === "content" || state === "partial") {', 'if (state !== "not_captured") {', [S.o04]),
   stackMutant("rollout", "E2E-S07", "an unavailable releases service reads as an empty list", "lib/services/http.ts", 'if (!response.ok) return { ok: false, reason: reasons[response.status] ?? "unavailable" };', `if (!response.ok) return ${EMPTY};`, [S.r01]),
   stackMutant("rollout", "E2E-S08", "a rolled-back release still offers a rollback", "lib/services/rollouts/view.ts", 'if (r.state !== "rolled_back") actions.push("rollback");', 'actions.push("rollback");', [S.r02]),
   stackMutant("rollout", "E2E-S09", "a decided proposal still reads as pending", "lib/services/rollouts/view.ts", 'x.policyRef === r.policyRef && x.state === "proposed"', "x.policyRef === r.policyRef", [S.r03, S.r05]),

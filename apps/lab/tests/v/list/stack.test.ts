@@ -44,7 +44,7 @@ test("V1M-S01..S06 the six L2 cases on the real route: own requests, another pro
     assert.ok(page.ok, JSON.stringify(page));
     const view = buildListView(page, null);
     assert.ok(view.kind === "rows");
-    return Object.fromEntries(view.rows.map((r) => [Object.entries(w.ids).find(([, id]) => id === r.requestId)![0], r.content]));
+    return Object.fromEntries(view.rows.map((r) => [Object.entries(w.ids).find(([, id]) => id === r.requestId)![0], r.loss === null ? r.access.label : `${r.access.label}; lost: ${r.loss}`]));
   };
 
   await t.test("S01 provider A's developer lists its own deployment's requests and reads one; the row links to its page", async () => {
@@ -65,7 +65,7 @@ test("V1M-S01..S06 the six L2 cases on the real route: own requests, another pro
     assert.deepEqual(await as("dev_b").detail(B, w.ids.ungranted), { ok: false, reason: "not_found" });
     assert.deepEqual(await as("dev_b").detail(A, w.ids.ungranted), { ok: false, reason: "not_found" });
     assert.deepEqual(await as("dev_b").list(A, null), { ok: false, reason: "not_found" });
-    assert.deepEqual(buildListView(await as("dev_b").list(B, null), null), { kind: "empty", message: LIST_COPY.empty });
+    assert.deepEqual(buildListView(await as("dev_b").list(B, null), null), { kind: "empty", title: LIST_COPY.empty, message: LIST_COPY.emptyWhy, clearHref: null });
     assert.deepEqual(await as("dev_a").detail(A, w.ids.foreign), { ok: false, reason: "not_found" });
     assert.deepEqual(await as("dev_a").detail(A, w.ids.deleted), { ok: false, reason: "not_found" });
   });
@@ -84,13 +84,13 @@ test("V1M-S01..S06 the six L2 cases on the real route: own requests, another pro
     const ungranted = raw.data.find((d: { request_id: string }) => d.request_id === w.ids.ungranted);
     assert.equal(ungranted.access, "metadata");
     assert.doesNotMatch(JSON.stringify(ungranted), new RegExp(`${w.C2}|content_bytes|grantor|key_id|prompt`));
-    assert.deepEqual(await labels(), { minimal: "Not captured", lost: "Lost: the capture queue was full", ungranted: "Metadata only", granted: "Shared", expired: "Expired" });
+    assert.deepEqual(await labels(), { minimal: "Not captured", lost: "Not captured; lost: the capture queue was full", ungranted: "Metadata only", granted: "Shared", expired: "Expired" });
   });
 
   await t.test("S04 after C1 revokes its grant the next read is metadata only", async () => {
     assert.equal((await fetch(`${url}/_test/revoke`, { method: "POST" })).status, 200);
     const labelled = await labels();
-    assert.equal(labelled.granted, "Metadata only");
+    assert.equal(labelled.granted, "Access revoked", "AP-07c: a withdrawn grant reads revoked, not never-granted");
     const one = await as("dev_a").detail(A, w.ids.granted);
     assert.ok(one.ok && one.value.access === "metadata" && !("grantor_org_id" in one.value));
   });
