@@ -1,0 +1,41 @@
+{
+  "task": "UX-07",
+  "related_tasks": ["AP-09"],
+  "lane": "ux-app-3",
+  "slice": "UX-07 follow-up / AP-09 (C-07): consumer data-use controls in Settings over AP-07a's routes through the App transport - per-key capture (PUT /console/v1/keys/{id}/capture) and grant withdrawal (DELETE /console/v1/data-grants/{id}), honest unavailable/forbidden/signed-out/suspended/loading states; settings ux runner",
+  "activity": "review",
+  "at": "2026-10-02T19:42:00Z",
+  "head": "608b21ff",
+  "base": "29b9df84",
+  "worktree": ".claude/worktrees/codex-w7-ux-app-3",
+  "branch": "codex/w7-ux-app-3",
+  "owned_paths": [
+    "apps/app/app/(console)/settings/",
+    "apps/app/lib/services/data-use/",
+    "apps/app/tests/ux/settings/",
+    "apps/app/tests/u/keys-source.test.ts (U2-S04)",
+    "apps/app/tests/u/settings-view-model.test.ts",
+    "apps/app/tests/u/run-mutants.mjs (U2 settings case names, U2-M15)",
+    "research/plan/evidence/w7/ux-app-3-608b21f.md",
+    "research/plan/evidence/coordinator/updates/UX-07-20261002T1942Z.json"
+  ],
+  "commands": [
+    {"cmd": "make console-test (base 29b9df84)", "exit": 0, "summary": "589 tests, 587 pass, 0 fail, 2 skipped"},
+    {"cmd": "node --test tests/ux/settings/settings.test.ts (before slice 1 / before slice 2)", "exit": 1, "summary": "red: module load 0/1; then 6 pass / 6 fail"},
+    {"cmd": "make console-test (head)", "exit": 0, "summary": "601 tests, 601 pass, 0 fail, 0 skipped"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-built", "exit": 0, "summary": "build OK; i2a 22/22"},
+    {"cmd": "node --test tests/boundary/*.test.ts", "exit": 0, "summary": "6/6, 0 API-BOUNDARY findings"},
+    {"cmd": "node tests/ux/settings/run-mutants.mjs", "exit": 0, "summary": "2/2 self-checks; 56/56 killed; every UXS case declared"},
+    {"cmd": "make console-mutants (WR-UXA3-1 applied transiently)", "exit": 0, "summary": "212+218+66+62+46+27+17+42+36+41+56 killed, 0 survivors"},
+    {"cmd": "uv run --frozen pytest -q tests/integration/test_makefile_mutant_lists.py (patch applied, then reverted)", "exit": 0, "summary": "7 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "all slices green with 56/56 mutants; remaining = review round and WR-UXA3-1 at merge; live verification needs CONSOLE_DATA_USE + the AP-09 cutover (production track, not estimated here)", "at": "2026-10-02T19:42:00Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-UXA3-1 Makefile console-mutants: add '\\tcd apps/app && node tests/ux/settings/run-mutants.mjs' after the usage runner line"],
+  "schema_requests": [],
+  "deviations": ["brief names /console/v1/data-use/grants; the committed path is /console/v1/data-grants (route module, OpenAPI, 05-service-contracts) - built against that", "grant creation (POST /console/v1/data-grants) not surfaced: no provider directory in the App"],
+  "evidence": ["research/plan/evidence/w7/ux-app-3-608b21f.md"]
+}
