@@ -1,0 +1,55 @@
+command 8839aafe-576b-4992-89aa-a2d884cb2b4e (e4c-run2-cache-diag.sh on i-0e8449a4ffca29bab)
+== now 2026-10-02T06:36:24Z
+/dev/mapper/vg.01-lv_ephemeral  412G   11G  381G   3% /opt/dlami/nvme
+INFRX_MODE=pilot
+== cache root /opt/dlami/nvme/processing
+138M	/opt/dlami/nvme/processing
+138M	/opt/dlami/nvme/processing/15e766d0-8c4d-47a8-986f-22ed32f390c3
+== files: total / .part / by org
+60
+0
+15e766d0-8c4d-47a8-986f-22ed32f390c3 60 files 138M
+== oldest / newest file mtimes
+2026-10-02T02:10:45.1890788070Z 37094 15e766d0-8c4d-47a8-986f-22ed32f390c3/v1/1a313f0a058ce65a/source.mp4
+2026-10-02T02:13:49.0260562890Z 3268442 15e766d0-8c4d-47a8-986f-22ed32f390c3/v1/a01efe5a4518536a/source.mp4
+== flocks held under the cache root (lslocks)
+held: 0
+== open fds under the cache root by process
+== cache metrics (host.prom)
+/var/lib/infrx/metrics/host.prom:infrx_processing_cache_bytes{process="host"} 143910266
+== gateway metrics endpoint (cache lines)
+== journal gateway+worker 2026-10-02 03:28..03:45 (cache/refusal lines, counts then last 12)
+0
+== journal gateway+worker 2026-10-02 04:19..04:35 (cache/refusal lines, counts then last 12)
+0
+== journal gateway+worker 2026-10-02 05:30..06:05 (cache/refusal lines, counts then last 12)
+1
+2026-10-02T05:59:58+00:00 ip-172-31-33-243 docker[393601]: 2026-10-02 05:59:58,753 INFO infrx.media.retention retention sweep: 0 deleted, 0 retained, 0 delete failures, 0 lost acks, batch 0, in flight 0, oldest pending delete 0 s, aborted: dependency_unavailab
+== journal gateway+worker: errors/tracebacks in the whole run window (counts by unit)
+1647
+      7 2026-10-02T05:55:43+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      6 2026-10-02T05:23:09+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      5 2026-10-02T04:47:55+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      5 2026-10-02T04:35:19+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      4 2026-10-02T06:05:10+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      4 2026-10-02T06:02:07+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      4 2026-10-02T05:57:30+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+      4 2026-10-02T05:43:07+00:00 ip-172-31-33-243 docker[393602]: Traceback (most recent call last):
+== who ran the bench (certify client host)
+total 52
+drwxrwxrwx  3 root   root    4096 Oct  2 06:17 .
+drwxr-xr-x 10 ubuntu ubuntu  4096 Oct  2 02:09 ..
+-rw-r--r--  1 root   root   19122 Oct  2 06:17 certify.log
+-rw-r--r--  1 root   root   17330 Oct  2 06:17 report.json
+drwxr-xr-x  2 root   root    4096 Oct  2 06:17 work
+8
+ 06:36:25 up 12 days,  7:50,  0 user,  load average: 0.19, 0.13, 0.26
+== docker ps
+infrx-worker Up 8 hours
+infrx-gateway Up 8 hours
+marlin2b-8000 Up 8 hours
+infrx-lab-control Up 29 hours
+infrx-valkey Up 7 days
+caddy Up 8 days
+	
+status Success

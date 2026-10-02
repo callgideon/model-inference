@@ -1,0 +1,60 @@
+command 23e2476a-ed40-409f-9965-6b8b14c50803 (e4c-run2-pg-diag.sh on i-0e8449a4ffca29bab)
+image: sha256:a02083a5c80d29bc0a56f264179556d4c3323c06cf632063973aafa7bd394751
+== journal_usage() timing (ms)
+0.0
+== server
+PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit | 60 | 287 MB
+== activity now (state, wait, count, max age s)
+None |  | 19 | None
+idle | Client | 2 | None
+active |  | 1 | 0
+== infrx tables: live/dead rows, size, last autovacuum/analyze
+stream_chunks | 92608 | 0 | 126 MB | 10-02 06:36 | 10-02 06:36 | 13317 | 1412094
+jobs | 12961 | 204 | 49 MB | 10-02 06:21 | 10-02 06:16 | 197367 | 25145903
+outbox | 50649 | 848 | 29 MB | 10-02 05:37 | 10-02 05:18 | 196 | 26941594
+job_results | 12749 | 2 | 15 MB | 10-02 02:17 | 10-02 05:13 | 25 | 39339
+content_objects | 21405 | 410 | 12 MB | 10-02 06:04 | 10-02 05:40 | 50 | 53826
+capacity_reservations | 38361 | 4204 | 7704 kB | 10-02 04:15 | 10-02 05:25 | 905 | 901822
+attempts | 25550 | 1976 | 6248 kB | 10-02 04:46 | 10-02 05:54 | 51 | 560104
+idempotency | 12773 | 1762 | 5016 kB | 10-02 03:50 | 10-02 06:11 | 12827 | 35978
+credit_ledger | 6961 | 5 | 3648 kB | 10-02 03:09 | 10-02 06:13 | 119370 | 334365
+job_media | 12300 | 3 | 3520 kB | 10-02 02:58 | 10-02 04:48 | 26 | 1564204
+credit_wallet_holds | 6980 | 391 | 1608 kB | 10-02 05:35 | 10-02 05:51 | 26 | 188105
+job_readiness | 6980 | 0 | 1176 kB | 10-02 06:16 | 10-02 05:52 | 144 | 1536045
+credit_holds | 5807 | 77 | 1040 kB | 09-25 00:35 | 09-25 00:39 | 53 | 92264
+credit_wallets | 5 | 37 | 144 kB | 10-02 02:19 | 10-02 06:16 | 112214 | 422
+== pg_stat_statements top by total time (calls, mean ms, max ms, rows, query)
+  failed: InsufficientPrivilege permission denied for schema extensions
+LINE 1: ...eft(regexp_replace(query,'\s+',' ','g'),110) from extensions...
+                                             
+== pg_stat_statements: stats reset at
+  failed: InsufficientPrivilege permission denied for schema extensions
+LINE 1: select stats_reset from extensions.pg_stat_statements_info
+                                ^
+== indexes on infrx journal/jobs tables
+job_media | job_media_content_idx
+job_media | job_media_pkey
+job_readiness | job_readiness_pkey
+job_results | job_results_pkey
+jobs | jobs_deadline_idx
+jobs | jobs_hold_target_key
+jobs | jobs_job_handle_key
+jobs | jobs_journal_stored_idx
+jobs | jobs_key_active_idx
+jobs | jobs_org_active_idx
+jobs | jobs_org_created_idx
+jobs | jobs_pkey
+jobs | jobs_queue_deadline_idx
+jobs | jobs_reconcile_idx
+jobs | jobs_request_id_org_id_key
+jobs | jobs_request_wallet_key
+jobs | jobs_settlement_target_key
+lab_import_jobs | lab_import_jobs_claimable
+lab_import_jobs | lab_import_jobs_pkey
+lab_import_jobs | lab_import_jobs_requeued_from_key
+stream_chunks | stream_chunks_expiry_idx
+stream_chunks | stream_chunks_one_terminal_idx
+stream_chunks | stream_chunks_pkey
+exit 0
+	
+status Success

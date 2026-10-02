@@ -1,0 +1,76 @@
+command 28b4729f-e707-43b6-835a-cd752fb71b0e (e4c-run2-db-diag.sh on i-0e8449a4ffca29bab)
+== exception lines grouped (gateway 393601 / worker 393602)
+    176 docker[393602] psycopg_pool.PoolTimeout: couldn't get a connection after 5.00 sec
+    144 docker[393602] asyncio.exceptions.CancelledError
+    144 docker[393602] TimeoutError
+== lifecycle/durable/pool lines grouped
+    176 docker[393602] psycopg_pool.PoolTimeout: couldn't get a connection after 5.00 sec
+    176 docker[393602]   File "/opt/venv/lib/python3.12/site-packages/psycopg_pool/pool_async.py", line 255, in getconn
+    176 docker[393602]     return _Pooled(pool, await pool.getconn())
+    176 docker[393602]     raise PoolTimeout(
+    153 docker[393602] readiness probe failed or did not answer in 10.0s
+     31 docker[393602] a durable dependency did not answer within 20.0s
+     19 docker[393602] INFO:     100.57.145.167:0 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] status read of job job_277604e37e0f46d69929e6bf560857bd did not answer; retrying
+      1 docker[393602] INFO:     127.0.0.1:60836 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:60826 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:53350 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:53348 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50776 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50764 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50754 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50752 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50736 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50720 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50714 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+      1 docker[393602] INFO:     127.0.0.1:50700 - "POST /v1/chat/completions HTTP/1.1" 429 Too Many Requests
+== first and last 'unreachable|did not answer' lines
+2026-10-02T02:24:38+00:00 ip-172-31-33-243 docker[393602]: readiness probe failed or did not answer in 10.0s
+2026-10-02T06:09:21+00:00 ip-172-31-33-243 docker[393602]: readiness probe failed or did not answer in 10.0s
+== per-10-min count of lines mentioning unreachable|did not answer|OperationalError
+      2 02:0
+     14 03:0
+     42 04:0
+     99 05:0
+     28 06:0
+== one full worker traceback (last, masked)
+  File "/opt/venv/lib/python3.12/site-packages/psycopg/connection_async.py", line 333, in execute
+    raise ex.with_traceback(None)
+                          journal_pruned_generation = v_generation,
+                          journal_pruned_sequence = v_sequence
+     where request_id = v_job"
+Traceback (most recent call last):
+  File "/app/infrx/worker/__main__.py", line 238, in every
+    await step()
+  File "/app/infrx/worker/__main__.py", line 248, in expire_journal
+    while found := await journal.expire():
+                   ^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/infrx/state/journal.py", line 124, in expire
+    return int(await self._db._call("expire_journal", {
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/infrx/state/jobstore.py", line 209, in _call
+    return await rpc.call(self._connect, function, args, error=domain_error)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/infrx/state/rpc.py", line 75, in call
+    return await _run(connect, f"select infrx.{function}(%s)", (Jsonb(args),), _scalar,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/infrx/state/rpc.py", line 51, in _run
+    raise error(failed) from None
+  File "/app/infrx/state/rpc.py", line 47, in _run
+    return await read(await conn.execute(sql, params))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/psycopg/connection_async.py", line 333, in execute
+    raise ex.with_traceback(None)
+                          journal_pruned_generation = v_generation,
+                          journal_pruned_sequence = v_sequence
+     where request_id = v_job"
+== valkey + lab-control health in the window
+0
+0
+== DB target kind (masked)
+pooler_or_host=<project>.pooler.supabase.com
+ENGINE_MAX_NUM_SEQS=8
+WORKER_CONCURRENCY=8
+DATABASE_POOL_MAX_SIZE=6
+	
+status Success

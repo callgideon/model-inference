@@ -1,0 +1,94 @@
+command 24d49a38-7f32-446d-90fa-2b7127fcde6c (e4c-run2-pg-diag3.sh on i-0e8449a4ffca29bab)
+== seq scans: table, seq_scan, seq_tup_read, tup/scan, idx_scan
+jobs | 197382 | 1057728430 | 5358 | 25168217
+stream_chunks | 13317 | 415589949 | 31207 | 1412108
+idempotency | 12827 | 81692465 | 6368 | 35978
+credit_ledger | 119370 | 659809 | 5 | 334400
+outbox | 196 | 589227 | 3006 | 26943945
+capacity_reservations | 905 | 467166 | 516 | 901874
+credit_wallets | 112221 | 444151 | 3 | 422
+wallets | 59867 | 335963 | 5 | 5870
+catalog_listings | 92154 | 184299 | 1 | 155931
+data_access_policies | 22196 | 22195 | 0 | 27943
+job_readiness | 144 | 10102 | 70 | 1556716
+provider_memberships | 121 | 95 | 0 | 3
+== index scans on jobs/stream_chunks/capacity_reservations/outbox/idempotency
+capacity_reservations | capacity_reservations_pkey | 597349
+capacity_reservations | capacity_reservations_org_active_idx | 294456
+capacity_reservations | capacity_reservations_active_idx | 10069
+credit_ledger | credit_ledger_one_debit_per_request | 313479
+credit_ledger | credit_ledger_wallet_created_idx | 20914
+credit_ledger | credit_ledger_wallet_credits_in_idx | 5
+credit_ledger | credit_ledger_one_signup_grant_per_wallet | 2
+credit_ledger | credit_ledger_operation_key | 0
+credit_ledger | credit_ledger_signup_target_key | 0
+credit_ledger | credit_ledger_pkey | 0
+credit_wallet_holds | credit_wallet_holds_wallet_active_idx | 143717
+credit_wallet_holds | credit_wallet_holds_reconcile_idx | 41607
+credit_wallet_holds | credit_wallet_holds_pkey | 2822
+idempotency | idempotency_pkey | 35978
+idempotency | idempotency_expiry_idx | 0
+jobs | jobs_settlement_target_key | 24032240
+jobs | jobs_job_handle_key | 725131
+jobs | jobs_key_active_idx | 103795
+jobs | jobs_journal_stored_idx | 84109
+jobs | jobs_reconcile_idx | 67902
+jobs | jobs_deadline_idx | 67419
+jobs | jobs_pkey | 49309
+jobs | jobs_hold_target_key | 28022
+jobs | jobs_org_active_idx | 9698
+jobs | jobs_request_id_org_id_key | 523
+jobs | jobs_org_created_idx | 68
+jobs | jobs_request_wallet_key | 1
+jobs | jobs_queue_deadline_idx | 0
+outbox | outbox_aggregate_idx | 17470602
+outbox | outbox_pending_idx | 9423270
+outbox | outbox_pkey | 31041
+outbox | outbox_event_org_idx | 18678
+outbox | outbox_acknowledged_idx | 354
+outbox | outbox_org_idx | 0
+stream_chunks | stream_chunks_pkey | 1288389
+stream_chunks | stream_chunks_expiry_idx | 123719
+stream_chunks | stream_chunks_one_terminal_idx | 0
+== jobs_journal_stored_idx definition
+CREATE INDEX jobs_journal_stored_idx ON infrx.jobs USING btree (request_id) WHERE (journal_stored_bytes > 0)
+CREATE INDEX jobs_key_active_idx ON infrx.jobs USING btree (key_id) WHERE (state = ANY (ARRAY['preparing'::text, 'queued'::text, 'running'::
+CREATE INDEX jobs_org_active_idx ON infrx.jobs USING btree (org_id) WHERE (state = ANY (ARRAY['preparing'::text, 'queued'::text, 'running'::
+CREATE INDEX jobs_reconcile_idx ON infrx.jobs USING btree (reconcile_after) WHERE (settlement_state = 'held_unknown'::text)
+CREATE INDEX stream_chunks_expiry_idx ON infrx.stream_chunks USING btree (expires_at)
+== journal_usage: stored_bytes
+Aggregate  (cost=642.19..642.20 rows=1 width=32)
+  ->  Bitmap Heap Scan on jobs j  (cost=40.65..640.65 rows=615 width=8)
+        Recheck Cond: (journal_stored_bytes > 0)
+        ->  Bitmap Index Scan on jobs_journal_stored_idx  (cost=0.00..40.50 rows=615 width=0)
+== journal_usage: reserved
+  failed: InsufficientPrivilege permission denied for table capacity_reservations
+== journal_usage: chunks count
+Aggregate  (cost=3420.53..3420.54 rows=1 width=8)
+  ->  Index Only Scan using stream_chunks_expiry_idx on stream_chunks  (cost=0.29..3189.01 rows=92608 width=0)
+== expire_journal: candidates
+Limit  (cost=3630.85..3631.76 rows=363 width=24)
+  ->  Sort  (cost=3630.85..3631.76 rows=363 width=24)
+        Sort Key: (min(expires_at)), job_id
+        ->  HashAggregate  (cost=3611.79..3615.42 rows=363 width=24)
+              Group Key: job_id
+              ->  Bitmap Heap Scan on stream_chunks c  (cost=452.47..3528.71 rows=16616 width=24)
+                    Recheck Cond: (expires_at <= now())
+                    ->  Bitmap Index Scan on stream_chunks_expiry_idx  (cost=0.00..448.32 rows=16616 width=0)
+                          Index Cond: (expires_at <= now())
+== journal_bytes_charged()
+CREATE OR REPLACE FUNCTION infrx.journal_bytes_charged()
+ RETURNS bigint
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'infrx',
+== timing: each journal_usage part (ms)
+1
+  sum jobs: 17 ms (idle DB, now)
+  failed reserved InsufficientPrivilege
+  count chunks: 26 ms (idle DB, now)
+  journal_usage(): 39 ms (idle DB, now)
+  failed charged InsufficientPrivilege
+exit 0
+	
+status Success
