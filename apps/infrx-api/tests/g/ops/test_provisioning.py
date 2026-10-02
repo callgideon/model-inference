@@ -209,7 +209,9 @@ def test_credit_identity__a_replayed_grant_is_deduplicated():
         first = await op.grant_initial(USER_A, idempotency_key="g1", reason=R)
         again = await op.grant_initial(USER_A, idempotency_key="g1", reason=R)
         other = await op.grant_initial(USER_A, idempotency_key="g2-new-campaign", reason=R)
-        assert first == again and not first["replayed"] and other["replayed"]
+        # The same key replays the recorded grant and says so; a new campaign key reaches the
+        # ledger, which reports the individual's existing grant as replayed too.
+        assert again == {**first, "replayed": True} and not first["replayed"] and other["replayed"]
         assert len(w.ledger.entries) == 1
         assert w.ledger.total(USER_A) == INITIAL_SIGNUP_GRANT
         await op.grant_initial(USER_B, idempotency_key="g3", reason=R)
@@ -222,8 +224,11 @@ def test_api_ops__a_replayed_adjustment_is_deduplicated():
 
     async def go():
         op, _ = await provision(w)
-        await op.adjust(USER_A, "25.5", idempotency_key="adj", reason=R)
-        await op.adjust(USER_A, "25.5", idempotency_key="adj", reason=R)
+        first = await op.adjust(USER_A, "25.5", idempotency_key="adj", reason=R)
+        again = await op.adjust(USER_A, "25.5", idempotency_key="adj", reason=R)
+        # The replay answers the recorded entry and SAYS it is a replay (the recorded
+        # result carries the original write's `replayed: false`).
+        assert (first["replayed"], again["replayed"], again["entry_id"]) == (False, True, first["entry_id"])
         with pytest.raises(errors.IdempotencyConflict):
             await op.adjust(USER_A, "99", idempotency_key="adj", reason=R)
         # Crash between the ledger append and the audit row: the retry reaches the

@@ -115,6 +115,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "        reveal = secret",
        "test_api_ops__the_secret_is_revealed_once"),
     # --- idempotency and audit -------------------------------------------------
+    _m("replay_reports_the_original_write", "a replayed operator write says replayed",
+       S, "        return {**result, \"replayed\": True}", "        return result",
+       "test_api_ops__a_replayed_adjustment_is_deduplicated"),
     _m("replay_ignores_the_request", "one idempotency key names one request",
        S, "    if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
        "    if prior.after.get(\"operation\") != operation:",

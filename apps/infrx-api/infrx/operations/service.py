@@ -476,7 +476,13 @@ def _recorded(prior: AuditEntry, operation: str, request: dict[str, Any]) -> Any
     if prior.after.get("operation") != operation or prior.after.get("request") != request:
         raise errors.IdempotencyConflict("this idempotency key recorded a different "
                                          "operator write")
-    return prior.after["result"]
+    result = prior.after["result"]
+    # The recorded result says what the ORIGINAL write saw (`replayed: false`); the caller
+    # of this replay must see the truth (E4C run 2 H5 2026-10-02: the window judged a
+    # replayed +40,000 as a fresh adjustment that moved nothing).
+    if isinstance(result, dict) and "replayed" in result:
+        return {**result, "replayed": True}
+    return result
 
 
 def _iso(value: datetime | None) -> str | None:
