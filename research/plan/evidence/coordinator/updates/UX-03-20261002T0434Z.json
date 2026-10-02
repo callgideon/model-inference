@@ -1,0 +1,49 @@
+{
+  "task": "UX-03",
+  "lane": "ux-lab-operate",
+  "slice": "UX-03 complete (shell + L-01, L-02 overview, L-03 models + legacy revision form, L-04 deployments, L-06 settings) + AP-09 09d Add model wizard; UX-T07/T08/T09 fixture journeys; mutants",
+  "activity": "review",
+  "at": "2026-10-02T04:34:00Z",
+  "head": "4207a251",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-ux-lab-operate",
+  "branch": "codex/w7-ux-lab-operate",
+  "owned_paths": [
+    "apps/lab/app/(provider)/layout.tsx",
+    "apps/lab/app/(provider)/nav.tsx",
+    "apps/lab/app/(provider)/operate.module.css",
+    "apps/lab/lib/auth/sign-in-form.tsx",
+    "apps/lab/app/(provider)/overview/",
+    "apps/lab/app/(provider)/models/",
+    "apps/lab/app/(provider)/deployments/",
+    "apps/lab/app/(provider)/settings/",
+    "apps/lab/lib/services/control/view.ts",
+    "apps/lab/tests/ux/operate/",
+    "research/plan/evidence/w7/ux-lab-operate-4207a25.md",
+    "research/plan/evidence/coordinator/updates/UX-03-20261002T0434Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/operate/shell.test.ts (before slice 1)", "exit": 1, "summary": "red: 4/4 fail by assertion on the base layout"},
+    {"cmd": "node --test tests/ux/operate/wizard.test.ts (models/new/{api,wizard}.ts aside)", "exit": 1, "summary": "red: ERR_MODULE_NOT_FOUND"},
+    {"cmd": "node --test tests/ux/operate/*.test.ts", "exit": 0, "summary": "37 OP cases pass; each also passes alone"},
+    {"cmd": "make lab-test", "exit": 0, "summary": "323 tests, 309 pass, 0 fail, 14 skipped (pre-existing)"},
+    {"cmd": "make lab-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make lab-build", "exit": 0, "summary": "build OK"},
+    {"cmd": "node tests/ux/operate/run-mutants.mjs", "exit": 0, "summary": "37 cases all named; 64 mutants, 64 killed"},
+    {"cmd": "node tests/l/shell/run-mutants.mjs", "exit": 0, "summary": "106/106 killed"},
+    {"cmd": "node tests/l/ui/run-mutants.mjs", "exit": 1, "summary": "86/88; L4-X45/X46 STALE -> WR-UX03-1 (88/88 with the patch)"},
+    {"cmd": "node tests/ux/run-mutants.mjs", "exit": 0, "summary": "16/16 killed"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "7 failed until WR-UX03-3; 7 passed with the patch"},
+    {"cmd": "make api-lint / make api-typecheck", "exit": 0, "summary": "no Python touched; pyright 458 (baseline 458)"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "all slices green with 0 survivors in the lane list; remaining = review findings + applying WR-UX03-1/3 at merge; WR-UX03-2/4 belong to the AP-04/AP-01 owners", "at": "2026-10-02T04:34:00Z"},
+  "blockers": ["Live wizard use needs WR-UX03-4 (AP-04 routes take the workspace) and LAB_ARTIFACTS mounted on the Lab unit; readiness/smoke/Connect need AP-05"],
+  "wiring_requests": [
+    "WR-UX03-1 apps/lab/tests/l/ui/run-mutants.mjs L4-X45/L4-X46 finds (composed: 88/88 killed)",
+    "WR-UX03-2 regenerate the Lab client with AP-04 and swap ArtifactPaths for @infrx/api-client/lab paths in models/new/api.ts (composed: OP-W06 on lab-control.json)",
+    "WR-UX03-3 Makefile lab-mutants: cd apps/lab && node tests/ux/operate/run-mutants.mjs (composed: test_makefile_mutant_lists.py 7 passed)",
+    "WR-UX03-4 AP-04 routes read ?provider_org_id= with a membership check (session actors carry none)"
+  ],
+  "evidence": ["research/plan/evidence/w7/ux-lab-operate-4207a25.md"]
+}
