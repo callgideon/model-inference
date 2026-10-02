@@ -105,9 +105,11 @@ class SubscriptionRequest(lab.LabModel):
 class ExperimentStore(Protocol):
     """WR-B4-2 (lab-sql): the provider's experiments."""
 
-    async def put(self, provider_org_id: str, experiment: dict[str, Any]) -> dict[str, Any]:
+    async def put(self, provider_org_id: str, experiment: dict[str, Any], *,
+                  actor: str | None = None) -> dict[str, Any]:
         """Write once per `experiment_id`: the stored row. The same `launch` again is a replay
-        (the stored row, its first `created_at`); another launch `IdempotencyConflict`."""
+        (the stored row, its first `created_at`); another launch `IdempotencyConflict`.
+        `actor` is the launching session user (WR-AP10-2)."""
         ...
 
     async def experiments(self, provider_org_id: str) -> Sequence[dict[str, Any]]:

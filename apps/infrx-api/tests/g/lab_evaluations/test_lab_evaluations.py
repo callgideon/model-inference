@@ -81,7 +81,7 @@ class Experiments:
     def __init__(self) -> None:
         self.rows: dict[tuple[str, str], dict] = {}
 
-    async def put(self, provider_org_id, experiment):
+    async def put(self, provider_org_id, experiment, *, actor=None):   # WR-AP10-2
         have = self.rows.setdefault((provider_org_id, experiment["experiment_id"]), experiment)
         if have["launch"] != experiment["launch"]:
             raise errors.IdempotencyConflict("the experiment id names another launch")
