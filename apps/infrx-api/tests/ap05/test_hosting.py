@@ -20,10 +20,10 @@ import pytest
 
 from infrx.contracts import errors
 from infrx.lab.hosting import PROFILE
-from infrx.lab.hosting.engine import Runtime
+from infrx.lab.hosting.engine import Runtime, options_digest
 from infrx.lab.hosting.store import Hold
 
-from .conftest import ENGINE_PORT, REPO_ROOT, run
+from .conftest import ENGINE_PORT, REPO_ROOT, entries, run
 
 PROC = pathlib.Path(__file__).with_name("controller_proc.py")
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -357,3 +357,87 @@ def test_ap05__the_box_window_never_runs_two_engines_on_the_gpu(tmp_path):
     (tmp_path / "bin" / "curl.rc").write_text("7")                 # the engine never answers
     done, _ = window(tmp_path, "close", HOSTING_ROOT=str(tmp_path / "models"))
     assert done.returncode == 4 and "do not reopen" in done.stderr
+
+
+# ===================================================== 05c: install and identity ===
+def test_ap05__the_engine_serves_exactly_the_requested_revision(world):
+    operation, deployment = world.deployed()
+    world.drive()
+    assert world.op(operation).state == "succeeded"
+    identity = world.readiness(deployment)["identity"]
+    assert identity["passed"] and identity["reasons"] == [] and identity["operation_id"] == \
+        operation
+    seen = identity["observed"]
+    assert seen["files"] == {e.relative_path: e.sha256 for e in entries(world.files)}
+    assert seen["image"] == PROFILE.runtime_image_ref.partition("@")[2]
+    assert seen["options_digest"] == PROFILE.engine_options_digest
+    assert seen["served_models"] == [PROFILE.served_model_name]
+    assert seen["model_dir"].endswith(f"infrx-hosting-{deployment}")
+    assert seen["serving_version_id"] == world.serving
+
+
+def _tamper(world, how: str):
+    def boundary(name: str) -> None:
+        if name != "launched":
+            return
+        model = next((world.target.model_root).iterdir())
+        if how == "bytes":
+            (model / "model-00001-of-00002.safetensors").write_bytes(b"\x00other weights")
+        elif how == "extra":
+            (model / "modeling_marlin.py").write_text("import os  # remote code")
+    return boundary
+
+
+MISMATCHES = {
+    "runtime_image": lambda w: setattr(w.launcher, "image", "sha256:" + "0" * 64),
+    "engine_options": lambda w: setattr(w.launcher, "flags", tuple(
+        "32" if f == "8" else f for f in PROFILE.flags)),
+    "served_model": lambda w: setattr(w.engine, "models", ["marlin2b-other"]),
+    "files.model-00001-of-00002.safetensors": "bytes",
+    "files.modeling_marlin.py": "extra",
+}
+
+
+@pytest.mark.parametrize("field", MISMATCHES)
+def test_ap05__a_mismatched_identity_never_becomes_ready(fake_world, field):
+    w = fake_world
+    how = MISMATCHES[field]
+    if callable(how):
+        how(w)
+    operation, deployment = w.deployed()
+    w.drive(w.controller(boundary=None if callable(how) else _tamper(w, how)))
+    doc = w.op(operation)
+    assert (doc.state, doc.error.code) == ("failed", "identity_mismatch")
+    identity = w.readiness(deployment)["identity"]
+    assert not identity["passed"]
+    expected = [field, "weights"] if how == "bytes" else [field]   # the manifest and the pin
+    assert [r["field"] for r in identity["reasons"]] == expected
+    assert w.state(deployment) == "retired" and w.launcher.running == {}
+    assert w.detail(deployment)["allocation"]["state"] == "released"
+    assert not any(w.target.model_root.iterdir())          # its installed model is removed
+
+
+def test_ap05__the_source_must_hold_the_verified_bytes(world):
+    (world.target.source_dir / "tokenizer.json").write_bytes(b'{"model": "swapped"}')
+    operation, deployment = world.deployed()
+    world.drive()
+    doc = world.op(operation)
+    assert (doc.state, doc.error.code) == ("failed", "artifact_unavailable")
+    assert "tokenizer.json" in doc.error.message
+    assert world.launcher.starts == [] and world.state(deployment) == "retired"
+    (world.target.source_dir / "tokenizer.json").unlink()
+    operation, _ = world.deployed()
+    world.drive()
+    assert world.op(operation).error.message.endswith("missing:tokenizer.json")
+
+
+def test_ap05__the_profile_is_the_measured_marlin_serving_version():
+    record = json.loads((REPO_ROOT / "models" / "marlin2b" / "serving-version.json").read_text())
+    flags = [f.replace("${ENGINE_MAX_NUM_SEQS}", record["settings"]["ENGINE_MAX_NUM_SEQS"])
+             .replace("${PROCESSING_CACHE_DIR}", record["settings"]["PROCESSING_CACHE_DIR"])
+             for f in record["flags"]]
+    assert list(PROFILE.flags) == flags
+    assert options_digest(PROFILE.flags) == record["engine_options_digest"] == \
+        PROFILE.engine_options_digest
+    assert PROFILE.runtime_image_ref == record["runtime_image"]["ref"]
+    assert PROFILE.served_model_name == flags[flags.index("--served-model-name") + 1]

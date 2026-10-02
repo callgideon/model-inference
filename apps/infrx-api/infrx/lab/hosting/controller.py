@@ -27,7 +27,8 @@ from ...contracts.api import FieldError
 from ...contracts.v2.records import DeploymentState, ServingRevision
 from ...state.control_ops import Operation, input_hash
 from . import KINDS, PROFILE, LabHosting, Target
-from .engine import Engine, InstallRefused, Launcher, install
+from .engine import Engine, InstallRefused, Launcher, Runtime, install, measure, mismatches, \
+    options_digest
 from .store import Allocation, Hold, Receipt, tag
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,17 @@ DEADLINE_S = 7200                 # a create or smoke operation ends within this
 VALIDATION_WINDOW_S = 3600        # a draft/validating deployment not ready by then is retired
 IDENTITY_TTL_S = SMOKE_TTL_S = 86400
 HEALTH_EVERY_S, HEALTH_TTL_S = 60, 180
+
+
+HARNESS = (PROFILE.prompt_harness_ref, PROFILE.preprocessor_profile_version)
+
+
+def _runtime(runtime: Runtime | None) -> dict:
+    """A runtime as a receipt records it (never a secret: image, flags, directory)."""
+    if runtime is None:
+        return {"running": False}
+    return {"running": True, "image": runtime.image, "image_declared": runtime.declared,
+            "options_digest": options_digest(runtime.flags), "model_dir": runtime.model_dir}
 
 
 def system(provider_org_id: str) -> api.Actor:
@@ -224,12 +236,18 @@ class Controller:
         return True
 
     async def _identity(self, hold: Hold, allocation: Allocation, serving: ServingRevision,
-                        models: list[str]) -> Receipt:
-        reasons = [] if PROFILE.served_model_name in models else [FieldError(
-            field="served_model", code="identity_mismatch",
-            message="the engine does not serve the profile's model name")]
-        return await self._receipt(hold, allocation, "identity", {"served_models": models},
-                                   reasons, IDENTITY_TTL_S)
+                        models: list[str] | None) -> Receipt:
+        """Observe the engine (its runtime as the launcher reads it, the model names it
+        serves, the installed bytes measured now) and record it against the revision."""
+        artifact = await self.h.artifact(serving)
+        runtime = await self.launcher.inspect(allocation)
+        files = await asyncio.to_thread(measure, self._dir(allocation))
+        reasons = mismatches(serving, runtime, models, self._dir(allocation),
+                             served_model=PROFILE.served_model_name, harness=HARNESS,
+                             files=files, manifest=artifact.files if artifact else ())
+        return await self._receipt(hold, allocation, "identity", {
+            "serving_version_id": serving.serving_version_id, "files": files,
+            "served_models": models, **_runtime(runtime)}, reasons, IDENTITY_TTL_S)
 
     # --- smoke -------------------------------------------------------------------------
     async def _smoke(self, op: Operation, hold: Hold) -> bool:

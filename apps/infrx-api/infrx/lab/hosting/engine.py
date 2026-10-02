@@ -24,7 +24,8 @@ from typing import Protocol
 
 import httpx
 
-from ...contracts.api import Wire
+from ...contracts.api import FieldError, Wire
+from ...contracts.v2.records import ServingRevision
 from ..artifacts.manifest import FileEntry
 from .store import Allocation
 
@@ -166,6 +167,50 @@ class LocalLauncher:
                     break
         self._state(allocation).unlink(missing_ok=True)
         return found is not None
+
+
+# ==================================================================== identity ===
+def mismatches(serving: ServingRevision, runtime: Runtime | None, models: list[str] | None,
+               model_dir: Path, *, served_model: str, harness: tuple[str, str],
+               files: dict[str, str] | None = None,
+               manifest: Sequence[FileEntry] = ()) -> list[FieldError]:
+    """Every way the running engine is not the requested serving revision: its image digest,
+    its engine options, the directory it loaded, the model name it serves, the harness and
+    preprocessor the platform runs it with, and - when `files` (the installed bytes, measured
+    now) are given - every file against the verified manifest (missing, other digest,
+    unexpected) and the revision's own weight/tokenizer/template pins. [] = the same."""
+    found: list[FieldError] = []
+
+    def bad(field: str, message: str) -> None:
+        found.append(FieldError(field=field, code="identity_mismatch", message=message))
+    if runtime is None:
+        bad("runtime", "no engine runs under this deployment's tag")
+        return found
+    if runtime.image != (serving.runtime_image_digest
+                         or serving.runtime_image_ref.partition("@")[2]):
+        bad("runtime_image", "the engine runs another image")
+    if options_digest(runtime.flags) != serving.engine_options_digest:
+        bad("engine_options", "the engine runs other options")
+    if runtime.model_dir != str(model_dir):
+        bad("model_dir", "the engine loaded another directory")
+    if models is None or served_model not in models:
+        bad("served_model", "the engine does not serve the profile's model name")
+    if (serving.prompt_harness_ref, serving.preprocessor_profile_version) != harness:
+        bad("harness", "the revision's harness or preprocessor is not the profile's")
+    if files is None:
+        return found
+    want = {f.relative_path: f.sha256 for f in manifest}
+    for path in sorted(set(want) | set(files)):
+        if want.get(path) != files.get(path):
+            bad(f"files.{path}", "missing" if path not in files else "unexpected"
+                if path not in want else "another digest")
+    shards = [files.get(p) for p in sorted(p for p in files if p.endswith(".safetensors"))]
+    if shards != list(serving.weight_shard_digests):
+        bad("weights", "the shards are not the revision's pins")
+    if (files.get("tokenizer.json"), files.get("chat_template.jinja")) != \
+            (serving.tokenizer_digest, serving.chat_template_digest):
+        bad("tokenizer", "the tokenizer or chat template is not the revision's pin")
+    return found
 
 
 # ================================================================= the box ===
