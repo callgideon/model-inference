@@ -33,8 +33,6 @@ export type World = {
   judge?: unknown;
   calls: unknown[][];
 };
-const world = () => (globalThis as unknown as { ux05: World }).ux05;
-
 const STUBS: Record<string, string> = {
   "next/link": `import { createElement } from "react";
 export default function Link({ href, prefetch, ...props }) { return createElement("a", { href: String(href), ...props }); }`,
@@ -120,5 +118,3 @@ export function text(markup: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
-
-export { world };

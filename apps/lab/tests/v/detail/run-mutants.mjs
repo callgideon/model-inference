@@ -31,6 +31,7 @@ const MUTANTS = [
   m("V2-X11", "an always-unavailable content port comes back", PORT, "return { traces: labTraces() };", 'return { traces: labTraces(), content: { read: async () => ({ ok: false, reason: "unavailable" }) } } as never;', [C.d07]),
   m("V2-X28", "the trace read is not scoped to the provider", FAKE, "r.detail.request_id === requestId && r.providerId === actor.providerId", "r.detail.request_id === requestId", [C.j02]),
   m("V2-X29", "a viewer reads individual requests", FAKE, '    if (actor.role === "viewer") return { ok: false, reason: "denied" };\n', "", [C.j02]),
+  m("V2-X30", "the fake drops a granted record's access", FAKE, "{ ok: true, value: row.detail }", '{ ok: true, value: { ...row.detail, access_state: "metadata" } as TraceDetail }', [C.j01]),
 ];
 
 process.exit(await runMutants({ suite: SUITE, prefix: "V2", mutants: MUTANTS }));

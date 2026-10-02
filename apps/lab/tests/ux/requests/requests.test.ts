@@ -60,7 +60,7 @@ test("UX05-L02 a row shows named metadata: id link, readable start, server elaps
   const { markup } = await list({}, page([granted({ content: SECRET, request_id: "id/../x" }), meta({ elapsed_ms: null, completed_at: null, loss_reason: "queue_full" }), meta({ loss_reason: "spool_full" })]));
   const shown = text(markup);
   assert.match(markup, /href="\/requests\/id%2F..%2Fx"/);
-  for (const piece of ["2026-09-27 10:00:00 UTC", "1250 ms", "acme-7b@r2", "full", "Shared", "Unfinished", "the capture queue was full", "spool_full"]) assert.ok(shown.includes(piece), piece);
+  for (const piece of ["2026-09-27 10:00:00 UTC", "1250 ms", "acme-7b@r2", "full", "Shared", "Metadata only", "Unfinished", "the capture queue was full", "spool_full"]) assert.ok(shown.includes(piece), piece);
   assert.match(markup, /<time dateTime="2026-09-27T10:00:00\+00:00">/);
   assert.doesNotMatch(markup, new RegExp(`${ORG}|812|synthetic-secret|grant-v1`));
 });
@@ -109,7 +109,7 @@ test("UX05-L06 empty says no requests were returned; filtered-empty says so and 
   assert.ok(gap.kind === "rows" && gap.rows.length === 0 && gap.note !== null && gap.nextHref === "/requests?cursor=Q1");
   const { markup } = await list({ model_id: "acme-7b" }, page([]));
   assert.match(markup, /data-state="empty"/);
-  assert.match(markup, /<a[^>]*href="\/requests"[^>]*>Show all requests<\/a>/);
+  assert.match(markup, /data-state="empty"[\s\S]*<a[^>]*href="\/requests"[^>]*>Show all requests<\/a>/);
 });
 
 test("UX05-L07 T09: an unavailable trace service keeps the heading and offers Try again on the same URL; denied and not found are their own states", async () => {
@@ -144,6 +144,9 @@ test("UX05-D01 metadata only: the content region says content is not shared, and
   assert.match(text(markup), /Content isn't shared with this workspace/);
   assert.doesNotMatch(markup, /synthetic-secret|<pre|Organization|bytes/);
   assert.match(text(markup), /acme-7b@r2/);
+  const claimed = await detail({ ok: true, value: meta({ access_state: "content", content: SECRET }) });
+  assert.match(text(claimed.markup), /could not be determined/, "a metadata record claiming content shows none");
+  assert.doesNotMatch(claimed.markup, /synthetic-secret|<pre/);
 });
 
 test("UX05-D02 expired and revoked content disappears: each state's copy, the allowed metadata kept, no body", async () => {
@@ -184,7 +187,7 @@ test("UX05-D05 a request outside the session workspace is not found: the unproje
   assert.match(markup, /data-state="not_found"/);
   assert.match(text(markup), /not be projected yet/);
   assert.doesNotMatch(markup, /Model revision|another provider|Judge/);
-  assert.match(markup, /href="\/requests"/);
+  assert.match(markup, /data-state="not_found"[\s\S]*href="\/requests"/);
 });
 
 test("UX05-D06 T09: an unavailable trace read keeps the heading and offers Try again, and feedback still shows", async () => {
