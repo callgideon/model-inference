@@ -228,6 +228,213 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/judge/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Budgets */
+        get: operations["getLabV1JudgeBudgets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/budgets/{payer_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Budget */
+        put: operations["putLabV1JudgeBudgetsByPayerRef"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calibration */
+        get: operations["getLabV1JudgeCalibration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configs */
+        get: operations["getLabV1JudgeConfigs"];
+        put?: never;
+        /** Configure */
+        post: operations["postLabV1JudgeConfigs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/configs/{config_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Config */
+        get: operations["getLabV1JudgeConfigsByConfigId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/estimates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Estimate */
+        post: operations["postLabV1JudgeEstimates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Models */
+        get: operations["getLabV1JudgeModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/rubrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rubrics */
+        get: operations["getLabV1JudgeRubrics"];
+        put?: never;
+        /** Create Rubric */
+        post: operations["postLabV1JudgeRubrics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["getLabV1JudgeRuns"];
+        put?: never;
+        /** Request Run */
+        post: operations["postLabV1JudgeRuns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One Run */
+        get: operations["getLabV1JudgeRunsByRunId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["postLabV1JudgeRunsByRunIdCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/judge/runs/{run_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Results */
+        get: operations["getLabV1JudgeRunsByRunIdResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lab/v1/optimizations": {
         parameters: {
             query?: never;
@@ -738,6 +945,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/traces/{request_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Feedback */
+        get: operations["getLabV1TracesByRequestIdFeedback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/traces/{request_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review */
+        post: operations["postLabV1TracesByRequestIdReviews"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -759,6 +1000,168 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Availability
+         * @description A feature's availability as FastAPI states it. A failed fetch is `unknown` with a
+         *     reason; it is never rendered as a zero count or a disabled feature.
+         */
+        Availability: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "configured" | "disabled" | "unavailable" | "unknown";
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** BudgetBody */
+        BudgetBody: {
+            limit: components["schemas"]["Money"];
+        };
+        /** BudgetDoc */
+        BudgetDoc: {
+            limit: components["schemas"]["Money"];
+            /** Payer Ref */
+            payer_ref: string;
+            reserved: components["schemas"]["Money"];
+            settled: components["schemas"]["Money"];
+            /** Version */
+            version?: number | null;
+        };
+        /** CalibrationDoc */
+        CalibrationDoc: {
+            /** Agreement */
+            agreement?: number | null;
+            /** Interval */
+            interval?: [
+                number,
+                number
+            ] | null;
+            /** Labels */
+            labels: number;
+            /** Required */
+            required: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "calibrated" | "insufficient" | "uncalibrated";
+        };
+        /** CalibrationView */
+        CalibrationView: {
+            /** Agreement */
+            agreement?: number | null;
+            /** Config Id */
+            config_id: string;
+            /** Interval */
+            interval?: [
+                number,
+                number
+            ] | null;
+            /** Labels */
+            labels: number;
+            /** Required */
+            required: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "calibrated" | "insufficient" | "uncalibrated";
+        };
+        /** ConfigBody */
+        ConfigBody: {
+            /** Grantor Org Id */
+            grantor_org_id: string;
+            /** Judge Model */
+            judge_model: string;
+            /** Model Id */
+            model_id: string;
+            /** Rubric Version */
+            rubric_version: number;
+            /** Sample Size */
+            sample_size: number;
+        };
+        /** ConfigDoc */
+        ConfigDoc: {
+            calibration: components["schemas"]["CalibrationDoc"];
+            /** Config Id */
+            config_id: string;
+            /** Created At */
+            created_at: string;
+            /** Grantor Org Id */
+            grantor_org_id: string;
+            /** Judge Model */
+            judge_model: string;
+            /** Model Id */
+            model_id: string;
+            /** Rubric Version */
+            rubric_version: number;
+            /** Sample Size */
+            sample_size: number;
+        };
+        /** CriterionBody */
+        CriterionBody: {
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "media" | "text";
+            /**
+             * Max Score
+             * @default 5
+             */
+            max_score: number;
+            /**
+             * Min Score
+             * @default 1
+             */
+            min_score: number;
+            /** Name */
+            name: string;
+            /** Pass At */
+            pass_at?: number | null;
+        };
+        /** CriterionDoc */
+        CriterionDoc: {
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "media" | "text";
+            /** Max Score */
+            max_score: number;
+            /** Min Score */
+            min_score: number;
+            /** Name */
+            name: string;
+            /** Pass At */
+            pass_at: number | null;
+        };
+        /** CriterionResult */
+        CriterionResult: {
+            /** Abstain Reason */
+            abstain_reason?: "no_media" | null;
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "media" | "text";
+            /** Max Score */
+            max_score?: number | null;
+            /** Name */
+            name: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Score */
+            score?: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "scored" | "abstained";
+        };
         /** Deployment */
         Deployment: {
             /**
@@ -827,10 +1230,140 @@ export interface components {
              */
             window_start: string;
         };
+        /** ErrorBody */
+        ErrorBody: {
+            /** Code */
+            code: string;
+            /**
+             * Field Errors
+             * @default []
+             */
+            field_errors: components["schemas"]["FieldError"][];
+            /** Message */
+            message: string;
+            /** Operation Id */
+            operation_id?: string | null;
+            /** Request Id */
+            request_id: string;
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Retryable */
+            retryable: boolean;
+        };
+        /** EstimateBody */
+        EstimateBody: {
+            /** Config Id */
+            config_id: string;
+        };
+        /**
+         * EstimateDoc
+         * @description A report: the worst case a live run of this configuration would reserve. `eligible`
+         *     is null - counting eligible traces needs the trace store, which this API does not read.
+         */
+        EstimateDoc: {
+            /**
+             * Authorizes Spend
+             * @default false
+             * @constant
+             */
+            authorizes_spend: false;
+            /** Config Id */
+            config_id: string;
+            /** Eligible */
+            eligible?: number | null;
+            /** Judge Model */
+            judge_model: string;
+            /** Note */
+            note: string;
+            per_sample?: components["schemas"]["Money"] | null;
+            /** Price Version */
+            price_version?: string | null;
+            /** Priced */
+            priced: boolean;
+            /** Samples Max */
+            samples_max: number;
+            worst_case?: components["schemas"]["Money"] | null;
+        };
+        /**
+         * FeedbackDoc
+         * @description The customer's shared signals and the provider's human reviews, kept apart: a review's
+         *     provenance is `human`, a signal's its author role; neither is a judge result.
+         */
+        FeedbackDoc: {
+            /** Reviews */
+            reviews: components["schemas"]["ReviewDoc"][];
+            /** Signals */
+            signals: components["schemas"]["Signal"][];
+        };
+        /** FieldError */
+        FieldError: {
+            /** Code */
+            code: string;
+            /** Field */
+            field: string;
+            /** Message */
+            message: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** JudgeModelDoc */
+        JudgeModelDoc: {
+            /** Effective At */
+            effective_at: string;
+            input_per_million: components["schemas"]["Money"];
+            /** Model */
+            model: string;
+            output_per_million: components["schemas"]["Money"];
+            /** Price Version */
+            price_version: string;
+            /** Source */
+            source: string;
+        };
+        /** JudgeModels */
+        JudgeModels: {
+            availability: components["schemas"]["Availability"];
+            /** Data */
+            data: components["schemas"]["JudgeModelDoc"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[BudgetDoc] */
+        ListPage_BudgetDoc_: {
+            /** Data */
+            data: components["schemas"]["BudgetDoc"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[ConfigDoc] */
+        ListPage_ConfigDoc_: {
+            /** Data */
+            data: components["schemas"]["ConfigDoc"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[RubricDoc] */
+        ListPage_RubricDoc_: {
+            /** Data */
+            data: components["schemas"]["RubricDoc"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[RunDoc] */
+        ListPage_RunDoc_: {
+            /** Data */
+            data: components["schemas"]["RunDoc"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** ListPage[SampleResult] */
+        ListPage_SampleResult_: {
+            /** Data */
+            data: components["schemas"]["SampleResult"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** Model */
         Model: {
@@ -849,6 +1382,43 @@ export interface components {
             runtime: string;
             /** Schema Version */
             schema_version: string;
+        };
+        /** Money */
+        Money: {
+            /** Amount */
+            amount: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "CREDIT" | "USD" | "PROVIDER_USD";
+        };
+        /**
+         * OperationDoc
+         * @description A long operation: 202 + Location points at one of these. `phase` describes observed
+         *     work; percentage and ETA are deliberately absent (a lane may add nullable ones).
+         */
+        OperationDoc: {
+            /** Created At */
+            created_at: string;
+            error?: components["schemas"]["ErrorBody"] | null;
+            /** Kind */
+            kind: string;
+            /** Operation Id */
+            operation_id: string;
+            /** Phase */
+            phase?: string | null;
+            /** Resource Id */
+            resource_id?: string | null;
+            /** Retry After S */
+            retry_after_s?: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "succeeded" | "failed" | "cancel_requested" | "cancelled";
+            /** Updated At */
+            updated_at: string;
         };
         /** Proposal */
         Proposal: {
@@ -911,6 +1481,47 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ReviewBody */
+        ReviewBody: {
+            /** Comment */
+            comment?: string | null;
+            /** Rubric Version */
+            rubric_version?: number | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "pass" | "fail" | "unsure";
+        };
+        /** ReviewDoc */
+        ReviewDoc: {
+            /** Comment */
+            comment?: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Provenance
+             * @constant
+             */
+            provenance: "human";
+            /** Request Id */
+            request_id: string;
+            /** Review Id */
+            review_id: string;
+            /** Reviewer */
+            reviewer: string;
+            /** Rubric Version */
+            rubric_version?: number | null;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "pass" | "fail" | "unsure";
+        };
         /** Rows[DeploymentAggregate] */
         Rows_DeploymentAggregate_: {
             /** Data */
@@ -930,6 +1541,183 @@ export interface components {
         Rows_Proposal_: {
             /** Data */
             data: components["schemas"]["Proposal"][];
+        };
+        /**
+         * RubricBody
+         * @description A reviewed rubric definition (`review_ref` names its review, e.g. the P-07 SOP
+         *     sign-off) that becomes an immutable version.
+         */
+        RubricBody: {
+            /** Criteria */
+            criteria: components["schemas"]["CriterionBody"][];
+            /**
+             * Max Notes Chars
+             * @default 500
+             */
+            max_notes_chars: number;
+            /**
+             * Max Rationale Chars
+             * @default 300
+             */
+            max_rationale_chars: number;
+            /**
+             * Min Rationale Chars
+             * @default 1
+             */
+            min_rationale_chars: number;
+            /** Review Ref */
+            review_ref: string;
+            /** Rubric Id */
+            rubric_id: string;
+            /**
+             * Sop Steps
+             * @default []
+             */
+            sop_steps: string[];
+            /** Version */
+            version: number;
+        };
+        /**
+         * RubricDoc
+         * @description A rubric version. `active`: immutable, `digest` its identity, gradable. A
+         *     `definition_pending` version is a reserved skeleton (criteria and evidence only): no
+         *     digest, no output schema, never configured (P-07).
+         */
+        RubricDoc: {
+            /** Criteria */
+            criteria: components["schemas"]["CriterionDoc"][];
+            /** Digest */
+            digest?: string | null;
+            /** Max Notes Chars */
+            max_notes_chars: number;
+            /** Max Rationale Chars */
+            max_rationale_chars: number;
+            /** Output Schema */
+            output_schema?: {
+                [key: string]: unknown;
+            } | null;
+            /** Pending Reason */
+            pending_reason?: string | null;
+            /** Review Ref */
+            review_ref?: string | null;
+            /** Rubric Id */
+            rubric_id: string;
+            /**
+             * Sop Steps
+             * @default []
+             */
+            sop_steps: string[];
+            /**
+             * State
+             * @default active
+             * @enum {string}
+             */
+            state: "active" | "definition_pending";
+            /** Version */
+            version: number;
+        };
+        /** RunBody */
+        RunBody: {
+            /** Config Id */
+            config_id: string;
+            /** Payer Ref */
+            payer_ref: string;
+        };
+        /** RunDoc */
+        RunDoc: {
+            /** Accepted */
+            accepted: number;
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Config Id */
+            config_id: string;
+            /**
+             * Domain State
+             * @enum {string}
+             */
+            domain_state: "queued" | "reserved" | "submitting" | "submitted" | "ambiguous" | "completed" | "failed" | "cancelled";
+            /** Grantor Org Id */
+            grantor_org_id: string;
+            /** Judge Model */
+            judge_model: string;
+            /** Media */
+            media: number;
+            /** Model Id */
+            model_id: string;
+            operation: components["schemas"]["OperationDoc"];
+            /** Payer Ref */
+            payer_ref: string;
+            /** Price Version */
+            price_version?: string | null;
+            /** Rejected */
+            rejected: number;
+            /** Requested At */
+            requested_at: string;
+            reserved?: components["schemas"]["Money"] | null;
+            /** Rubric Version */
+            rubric_version: number;
+            /** Run Id */
+            run_id: string;
+            /** Sample Size */
+            sample_size: number;
+            /** Selected */
+            selected: number;
+            /** Sent */
+            sent: number;
+            settled?: components["schemas"]["Money"] | null;
+        };
+        /** SampleResult */
+        SampleResult: {
+            /**
+             * Criteria
+             * @default []
+             */
+            criteria: components["schemas"]["CriterionResult"][];
+            /** Label Id */
+            label_id: string;
+            /**
+             * Limited
+             * @default false
+             */
+            limited: boolean;
+            /** Overall Pass */
+            overall_pass?: boolean | null;
+            /** Quarantine Reason */
+            quarantine_reason?: string | null;
+            /** Recorded At */
+            recorded_at: string;
+            /** Rubric Version */
+            rubric_version: number;
+            /** Sample Id */
+            sample_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "scored" | "quarantined";
+        };
+        /**
+         * Signal
+         * @description A stored customer (or judge) signal shared with the provider (0038).
+         */
+        Signal: {
+            /**
+             * Author Role
+             * @enum {string}
+             */
+            author_role: "customer" | "judge";
+            /** Channel */
+            channel: string;
+            /** Comment */
+            comment?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Feedback Id */
+            feedback_id: string;
+            /** Name */
+            name: string;
+            /** Value */
+            value: boolean | number | string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1807,6 +2595,518 @@ export interface operations {
             };
         };
     };
+    getLabV1JudgeBudgets: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_BudgetDoc_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    putLabV1JudgeBudgetsByPayerRef: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                payer_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeCalibration: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+                config_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeConfigs: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_ConfigDoc_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeConfigs: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeConfigsByConfigId: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path: {
+                config_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeEstimates: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeModels: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeModels"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeRubrics: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_RubricDoc_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeRubrics: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RubricBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RubricDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeRuns: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_RunDoc_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeRuns: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeRunsByRunId: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1JudgeRunsByRunIdCancel: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLabV1JudgeRunsByRunIdResults: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPage_SampleResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getLabV1Optimizations: {
         parameters: {
             query?: never;
@@ -2607,6 +3907,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    getLabV1TracesByRequestIdFeedback: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1TracesByRequestIdReviews: {
+        parameters: {
+            query: {
+                provider_org_id: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDoc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

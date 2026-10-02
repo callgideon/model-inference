@@ -22,16 +22,13 @@ from collections.abc import Awaitable, Callable, Sequence
 from ..contracts import errors
 from .dryrun import MAX_CANDIDATES
 from .rubric import RUBRICS, Rubric, from_definition
-from .submit import JudgeJob, JudgeWiring, LedgerRun, submit
+from .submit import JudgeJob, JudgeWiring, LedgerRun, RubricOf, submit
 
 log = logging.getLogger(__name__)
 #: (grantor org, grantor model, limit) -> that model's traces eligible for judging, as
 #: (request id, has video) - the trace store's read; the worker composes it (WIRING REQUEST).
 Eligible = Callable[[str, str, int], Awaitable[Sequence[tuple[str, bool]]]]
 Queued = Callable[[int], Awaitable[list[dict[str, Any]]]]
-#: run id -> the rubric its configuration pins (SR-AP08-1's stored definition, else the code
-#: version), None for no such run. The default is the code registry only.
-RubricOf = Callable[[str], Awaitable[Rubric | None]]
 START_BATCH = 20
 
 
@@ -52,11 +49,11 @@ def frozen_sample(run_id: str, rows: Sequence[tuple[str, bool]],
     return chosen, frozenset(r for r in chosen if media[r])
 
 
-async def start(request: dict[str, Any], *, wiring: JudgeWiring, eligible: Eligible,
-                rubric_of: RubricOf | None = None) -> LedgerRun | None:
+async def start(request: dict[str, Any], *, wiring: JudgeWiring,
+                eligible: Eligible) -> LedgerRun | None:
     """One queued request -> `submit` (None: nothing eligible yet, it stays queued)."""
-    rubric = RUBRICS.get(request["rubric_version"]) if rubric_of is None else \
-        await rubric_of(request["run_id"])
+    rubric = RUBRICS.get(request["rubric_version"]) if wiring.rubric_of is None else \
+        await wiring.rubric_of(request["run_id"])
     if rubric is None or rubric.version != request["rubric_version"]:
         raise errors.InvalidRequest("the worker grades no such rubric version")
     rows = await eligible(request["grantor_org_id"], request["model_id"], MAX_CANDIDATES)
@@ -71,14 +68,13 @@ async def start(request: dict[str, Any], *, wiring: JudgeWiring, eligible: Eligi
 
 
 async def start_pass(queued: Queued, wiring: JudgeWiring, eligible: Eligible,
-                     limit: int = START_BATCH, rubric_of: RubricOf | None = None
-                     ) -> dict[str, int]:
+                     limit: int = START_BATCH) -> dict[str, int]:
     """Every queued request once. A refusal (dry-run, budget, permission) sends nothing and
     leaves the request queued; one request's failure is counted and the next still runs."""
     done = {"started": 0, "waiting": 0, "refused": 0, "failed": 0}
     for request in await queued(limit):
         try:
-            run = await start(request, wiring=wiring, eligible=eligible, rubric_of=rubric_of)
+            run = await start(request, wiring=wiring, eligible=eligible)
             done["started" if run is not None else "waiting"] += 1
         except errors.DomainError as refused:
             log.info("judge start refused: %s", refused.code)

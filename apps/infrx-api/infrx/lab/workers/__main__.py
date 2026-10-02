@@ -331,14 +331,13 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     except (OSError, ValueError) as unreadable:
         raise RuntimeMisconfigured(mode, detail=f"JUDGE_GOLD_SET is not a reviewed reference "
                                    f"set ({type(unreadable).__name__})") from None
-    ledger = PgJudgeLedger(connect)
+    ledger, results_of = PgJudgeLedger(connect), goldset.pg_results_of(connect)
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
-                         settings=limits)
-    rubric_of, results_of = start.pg_rubric_of(connect), goldset.pg_results_of(connect)
+                         settings=limits, rubric_of=start.pg_rubric_of(connect))
 
     async def collect() -> dict[str, int]:
-        done = await judge_pass(wiring, partial(ledger.providers_in, JUDGE_WORK), rubric_of)
+        done = await judge_pass(wiring, partial(ledger.providers_in, JUDGE_WORK))
         if gold is not None:
             await goldset.calibrate(ledger, results_of, gold)
         return done
@@ -349,11 +348,11 @@ def _judge(mode, env, connect, objects, worker_id, **_):
     eligible = start.eligible_read(limits)
     if eligible is not None:
         tasks["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
-            start.pg_queued(connect), wiring, eligible, rubric_of=rubric_of), "judge start")
+            start.pg_queued(connect), wiring, eligible), "judge start")
     return tasks, wiring
 
 
-async def judge_pass(wiring, providers, rubric_of=None) -> dict[str, int]:
+async def judge_pass(wiring, providers) -> dict[str, int]:
     """WR-LSQ-C2A: for every provider, D6J's `ambiguous` runs (`runs_in`, 0049) are looked up
     by their submit key - the provider's record moves the run to `submitted`; none leaves it
     as it is (R184/R192: never resubmitted or released by the platform) - then every
@@ -369,9 +368,7 @@ async def judge_pass(wiring, providers, rubric_of=None) -> dict[str, int]:
                     continue
                 try:
                     if state == "submitted":
-                        graded = {} if rubric_of is None else {"rubric": await _graded(
-                            rubric_of, run.run_id)}
-                        await submit.collect(run.run_id, wiring=wiring, **graded)
+                        await submit.collect(run.run_id, wiring=wiring)
                         done["collected"] += 1
                     elif (external := await wiring.provider.lookup(run.submit_key)) is None:
                         done["waiting"] += 1
@@ -382,14 +379,6 @@ async def judge_pass(wiring, providers, rubric_of=None) -> dict[str, int]:
                     log.exception("judge pass failed for one run")
                     done["failed"] += 1
     return done
-
-
-async def _graded(rubric_of, run_id: str):
-    """The rubric the run's configuration pins (SR-AP08-1); none is a refusal, never v1."""
-    rubric = await rubric_of(run_id)
-    if rubric is None:
-        raise errors.StateConflict("the run's rubric version is not gradable here")
-    return rubric
 
 
 class JudgeReport:

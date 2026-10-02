@@ -64,8 +64,13 @@ def check_a_rubric_version_is_stored_once_by_an_operator(conn) -> None:
         "IdempotencyConflict"
     assert refused(store(conn, l2.DEV, "rb-4", version=3)) == "Forbidden"
     assert conn.execute("select count(*) from infrx.lab_judge_rubrics").fetchone()[0] == 1
-    with pytest.raises(psycopg.Error), conn.transaction():
-        conn.execute("update infrx.lab_judge_rubrics set review_ref = 'edited'")
+    try:
+        with conn.transaction():
+            conn.execute("update infrx.lab_judge_rubrics set review_ref = 'edited'")
+        edited = True
+    except psycopg.Error:
+        edited = False
+    assert not edited, "a stored rubric version was edited in place"
     listed = run(JudgeApi(doors(conn)).rubrics(l2.DEV, NEMO)).data
     assert {d.version: d.state for d in listed} == {1: "active", 2: "active"}
     assert refused(JudgeApi(doors(conn)).rubrics(j.BOTH, NEMO)) == "Forbidden"

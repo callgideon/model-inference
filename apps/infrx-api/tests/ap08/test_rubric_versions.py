@@ -142,3 +142,33 @@ def test_ap08_routes__a_reviewed_definition_becomes_one_immutable_version():
                     json={"grantor_org_id": NEMO, "model_id": NEMO, "judge_model": "judge-1",
                           "rubric_version": 2, "sample_size": 5})
     assert pinned.status_code == 201, pinned.text
+
+
+def test_ap08_routes__a_stored_versions_results_abstain_on_its_media_criteria():
+    """A result of a stored version (SOP v2) judged without video names that version's media
+    criteria `abstained` - the projection reads the stored rubric, not the code registry.
+    Failure oracle: step evidence and task correctness silently omitted from a no-media
+    result of the SOP rubric."""
+    import json
+
+    from infrx.judge.rubric import validate_json
+
+    doors = FakeDoors()
+    c = client(doors)
+    assert c.post(f"{lab_judge.PREFIX}/rubrics", params=Q, headers={"Idempotency-Key": "rb"},
+                  json=sop_body()).status_code == 201
+    sop = r.from_definition(doors.rubrics[2]["definition"])
+    payload = {x.name: {"score": 4, "rationale": "ok"} for x in sop.criteria_for(media=False)}
+    payload.update(overall_pass=False, notes="")
+    result = validate_json(sop, json.dumps(payload), run_id="7a000000-0000-4000-8000-0000000000a1",
+                           sample_id="5a000000-0000-4000-8000-000000000001",
+                           media_available=False)
+    doors.results = [{"label_id": "1abe1000-0000-4000-8000-000000000001",
+                      "sample_id": result.sample_id, "rubric_version": 2,
+                      "accepted": True, "result": dataclasses.asdict(result),
+                      "recorded_at": "2026-10-02T00:00:00+00:00"}]
+    shown = c.get(f"{lab_judge.PREFIX}/runs/7a000000-0000-4000-8000-0000000000a1/results",
+                  params=Q).json()["data"][0]
+    states = {x["name"]: x["state"] for x in shown["criteria"]}
+    assert states == {"instruction_following": "scored", "output_validity": "scored",
+                      "step_evidence": "abstained", "task_correctness": "abstained"}

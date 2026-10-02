@@ -118,6 +118,11 @@ class JudgeProvider(Protocol):
     async def results(self, external_id: str) -> ProviderResults: ...
 
 
+#: AP-08: run id -> the rubric its configuration pins (SR-AP08-1's stored definition, else the
+#: code version), None for no such run (`infrx.judge.start.pg_rubric_of` on PostgreSQL).
+RubricOf = Callable[[str], Awaitable[Rubric | None]]
+
+
 @dataclass(frozen=True)
 class JudgeWiring:
     access: Any                  # infrx.lab.access.LabAccess
@@ -126,6 +131,9 @@ class JudgeWiring:
     retention: Any               # T3 `Retention`: `read_content` (tombstones, content bound)
     rates: RateTable
     settings: PilotSettings
+    #: None: every run is graded with the code registry (the first rubric); composed, with the
+    #: rubric each run's configuration pins.
+    rubric_of: RubricOf | None = None
 
 
 @dataclass(frozen=True)
@@ -225,12 +233,17 @@ async def reconcile(run_id: str, *, wiring: JudgeWiring) -> LedgerRun:
 
 
 async def collect(run_id: str, *, wiring: JudgeWiring,
-                  rubric: Rubric = MARLIN_VIDEO_V1) -> LedgerRun:
-    """Project what has arrived (once per run/sample/rubric version); settle when done."""
+                  rubric: Rubric | None = None) -> LedgerRun:
+    """Project what has arrived (once per run/sample/rubric version); settle when done. The
+    rubric is the run's (`wiring.rubric_of`) unless given; no gradable one is a refusal."""
     run = await wiring.ledger.run(run_id)
     if run is not None and run.state == "completed":
         return run
     run = await _run(wiring.ledger, run_id, "submitted")
+    if rubric is None:
+        rubric = MARLIN_VIDEO_V1 if wiring.rubric_of is None else await wiring.rubric_of(run_id)
+    if rubric is None:
+        raise errors.StateConflict(f"judge run {run_id} pins no rubric this worker grades")
     polled = await wiring.provider.results(run.external_id)
     plan = ScoreLedger(run.run_id, rubric.version, run.sent_ids)
     for sample_id, text in polled.items:

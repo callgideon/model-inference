@@ -10,6 +10,7 @@ consumer's CREDIT never moves. Test rates (`tests/j/fakes.TEST_RATES`), never an
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 
 import pytest
 
@@ -62,7 +63,8 @@ class Worker:
         self.wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=self.ledger,
                                   provider=HttpJudgeProvider(fake.url, timeout_s=timeout_s),
                                   retention=fakes.retention(projection, objects),
-                                  rates=j1.TEST_RATES, settings=settings)
+                                  rates=j1.TEST_RATES, settings=settings,
+                                  rubric_of=start.pg_rubric_of(connect))
 
     async def eligible(self, grantor: str, model: str, limit: int):
         assert (grantor, model) == (self.grantor, l2.MODEL)
@@ -172,16 +174,27 @@ def check_results_are_graded_by_the_runs_rubric_and_calibrated_against_the_gold_
         "provider_org_id": NEMO, "org_id": w.grantor, "judge_model": j1.JUDGE_MODEL,
         "rubric_version": 1, "reviewed_by": "operator@infrx.test", "review_ref": "ap8",
         "labels": [{"sample_id": t, "verdict": "correct"} for t in TRACES]})
-    assert run(results_of(gold)) == [], "a submitted run's results are not settled"
     sent = [i["sample_id"] for i in fake.posts[0]["items"]]
     fake.outputs[fake.batches[fake.posts[0]["submit_key"]]] = [answer(t, t == TRACES[0])
                                                                for t in sent]
-    done = run(judge_pass(w.wiring, lambda: _async([NEMO]), start.pg_rubric_of(connect)))
+    provider, real = w.wiring.provider, w.wiring.provider.results
+
+    async def unsettled(external_id):          # the batch answered in part: nothing settled
+        return dataclasses.replace(await real(external_id), done=False, cost=None)
+    provider.results = unsettled
+    run(judge_pass(w.wiring, lambda: _async([NEMO])))
+    del provider.results
+    assert w.state(run_id) == "submitted" and conn.execute(
+        "select count(*) from infrx.lab_judge_results where run_id = %s",
+        (run_id,)).fetchone()[0] == len(sent)
+    assert run(results_of(gold)) == [], "an unsettled run's results entered a calibration"
+    done = run(judge_pass(w.wiring, lambda: _async([NEMO])))
     assert done["collected"] == 1 and w.state(run_id) == "completed"
     rows = run(results_of(gold))
     assert sorted(r["sample_id"] for r in rows) == sorted(sent)
-    assert run(results_of(gold.model_copy(update={"judge_model": "judge-2"}))) == []
-    assert run(results_of(gold.model_copy(update={"rubric_version": 2}))) == []
+    for other in ({"judge_model": "judge-2"}, {"rubric_version": 2},
+                  {"provider_org_id": j.OTHER}):
+        assert run(results_of(gold.model_copy(update=other))) == [], other
     quality = run(goldset.calibrate(w.ledger, results_of, gold))
     assert (quality.state, quality.kappa.n) == ("insufficient", 1)
     shown = conn.execute("select calibration->>'state' from infrx.lab_judge_calibrations "

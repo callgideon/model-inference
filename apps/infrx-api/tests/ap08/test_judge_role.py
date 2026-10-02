@@ -7,6 +7,9 @@ test replaces it. The process itself is `test_judge_cli_pg.py`.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+
 import pytest
 
 from infrx.config import RuntimeMisconfigured
@@ -37,7 +40,9 @@ def test_ap08_role__the_start_job_needs_the_eligible_read(monkeypatch):
     async def eligible(*_):
         return []
     monkeypatch.setattr(start, "eligible_read", lambda limits: eligible)
-    assert set(compose().tasks) == {"judge_sweep", "judge_collect", "judge_start"}
+    worker = compose()
+    assert set(worker.tasks) == {"judge_sweep", "judge_collect", "judge_start"}
+    assert worker.wiring.rubric_of is not None, "runs graded with the first rubric"
 
 
 def test_ap08_role__a_remote_judge_is_an_allowlisted_https_host_in_live_mode_only():
@@ -62,3 +67,38 @@ def test_ap08_role__the_gold_set_is_a_reviewed_reference_set_or_nothing_starts(t
     bad.write_text('{"labels": []}')
     with pytest.raises(RuntimeMisconfigured):
         compose(JUDGE_GOLD_SET=str(bad))
+
+
+def test_ap08_role__each_collect_pass_is_followed_by_the_gold_set_calibration(
+        monkeypatch, tmp_path):
+    """Failure oracle: a configured gold set never graded (the Lab keeps `uncalibrated`), or
+    a calibration published before the pass collected."""
+    from infrx.judge.calibration import goldset
+    gold = tmp_path / "gold.json"
+    gold.write_text(json.dumps({
+        "provider_org_id": "b0000001-0000-4000-8000-000000000001",
+        "org_id": "0a000000-0000-4000-8000-0000000000a1", "judge_model": "judge-1",
+        "rubric_version": 1, "reviewed_by": "operator@infrx.test", "review_ref": "ap8",
+        "labels": [{"sample_id": "5a000000-0000-4000-8000-000000000001",
+                    "verdict": "correct"}]}))
+    order: list[str] = []
+    steps = {}
+
+    async def judge_pass(wiring, providers):
+        order.append("collect")
+        return {}
+
+    async def calibrate(ledger, results_of, g):
+        order.append(f"calibrate {g.judge_model}")
+
+    def every(interval, step, what):
+        steps[what] = step
+        return asyncio.sleep(0)
+
+    monkeypatch.setattr(lab_workers, "judge_pass", judge_pass)
+    monkeypatch.setattr(goldset, "calibrate", calibrate)
+    monkeypatch.setattr(lab_workers, "every", every)
+    worker = compose(JUDGE_GOLD_SET=str(gold))
+    asyncio.run(worker.tasks["judge_collect"]())
+    asyncio.run(steps["judge collect"]())
+    assert order == ["collect", "calibrate judge-1"]
