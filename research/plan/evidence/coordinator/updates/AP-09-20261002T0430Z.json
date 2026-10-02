@@ -1,0 +1,75 @@
+{
+  "task": "AP-09",
+  "slice": "09c/09e (Lab)",
+  "activity": "review",
+  "head": "cd1fca28",
+  "worktree": ".claude/worktrees/codex-w7-api-frontends-lab",
+  "branch": "codex/w7-api-frontends-lab",
+  "owned_paths": [
+    "apps/lab/lib/auth/",
+    "apps/lab/lib/services/{judge,review}/",
+    "apps/lab/lib/services/common.ts",
+    "apps/lab/lib/api/",
+    "apps/lab/tests/boundary/",
+    "apps/lab/tests/l/**"
+  ],
+  "commands": [
+    {
+      "cmd": "make lab-test",
+      "exit": 0,
+      "summary": "276 pass, 0 fail, 10 skipped"
+    },
+    {
+      "cmd": "make lab-lint",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "make lab-typecheck",
+      "exit": 0,
+      "summary": "0 with WR-AP09L-1 (regenerated client); 6 errors without it"
+    },
+    {
+      "cmd": "make lab-build",
+      "exit": 0,
+      "summary": "with WR-AP09L-1"
+    },
+    {
+      "cmd": "make lab-mutants",
+      "exit": 0,
+      "summary": "14 runners, 1048 mutants, 0 survivors, every case named"
+    },
+    {
+      "cmd": "make api-lint && make api-typecheck",
+      "exit": 0,
+      "summary": "WR-AP09L-2 applied: clean, pyright 458 (baseline 458)"
+    },
+    {
+      "cmd": "make lab-e2e",
+      "exit": null,
+      "summary": "BLOCKED: Lab unit lacks /auth/v1 (WR-AP09L-2) and /lab/v1/workspaces + actors (api-identity-2)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "lane slices done; remaining = WR-AP09L-1/2/5 application, lab-e2e rerun after the identity mount, WR-AP09L-3",
+    "at": "2026-10-02"
+  },
+  "blockers": [
+    "lab-e2e: WR-AP09L-2 + api-identity-2 Lab-unit identity mount"
+  ],
+  "wiring_requests": [
+    "WR-AP09L-1 regenerate packages/api-client",
+    "WR-AP09L-2 Lab unit auth facade mount (patch in evidence)",
+    "WR-AP09L-3 per-request judge runs route",
+    "WR-AP09L-4 stack.py drop Lab postgrest tests",
+    "WR-AP09L-5 remove @supabase deps from apps/lab"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-frontends-lab-cd1fca2.md",
+    "research/plan/evidence/w7/api-frontends-lab-cd1fca2-WR-AP09L-2.patch"
+  ]
+}
