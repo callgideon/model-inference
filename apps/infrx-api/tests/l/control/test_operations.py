@@ -482,12 +482,16 @@ def test_control_app__mounts_the_artifact_families_only_with_lab_artifacts(world
     monkeypatch.setattr(workers, "lab_objects", lambda mode, env: (
         workers.settings(mode, env, (workers.BUCKET,)) and "bucket"))
     monkeypatch.setenv("LAB_S3_BUCKET", "lab-bucket")
+    training = (f"/lab/v1/providers/{w.A}/training-runs/"            # WR-AP10E-1 (AP-10 10e)
+                "e0000001-0000-4000-8000-000000000001/export")
     monkeypatch.delenv("LAB_ARTIFACTS", raising=False)
-    assert TestClient(control_app.create_app()).get(projects, params=params).status_code == 404
+    off = TestClient(control_app.create_app())
+    assert off.get(projects, params=params).status_code == 404
+    assert off.post(training, headers={"Idempotency-Key": "k" * 8}, json={}).status_code == 404
     monkeypatch.setenv("LAB_ARTIFACTS", "1")
     on = TestClient(control_app.create_app())
     for method, path in (("GET", projects), ("GET", "/lab/v1/operations/x"),
-                         ("POST", "/lab/v1/artifacts/imports")):
+                         ("POST", "/lab/v1/artifacts/imports"), ("POST", training)):
         r = on.request(method, path, params=params, headers={"Idempotency-Key": "k" * 8},
                        json={})
         assert r.status_code in (503, 422), (path, r.status_code)

@@ -1391,6 +1391,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lab/v1/providers/{provider}/training-runs/{run_id}/checkpoints/{checkpoint_id}/candidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Candidate */
+        post: operations["postLabV1ProvidersByProviderTrainingRunsByRunIdCheckpointsByCheckpointIdCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/providers/{provider}/training-runs/{run_id}/checkpoints/{checkpoint_id}/release-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence */
+        get: operations["getLabV1ProvidersByProviderTrainingRunsByRunIdCheckpointsByCheckpointIdReleaseEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lab/v1/providers/{provider}/training-runs/{run_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export */
+        post: operations["postLabV1ProvidersByProviderTrainingRunsByRunIdExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lab/v1/releases": {
         parameters: {
             query?: never;
@@ -1953,6 +2004,21 @@ export interface components {
             serving_version_id: string;
             /** State */
             state: string;
+        };
+        /**
+         * CandidateRequest
+         * @description AP-04's import body for the checkpoint's weights, beside the received descriptor.
+         */
+        CandidateRequest: {
+            /** Artifact Key */
+            artifact_key: string;
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
+            /** Project Id */
+            project_id: string;
+            /** Secret Ref */
+            secret_ref?: string | null;
+            source: components["schemas"]["ImportSource"];
         };
         /**
          * Captcha
@@ -3009,6 +3075,53 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ReleaseEvidence */
+        ReleaseEvidence: {
+            /** Approved By */
+            approved_by: unknown;
+            /** Artifact */
+            artifact: {
+                [key: string]: unknown;
+            };
+            /** Checkpoint */
+            checkpoint: {
+                [key: string]: unknown;
+            };
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+            /** Dataset Ref */
+            dataset_ref: string;
+            /** Evaluation */
+            evaluation: unknown;
+            /** Export */
+            export: {
+                [key: string]: unknown;
+            };
+            /** External Run Id */
+            external_run_id: string;
+            /** External Run Ref */
+            external_run_ref: string;
+            /** Format */
+            format: string;
+            /** Holdout */
+            holdout: {
+                [key: string]: unknown;
+            };
+            /** Label Methods */
+            label_methods: {
+                [key: string]: number;
+            };
+            /** Provider Org Id */
+            provider_org_id: string;
+            /** Qualification */
+            qualification: {
+                [key: string]: unknown;
+            };
+            /** Recorded At */
+            recorded_at: string;
+        };
         /**
          * Resend
          * @description WR-AP09-RESEND: a new sign-up verification link for this address.
@@ -3462,6 +3575,46 @@ export interface components {
             requires_media: boolean;
             /** Score */
             score: number;
+        };
+        /** TrainingConfig */
+        TrainingConfig: {
+            /**
+             * Adaptation
+             * @enum {string}
+             */
+            adaptation: "full" | "lora";
+            /** Base Model */
+            base_model: string;
+            /** Environment */
+            environment: {
+                [key: string]: string;
+            };
+            /** Hyperparameters */
+            hyperparameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Objective
+             * @enum {string}
+             */
+            objective: "sft" | "preference";
+        };
+        /**
+         * TrainingExport
+         * @description Any trainer name is read: one other than P3's manual bundle is refused by name.
+         */
+        TrainingExport: {
+            config: components["schemas"]["TrainingConfig"];
+            /** Dataset Ref */
+            dataset_ref: string;
+            /** Label Export Id */
+            label_export_id: string;
+            /** Limit */
+            limit: string;
+            /** Payer Ref */
+            payer_ref: string;
+            /** Trainer */
+            trainer: string;
         };
         /** Upload */
         Upload: {
@@ -8086,6 +8239,305 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    postLabV1ProvidersByProviderTrainingRunsByRunIdCheckpointsByCheckpointIdCandidate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                provider: string;
+                run_id: string;
+                checkpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getLabV1ProvidersByProviderTrainingRunsByRunIdCheckpointsByCheckpointIdReleaseEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+                run_id: string;
+                checkpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseEvidence"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postLabV1ProvidersByProviderTrainingRunsByRunIdExport: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                provider: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainingExport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDoc"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

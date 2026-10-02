@@ -113,11 +113,20 @@ def _compose(lab: dict[str, str], store):
                                   credentials=PgDevCredentials(connect))
     # WR-AP04-2 (AP-04): model projects and artifacts on the unit's login, only with
     # LAB_ARTIFACTS; the Lab objects are required (a missing LAB_S3_BUCKET refuses startup).
-    artifacts = None
+    artifacts = improve = None
     if settings.deployment is not None and settings.deployment.lab_artifacts:
         from ..artifacts.compose import surface
         from ..workers.__main__ import lab_objects
         artifacts = surface(connect, lab_objects(MODE, os.environ))
+        # WR-AP10E-1 (AP-10 10e): the training-run routes ride LAB_ARTIFACTS (AP-04's import is
+        # the candidate's only door): D7, D8's run ledger, 0060 and the Lab objects, this login.
+        from ...gateway.routes.lab_improve import LabImprove
+        from ...state.control_ops import PgControlOps
+        from ...state.lab_data import PgLabDataStore
+        from ...state.lab_pipeline import PgRunLedger
+        from ..compose import RunLedger
+        improve = LabImprove(access, PgLabDataStore(connect), lab_objects(MODE, os.environ),
+                             RunLedger(PgRunLedger(connect)), PgControlOps(connect), artifacts)
     # WR-AP05-2 (AP-05): private deployments on the unit's login (0060-0062), only with
     # LAB_HOSTING; without a configured slot (`HOSTING_*`) the profile reads `unavailable`.
     hosting = None
@@ -135,6 +144,7 @@ def _compose(lab: dict[str, str], store):
                            identity=actors and actors.identity,
                            lab_access=access if actors else None,
                            lab_publication=publication, lab_artifacts=artifacts,
+                           lab_improve=improve,
                            lab_hosting=hosting, auth_facade=_auth_facade(settings, lab),
                            **_families(settings, lab, connect)), control, traces
 
@@ -203,14 +213,15 @@ def create_app() -> FastAPI:
         return {"status": "ready"}
 
     from ...gateway.routes import (auth, console_me, lab_checkpoints, lab_control, lab_datasets,
-                                   lab_evaluations, lab_judge, lab_pipelines, lab_releases,
-                                   lab_reviews, lab_traces, lab_workspaces, operator_publication)
+                                   lab_evaluations, lab_improve, lab_judge, lab_pipelines,
+                                   lab_releases, lab_reviews, lab_traces, lab_workspaces,
+                                   operator_publication)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
                    lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication,
-                   auth):
+                   auth, lab_improve):              # WR-AP10E-1: nothing while LAB_ARTIFACTS is off
         family.register(app, rt)
     from ..artifacts.compose import WorkspaceActors, mount   # WR-AP04-2: nothing while off
     mount(app, rt)
