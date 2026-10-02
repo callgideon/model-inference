@@ -1,0 +1,82 @@
+{
+  "task": "AP-02",
+  "lane": "api-reads",
+  "slice": "02a, 02b, 02c (+ parity, OpenAPI documentation case)",
+  "activity": "review",
+  "at": "2026-10-02T00:31:00Z",
+  "head": "ddac3648",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-reads",
+  "branch": "codex/w7-api-reads",
+  "owned_paths": [
+    "apps/infrx-api/infrx/console/reads.py",
+    "apps/infrx-api/infrx/console/cursor.py",
+    "apps/infrx-api/infrx/gateway/routes/console_reads.py",
+    "apps/infrx-api/tests/ap02/",
+    "research/plan/evidence/w7/api-reads-ddac364.md",
+    "research/plan/evidence/coordinator/updates/AP-02-20261002T0031Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_credits_pg.py (before the routes)",
+      "exit": 1,
+      "summary": "red: 17 failed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_requests_pg.py tests/ap02/test_units.py (before the 02b routes)",
+      "exit": 1,
+      "summary": "red: 11 failed, 11 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_projections_pg.py (before the 02c routes)",
+      "exit": 1,
+      "summary": "red: 15 failed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02",
+      "exit": 0,
+      "summary": "72 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap2 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/ap02 --deselect tests/ap02/test_mutants.py::test_mutant_is_killed",
+      "exit": 0,
+      "summary": "71 passed, 1 deselected"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py",
+      "exit": 0,
+      "summary": "63 mutants killed (22 unit + 41 PG), 0 survivors; well_formed + every_case green"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 458 (baseline 458), no new errors"
+    },
+    {
+      "cmd": "pytest -q tests/integration/test_makefile_mutant_lists.py",
+      "exit": 1,
+      "summary": "expected until WR-AP02-2 (tests/ap02/test_mutants.py named 0 times)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "one review round over 3 modules/72 cases + the composed test once AP-01 SessionActors and WR-AP02-1 land; pessimistic = the production console DSN login cannot SET ROLE authenticated (deployment decision)",
+    "at": "2026-10-02T00:31:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-AP02-1: config.py DeploymentSettings console_reads/console_database_url/console_cursor_secret (default off); pilot.py rt.console_reads = ConsoleReads(connector(CONSOLE_DATABASE_URL, set_role=False), secret) when on (needs AP-01 rt.actors); app.py ROUTERS += console_reads before metrics; composed test on ap2 (on: 200 no-store; off: 404 and no /console|/operator routes; misconfigured: RuntimeMisconfigured)",
+    "WR-AP02-2: Makefile api-mutants line 'cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py' (own process); composed test tests/integration/test_makefile_mutant_lists.py"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-reads-ddac364.md"
+  ]
+}

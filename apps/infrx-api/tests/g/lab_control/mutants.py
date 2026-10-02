@@ -20,7 +20,10 @@ FILES = (F, auth.F)
 C = "test_lab_control__"
 ACTOR = ("    membership = await member(\n"
          "        access, user_id, request.query_params.get(\"provider_org_id\", \"\"), capability)\n")
-READ = "            who = await actor(request, Cap.read_aggregate_health)\n"
+READ = "        async def read(who: Actor = actor(Cap.read_aggregate_health)):\n"
+#: AP-00: the typed handlers' `{refusal}` adapter (`lab_auth.refusal_route`).
+WITHHELD = ("                        except errors.DomainError as refused:\n"
+            "                            request._body, withheld = b\"\", refused\n")
 
 
 def _m(name, invariant, old, new, *cases, file=F) -> Mutant:
@@ -40,12 +43,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    user_id = await authenticate(request, sessions)\n",
        '    user_id = request.query_params.get("user_id", "")\n',
        C + "every_route_needs_the_session_before_anything_else", file=auth.F),
-    _m("body_before_identity", "the body is read only after the session and membership",
-       "        who = await actor(request, Cap.manage_dev_deployment)\n"
-       "        registration = await body(request, Registration)\n",
-       "        registration = await body(request, Registration)\n"
-       "        who = await actor(request, Cap.manage_dev_deployment)\n",
-       C + "every_route_needs_the_session_before_anything_else"),
+    _m("body_before_identity", "an unreadable body waits for the session and membership",
+       WITHHELD, "                        except errors.DomainError:\n                            raise\n",
+       C + "every_route_needs_the_session_before_anything_else", file=auth.F),
     _m("actor_role_not_the_memberships", "the actor's role is the current membership's",
        "user_id=user_id,\n                 role=membership.role)",
        "user_id=user_id,\n                 role=ProviderRole.administrator)",
@@ -72,16 +72,16 @@ MUTANTS: tuple[Mutant, ...] = (
        READ, READ.replace("read_aggregate_health", "manage_dev_deployment"),
        C + "each_operation_needs_its_capability"),
     _m("health_needs_development", "a viewer reads aggregate health",
-       "        who = await actor(request, Cap.read_aggregate_health)\n        rows",
-       "        who = await actor(request, Cap.manage_dev_deployment)\n        rows",
+       "    async def aggregates(who: Actor = actor(Cap.read_aggregate_health)):",
+       "    async def aggregates(who: Actor = actor(Cap.manage_dev_deployment)):",
        C + "each_operation_needs_its_capability"),
     _m("viewer_registers", "registering needs manage_dev_deployment",
-       "        who = await actor(request, Cap.manage_dev_deployment)\n        registration",
-       "        who = await actor(request, Cap.read_aggregate_health)\n        registration",
+       "who: Actor = actor(Cap.manage_dev_deployment)):\n        created",
+       "who: Actor = actor(Cap.read_aggregate_health)):\n        created",
        C + "each_operation_needs_its_capability"),
     _m("viewer_smokes", "a smoke run needs manage_dev_deployment",
-       "        who = await actor(request, Cap.manage_dev_deployment)\n        tested",
-       "        who = await actor(request, Cap.read_aggregate_health)\n        tested",
+       "who: Actor = actor(Cap.manage_dev_deployment)):\n        tested",
+       "who: Actor = actor(Cap.read_aggregate_health)):\n        tested",
        C + "each_operation_needs_its_capability"),
     _m("developer_proposes", "only an administrator proposes a publication",
        "Cap.propose_publication", "Cap.manage_dev_deployment",
@@ -91,8 +91,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "getattr(operations(), name)(who)", 'getattr(operations(), "models")(who)',
        C + "each_operation_needs_its_capability"),
     _m("smoke_id_from_the_query", "the smoked revision is the path's",
-       'request.path_params["deployment_revision_id"]',
-       'request.query_params.get("deployment_revision_id", "")',
+       "operations().smoke(who, deployment_revision_id)",
+       'operations().smoke(who, "")',
        C + "each_operation_needs_its_capability"),
     _m("registered_with_200", "a registration is a 201",
        "lab_auth.ok(created.model_dump(mode=\"json\"), 201)",
@@ -103,9 +103,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "lab_auth.ok(proposal.model_dump(mode=\"json\"))",
        C + "each_operation_needs_its_capability"),
     _m("refusal_not_rendered", "L3's typed refusal is port.ts's reason, never a 5xx",
-       "        except Exception as exc:                 # noqa: BLE001 - rendered, never re-raised\n"
-       "            return refusal(exc)\n",
-       "        except errors.DependencyUnavailable as exc:\n            return refusal(exc)\n",
+       "                except Exception as failure:     # noqa: BLE001 - rendered, never re-raised\n"
+       "                    return refusal(failure)\n",
+       "                except errors.DependencyUnavailable as failure:\n"
+       "                    return refusal(failure)\n",
        C + "operation_refusals_are_the_lab_ports_reasons", file=auth.F),
     _m("expected_refusal_logged", "an expected refusal (L3 unwired) is not logged as a bug",
        "    if not isinstance(exc, errors.DomainError):", "    if True:",
@@ -127,7 +128,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "max_bytes=max_bytes,", "max_bytes=rt.settings.pilot.max_request_bytes,",
        C + "a_body_is_json_bounded_and_valid_before_the_operations", file=auth.F),
     _m("invalid_body_escapes", "a body failing validation is a 422, never a 5xx",
-       "    except ValidationError:\n", "    except KeyError:\n",
+       "                except RequestValidationError:\n", "                except KeyError:\n",
        C + "a_body_is_json_bounded_and_valid_before_the_operations", file=auth.F),
     _m("digest_unchecked", "an artifact digest is sha256:<64 hex>",
        "    artifact_digest: str = Field(pattern=DIGEST)", "    artifact_digest: str",
