@@ -205,6 +205,12 @@ def test_publication_pg__a_role_login_connects_without_the_switch_and_the_servic
     w = pg_world
     role = login(w, "infrx_lab_datasets")
 
+    def answer(coro):          # a refused login is a compared outcome, not a crash
+        try:
+            return run(coro)
+        except Exception as refused:          # noqa: BLE001
+            return f"{type(refused).__name__}: {refused}"
+
     async def current_user(dsn):
         conn = await lab_workers.lab_connector(dsn)()
         try:
@@ -214,6 +220,6 @@ def test_publication_pg__a_role_login_connects_without_the_switch_and_the_servic
     worker = lab_workers.compose("checkpoints", {
         "LAB_DATABASE_URL": role, "LAB_WORKER_HEALTH_PORT": "18013",
         "LAB_S3_BUCKET": "infrx-lab"}, objects=InMemoryObjectStore())
-    assert run(worker.ready()) is True
-    assert run(current_user(role)) == "infrx_lab_datasets"
-    assert run(current_user(w.dsn)) == "service_role"
+    assert answer(worker.ready()) is True
+    assert answer(current_user(role)) == "infrx_lab_datasets"
+    assert answer(current_user(w.dsn)) == "service_role"
