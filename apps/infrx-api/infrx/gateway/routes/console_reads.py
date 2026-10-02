@@ -44,12 +44,6 @@ def register(app: FastAPI, rt: Any) -> None:
     async def credits(request: Request) -> JSONResponse:
         return await answer(request, reads.credits)
 
-    @app.get("/console/v1/credit-ledger", response_model=api.ListPage[r.LedgerEntry],
-             responses=ERRORS, operation_id="console_credit_ledger")
-    async def credit_ledger(request: Request, limit: str | None = LIMIT,
-                            cursor: str | None = CURSOR) -> JSONResponse:
-        return await answer(request, lambda a: reads.credit_ledger(a, limit, cursor))
-
     @app.get("/console/v1/legacy-statement", response_model=r.LegacyStatement, responses=ERRORS,
              operation_id="console_legacy_statement")
     async def legacy_statement(request: Request) -> JSONResponse:
@@ -78,3 +72,22 @@ def register(app: FastAPI, rt: Any) -> None:
              responses=ERRORS, operation_id="console_request_result")
     async def result(request: Request, request_id: str) -> JSONResponse:
         return await answer(request, lambda a: reads.result(a, request_id))
+
+    def listing(path: str, item: type, read: Callable[..., Awaitable[Any]], name: str) -> None:
+        """A paged read: `{data, next_cursor}` of `item`, the actor and the page from the query."""
+        async def handler(request: Request, limit: str | None = LIMIT,
+                          cursor: str | None = CURSOR) -> JSONResponse:
+            return await answer(request, lambda a: read(a, limit, cursor))
+        app.get(path, response_model=api.ListPage[item], responses=ERRORS,
+                operation_id=name)(handler)
+
+    listing("/console/v1/credit-ledger", r.LedgerEntry, reads.credit_ledger,
+            "console_credit_ledger")
+    listing("/console/v1/keys", r.KeySummary, reads.keys, "console_keys")
+    listing("/console/v1/account/members", r.Member, reads.members, "console_account_members")
+    listing("/operator/v1/accounts", r.OperatorAccount, reads.accounts, "operator_accounts")
+    listing("/operator/v1/wallet-drift", r.WalletDrift, reads.wallet_drift,
+            "operator_wallet_drift")
+    listing("/operator/v1/unknown-usage", r.UnknownUsage, reads.unknown_usage,
+            "operator_unknown_usage")
+    listing("/operator/v1/audit", r.AuditEntry, reads.audit, "operator_audit")

@@ -15,7 +15,8 @@ from ..contracts.mutants import API_DIR, Mutant, Runner
 
 C, R, ROUTES = "console/cursor.py", "console/reads.py", "gateway/routes/console_reads.py"
 FILES = ("tests/ap02/test_cursor.py", "tests/ap02/test_units.py",
-         "tests/ap02/test_credits_pg.py", "tests/ap02/test_requests_pg.py")
+         "tests/ap02/test_credits_pg.py", "tests/ap02/test_requests_pg.py",
+         "tests/ap02/test_projections_pg.py")
 
 
 def _layout(root: pathlib.Path) -> pathlib.Path:
@@ -43,6 +44,12 @@ LIST = "test_requests__are_mine_newest_first_with_separate_states"
 FILTERED = "test_requests__filters_narrow_and_scope_the_cursor"
 RESULT = "test_result__served_only_when_available"
 KEY_OUTAGE = "test_requests__refused_to_a_key_and_503_on_an_outage"
+KEYS = "test_keys__the_orgs_newest_first_without_secrets"
+MEMBERS = "test_members__the_accounts_own"
+AUTHORITY = "test_operator__needs_authority_from_the_actor_and_the_database"
+ACCOUNTS = "test_operator__accounts_are_exact_and_paged"
+UNKNOWN_DRIFT = "test_operator__unknown_usage_and_drift"
+AUDIT = "test_operator__audit_newest_first"
 FOREIGN_CURSOR = "test_credit_ledger__a_cursor_from_another_actor_is_refused"
 
 #: The cursor's own decisions, killed by the unit cases (no PostgreSQL).
@@ -125,7 +132,8 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        "test_legacy_statement__another_org_is_refused"),
     _m("ap02_outage_raw", "an outage is a typed 503, never a raw 500", R,
        'return errors.DependencyUnavailable("console read failed", retry_after_s=5)',
-       "return failed", "test_reads__a_database_outage_is_503_never_empty", KEY_OUTAGE),
+       "return failed", "test_reads__a_database_outage_is_503_never_empty", KEY_OUTAGE,
+       "test_projections__503_on_an_outage"),
     _m("ap02_router_mounted_without_its_port", "default OFF: no port, no routes", ROUTES,
        "    if reads is None:\n        return\n", "", "test_router__mounts_nothing_without_the_port",
        dies_by=("AttributeError",)),     # the defect IS mounting over a None port
@@ -189,6 +197,40 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("ap02_result_expiry_from_the_flag_only", "an expired result is 410 and listed expired", R,
        'return "available" if available else "expired"', 'return "available"',
        "test_result__expired_by_the_database_clock_is_410"),
+    # ---------------------------------------------------------------- projections (02c)
+    _m("ap02_keys_any_org", "keys are the actor's org's only", R,
+       "and org_id = %(org)s::uuid order by created_at desc", "and true order by created_at desc",
+       KEYS),
+    _m("ap02_keys_oldest_first", "keys are newest first", R,
+       "order by created_at desc, id desc", "order by created_at, id", KEYS),
+    _m("ap02_keys_extra_field", "a key summary carries no secret material", R,
+       '    """Never the secret or its hash."""\n    id: str\n',
+       '    """Never the secret or its hash."""\n    key_hash: str | None = None\n    id: str\n',
+       KEYS),
+    _m("ap02_members_any_org", "members are the actor's account's only", R,
+       "and m.org_id = %(org)s::uuid order by", "and true order by", MEMBERS),
+    _m("ap02_members_keyset_backwards", "the members page resumes after its last row", R,
+       "(m.created_at, m.user_id) > (", "(m.created_at, m.user_id) < (", MEMBERS),
+    _m("ap02_operator_actor_unchecked", "operator authority comes from the server actor", R,
+       "    if not actor.operator:\n", "    if False:\n", AUTHORITY),
+    _m("ap02_operator_database_unchecked", "operator authority is the database's too", R,
+       "    if yes is not True:\n", "    if False:\n", AUTHORITY),
+    _m("ap02_operator_accounts_open", "the accounts projection is operator-only", R,
+       '"updated_at.desc,wallet_id.desc", {}, limit,\n                                token, fetch, operator=True)',
+       '"updated_at.desc,wallet_id.desc", {}, limit,\n                                token, fetch)',
+       AUTHORITY),
+    _m("ap02_accounts_total_is_reserved", "an account's figures are its own fields", R,
+       'ledger_total=_money(r["ledger_total"], "CREDIT"),',
+       'ledger_total=_money(r["reserved_total"], "CREDIT"),', ACCOUNTS),
+    _m("ap02_accounts_oldest_first", "accounts are most recently moved first", R,
+       "order by w.updated_at desc, w.wallet_id desc", "order by w.updated_at, w.wallet_id",
+       ACCOUNTS),
+    _m("ap02_unknown_hold_relabelled", "an unknown-usage hold keeps its unit", R,
+       'hold=_opt_money(r["hold"], unit))', 'hold=_opt_money(r["hold"], "USD"))', UNKNOWN_DRIFT),
+    _m("ap02_drift_keyset_repeats", "the drift page resumes after its last row", R,
+       "wallet_id > %(id)s::uuid", "wallet_id >= %(id)s::uuid", UNKNOWN_DRIFT),
+    _m("ap02_audit_oldest_first", "the audit is newest first", R,
+       "order by at desc, id desc", "order by at, id", AUDIT),
 )
 
 
