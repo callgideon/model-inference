@@ -105,9 +105,11 @@ test("UX10-U02 a publication request shows its decision beside its revision's pr
   const proven = publicationRows({ proposals: ok({ data: [pub({ state: "approved" })] }), deployments: DOWN, readiness: { [DEP]: ok(ready()) } });
   assert.equal(proven[0].caveat, null, "an approval with current proof needs no caveat");
   assert.equal(proven[0].title, `Publish deployment revision ${DEP}`, "an unreadable listing still shows the request");
-  const pending = publicationRows({ proposals: ok({ data: [pub()] }), deployments: DOWN, readiness: {} });
+  const pending = publicationRows({ proposals: ok({ data: [pub()] }), deployments: ok({ data: [dep()] }), readiness: {} });
   assert.deepEqual(pending[0].request, { tone: "neutral", text: "Awaiting an operator's decision" });
   assert.equal(pending[0].caveat, null);
+  assert.equal(pending[0].listed, null, "a private deployment is not listed");
+  assert.equal(pending[0].proof.text, "Serving proof can't be checked right now", "no readiness read is no proof");
   assert.deepEqual(publicationRows({ proposals: DOWN, deployments: DOWN, readiness: {} }), []);
 });
 

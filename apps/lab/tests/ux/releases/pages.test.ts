@@ -99,6 +99,11 @@ test("UX10-P02 a viewer and a developer read the same evidence with no proposal 
     assert.ok(strip(page).includes("Proposing an expansion or a rollback needs an administrator."), role);
     assert.ok(section(page, POLICY) !== null, role);
   }
+  const approved = await releases("viewer", world({ rollouts: { ...world().rollouts, releases: async () => ({ ok: true, value: records([release({ state: "approved", progress: null, verdict: EXPAND })]) }) } }));
+  const own = section(approved, POLICY)!;
+  assert.match(own, /lab-badge--neutral[^>]*>(?:<svg[\s\S]*?<\/svg>)?No measurement yet</, "an approved expansion with nothing measured is no proof");
+  assert.doesNotMatch(own, /lab-badge--success/);
+  assert.ok(strip(own).includes("Status expansion approved by an operator"));
 });
 
 test("UX10-P03 publication requests show the operator's decision beside the revision's serving proof, never one for the other", async () => {
@@ -152,6 +157,7 @@ test("UX10-P07 the optimization list: scoped identities, Not recorded, not compa
     assert.ok(shown.includes(fact), fact);
   }
   assert.equal([...list.matchAll(/optimization claimed for this scope only/g)].length, 1, "only the comparable, measured variant claims");
+  assert.match(list, /lab-badge--warning[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not comparable: measured on different hardware/, "the scope gap is the variant's badge");
   assert.deepEqual(states(await html(Variants({ result: { ok: true, value: [] } }))), ["empty"]);
   assert.match(strip(await html(Variants({ result: { ok: true, value: [] } }))), /No optimized variants registered yet\./, "lab-e2e E2E-R01's copy");
   assert.deepEqual(states(await html(Variants({ result: { ok: false, reason: "unavailable" } }))), ["unavailable"]);
