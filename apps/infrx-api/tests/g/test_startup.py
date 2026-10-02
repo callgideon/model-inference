@@ -20,8 +20,8 @@ from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import (auth, console_actions, console_data_use, console_me,
                                   console_reads, feedback, health, ingress, jobs,
-                                  lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
-                                  lab_pipelines, lab_releases, lab_traces, lab_workspaces, models,
+                                  lab_artifacts, lab_checkpoints, lab_control, lab_datasets,
+                                  lab_evaluations, lab_model_projects, lab_pipelines, lab_releases, lab_traces, lab_workspaces, models,
                                   operator_actions, operator_providers, trace_export, uploads)
 from infrx.observe import host
 from infrx.observe import route as metrics
@@ -221,8 +221,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback,
                                    console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines,
                                    lab_releases, lab_datasets, lab_checkpoints, auth,
-                                   console_me, lab_workspaces, operator_providers, console_reads,
-                                   metrics)
+                                   console_me, lab_workspaces, operator_providers, lab_model_projects,
+                                   lab_artifacts, console_reads, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}

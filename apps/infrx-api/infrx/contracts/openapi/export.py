@@ -11,7 +11,8 @@ matters and nothing connects anywhere:
   `IDENTITY_API` over inert identity/access stand-ins - its `SessionActors` are the session
   actors the console routes need - `AUTH_FACADE` over an inert publishable key,
   `CONSOLE_READS` over an unreachable DSN, `CONSOLE_ACTIONS_API` over an inert repository
-  stand-in, `CONSOLE_DATA_USE` over an inert data-use stand-in);
+  stand-in, `CONSOLE_DATA_USE` over an inert data-use stand-in, AP-04's model projects and
+  artifacts over an inert `rt.lab_artifacts` - no switch composes it until WR-AP04-2);
   the Lab switches stay off on the gateway (R237: the Lab unit serves them);
 - `consumer-launched`: the gateway as launched (every switch at its default, OFF);
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints,
@@ -209,8 +210,11 @@ def compositions() -> dict[str, FastAPI]:
                "CONSOLE_DATA_USE": "1",                                # W1 api-traces
                "IDENTITY_API": "1", "AUTH_FACADE": "1",                # WR-AP01-1
                "SUPABASE_ANON_KEY": "export-anon"}
-    return {"consumer": _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1",
-                                  **console}),
+    from ...gateway.app import Runtime
+    # WR-AP04-1: AP-04's routes mount on `rt.lab_artifacts`, which no switch sets yet (WR-AP04-2)
+    with mock.patch.object(Runtime, "lab_artifacts", object(), create=True):
+        consumer = _gateway({**test, "FEEDBACK_API": "1", "TRACE_EXPORT_API": "1", **console})
+    return {"consumer": consumer,
             "consumer-launched": _gateway(test),
             "lab-control": _lab_control()}
 

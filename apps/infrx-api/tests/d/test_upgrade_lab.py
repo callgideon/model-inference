@@ -52,7 +52,9 @@ NEW_TABLES = {"infrx.lab_access_grants",                                    # 00
               "infrx.lab_import_jobs",                                      # 0051
               "infrx.lab_variant_identities",                               # 0058
               "infrx.control_operations", "infrx.control_idempotency",      # 0060 (R271)
-              "infrx.lab_judge_cancellations", "infrx.lab_trace_reviews"}   # 0064 (R271)
+              "infrx.lab_judge_cancellations", "infrx.lab_trace_reviews",    # 0064 (R271)
+              *(f"infrx.{t}" for t in ("model_projects", "artifacts", "artifact_uploads",
+                                       "artifact_imports", "model_project_revisions"))}  # 0061 (R271)
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 

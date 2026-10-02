@@ -337,7 +337,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
          "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
          "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "auth", "console_me",
-         "lab_workspaces", "operator_providers", "console_reads", "route"]
+         "lab_workspaces", "operator_providers", "lab_model_projects", "lab_artifacts", "console_reads",
+         "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 

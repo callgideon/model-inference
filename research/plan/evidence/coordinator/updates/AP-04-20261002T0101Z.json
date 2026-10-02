@@ -1,0 +1,28 @@
+{
+  "task": "AP-04",
+  "lane": "api-artifacts",
+  "slice": "04a-04e (local; real Marlin import and adoption are coordinator runs)",
+  "activity": "review",
+  "at": "2026-10-02T01:01:23Z",
+  "head": "dc343a40",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-artifacts",
+  "branch": "codex/w7-api-artifacts",
+  "owned_paths": ["apps/app/supabase/migrations/0061_model_projects_artifacts.sql", "apps/infrx-api/infrx/lab/artifacts/", "apps/infrx-api/infrx/gateway/routes/lab_model_projects.py", "apps/infrx-api/infrx/gateway/routes/lab_artifacts.py", "apps/infrx-api/tests/ap04/", "apps/infrx-api/tests/d/test_upgrade_0061_mutants.py"],
+  "commands": [
+    {"cmd": "pytest -q tests/ap04 -m 'not pg' (package set aside)", "exit": 4, "summary": "red: ImportError at conftest"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/ap04/test_artifacts.py", "exit": 0, "summary": "56 passed (fake + PG control login + MinIO)"},
+    {"cmd": "INFRX_D_TASK=ap4 INFRX_D1_IMAGE=supabase pytest -q tests/ap04/test_artifacts.py -m pg", "exit": 0, "summary": "27 passed"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/d -k 0061 (plain and supabase image)", "exit": 0, "summary": "29 passed each; 19 SQL mutants killed"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap4 pytest -q tests/ap04/test_mutants.py", "exit": 0, "summary": "66 passed; 56 fake + 4 PG mutants killed, 0 survivors, every case covered"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "458 errors (baseline 458)"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/contracts tests/g (mutant list deselected)", "exit": 0, "summary": "2393 passed, 15 skipped"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/l tests/l3sql", "exit": 0, "summary": "99 passed"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/d/test_upgrade_lab.py", "exit": 1, "summary": "NEW_TABLES lacks 0061 (WR-AP04-3; patched copy passes)"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 5, "pessimistic_h": 9, "confidence": "medium", "basis": "paths proven on PG + MinIO; remaining = 0060 store swap (same protocol), one composition patch + worker role, review fixes; the real-network import may surface HF redirect/Xet behaviour", "at": "2026-10-02T01:01:23Z"},
+  "blockers": ["real Marlin import + adoption: coordinator (network, HF_TOKEN via ssm reference)", "worker composition waits for 0060 (api-schema)"],
+  "wiring_requests": ["WR-AP04-1 app.py ROUTERS += lab_model_projects, lab_artifacts", "WR-AP04-2 (batch 2) LAB_ARTIFACTS switch + rt.lab_artifacts in lab/control/app.py + workers role artifacts", "WR-AP04-3 tests/d/test_upgrade_lab.py NEW_TABLES += 0061 tables", "WR-AP04-4 Makefile api-mutants += tests/d/test_upgrade_0061_mutants.py, tests/ap04/test_mutants.py (ap4)", "WR-AP04-5 tests/integration/test_harness.py migration list += 0061"],
+  "evidence": ["research/plan/evidence/w7/api-artifacts-dc343a4.md"]
+}
