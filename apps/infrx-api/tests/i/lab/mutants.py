@@ -130,13 +130,12 @@ MUTANTS: tuple[Mutant, ...] = (
        NO_LOOP),
     # WR-LAB-API-2c: the control factory is the gateway's one L3 composition, on its login
     _m("control_operations_off_the_login", "L3's operations run on the Lab's own login",
-       CONTROL_APP, "    control = Routes(sessions, access, lab_operations(connect, access))",
-       "    control = Routes(sessions, access, lab_operations(connector(\"\"), access))",
+       CONTROL_APP, "    operations = lab_operations(connect, access)",
+       "    operations = lab_operations(connector(\"\"), access)",
        ONE_COMPOSITION),
     _m("control_operations_other_access", "L3 checks the same L2 access the routes use",
-       CONTROL_APP, "    control = Routes(sessions, access, lab_operations(connect, access))",
-       "    control = Routes(sessions, access, lab_operations(connect, "
-       "LabAccess(PgAccessStore(connect))))", ONE_COMPOSITION),
+       CONTROL_APP, "    operations = lab_operations(connect, access)",
+       "    operations = lab_operations(connect, LabAccess(PgAccessStore(connect)))", ONE_COMPOSITION),
 )
 
 
