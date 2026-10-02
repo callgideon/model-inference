@@ -1,0 +1,30 @@
+{
+  "task": "AP-03",
+  "lane": "api-actions",
+  "slice": "03a-03d (keys, grant claim, feedback, operator mutations); routes unmounted until WR-AP03-2/3",
+  "activity": "review",
+  "at": "2026-10-02T00:36:00Z",
+  "head": "75b8d25",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-actions",
+  "branch": "codex/w7-api-actions",
+  "owned_paths": ["apps/infrx-api/infrx/console/actions.py", "apps/infrx-api/infrx/gateway/routes/console_actions.py", "apps/infrx-api/infrx/gateway/routes/operator_actions.py", "apps/infrx-api/tests/ap03/", "research/plan/evidence/w7/api-actions-75b8d25.md", "research/plan/evidence/coordinator/updates/AP-03-20261002T0036Z.json"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03 (before implementation)", "exit": 2, "summary": "seam red: No module named 'infrx.console'"},
+    {"cmd": "INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03 -k 'not mutant_is_killed and not false_kill'", "exit": 0, "summary": "37 passed (14 route, 5 repository, 16 PG incl. two-process key and grant races, 2 list-shape)"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py", "exit": 0, "summary": "50 passed: 23/23 unit + 23/23 PG mutants killed; every-case guard green"},
+    {"cmd": "INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/contracts tests/g tests/i tests/ap03", "exit": 1, "summary": "2902 passed, 23 skipped, 1 xfailed; 1 failed = ap03 list-shape while files were edited mid-run (green on rerun)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright: 458 errors (baseline 458), lane files 0"},
+    {"cmd": "tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "expected until WR-AP03-1; 7 passed with the patch applied then reverted"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "implementation, PG proofs and both mutant lists done on ap3; remaining = review fixes + composing WR-AP03-2/3 with one create_app test + the DB login decision (pessimistic: infrx_runtime grants through 0060)", "at": "2026-10-02T00:36:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-AP03-1 Makefile api-mutants: add `cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py` after the lw9 line (composed: tests/integration/test_makefile_mutant_lists.py 7 passed)",
+    "WR-AP03-2 infrx/config.py DeploymentSettings: console_actions_api: bool = False (CONSOLE_ACTIONS_API)",
+    "WR-AP03-3 pilot.py adapters_from_env: console_actions = ConsoleActions(connect) when console_actions_api; build_ingress_deps sets rt.console_actions (else None) and refuses the switch without AP-01's rt.actors; app.py ROUTERS += console_actions, operator_actions after feedback; the pool login must be able to set role service_role and set local role authenticated (not infrx_runtime)"
+  ],
+  "schema_requests": ["conditional, only if the API stays on infrx_runtime: grant authenticated to infrx_runtime; insert on public.api_keys, infrx.audit_entries; execute on consumer_may_create_key(), is_org_owner(uuid), claim_signup_grant(uuid,text,uuid), infrx.revoke_key(uuid,text,text,text) — in 0060"],
+  "evidence": ["research/plan/evidence/w7/api-actions-75b8d25.md"]
+}
