@@ -440,7 +440,10 @@ def compose(out: Path):
                        "PYTHONUNBUFFERED": "1", "PYTHONPATH": box.env["PYTHONPATH"],
                        "INFRX_LAB_DATABASE_URL": dsn, "INFRX_LAB_SUPABASE_URL": edge_url,
                        "INFRX_LAB_SUPABASE_ANON_KEY": anon, "LAB_JUDGE_API": "1",
-                       "LAB_ARTIFACTS": "1", "IDENTITY_API": "1", "LAB_HOSTING": "1"}
+                       "LAB_ARTIFACTS": "1", "IDENTITY_API": "1", "LAB_HOSTING": "1",
+                       # AP-04's composition answers HeadBucket on the Lab objects at startup
+                       "LAB_S3_BUCKET": BUCKET, "LAB_S3_ENDPOINT": s3["S3_ENDPOINT_URL"],
+                       "LAB_S3_PREFIX": f"lab/{TASK}/{release[:12]}/"}
         box.start("worker")
         box.start("gateway")
         box.start("lab")
