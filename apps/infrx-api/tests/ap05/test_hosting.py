@@ -27,12 +27,19 @@ from infrx.lab.hosting import PROFILE
 from infrx.lab.hosting.engine import Runtime, options_digest
 from infrx.lab.hosting.store import Hold
 
+from tests.l.control import worlds as l3
+
 from .conftest import ENGINE_PORT, REPO_ROOT, clip, entries, run
 
 PROC = pathlib.Path(__file__).with_name("controller_proc.py")
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
 
 DEPLOYMENTS = "/lab/v1/control/deployments"
+
+
+def code(doc) -> str | None:
+    """An operation's error code (None while it has none)."""
+    return doc.error.code if doc.error else None
 
 
 # ============================================================ 05a: the operation ===
@@ -52,6 +59,7 @@ def test_ap05__a_deploy_request_is_one_operation_and_one_draft(world):
     again = world.deploy(key=key)              # a lost response: the same operation, no 2nd draft
     assert again.status_code == 202 and again.json()["operation_id"] == doc["operation_id"]
     assert again.json()["resource_id"] == deployment
+    assert world.drafts() == 1
     other = world.deploy(key=key, max_output_tokens=512)
     assert other.status_code == 409 and other.json()["error"]["code"] == "idempotency_conflict"
     assert world.deploy(key=world.key()).json()["resource_id"] != deployment
@@ -89,6 +97,13 @@ def test_ap05__an_unsupported_request_names_its_reasons(world):
     prod = world.deploy(serving_version_id=l3_serving())
     assert prod.status_code == 422
     assert [f["code"] for f in prod.json()["error"]["field_errors"]] == ["no_verified_artifact"]
+    other = l3.serving(world.w, "other-options")         # A's own, other engine options
+    run(world.w.control.registry.put(other))
+    pins = world.deploy(serving_version_id=other.serving_version_id)
+    assert pins.status_code == 422
+    assert [(f["field"], f["code"]) for f in pins.json()["error"]["field_errors"]] == [
+        ("serving.engine_options_digest", "unsupported_by_profile"),
+        ("serving_version_id", "no_verified_artifact")]
     assert world.deploy(actor="dev_b").status_code == 404      # another provider's revision
     assert world.deploy(max_replicas=2).status_code == 422     # one replica, no autoscaling
     assert world.deploy(warm_policy="scale_to_zero").status_code == 422
@@ -195,8 +210,8 @@ def test_ap05__a_taken_slot_is_capacity_unavailable_never_an_eviction(world):
     second_op, second = world.deployed()
     world.drive()
     failed = world.op(second_op)
-    assert (failed.state, failed.error.code, failed.error.retryable) == \
-        ("failed", "capacity_unavailable", True)
+    assert failed.state == "failed" and failed.error is not None
+    assert (failed.error.code, failed.error.retryable) == ("capacity_unavailable", True)
     assert world.state(second) == "retired"
     assert world.state(first) == "validating"               # the holder is untouched
     assert world.detail(first)["allocation"]["state"] == "launched"
@@ -315,6 +330,7 @@ def test_ap05__the_box_window_never_runs_two_engines_on_the_gpu(tmp_path):
     (tmp_path / "bin" / "systemctl.is-active.rc").write_text("3")
     done, calls = window(tmp_path, "open", PORT="8100")
     assert done.returncode == 0, done.stderr
+    assert "systemctl stop marlin2b-vllm.service" in calls
     stop = calls.index("systemctl stop marlin2b-vllm.service")
     assert stop < next(i for i, c in enumerate(calls) if c.startswith("install -m 0644"))
     assert calls[-1] == "systemctl daemon-reload"
@@ -327,6 +343,7 @@ def test_ap05__the_box_window_never_runs_two_engines_on_the_gpu(tmp_path):
     assert "systemctl stop infrx-candidate@8100.service" in calls
     assert "docker rm -f marlin2b-8100" in calls
     assert not any("8000" in c for c in calls if c.startswith(("systemctl stop", "docker")))
+    assert "systemctl start marlin2b-vllm.service" in calls
     assert calls.index("docker rm -f marlin2b-8100") < calls.index(
         "systemctl start marlin2b-vllm.service")
     (tmp_path / "bin" / "curl.rc").write_text("7")                 # the engine never answers
@@ -337,6 +354,9 @@ def test_ap05__the_box_window_never_runs_two_engines_on_the_gpu(tmp_path):
 # ===================================================== 05c: install and identity ===
 def test_ap05__the_engine_serves_exactly_the_requested_revision(world):
     operation, deployment = world.deployed()
+    stray = world.target.model_root / f"infrx-hosting-{deployment}"
+    stray.mkdir(parents=True)
+    (stray / "leftover.bin").write_bytes(b"what a crashed install left behind")
     world.drive()
     assert world.op(operation).state == "succeeded"
     identity = world.readiness(deployment)["identity"]
@@ -349,6 +369,7 @@ def test_ap05__the_engine_serves_exactly_the_requested_revision(world):
     assert seen["served_models"] == [PROFILE.served_model_name]
     assert seen["model_dir"].endswith(f"infrx-hosting-{deployment}")
     assert seen["serving_version_id"] == world.serving
+    assert world.detail(deployment)["actions"] == ["smoke", "retire"]
 
 
 def _tamper(world, how: str):
@@ -370,6 +391,7 @@ MISMATCHES = {
     "served_model": lambda w: setattr(w.engine, "models", ["marlin2b-other"]),
     "files.model-00001-of-00002.safetensors": "bytes",
     "files.modeling_marlin.py": "extra",
+    "model_dir": lambda w: setattr(w.launcher, "model_dir", "/opt/elsewhere"),
 }
 
 
@@ -382,7 +404,7 @@ def test_ap05__a_mismatched_identity_never_becomes_ready(fake_world, field):
     operation, deployment = w.deployed()
     w.drive(w.controller(boundary=None if callable(how) else _tamper(w, how)))
     doc = w.op(operation)
-    assert (doc.state, doc.error.code) == ("failed", "identity_mismatch")
+    assert (doc.state, code(doc)) == ("failed", "identity_mismatch")
     identity = w.readiness(deployment)["identity"]
     assert not identity["passed"]
     expected = [field, "weights"] if how == "bytes" else [field]   # the manifest and the pin
@@ -397,13 +419,14 @@ def test_ap05__the_source_must_hold_the_verified_bytes(world):
     operation, deployment = world.deployed()
     world.drive()
     doc = world.op(operation)
-    assert (doc.state, doc.error.code) == ("failed", "artifact_unavailable")
+    assert (doc.state, code(doc)) == ("failed", "artifact_unavailable")
     assert "tokenizer.json" in doc.error.message
     assert world.launcher.starts == [] and world.state(deployment) == "retired"
     (world.target.source_dir / "tokenizer.json").unlink()
     operation, _ = world.deployed()
     world.drive()
-    assert world.op(operation).error.message.endswith("missing:tokenizer.json")
+    missing = world.op(operation).error
+    assert missing is not None and missing.message.endswith("missing:tokenizer.json")
 
 
 def test_ap05__the_profile_is_the_measured_marlin_serving_version():
@@ -473,6 +496,8 @@ SMOKE_FAILURES = {
     "smoke.video": {"prompt_tokens": 20},                 # a text-only answer: no video tokens
     "smoke.finish_reason": {"finish_reason": "abort"},
     "smoke.usage": {"completion_tokens": 0},
+    "smoke.unreachable": {"chat_down": True},             # models answer, the chat does not
+    "smoke.served_model": {"model": "another-model"},
 }
 
 
@@ -485,7 +510,7 @@ def test_ap05__a_failing_smoke_never_promotes(fake_world, field):
     operation = smoked(w, deployment)
     w.drive()
     doc = w.op(operation)
-    assert (doc.state, doc.error.code) == ("failed", "smoke_failed")
+    assert (doc.state, code(doc)) == ("failed", "smoke_failed")
     assert w.state(deployment) == "validating"            # actionable: smoke again or retire
     ready = w.readiness(deployment)
     assert not ready["ready"] and "smoke_failed" in ready["reasons"]
@@ -503,7 +528,7 @@ def test_ap05__an_unreachable_or_swapped_engine_never_promotes(fake_world):
     operation = smoked(w, deployment)
     w.drive()
     doc = w.op(operation)
-    assert (doc.state, doc.error.code) == ("failed", "identity_mismatch")   # not even asked
+    assert (doc.state, code(doc)) == ("failed", "identity_mismatch")   # not even asked
     assert w.engine.seen == [] and w.state(deployment) == "validating"
     w.engine.up = True
     running = w.launcher.running[f"infrx-hosting-{deployment}"]   # swapped since the create
@@ -511,7 +536,7 @@ def test_ap05__an_unreachable_or_swapped_engine_never_promotes(fake_world):
         update={"image": "sha256:" + "9" * 64})
     operation = smoked(w, deployment)
     w.drive()
-    assert w.op(operation).error.code == "identity_mismatch" and w.engine.seen == []
+    assert code(w.op(operation)) == "identity_mismatch" and w.engine.seen == []
     assert w.readiness(deployment)["identity"]["reasons"][0]["field"] == "runtime_image"
 
 
@@ -523,6 +548,7 @@ def test_ap05__a_smoke_needs_a_validating_deployment_with_nothing_running(world)
     key = world.key()
     first = smoked(world, deployment, key)
     assert smoked(world, deployment, key) == first          # the same key while it runs
+    assert world.detail(deployment)["actions"] == ["retire"]   # one smoke at a time
     world.drive()
     late = world.call("POST", f"{DEPLOYMENTS}/{deployment}/smoke", key=world.key())
     assert late.status_code == 409
@@ -542,6 +568,8 @@ def test_ap05__a_controller_stopped_mid_smoke_never_smokes_twice(fake_world, bou
             raise KeyboardInterrupt(name)
     with pytest.raises(KeyboardInterrupt):
         w.drive(w.controller(owner="first", boundary=stop))
+    if boundary == "smoke":         # every check passed, but the revision is not promoted yet
+        assert w.readiness(deployment)["reasons"] == ["state_validating"]
     w.advance(120)
     w.drive(w.controller(owner="second"))
     assert w.op(operation).state == "succeeded" and w.state(deployment) == "ready_private"
@@ -580,6 +608,9 @@ def test_ap05__a_lost_engine_or_a_stale_check_makes_a_ready_deployment_unavailab
     status = world.readiness(deployment)
     assert status["ready"] and status["reasons"] == [] and status["health"]["passed"]
     assert world.detail(deployment)["ready"]
+    assert run(world.hosting.status(deployment)).ready      # AP-06's server-side read
+    with pytest.raises(errors.NotFound):
+        run(world.hosting.status(str(uuid.uuid4())))
     world.advance(200)                                    # no observation for > its TTL
     assert world.readiness(deployment)["reasons"] == ["health_expired"]
     world.drive()                                         # a restarted controller re-observes
@@ -597,6 +628,7 @@ def test_ap05__expired_stuck_and_abandoned_deployments_are_retired(fake_world):
     w = fake_world
     deployment = ready(w)
     w.advance(7201)                                       # its own expire_after_s
+    assert "expired" in w.readiness(deployment)["reasons"]
     w.drive()
     assert w.state(deployment) == "retired" and w.launcher.running == {}
     assert w.detail(deployment)["allocation"]["state"] == "released"
@@ -615,13 +647,20 @@ def test_ap05__an_engine_that_never_answers_or_a_late_operation_fails_terminally
     w.advance(901)
     w.drive()
     doc = w.op(operation)
-    assert (doc.state, doc.error.code) == ("failed", "engine_timeout")
+    assert (doc.state, code(doc)) == ("failed", "engine_timeout")
     assert w.state(deployment) == "retired" and w.launcher.running == {}
     w.engine.up = True
     late, stale = w.deployed()                            # no controller ran for 2 h
     w.advance(7201)
     w.drive()
-    assert w.op(late).error.code == "deadline_exceeded" and w.state(stale) == "retired"
+    assert code(w.op(late)) == "deadline_exceeded" and w.state(stale) == "retired"
+    crashed, gone = w.deployed()                          # vLLM dies while loading
+
+    def crash(name):
+        if name == "launched":
+            w.launcher.running.clear()
+    w.drive(w.controller(boundary=crash))
+    assert code(w.op(crashed)) == "engine_exited" and w.state(gone) == "retired"
 
 
 def test_ap05__retire_waits_for_running_work_and_in_flight_requests(fake_world):
@@ -659,6 +698,19 @@ def test_ap05__retire_waits_for_running_work_and_in_flight_requests(fake_world):
     assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
 
 
+def test_ap05__a_drain_is_bounded(fake_world):
+    w = fake_world
+    deployment = ready(w)
+    retire = w.call("POST", f"{DEPLOYMENTS}/{deployment}/retire", key=w.key()).json()
+    w.engine.running = 1                                  # a request that never finishes
+    controller = w.controller()
+    w.drive(controller)
+    assert w.op(retire["operation_id"]).phase == "drain"
+    w.advance(301)
+    w.drive(controller)
+    assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
+
+
 @pytest.mark.pg
 def test_ap05__a_real_in_flight_request_finishes_before_its_engine_stops(pg_world):
     import threading
@@ -684,6 +736,8 @@ def test_ap05__a_real_in_flight_request_finishes_before_its_engine_stops(pg_worl
     client.join(30)
     assert answer["body"].rstrip().endswith(b"data: [DONE]")    # not cut by the teardown
     assert w.op(retire["operation_id"]).state == "succeeded" and w.launcher.running == {}
+    with pytest.raises(httpx.ConnectError):                    # its process group is gone
+        httpx.get(f"http://127.0.0.1:{ENGINE_PORT}/v1/models", timeout=5)
 
 
 KILLS = (*(("create", b) for b in BOUNDARIES), *(("smoke", b) for b in SMOKE_BOUNDARIES),
@@ -759,3 +813,54 @@ def test_ap05__the_hosting_role_hosts_only_its_configured_slot_on_the_box_launch
     async def connect():
         raise AssertionError("composing connects to nothing")
     assert set(tasks(env, connect, owner="lab-hosting-1")) == {"hosting"}
+
+
+def test_ap05__without_a_target_nothing_is_queued_and_unwired_nothing_mounts(fake_world):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from infrx.gateway.routes import lab_deployments
+    from infrx.lab.hosting import LabHosting
+
+    from .conftest import TestActors, actors
+    w = fake_world
+    bare = FastAPI()
+    lab_deployments.register(bare, types.SimpleNamespace(actors=None))
+    assert not bare.openapi()["paths"]                    # the export documents nothing
+    h = w.hosting
+    app = FastAPI()
+    lab_deployments.register(app, types.SimpleNamespace(
+        actors=TestActors(actors(w.w)), lab_hosting=LabHosting(
+            h.access, h.control, h.artifacts, h.ops, h.store, target=None)))
+    client = TestClient(app)
+    profile = client.get("/lab/v1/hosting-profiles", headers={"x-test-actor": "dev_a"})
+    assert profile.json()["data"][0]["availability"] == {
+        "state": "unavailable", "reason": "no_hosting_target", "verified_at": None}
+    refused = client.post(DEPLOYMENTS, json=w.body(), headers={
+        "x-test-actor": "dev_a", "Idempotency-Key": w.key()})
+    assert refused.status_code == 503 and w.drafts() == 0
+
+
+def test_ap05__a_newer_failed_check_supersedes_an_interrupted_smoke(fake_world):
+    """A smoke stopped after its passing receipts, then the engine changes and a second
+    smoke's identity check fails: the first never promotes on its older receipts."""
+    w = fake_world
+    _, deployment = created(w)
+    first = smoked(w, deployment)
+
+    def stop(name):
+        if name == "smoke":
+            raise KeyboardInterrupt(name)
+    with pytest.raises(KeyboardInterrupt):
+        w.drive(w.controller(owner="first", boundary=stop))
+    tag = f"infrx-hosting-{deployment}"
+    w.launcher.running[tag] = w.launcher.running[tag].model_copy(
+        update={"image": "sha256:" + "7" * 64})
+    second = smoked(w, deployment)
+    w.drive(w.controller(owner="second"))                 # the first's holder is still live
+    assert code(w.op(second)) == "identity_mismatch"
+    w.advance(120)
+    w.drive(w.controller(owner="third"))
+    doc = w.op(first)
+    assert (doc.state, code(doc)) == ("failed", "stale_receipt")
+    assert w.state(deployment) == "validating"

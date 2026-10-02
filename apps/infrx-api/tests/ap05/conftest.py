@@ -123,13 +123,15 @@ class ScriptedEngine:
             return httpx.Response(200, text=f'vllm:num_requests_running{{model_name="m"}} '
                                             f'{self.running}\n')
         if request.url.path == "/v1/chat/completions":
+            if self.answer.get("chat_down"):
+                raise httpx.ConnectError("refused", request=request)
             body = json.loads(request.content)
             self.seen.append(body)
             a = self.answer
             if a["status"] != 200:
                 return httpx.Response(a["status"], json={"error": {"message": "no"}})
             return httpx.Response(200, json={
-                "model": body["model"], "choices": [{"message": {"content": a["content"]},
+                "model": a.get("model", body["model"]), "choices": [{"message": {"content": a["content"]},
                                                      "finish_reason": a["finish_reason"]}],
                 "usage": {"prompt_tokens": a["prompt_tokens"],
                           "completion_tokens": a["completion_tokens"]}})
@@ -145,11 +147,13 @@ class ScriptedLauncher:
         self.stops: list[str] = []
         self.image = PROFILE.runtime_image_ref.partition("@")[2]
         self.flags = PROFILE.flags
+        self.model_dir: str | None = None          # a launch that loads another directory
 
     async def start(self, allocation, model_dir) -> None:
         self.starts.append(allocation.resource_tag)
         self.running[allocation.resource_tag] = Runtime(
-            image=self.image, flags=tuple(self.flags), model_dir=str(model_dir), declared=True)
+            image=self.image, flags=tuple(self.flags), model_dir=self.model_dir or str(model_dir),
+            declared=True)
 
     async def inspect(self, allocation) -> Runtime | None:
         return self.running.get(allocation.resource_tag)

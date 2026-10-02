@@ -99,8 +99,8 @@ class HostingStore(Protocol):
         """Its unfinished operations, oldest first."""
 
     async def allocate(self, hold: Hold, allocation: Allocation) -> Allocation:
-        """Reserve the slot: the deployment's own unreleased allocation if it has one (a
-        resumed controller), `CapacityUnavailable` while another deployment holds the slot."""
+        """Reserve the slot; `CapacityUnavailable` while an unreleased allocation holds it.
+        (The controller allocates only when the deployment holds none.)"""
 
     async def move(self, hold: Hold, allocation_id: str,
                    state: Literal["launched", "released"]) -> Allocation: ...
@@ -184,10 +184,6 @@ class FakeHostingStore:
 
     async def allocate(self, hold, allocation):
         self._fence(hold)
-        for held in self.allocations.values():
-            if held.state != "released" and held.deployment_revision_id \
-                    == allocation.deployment_revision_id:
-                return held
         if any(a.state != "released" and a.slot == allocation.slot
                for a in self.allocations.values()):
             raise errors.CapacityUnavailable(f"slot {allocation.slot} is taken")
@@ -197,21 +193,12 @@ class FakeHostingStore:
     async def move(self, hold, allocation_id, state):
         self._fence(hold)
         a = self.allocations[allocation_id]
-        if a.state == state:
-            return a
-        if (a.state, state) not in (("reserved", "launched"), ("reserved", "released"),
-                                    ("launched", "released")):
-            raise errors.StateConflict(f"allocation {a.state} -> {state}")
         stamp = {"launched_at" if state == "launched" else "released_at": self.now()}
         moved = self.allocations[allocation_id] = a.model_copy(update={"state": state, **stamp})
         return moved
 
     async def record(self, hold, receipt):
-        if hold is None:
-            if receipt.kind != "health":
-                raise errors.InvalidRequest("only a health observation is made outside an "
-                                            "operation")
-        else:
+        if hold is not None:
             self._fence(hold)
         self.receipt_rows.append(receipt)
         return receipt
@@ -328,17 +315,13 @@ class PgHostingStore:
 
     async def allocate(self, hold, allocation):
         a = allocation
-        await self._fenced(hold, "with mine as (select 1 from infrx.hosting_allocations "
-                           "where deployment_revision_id = %s and state <> 'released') "
-                           "insert into infrx.hosting_allocations (allocation_id, "
-                           "deployment_revision_id, slot, port, resource_tag, operation_id, "
-                           "reserved_at) select %s, %s, %s, %s, %s, %s, infrx.now() "
-                           "where not exists (select 1 from mine)",
-                           (a.deployment_revision_id, a.allocation_id, a.deployment_revision_id,
-                            a.slot, a.port, a.resource_tag, a.operation_id))
-        held = await self.allocation(a.deployment_revision_id)
-        assert held is not None and held.state != "released"
-        return held
+        found = await self._fenced(hold, "insert into infrx.hosting_allocations (allocation_id, "
+                                   "deployment_revision_id, slot, port, resource_tag, "
+                                   "operation_id, reserved_at) values (%s, %s, %s, %s, %s, %s, "
+                                   f"infrx.now()) returning {', '.join(Allocation.model_fields)}",
+                                   (a.allocation_id, a.deployment_revision_id, a.slot, a.port,
+                                    a.resource_tag, a.operation_id))
+        return _load(Allocation, found[0])
 
     async def move(self, hold, allocation_id, state):
         stamp = "launched_at" if state == "launched" else "released_at"

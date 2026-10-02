@@ -170,7 +170,7 @@ def latest(receipts: list[Receipt], allocation: Allocation | None) -> dict[str, 
 def gaps(allocation: Allocation | None, found: dict[str, Receipt], now: datetime,
          kinds: tuple[str, ...]) -> list[str]:
     """Why these checks do not hold now for this exact allocation: [] when they all do."""
-    if allocation is None or allocation.state != "launched":
+    if allocation is None:
         return ["not_launched"]
     reasons = []
     for kind in kinds:
@@ -223,7 +223,7 @@ class LabHosting:
         hosting, deployment = await self._mine(actor, deployment_id, C.read_aggregate_health)
         allocation = await self.store.allocation(deployment_id)
         active = await self.store.active(deployment_id)
-        ready = (await self.readiness(actor, deployment_id)).ready
+        ready = (await self.status(deployment_id)).ready
         actions = (("smoke",) if deployment.state is S.validating and not active else ()) + \
             (("retire",) if deployment.state is not S.retired else ())
         return DeploymentDoc(
@@ -236,9 +236,20 @@ class LabHosting:
             expires_at=hosting.expires_at)
 
     async def readiness(self, actor: api.Actor, deployment_id: str) -> ReadinessDoc:
+        """The caller's own deployment's readiness (`status`)."""
+        await self._mine(actor, deployment_id, C.read_aggregate_health)
+        return await self.status(deployment_id)
+
+    async def status(self, deployment_id: str) -> ReadinessDoc:
         """Ready = the revision is `ready_private`, unexpired, and THIS allocation's newest
-        identity, smoke and health checks all passed and are current."""
-        hosting, deployment = await self._mine(actor, deployment_id, C.read_aggregate_health)
+        identity, smoke and health checks all passed and are current. No access check: the
+        server-side read other services take (AP-06's publication gate) - a route asks
+        `readiness`."""
+        hosting = await self.store.hosting(deployment_id)
+        if hosting is None:
+            raise errors.NotFound("no such deployment")
+        deployment = await self.control.store.deployment(deployment_id)
+        assert deployment is not None                  # 0062's foreign key
         allocation = await self.store.allocation(deployment_id)
         now = await self.store.db_now()
         found = latest(await self.store.receipts(deployment_id), allocation)
