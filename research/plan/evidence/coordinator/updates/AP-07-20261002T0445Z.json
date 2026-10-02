@@ -1,0 +1,28 @@
+{
+  "task": "AP-07",
+  "lane": "api-traces-2",
+  "slice": "AP-07 remainder + AP-08's eligible read: eligible done (ap7 stack, 16 mutants); console_data_use on control.R270Route done; suspended-org withdrawal through 0066's door done (FAKE door until 0066 merges); e5l-box variant written, BLOCKED (e5l block not ap7's key)",
+  "activity": "review",
+  "at": "2026-10-02T04:45:00Z",
+  "head": "3e6c26b5",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-traces-2",
+  "branch": "codex/w7-api-traces-2",
+  "owned_paths": ["apps/infrx-api/infrx/traces/eligible.py", "apps/infrx-api/infrx/console/data_use.py", "apps/infrx-api/infrx/gateway/routes/console_data_use.py", "apps/infrx-api/tests/ap07/", "tests/integration/lab_observe/test_ap07_box_variant.py", "research/plan/evidence/w7/api-traces-2-b5d6fec.md", "research/plan/evidence/w7/api-traces-2-WR-AP07B-1.patch", "research/plan/evidence/coordinator/updates/AP-07-20261002T0445Z.json"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 pytest -q tests/ap07/test_eligible.py (before eligible.py)", "exit": 2, "summary": "RED: collection error"},
+    {"cmd": "INFRX_D_TASK=ap7 pytest -q tests/ap07/test_data_use.py -k 'suspended or revocation' (before the door)", "exit": 1, "summary": "RED: 403 != 200"},
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 pytest -q tests/ap07 tests/g/lab_traces tests/g/lab_auth tests/l/access tests/contracts/test_api_wire.py", "exit": 0, "summary": "132 passed, 2 skipped"},
+    {"cmd": "INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_AP7_STACK=1 INFRX_MUTANTS=all pytest -q tests/ap07/test_mutants.py", "exit": 0, "summary": "64/64 mutants killed + 3 guards (67 passed)"},
+    {"cmd": "pytest -m 'not pg' tests/contracts/test_openapi_export.py tests/g/lab_traces tests/j tests/ap08 tests/contracts/test_config_and_imports.py", "exit": 1, "summary": "748 passed; 1 pre-existing failure tests/j test_every_judge_module_is_covered (start.py, api-judge-2's)"},
+    {"cmd": "pytest tests/integration/lab_observe/test_ap07_box_variant.py", "exit": 0, "summary": "1 skipped BLOCKED[e5l stack]"},
+    {"cmd": "pytest tests/integration/lab_observe/test_e5l_runner.py test_mutants.py (WR-AP07B-1 applied, then restored)", "exit": 0, "summary": "30 passed, 1 skipped"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "7 passed"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "458 (baseline 458)"}
+  ],
+  "estimate": {"optimistic_h": 1.5, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium", "basis": "WR-AP07B-1..3 review + the o11 run on the e5l stack (coordinator), delete the 0066 fake at merge, compose eligible into api-judge-2's start job", "at": "2026-10-02T04:45:00Z"},
+  "blockers": ["e5l-box variant (o11): BLOCKED - needs E5L's stack (tasklocal block 57100-57199), outside key ap7; run by the coordinator after WR-AP07B-1"],
+  "wiring_requests": ["WR-AP07B-1 lab_observe runner/test_e5l_runner/mutants: register o11 (patch research/plan/evidence/w7/api-traces-2-WR-AP07B-1.patch)", "WR-AP07B-2 Makefile lab-compositions: test_eligible.py beside test_trace_stack.py + the eligible stack mutants (INFRX_AP7_STACK=1)", "WR-AP07B-3 lab/workers/__main__.py _judge: TraceEligible(connect, retention) into api-judge-2's start job", "at 0066 merge: delete tests/ap07/withdraw_door.sql and the pg_world override in tests/ap07/conftest.py"],
+  "evidence": ["research/plan/evidence/w7/api-traces-2-b5d6fec.md", "research/plan/evidence/w7/api-traces-2-WR-AP07B-1.patch"]
+}
