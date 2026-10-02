@@ -40,11 +40,11 @@
    }
   ]
  },
- "revision": 398,
- "updated": "2026-10-01T23:39:54Z",
+ "revision": 399,
+ "updated": "2026-10-02T00:14:58Z",
  "agent_slots": {
   "total": 16,
-  "active": 12,
+  "active": 11,
   "reserved": 2,
   "note": "Wave 7 batch 1: twelve Opus lanes dispatched 2026-10-01 from cd9f517c (lane-w7.js, fast mode); batch 2 waits on their merges."
  },
@@ -11843,22 +11843,22 @@
   {
    "id": "W7-api-improve",
    "task": "AP-10",
-   "slice": "10a evaluation/pipeline read composition, 10b double-debit root cause (wf_50947c1f-37d)",
+   "slice": "10a evaluation/pipeline read composition, 10b double-debit root cause (wf_50947c1f-37d); merge #85 b6eff188 integrated (10a/10b done; 10c–10e batch 2/3)",
    "agent": "opus",
    "branch": "codex/w7-api-improve",
    "worktree": ".claude/worktrees/codex-w7-api-improve",
    "base": "cd9f517c",
-   "head": null,
+   "head": "5ffa23a5",
    "isolation": {
     "ports": "tasklocal key ap10",
     "prefix": "infrx-ap10-*",
     "db": "infrx_ap10"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-01T23:39:54Z",
-   "updated": "2026-10-01T23:39:54Z",
+   "updated": "2026-10-02T00:14:58Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (fast mode: merge-fast.js)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -11867,7 +11867,9 @@
     "basis": "wave7-plan.md brief estimate (2–8 h slices per implementation.md)",
     "at": "2026-10-01T23:39:54Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-improve-47ab6e9.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/lab/evaluation/",
@@ -15486,6 +15488,12 @@
    "by": "implementation coordinator (session 03)",
    "what": "rev 398: wave 7 batch 1 dispatched — twelve lanes (api-schema, api-contracts, api-identity, api-reads, api-actions, api-artifacts, api-traces, api-judge, api-improve, api-lifecycle, ux-foundations, ux-app) from the keystone base cd9f517c (R270–R271; tasklocal ap0..ap11); briefs in the coordinator scratchpad wave7-plan.md.",
    "source": "research/plan/08-contracts-v1-encoding.md R270–R271; research/plan/consumer-v1/07-post-launch-waves.md LW7"
+  },
+  {
+   "at": "2026-10-02T00:14:58Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 399: merge #85 api-improve (AP-10 10a/10b) integrated; row 27 root-caused as a two-concurrent-case artefact of the w oracle, not a double debit (ruling proposed); SR-AP10-1..3 queued for api-schema; the E6L j09 rerun launched by the coordinator.",
+   "source": "research/plan/evidence/w7/api-improve-47ab6e9.md"
   }
  ],
  "history": {
