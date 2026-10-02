@@ -75,5 +75,5 @@ test("UX09-P03 review: the page keeps its header in every state, offers the data
   assert.match(page, /<input name="dataset" required list="dataset-versions"/);
   assert.match(page, /<DatasetOptions id="dataset-versions" versions=\{versions\} \/>/);
   assert.match(page, /Reviewer \(member user id\)/);
-  assert.match(page, /no member list is read here yet/);
+  assert.match(page, /No member list is read here yet: enter the member&apos;s user id. The service refuses anyone who is not a current member allowed to review./);
 });

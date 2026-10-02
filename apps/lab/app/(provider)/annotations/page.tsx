@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
+import { PageHeader } from "@/components/ui/page-header";
 import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { firstFailure } from "@/lib/services/common";
+import { datasetsPort } from "@/lib/services/datasets/server";
 import { adjudicateSample, assignReviewer, exportLabels, importLabels, reviewLabel } from "@/lib/services/pipelines/actions";
 import { ADAPTERS, holds, isPreview, pipelinesPort } from "@/lib/services/pipelines/port";
 import { exportRows, importRows, labelRows, refusalCopy, REFUSAL_COPY } from "@/lib/services/pipelines/view";
 import { PreviewNote } from "@/components/preview-note";
+import { DatasetOptions } from "../datasets/options";
 
 export const metadata = { title: "Annotations · infrx Lab" };
 
-// P4: label import, review, adjudication and train-only export over P1's records. Every outcome shown
-// is whatever the records say after the redirect back here.
+// P4 + UX-09 (L-09): label import, review, adjudication and train-only export over P1's records. Every
+// outcome shown is whatever the records say after the redirect back here. "Review" is this route's name
+// in the Lab (02-foundations); the dataset field offers the workspace's versions where they can be read.
 export default async function Annotations({ searchParams }: PageProps<"/annotations">) {
   const workspace = await requireProviderWorkspace();
   const query = await searchParams;
@@ -17,18 +21,23 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
   const shape = new RegExp(`^lab:dataset:${workspace.providerId}:[0-9a-f-]{36}@sha256:[0-9a-f]{64}$`);
   const dataset = typeof query.dataset === "string" && shape.test(query.dataset) ? query.dataset : null;
   const port = pipelinesPort();
-  const [imports, exports, labels, disputes] = await Promise.all([
+  const [imports, exports, labels, disputes, versions] = await Promise.all([
     port.imports(workspace), port.exports(workspace),
     dataset === null ? null : port.labels(workspace, dataset), dataset === null ? null : port.disagreements(workspace, dataset),
+    (await datasetsPort()).versions(workspace.providerId),
   ]);
   const failed = firstFailure(imports, exports, labels, disputes);
   return (
     <>
-      <h1>Annotations</h1>
+      <PageHeader
+        title="Review"
+        purpose="Labels on one dataset version: review, adjudicate, import and export them. Imported and model-made labels are provenance, never ground truth."
+      />
       {isPreview() && <PreviewNote records="pipeline" service="pipeline" />}
       {refused && <p role="alert">{refused}</p>}
       <form method="get">
-        <label>Dataset version <input name="dataset" required defaultValue={dataset ?? ""} placeholder="lab:dataset:…@sha256:…" /></label>
+        <label>Dataset version <input name="dataset" required list="dataset-versions" defaultValue={dataset ?? ""} placeholder="lab:dataset:…@sha256:…" /></label>
+        <DatasetOptions id="dataset-versions" versions={versions} />
         <button type="submit">Open</button>
       </form>
       {failed !== null ? (
@@ -93,7 +102,8 @@ export default async function Annotations({ searchParams }: PageProps<"/annotati
                   <h2>Assign a reviewer</h2>
                   <input type="hidden" name="datasetRef" value={dataset} />
                   <label>Sample <input name="sampleId" required /></label>
-                  <label>Reviewer (member id) <input name="reviewerId" required /></label>
+                  <label>Reviewer (member user id) <input name="reviewerId" required /></label>
+                  <p>No member list is read here yet: enter the member&apos;s user id. The service refuses anyone who is not a current member allowed to review.</p>
                   <label>Rubric <input name="rubricRef" required placeholder="lab:rubric:…" /></label>
                   <button type="submit">Assign</button>
                 </form>
