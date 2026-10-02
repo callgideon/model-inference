@@ -60,9 +60,9 @@
 -- rollback: revoke usage on schema infrx from infrx_lab_datasets;
 -- rollback: drop index if exists infrx.jobs_content_unscrubbed_idx;
 -- rollback: create or replace function infrx.journal_bytes_charged() returns bigint language sql stable security definer set search_path = infrx, public, pg_temp as $$ select coalesce(sum(greatest(coalesce(r.amount, 0), j.journal_stored_bytes)), 0)::bigint from infrx.jobs j left join infrx.capacity_reservations r on r.request_id = j.request_id and r.kind = 'journal_bytes' and r.active where r.request_id is not null or j.journal_stored_bytes > 0; $$;
--- (the role itself stays: a role is the cluster's, and with no grant it reaches nothing;
--- the restored check refuses while a `lab_dev_key_revoke` event exists: control events are
--- history, never deleted - roll back only before the first revocation)
+-- (The role itself stays: a role is the cluster's, and with no grant it reaches nothing. The
+-- restored action check refuses while a `lab_dev_key_revoke` event exists - control events are
+-- history, never deleted - so roll back only before the first dev-key revocation.)
 
 -- ================================================================ SR-AP06-1 ===
 alter table infrx.lab_control_events drop constraint if exists lab_control_events_action_check,

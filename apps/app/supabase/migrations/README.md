@@ -32,6 +32,7 @@ R271 allocates the wave-7 numbers by owner; for these files it replaces rule 1's
 | 0065 | the six SECURITY DEFINER identity doors (`infrx.identity_*`, SR-AP01-1) for the Lab control login | api-schema-2, AP-00 00d (batch 2; allocated at merge #87) | always |
 | 0066 | the batch's grants and reads: SR-AP10-1/2/3 (evaluation catalog, experiment run refs, pipeline listings, the control login's route reads), AP-07's revoke-only door, `control_op_cancel` answering a finished operation as it is | api-schema-2, AP-00 00d (batch 2) | always |
 | 0067 | the judge rubric store (SR-AP08-1: `infrx.lab_judge_rubrics`, the operator-only create door, the member list, the worker's run-rubric and calibration reads) + EXECUTE on 0043's `public.lab_judge_runs` for the Lab control login (WR-AP09L-3) | api-judge-2, AP-08 (batch 2; allocated at merge #95) | always |
+| 0068 | the late wave-7 follow-ups (register rows 91 and 94): SR-AP06-1's dev-key listing, one-way revocation and dev-wallet read for the Lab control login; SR-AP10C-1's `infrx_lab_datasets` (the datasets worker's own NOLOGIN role and grant set, WR-LDP-7's shape); the E4C run-2 database findings - the content-scrub sweep's partial index and `journal_bytes_charged()` without the OR-join (same answer) | api-schema-3, AP-00 (batch 3) | always |
 
 A number whose condition does not hold stays unused (no placeholder file).
 

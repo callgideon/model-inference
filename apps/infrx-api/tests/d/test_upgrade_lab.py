@@ -113,12 +113,13 @@ def test_lab_upgrade_preserves_history_money_identity_and_grants() -> None:
     assert kept == before["acl"], "the Lab upgrade changed an existing relation's grants"
     assert {k: v for k, v in after["cols"].items() if k in before["cols"]} == before["cols"]
     changed = {k for k in before["fns"] if after["fns"].get(k) != before["fns"][k]}
-    # (and executes the clock /readyz reads and the price PgCatalogDirectory reads)
-    assert changed == {"infrx.now()", "infrx.usd_price(text)"}, \
-        f"an existing function's grants changed: {changed}"
-    assert all(after["fns"][k] == (before["fns"][k][0][:-1] + ",infrx_lab_control=X/postgres}",
-                                   before["fns"][k][1]) for k in changed), \
-        {k: (before["fns"][k], after["fns"][k]) for k in changed}
+    # (and executes the clock /readyz reads and the price PgCatalogDirectory reads; 0068
+    # SR-AP10C-1: the datasets worker's own role reads the clock too)
+    grantees = {"infrx.now()": ",infrx_lab_control=X/postgres,infrx_lab_datasets=X/postgres}",
+                "infrx.usd_price(text)": ",infrx_lab_control=X/postgres}"}
+    assert changed == set(grantees), f"an existing function's grants changed: {changed}"
+    assert all(after["fns"][k] == (before["fns"][k][0][:-1] + grantees[k], before["fns"][k][1])
+               for k in changed), {k: (before["fns"][k], after["fns"][k]) for k in changed}
     assert conn.execute("select entry_seq from infrx.feedback where feedback_id = 'fb_pre_lab'"
                         ).fetchone()[0] is not None                              # 0028
     pgharness.apply(DB, lab)

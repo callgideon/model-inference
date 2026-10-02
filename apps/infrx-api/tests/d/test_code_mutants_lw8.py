@@ -53,7 +53,9 @@ GRANTED = frozenset({
     # SR-AP10-3 (0066, api-schema-2, R251): the evaluation and pipeline route reads on the unit
     "lab_put_experiment", "lab_checkpoint_listing", "lab_list_datasets", "lab_evaluator",
     "lab_checkpoint_subscribe", "lab_checkpoint_decisions", "lab_eval_catalog",
-    "lab_external_runs_of", "lab_checkpoint_receipts_of"})
+    "lab_external_runs_of", "lab_checkpoint_receipts_of",
+    # SR-AP06-1 (0068, api-schema-3): the dev-credential listing, revocation and wallet read
+    "lab_control_dev_keys", "lab_control_revoke_dev_key", "lab_control_dev_wallet"})
 #: One worker-only claim: an import job is claimed by the I5 datasets pool, never a route.
 WORKER_CLAIM = "lab_import_job_claim"
 
