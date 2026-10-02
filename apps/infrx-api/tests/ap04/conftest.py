@@ -264,6 +264,8 @@ def pg_template():
     pgharness.ensure()
     pgharness.recreate(TEMPLATE)
     pgharness.apply(TEMPLATE, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    if pgharness.ON_SUPABASE:           # `postgres` is no superuser there: the login needs it
+        pgharness._sb(TEMPLATE, f"grant {LOGIN} to postgres with set true")
     with pgharness.connect(TEMPLATE) as conn:
         l3.seed_pg(conn, pgharness.dsn(TEMPLATE))
     return TEMPLATE
