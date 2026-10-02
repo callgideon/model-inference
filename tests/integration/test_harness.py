@@ -286,10 +286,13 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0057_trace_consent_read.sql",
     "0058_lab_variant_identities.sql",
     "0059_lab_control_grants_2.sql",
-    # Wave 7 (LOCAL-ONLY, R271): api-schema 0060, api-artifacts 0061 (merge #89), api-judge 0064
+    # Wave 7 (LOCAL-ONLY, R271): api-schema 0060, api-artifacts 0061 (merge #89), api-judge 0064,
+    # api-schema-2 0065 (SR-AP01-1) and 0066 (the batch's grants and reads)
     "0060_control_operations.sql",
     "0061_model_projects_artifacts.sql",
     "0064_judge_api.sql",
+    "0065_identity_functions.sql",
+    "0066_wave7_grants_and_reads.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
