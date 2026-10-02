@@ -105,7 +105,7 @@ const MUTANTS = [
   m("OP-X35", "a conflict is a generic refusal", WIZARD, "if (status === 409)", "if (status === 499)", [C.w04]),
   m("OP-X36", "a query value overrides the actor's workspace", API, "query: { ...(init.query ?? {}), provider_org_id: actor.providerId }", "query: { provider_org_id: actor.providerId, ...(init.query ?? {}) }", [C.w05]),
   m("OP-X37", "the port is built without a Lab config", API, "if (config === null) return null;", "if (false) return null;", [C.w05]),
-  m("OP-X38", "the port declares an operation the API does not have", API, '"/lab/v1/artifacts/{artifact_id}": { get: Get<Artifact> };', '"/lab/v1/artifacts/{artifact_id}": { get: Get<Artifact>; post: Get<Artifact> };', [C.w06]),
+  m("OP-X38", "the wizard calls an operation the API does not have", NEW_PAGE, '"get", "/lab/v1/artifacts/{artifact_id}"', '"post", "/lab/v1/artifacts/{artifact_id}"', [C.w06]),
   m("OP-X39", "the wizard's actions skip the role check", NEW_ACTIONS, '  if (!holds(w.role, "manage_dev_deployment")) return refuse("Your role in this workspace does not allow that.");\n  if (!UUID_RE', "  if (!UUID_RE", [C.a04, C.a06, C.a07, C.j01]),
   m("OP-X40", "a stale form's key is accepted", NEW_ACTIONS, "if (!UUID_RE.test(key)) return refuse(", "if (false) return refuse(", [C.a04, C.a06]),
   m("OP-X41", "the secret reference is echoed back", NEW_ACTIONS, 'const values = read(data, ["host", "repo", "commit", "manifest"]);', 'const values = read(data, ["host", "repo", "commit", "manifest", "secretRef"]);', [C.a05]),

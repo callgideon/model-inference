@@ -214,6 +214,7 @@ lab-mutants:
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
 	cd apps/lab && node tests/ux/run-mutants.mjs && node tests/ux/improve/run-mutants.mjs
+	cd apps/lab && node tests/ux/operate/run-mutants.mjs
 	cd apps/lab && node tests/ux/requests/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
 

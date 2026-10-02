@@ -87,11 +87,12 @@ test("OP-W05 every call is the actor's workspace with the session's own token, n
 
 test("OP-W06 the port's paths, methods and the fields the wizard reads exist in the checked OpenAPI artifact", () => {
   // The real checkout's artifact, also from a mutant runner's copy (its node_modules links the real Lab).
-  const doc = JSON.parse(readFileSync(join(realpathSync(join(LAB, "node_modules")), "../../infrx-api/openapi/consumer.json"), "utf8"));
-  const source = readFileSync(join(LAB, "app/(provider)/models/new/api.ts"), "utf8");
-  const declared = [...source.matchAll(/^  "(\/lab\/v1\/[^"]+)": \{([^\n]*(?:\n    [^\n]*)*)/gm)].map((m) => [m[1], [...m[2].matchAll(/\b(get|post):/g)].map((x) => x[1])] as const);
-  assert.equal(declared.length, 8);
-  for (const [path, methods] of declared) for (const method of methods) assert.ok(doc.paths[path]?.[method], `${method} ${path} is not in consumer.json`);
+  // WR-UX03-2: the port's operations are the generated Lab client's (lab-control.json); every call the wizard makes is one.
+  const doc = JSON.parse(readFileSync(join(realpathSync(join(LAB, "node_modules")), "../../infrx-api/openapi/lab-control.json"), "utf8"));
+  const source = ["actions.ts", "page.tsx"].map((f) => readFileSync(join(LAB, "app/(provider)/models/new", f), "utf8")).join("\n");
+  const calls = [...source.matchAll(/\.call\(\w+, "(get|post)", "(\/lab\/v1\/[^"]+)"/g)].map((m) => [m[1], m[2]] as const);
+  assert.equal(calls.length, 10);
+  for (const [method, path] of calls) assert.ok(doc.paths[path]?.[method], `${method} ${path} is not in lab-control.json`);
   const props = (name: string) => Object.keys(doc.components.schemas[name].properties);
   const READS: Record<string, string[]> = {
     Project: ["project_id", "slug", "name", "description", "created_at"],

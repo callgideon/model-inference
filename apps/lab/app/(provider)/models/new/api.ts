@@ -2,20 +2,13 @@
 // /lab/v1/operations/{id}) over the generated clients' transport (@infrx/api-client/transport): the
 // signed-in user's own session token, the actor's workspace as `provider_org_id`, no-store, an
 // Idempotency-Key on every mutation, R270 errors typed. Server-only; the Lab holds no key.
-//
-// ponytail: `ArtifactPaths` restates the AP-04 operations of apps/infrx-api/openapi/consumer.json (the
-// gateway composition) because the Lab client (@infrx/api-client/lab, generated from lab-control.json)
-// does not carry them until AP-04 mounts on the Lab unit (WR-UX03-2); then this becomes
-// `import type { paths } from "@infrx/api-client/lab"`. tests/ux/operate/api.test.ts pins it to the artifact.
-import { createClient, type CallInit, type Result } from "@infrx/api-client/transport";
+// The operations are the generated Lab client's (apps/infrx-api/openapi/lab-control.json, WR-UX03-2);
+// the document types below are the fields the wizard reads (tests/ux/operate/wizard.test.ts OP-W06).
+import type { paths as ArtifactPaths } from "@infrx/api-client/lab";
+import { createClient, type CallInit, type BodyOf, type Result, type Success } from "@infrx/api-client/transport";
 import type { Actor } from "@/lib/auth/access";
 import { labConfig } from "@/lib/auth/config";
 import { sessionToken } from "@/lib/auth/session";
-
-type Json<T> = { content: { "application/json": T } };
-type Query = { provider_org_id?: string; limit?: number; cursor?: string };
-type Get<R> = { parameters: { query?: Query }; responses: { 200: Json<R> } };
-type Post<B, R, S extends 200 | 201 | 202 = 201> = { parameters: { query?: Query }; requestBody: Json<B>; responses: { [K in S]: Json<R> } };
 
 export type FileEntry = { relative_path: string; bytes: number; sha256: string; media_type: string };
 export type FieldError = { field: string; code: string; message: string };
@@ -35,29 +28,15 @@ export type RevisionDoc = {
   serving_version_id: string; project_id: string; artifact_id: string; public_model_id: string; revision_label: string;
   model_revision: string; created_at: string;
 };
-type Page<T> = { data: T[]; next_cursor: string | null };
-type Card = { summary?: string; license?: string; task?: string };
-
-export type ArtifactPaths = {
-  "/lab/v1/control/model-projects": { get: Get<Page<Project>>; post: Post<{ name: string; slug: string; description?: string }, Project> };
-  "/lab/v1/control/model-projects/{project_id}/revisions": {
-    get: Get<Page<RevisionDoc>>;
-    post: Post<{ artifact_id: string; prompt_harness_ref?: string; preprocessor_profile_version?: string }, RevisionDoc>;
-  };
-  "/lab/v1/artifacts/uploads": { post: Post<{ project_id: string; files: FileEntry[]; card?: Card }, Upload> };
-  "/lab/v1/artifacts/uploads/{upload_id}/parts": { post: Post<{ relative_path: string }, PartGrant, 200> };
-  "/lab/v1/artifacts/uploads/{upload_id}/complete": { post: Post<{ manifest_sha256: string }, OperationDoc, 202> };
-  "/lab/v1/artifacts/imports": {
-    post: Post<{ project_id: string; source: { host: string; repo: string; commit: string }; secret_ref?: string | null; files: FileEntry[]; card?: Card }, OperationDoc, 202>;
-  };
-  "/lab/v1/artifacts/{artifact_id}": { get: Get<Artifact> };
-  "/lab/v1/operations/{operation_id}": { get: Get<OperationDoc> };
-};
 
 type Paths = keyof ArtifactPaths;
 type Method<P extends Paths> = keyof ArtifactPaths[P] & ("get" | "post");
-type Answer<P extends Paths, M extends Method<P>> = ArtifactPaths[P][M] extends { responses: infer R } ? R[keyof R] extends Json<infer T> ? T : never : never;
-type Init<P extends Paths, M extends Method<P>> = CallInit<ArtifactPaths[P][M]>;
+type Answer<P extends Paths, M extends Method<P>> = Success<ArtifactPaths[P][M]>;
+// openapi-typescript 7 marks a request field the API defaults as required: these AP-04 request fields have
+// server defaults in lab-control.json, so the wizard may leave them out.
+type Defaulted = "card" | "prompt_harness_ref" | "preprocessor_profile_version" | "profile";
+type Body<B> = Omit<B, Defaulted> & Partial<Pick<B, Extract<keyof B, Defaulted>>>;
+type Init<P extends Paths, M extends Method<P>> = Omit<CallInit<ArtifactPaths[P][M]>, "body"> & { body?: Body<BodyOf<ArtifactPaths[P][M]>> };
 
 export type ArtifactPort = {
   call<P extends Paths, M extends Method<P>>(actor: Pick<Actor, "providerId">, method: M, path: P, init?: Init<P, M>): Promise<Result<Answer<P, M>>>;
