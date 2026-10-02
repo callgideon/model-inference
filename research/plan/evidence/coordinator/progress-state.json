@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "98e9af2c (= claude/consumer-v1 tip)",
- "integration_head": "98e9af2c",
+ "main": "49114933 (= claude/consumer-v1 tip)",
+ "integration_head": "49114933",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,8 +40,8 @@
    }
   ]
  },
- "revision": 407,
- "updated": "2026-10-02T05:12:28Z",
+ "revision": 409,
+ "updated": "2026-10-02T09:10:26Z",
  "agent_slots": {
   "total": 18,
   "active": 0,
@@ -12021,7 +12021,7 @@
   {
    "id": "W7-api-schema-2",
    "task": "AP-00",
-   "slice": "00d remainder: 0065 identity functions, 0066 grants/reads, migration pins 0060..0066, whole-set re-proof (wf_5a392dad-a53)",
+   "slice": "00d remainder: 0065 identity functions, 0066 grants/reads, migration pins 0060..0066, whole-set re-proof (wf_5a392dad-a53); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-schema-2",
    "worktree": ".claude/worktrees/codex-w7-api-schema-2",
@@ -12032,11 +12032,11 @@
     "prefix": "infrx-ap0-*",
     "db": "infrx_ap0"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 5,
     "likely_h": 8,
@@ -12062,7 +12062,7 @@
   {
    "id": "W7-api-hosting",
    "task": "AP-05",
-   "slice": "05a–05e on the fake engine; migration 0062; infra/lab/hosting procedure (wf_07e7f796-998)",
+   "slice": "05a–05e on the fake engine; migration 0062; infra/lab/hosting procedure (wf_07e7f796-998); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-hosting",
    "worktree": ".claude/worktrees/codex-w7-api-hosting",
@@ -12073,11 +12073,11 @@
     "prefix": "infrx-ap5-*",
     "db": "infrx_ap5"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 10,
     "likely_h": 16,
@@ -12144,7 +12144,7 @@
   {
    "id": "W7-api-identity-2",
    "task": "AP-01",
-   "slice": "PgIdentity over 0065, Idempotency-Key on 0060, Lab-unit mount wiring, CAPTCHA availability (wf_a90e3cc3-55a)",
+   "slice": "PgIdentity over 0065, Idempotency-Key on 0060, Lab-unit mount wiring, CAPTCHA availability (wf_a90e3cc3-55a); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-identity-2",
    "worktree": ".claude/worktrees/codex-w7-api-identity-2",
@@ -12155,11 +12155,11 @@
     "prefix": "infrx-ap1-*",
     "db": "infrx_ap1"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -12222,7 +12222,7 @@
   {
    "id": "W7-api-traces-2",
    "task": "AP-07",
-   "slice": "W4 box variant, EnvelopeRoute→R270Route, eligible read for AP-08, suspended-org revocation (wf_c44b7a95-5a5)",
+   "slice": "W4 box variant, EnvelopeRoute→R270Route, eligible read for AP-08, suspended-org revocation (wf_c44b7a95-5a5); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-traces-2",
    "worktree": ".claude/worktrees/codex-w7-api-traces-2",
@@ -12233,11 +12233,11 @@
     "prefix": "infrx-ap7-*",
     "db": "infrx_ap7"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -12262,7 +12262,7 @@
   {
    "id": "W7-api-judge-2",
    "task": "AP-08",
-   "slice": "worker start job, rubric versioning + SOP v2 skeleton, calibration gold-set tooling; live BLOCKED P-10 (wf_926aba52-4e1)",
+   "slice": "worker start job, rubric versioning + SOP v2 skeleton, calibration gold-set tooling; live BLOCKED P-10 (wf_926aba52-4e1); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-judge-2",
    "worktree": ".claude/worktrees/codex-w7-api-judge-2",
@@ -12273,11 +12273,11 @@
     "prefix": "infrx-ap8-*",
     "db": "infrx_ap8"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -12340,7 +12340,7 @@
   {
    "id": "W7-api-frontends-app",
    "task": "AP-09",
-   "slice": "09a/09b/09e the App: generated clients, admin client deleted, boundary test, CAPTCHA form half (wf_fc280031-4a4)",
+   "slice": "09a/09b/09e the App: generated clients, admin client deleted, boundary test, CAPTCHA form half (wf_fc280031-4a4); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-frontends-app",
    "worktree": ".claude/worktrees/codex-w7-api-frontends-app",
@@ -12351,11 +12351,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 10,
     "likely_h": 16,
@@ -12386,7 +12386,7 @@
   {
    "id": "W7-api-frontends-lab",
    "task": "AP-09",
-   "slice": "09c/09e the Lab: memberships/judge/review via the client, boundary test, row 76 URLs (wf_90eae2a9-849)",
+   "slice": "09c/09e the Lab: memberships/judge/review via the client, boundary test, row 76 URLs (wf_90eae2a9-849); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-frontends-lab",
    "worktree": ".claude/worktrees/codex-w7-api-frontends-lab",
@@ -12397,11 +12397,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -12427,7 +12427,7 @@
   {
    "id": "W7-ux-lab-operate",
    "task": "UX-03",
-   "slice": "L-01–L-04/L-06 + the Add model wizard (09d) (wf_5e6871f7-93a)",
+   "slice": "L-01–L-04/L-06 + the Add model wizard (09d) (wf_5e6871f7-93a); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-ux-lab-operate",
    "worktree": ".claude/worktrees/codex-w7-ux-lab-operate",
@@ -12438,11 +12438,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -12505,7 +12505,7 @@
   {
    "id": "W7-ux-app-2",
    "task": "UX-07",
-   "slice": "usage/credits/privacy presentation + WR-UXF-4/5 (wf_f65e2213-fe9)",
+   "slice": "usage/credits/privacy presentation + WR-UXF-4/5 (wf_f65e2213-fe9); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-ux-app-2",
    "worktree": ".claude/worktrees/codex-w7-ux-app-2",
@@ -12516,11 +12516,11 @@
     "prefix": "-",
     "db": "-"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -12622,7 +12622,7 @@
   {
    "id": "W7-api-lifecycle-2",
    "task": "AP-11",
-   "slice": "11c isolated: stages 02–03, 12–17 live on the merged APIs; 04–07 BLOCKED on AP-05/06 (wf_ac877886-d7e)",
+   "slice": "11c isolated: stages 02–03, 12–17 live on the merged APIs; 04–07 BLOCKED on AP-05/06 (wf_ac877886-d7e); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-api-lifecycle-2",
    "worktree": ".claude/worktrees/codex-w7-api-lifecycle-2",
@@ -12633,11 +12633,11 @@
     "prefix": "infrx-ap11-*",
     "db": "infrx_ap11"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 6,
     "likely_h": 10,
@@ -12697,7 +12697,7 @@
   {
    "id": "W7-lab-e2e-fix",
    "task": "UX-11",
-   "slice": "register row 90: the Lab e2e gate (lab-e2e on l4) back to green on the merged tree — harness fakes for AP-10's port shapes, E2E-E under SR-AP10-1 as an honest NOT RUN, E2E-R04 conflict root cause, WR-AP10C-3 (N4-J01) (batch 2 addition)",
+   "slice": "register row 90: the Lab e2e gate (lab-e2e on l4) back to green on the merged tree — harness fakes for AP-10's port shapes, E2E-E under SR-AP10-1 as an honest NOT RUN, E2E-R04 conflict root cause, WR-AP10C-3 (N4-J01) (batch 2 addition); merges #94–#97 integrated (49114933)",
    "agent": "opus",
    "branch": "codex/w7-lab-e2e-fix",
    "worktree": ".claude/worktrees/codex-w7-lab-e2e-fix",
@@ -12708,11 +12708,11 @@
     "prefix": "infrx-l4-*",
     "db": "infrx_l4"
    },
-   "activity": "integration",
+   "activity": "complete",
    "started": "2026-10-02T04:04:03Z",
-   "updated": "2026-10-02T05:12:28Z",
+   "updated": "2026-10-02T08:28:26Z",
    "blocker": null,
-   "next_action": "merge #93 (chained)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -12729,6 +12729,267 @@
     "apps/lab/tests/e2e/",
     "apps/lab/tests/n/journey.test.ts",
     "apps/lab/tests/n/backend.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-lifecycle-3",
+   "task": "AP-11",
+   "slice": "11c close-out (row 97: the artifacts role in the isolated world; reviewed-rubric choice), 11d live prerequisites BLOCKED[P-10], 11e hosted dry plan (wf_afab4f49-327) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-api-lifecycle-3",
+   "worktree": ".claude/worktrees/codex-w7-api-lifecycle-3",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap11",
+    "prefix": "infrx-ap11-*",
+    "db": "infrx_ap11"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "tests/integration/api_lifecycle/",
+    "research/plan/api-lifecycle/verification.md (stage table)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-improve-3",
+   "task": "AP-10",
+   "slice": "10d SOP benchmark harness + report (quality BLOCKED[P-07]); 10e external training/checkpoint/release evidence; WR-AP10C-4 route (row 92) (wf_d9738651-4e3) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-api-improve-3",
+   "worktree": ".claude/worktrees/codex-w7-api-improve-3",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap10",
+    "prefix": "infrx-ap10-*",
+    "db": "infrx_ap10"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 5,
+    "likely_h": 9,
+    "pessimistic_h": 16,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/lab/evaluation/",
+    "infrx/lab/pipelines/",
+    "infrx/lab/datasets/",
+    "infrx/lab/improve/",
+    "infrx/gateway/routes/lab_datasets.py (from-traces route)",
+    "tests/ap10/",
+    "tests/integration/lab_evaluate/",
+    "tests/integration/lab_improve/",
+    "models/marlin2b/sop/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-schema-3",
+   "task": "AP-00",
+   "slice": "0068 LOCAL-ONLY: SR-AP06-1, SR-AP10C-1, artifacts-role grants, the E4C scrub-sweep index + journal_bytes_charged() rewrite; 0060–0068 re-proof on both images (wf_f1c0ae43-0fa) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-api-schema-3",
+   "worktree": ".claude/worktrees/codex-w7-api-schema-3",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap0",
+    "prefix": "infrx-ap0-*",
+    "db": "infrx_ap0"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/app/supabase/migrations/0068_*.sql",
+    "apps/app/supabase/migrations/README.md",
+    "tests/d/",
+    "the migration pins (tests/i, tests/integration/test_harness.py)"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-api-probe",
+   "task": "AP-02",
+   "slice": "E4C run 2 code half (rows 94/95): cheap journal readiness, pool/probe bounds review, 75-pg-activity-sampler.sh, the protocol note on the overload client (wf_b15aa01a-8ac) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-api-probe",
+   "worktree": ".claude/worktrees/codex-w7-api-probe",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key ap2",
+    "prefix": "infrx-ap2-*",
+    "db": "infrx_ap2"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "infrx/state/journal.py",
+    "infrx/gateway/readiness.py",
+    "tests/g/test_readiness.py",
+    "infra/rollout/steps/75-pg-activity-sampler.sh",
+    "tests/i/test_rollout.py"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-ux-lab-releases",
+   "task": "UX-10",
+   "slice": "release and optimization evidence on AP-06/AP-05 through the generated client (wf_732132a8-387) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-ux-lab-releases",
+   "worktree": ".claude/worktrees/codex-w7-ux-lab-releases",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key none",
+    "prefix": "none",
+    "db": "none"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 4,
+    "likely_h": 7,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/app/(provider)/releases/",
+    "apps/lab/lib/services/releases/",
+    "apps/lab/tests/ux/releases/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-lab-judge-runs",
+   "task": "UX-08",
+   "slice": "row 98: runs.ts onto the judge-runs route; idempotency_key/config_id on the judge forms (wf_ecf5a1fc-7ad) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-lab-judge-runs",
+   "worktree": ".claude/worktrees/codex-w7-lab-judge-runs",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key none",
+    "prefix": "none",
+    "db": "none"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/lib/services/judge/runs.ts",
+    "apps/lab/app/(provider)/evaluations/judge/ (forms)",
+    "apps/lab/tests/ux/evaluations/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-ux-verify-final",
+   "task": "UX-11",
+   "slice": "final acceptance: T01–T13 on the merged tree, lab-e2e (l4), the lab-v1m stack test (t2i), the accessibility pass, the report (wf_ee9e62f0-dfe) (batch 3)",
+   "agent": "opus",
+   "branch": "codex/w7-ux-verify-final",
+   "worktree": ".claude/worktrees/codex-w7-ux-verify-final",
+   "base": "49114933",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key l4 t2i",
+    "prefix": "infrx-l4-*",
+    "db": "infrx_l4"
+   },
+   "activity": "running",
+   "started": "2026-10-02T09:10:26Z",
+   "updated": "2026-10-02T09:10:26Z",
+   "blocker": null,
+   "next_action": "handback → coordinator merge (merge-fast.js; next n=98)",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "batch-3 brief",
+    "at": "2026-10-02T09:10:26Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/tests/ux/matrix/",
+    "apps/app/tests/ux/matrix/",
+    "research/design/v1/acceptance/",
+    "apps/lab/tests/e2e/ (journeys)"
    ],
    "wiring_requests": []
   }
@@ -16278,6 +16539,212 @@
    "by": "implementation coordinator (session 03)",
    "what": "rev 407: merge #92 (five lanes) integrated at 98e9af2c; every batch-2 lane handed back (17 + lab-e2e-fix); eleven queue for merge #93. 0067 allocated for the late schema requests (SR-AP08-1 rubrics, SR-AP06-1 dev-key doors, SR-AP10C-1 datasets grants).",
    "source": "research/plan/evidence/w7/"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "event": "merges #94–#97 integrated onto claude/consumer-v1 at 49114933: api-schema-2, api-hosting, api-identity-2, api-traces-2, api-judge-2, api-frontends-app, api-frontends-lab, ux-lab-operate, ux-app-2, api-lifecycle-2, lab-e2e-fix; chains 93/95/96 each broke once on a pre-existing or baseline red fixed forward (tests/j coverage guard; x-infrx-no-body on the body-less AP-05 routes; the data-use web door R272); the AP-11 isolated gate FAIL on stages 02/14 is api-lifecycle-3's"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-10-20261002T0004Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-00-20261002T0028Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-07-20261002T0030Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-11-20261002T0030Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-02-20261002T0031Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-00-20261002T0032Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-03-20261002T0036Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-04-20261002T0038Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-01-20261002T0040Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-00-20261002T0045Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-01-20261002T0045Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-02-20261002T0045Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-08-20261002T0100Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-04-20261002T0101Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-11-20261002T0330Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-08-20261002T0334Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-05-20261002T0340Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-10-20261002T0355Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-06-20261002T0405Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-04-20261002T0415Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-06-20261002T0417Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-09-20261002T0417Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-01-20261002T0426Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-07-20261002T0427Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate at: timestamp '2026-10-02' has no UTC offset",
+   "source": "updates/AP-09-20261002T0430Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-03-20261002T0434Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-11-20261002T0437Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-08-20261002T0441Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-07-20261002T0445Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-00-20261002T0456Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-09-20261002T0501Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-05-20261002T0502Z.json"
+  },
+  {
+   "at": "2026-10-02T08:28:26Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-11-20261002T0700Z.json"
+  },
+  {
+   "at": "2026-10-02T09:10:26Z",
+   "event": "batch 3 dispatched from 49114933: api-lifecycle-3, api-improve-3, api-schema-3, api-probe, ux-lab-releases, lab-judge-runs, ux-verify-final (seven Opus lanes); operator decision: hosted compute Medium now, Large after the v1 launch"
   }
  ],
  "history": {
@@ -18325,10 +18792,175 @@
    "status": "rejected",
    "at": "2026-10-01T12:00:00Z",
    "reason": "unknown task ID 'W6-api-L4'"
+  },
+  "AP-10-20261002T0004Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:04:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-00-20261002T0028Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:28:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-07-20261002T0030Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:30:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-11-20261002T0030Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:30:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-02-20261002T0031Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:31:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-00-20261002T0032Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:32:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-03-20261002T0036Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:36:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-04-20261002T0038Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:38:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-01-20261002T0040Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:40:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-00-20261002T0045Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:45:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-01-20261002T0045Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:45:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-02-20261002T0045Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T00:45:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-08-20261002T0100Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T01:00:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-04-20261002T0101Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T01:01:23Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-11-20261002T0330Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T03:30:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-08-20261002T0334Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T03:34:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-05-20261002T0340Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T03:40:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-10-20261002T0355Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T03:55:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-06-20261002T0405Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:05:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-04-20261002T0415Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:15:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-06-20261002T0417Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:17:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-09-20261002T0417Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:17:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-01-20261002T0426Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:26:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-07-20261002T0427Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:27:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-09-20261002T0430Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:30:00Z",
+   "reason": "malformed: estimate at: timestamp '2026-10-02' has no UTC offset"
+  },
+  "UX-03-20261002T0434Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:34:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-11-20261002T0437Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:37:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-08-20261002T0441Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:41:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-07-20261002T0445Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:45:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-00-20261002T0456Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T04:56:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-09-20261002T0501Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T05:01:54Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-05-20261002T0502Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T05:02:58Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-11-20261002T0700Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T07:00:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
   }
  },
  "eta": {
-  "computed_at": "2026-10-01T20:41:39Z",
+  "computed_at": "2026-10-02T08:28:26Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,

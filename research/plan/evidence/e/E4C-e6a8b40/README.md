@@ -47,3 +47,5 @@ Classification (corrected 07:20Z, `pg-diag4.log`, `pg-diag5.log`): a **platform 
 
 - 2026-10-02T07:20Z: classification corrected after the statistics epoch (2026-08-25) and the EXPLAINs: the sequential scans are not a hot path; the hosted compute class is the leading cause; `pg-diag4.log`/`pg-diag5.log` added.
 - 2026-10-02T06:52Z: written by the coordinator from report.json, the window logs and four read-only box diagnosis steps (`infra/rollout/ssm.sh` with scratchpad scripts, command ids in the logs); secrets scan of the copied files clean; no box, hosted-database or AWS state changed.
+- 2026-10-02T09:08Z: operator decision — hosted compute to Medium now, Large after the v1 launch is tested in production; the dashboard reads (CPU/credit graphs, Query Performance) remain requested for the record.
+
