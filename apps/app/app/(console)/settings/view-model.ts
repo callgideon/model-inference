@@ -1,9 +1,10 @@
 /**
- * U2: the Settings page. v1 has no mutable consumer setting: consumer trace capture is off (P-09),
- * `api_keys.trace_mode` is not browser-writable and C3A exposes no settings write. So every privacy
- * row is a fact with its availability stated, never a control that could look saved. Retention
- * periods are the published record's and are read on Docs (A3), not restated here where they could
- * drift from it.
+ * U2: the Settings page's facts. Every privacy row is a fact with its availability stated, never a
+ * control. The one mutable setting - per-key trace capture and the withdrawal of a provider grant -
+ * is C-07's data-use section (`data-use.tsx`), shown from the API's record and only when it answers;
+ * these facts hold whatever that record says (capture is off until the owner turns it on for a key,
+ * D3; signup grants nothing). Retention periods are the published record's and are read on Docs
+ * (A3), not restated here where they could drift from it.
  *
  * Imported by `node --test`: relative `.ts` imports only (R48). Server-only: the type import below
  * keeps it out of client components (tests/c/client-boundary.test.ts).
@@ -12,7 +13,7 @@ import type { ConsumerContext } from "../../../lib/services/console.ts";
 
 export type PrivacyRow = {
   title: string;
-  status: "Off" | "Not offered" | "Not available" | "Stored for limited periods";
+  status: "Off unless you turn it on" | "Off unless you grant it" | "Not available" | "Stored for limited periods";
   detail: string;
   href: string | null;
 };
@@ -37,16 +38,16 @@ const PRIVACY: PrivacyRow[] = [
   },
   {
     title: "Trace capture",
-    status: "Off",
+    status: "Off unless you turn it on",
     detail:
-      "Optional trace capture is off for consumer accounts and cannot be turned on yet. It does not change what we store to run a request (above).",
+      "Optional trace capture records a key's requests only after the account owner turns it on for that key below. It does not change what we store to run a request (above).",
     href: null,
   },
   {
     title: "Sharing, annotation, evaluation and training",
-    status: "Not offered",
+    status: "Off unless you grant it",
     detail:
-      "We do not share your request content or use it for annotation, evaluation or training. Signing up grants no permission for any of these, and there is no setting that grants one.",
+      "We do not share your request content or use it for annotation, evaluation or training unless the account owner grants it to a named provider. Signing up grants no permission for any of these, and the console does not create one; any grant you made is listed below, where you can withdraw it.",
     href: null,
   },
   {
