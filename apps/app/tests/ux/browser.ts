@@ -36,6 +36,7 @@ export async function harness(): Promise<Harness> {
       ...process.env,
       NODE_ENV: "development",
       NEXT_TELEMETRY_DISABLED: "1",
+      INFRX_UX_APP_DIR: app,
       // Synthetic and unreachable: the App's instrumentation requires them; nothing here calls them.
       NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:9",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "synthetic-fixture",
