@@ -207,7 +207,7 @@ lab-mutants:
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
-	cd apps/lab && node tests/ux/run-mutants.mjs
+	cd apps/lab && node tests/ux/run-mutants.mjs && node tests/ux/improve/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).

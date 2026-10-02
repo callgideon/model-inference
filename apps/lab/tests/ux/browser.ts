@@ -66,11 +66,11 @@ function freePort(): Promise<number> {
 
 export type Harness = { url: string; browser: Browser; stop: () => Promise<void> };
 
-/** `next dev` on the harness project and one headless Chromium; `stop` ends both. */
-export async function harness(): Promise<Harness> {
+/** `next dev` on a harness project (UX-00's by default) and one headless Chromium; `stop` ends both. */
+export async function harness(dir = resolve(import.meta.dirname, "harness")): Promise<Harness> {
   const port = await freePort();
   const next = resolve(lab, "node_modules/next/dist/bin/next");
-  const server: ChildProcess = spawn(process.execPath, [next, "dev", resolve(import.meta.dirname, "harness"), "-H", "127.0.0.1", "-p", String(port)], {
+  const server: ChildProcess = spawn(process.execPath, [next, "dev", dir, "-H", "127.0.0.1", "-p", String(port)], {
     cwd: lab,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],

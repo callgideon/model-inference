@@ -1,4 +1,4 @@
-// UX-06/UX-09: the improve lane's synthetic harness project (tests/ux/improve/browser.ts serves it). Its build output goes under the
+// UX-06/UX-09: the improve lane's synthetic harness project (tests/ux/browser.ts serves it). Its build output goes under the
 // Lab's own .next (ignored by git and eslint), never beside these sources.
 import { realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";

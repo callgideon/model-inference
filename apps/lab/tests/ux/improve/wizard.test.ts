@@ -3,9 +3,9 @@
 // turns exact percentages into basis points with the holdout shown - at 1440, 768 and 390 px, with a
 // 320 px reflow check. Synthetic harness only (tests/ux/improve/harness); no screenshots.
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { after, before, test } from "node:test";
-import type { Locator, Page } from "../browser.ts";
-import { harness } from "./browser.ts";
+import { harness, type Locator, type Page } from "../browser.ts";
 
 type Field = Locator & {
   fill(value: string): Promise<void>;
@@ -23,7 +23,7 @@ const rows = (text: string) => ({ name: "rows.jsonl", mimeType: "application/x-n
 
 let h: Awaited<ReturnType<typeof harness>>;
 before(async () => {
-  h = await harness();
+  h = await harness(resolve(import.meta.dirname, "harness"));
 });
 after(async () => {
   await h?.stop();
