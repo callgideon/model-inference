@@ -5,7 +5,7 @@
 // mutation is "not confirmed"; every call is the actor's workspace with the session's own token and the
 // form's Idempotency-Key; the paths and fields the wizard reads exist in the artifact.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { LAB, load } from "./render.ts";
@@ -81,12 +81,13 @@ test("OP-W05 every call is the actor's workspace with the session's own token, n
   assert.equal(url, `http://api.test/lab/v1/artifacts/imports?provider_org_id=${actor.providerId}`, "the actor's workspace wins over a query value");
   const headers = init.headers as Record<string, string>;
   assert.deepEqual([headers.authorization, headers["idempotency-key"], init.cache, init.method], ["Bearer session-jwt", "form-key-1", "no-store", "POST"]);
-  assert.equal(api.artifactPort({}), null, "unconfigured: no port (the wizard says unavailable)");
-  assert.equal(api.artifactPort({ LAB_API_URL: "http://api.test" }), null, "no Lab config: no port");
+  assert.ok(api.artifactPort({}) === null, "unconfigured: no port (the wizard says unavailable)");
+  assert.ok(api.artifactPort({ LAB_API_URL: "http://api.test" }) === null, "no Lab config: no port");
 });
 
 test("OP-W06 the port's paths, methods and the fields the wizard reads exist in the checked OpenAPI artifact", () => {
-  const doc = JSON.parse(readFileSync(join(LAB, "../infrx-api/openapi/consumer.json"), "utf8"));
+  // The real checkout's artifact, also from a mutant runner's copy (its node_modules links the real Lab).
+  const doc = JSON.parse(readFileSync(join(realpathSync(join(LAB, "node_modules")), "../../infrx-api/openapi/consumer.json"), "utf8"));
   const source = readFileSync(join(LAB, "app/(provider)/models/new/api.ts"), "utf8");
   const declared = [...source.matchAll(/^  "(\/lab\/v1\/[^"]+)": \{([^\n]*(?:\n    [^\n]*)*)/gm)].map((m) => [m[1], [...m[2].matchAll(/\b(get|post):/g)].map((x) => x[1])] as const);
   assert.equal(declared.length, 8);
