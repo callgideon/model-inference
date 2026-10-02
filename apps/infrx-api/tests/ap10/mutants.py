@@ -21,7 +21,8 @@ from tests.contracts import mutants as shared  # noqa: E402
 from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
 SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
-          "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py")
+          "tests/ap10/test_from_traces.py", "tests/ap10/test_from_traces_route.py",
+          "tests/ap10/test_sop_benchmark.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -46,6 +47,12 @@ C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
 RT = "gateway/routes/lab_datasets.py"
 RT_START = "test_ap10_route_a_session_starts_one_operation_and_a_replay_is_the_same"
 RT_REFUSED = "test_ap10_route_refusals_are_r270_envelopes"
+SOP = "lab/improve/sop.py"
+SOP_REPORT = "test_ap10_sop_the_report_pins_identity_and_lists_every_failure_and_abstention"
+SOP_BLOCKED = "test_ap10_sop_quality_is_blocked_on_p07_and_validity_is_counted_apart"
+SOP_AGREE = "test_ap10_sop_agreement_is_computed_only_from_reviewed_gold_within_tolerance"
+SOP_PERF = ("test_ap10_sop_performance_is_meas_only_for_a_declared_candidate_without_the_"
+            "fake_surface")
 #: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
 PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
 BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
@@ -176,6 +183,61 @@ MUTANTS: tuple[Mutant, ...] = (
     m("rt_start_is_200", "a start is 202 + Location at the operation",
       'return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")',
       "return control.ok(doc)", RT_START, file=RT),
+    # --- 10d: the SOP benchmark report
+    m("sop_no_media_sent", "an item without its video is an abstention, never sent",
+      "        if item.video is None:\n", "        if False:\n", SOP_REPORT, file=SOP,
+      dies_by=("AssertionError",)),
+    m("sop_sampled", "every request is greedy (temperature 0)",
+      '"temperature": 0, "seed": seed}', '"temperature": 1, "seed": seed}', SOP_REPORT,
+      file=SOP),
+    m("sop_seed_unpinned", "every request carries the run's seed",
+      '"temperature": 0, "seed": seed}', '"temperature": 0, "seed": 0}', SOP_REPORT, file=SOP),
+    m("sop_status_unclassed", "a refused request is a failure by its status",
+      "        if response.status_code != 200:\n", "        if False:\n", SOP_REPORT,
+      file=SOP),
+    m("sop_identity_unchecked", "an answer from another model is a failure",
+      'elif reply.get("model") != model:', "elif False:", SOP_REPORT, file=SOP),
+    m("sop_untimed_answered", "an answer with no timed event is an abstention",
+      '"outcome": "answered" if events else "abstained"', '"outcome": "answered"',
+      SOP_REPORT, file=SOP),
+    m("sop_find_mode_unparsed", "find mode's `From a to b.` is parsed",
+      'r"From\s+(', 'r"Fromm\s+(', SOP_REPORT, file=SOP),
+    m("sop_quality_without_definition", "no SOP definition is BLOCKED[P-07]",
+      "if definition is None or gold is None:", "if gold is None:", SOP_BLOCKED, file=SOP,
+      dies_by=("AssertionError",)),
+    m("sop_quality_without_gold", "no gold set is BLOCKED[P-07]",
+      "if definition is None or gold is None:", "if definition is None:", SOP_BLOCKED,
+      file=SOP, dies_by=("AttributeError",)),
+    m("sop_teacher_labels_graded", "teacher/model labels are not ground truth",
+      'elif gold.provenance != "human_reviewed":', "elif False:", SOP_BLOCKED, file=SOP),
+    m("sop_other_manifest_graded", "a gold set of another manifest is refused",
+      "elif (gold.dataset_version, gold.manifest_sha256) != (dataset_version, manifest_sha256):",
+      "elif False:", SOP_BLOCKED, file=SOP),
+    m("sop_unknown_items_graded", "a gold set naming unknown items is refused",
+      'elif set(gold.labels) - {r["id"] for r in rows}:', "elif False:", SOP_BLOCKED,
+      file=SOP, dies_by=("KeyError",)),
+    m("sop_validity_is_answers", "validity counts answers WITH timed events",
+      '"with_timed_events": len(answered)}', '"with_timed_events": len(sent)}', SOP_BLOCKED,
+      file=SOP),
+    m("sop_end_unchecked", "a match needs the end within the tolerance too",
+      " and abs(end - g.end_s) <= tolerance_s:", ":", SOP_AGREE, file=SOP),
+    m("sop_prediction_reused", "matching is one-to-one",
+      "matched, at = matched + 1, k + 1", "matched, at = matched + 1, at", SOP_AGREE,
+      file=SOP),
+    m("sop_hallucinations_dropped", "unmatched predictions are counted",
+      "hallucinated += len(predicted) - hit", "hallucinated += 0", SOP_AGREE, file=SOP),
+    m("sop_unanswered_unlisted", "a gold item without an answer is listed",
+      'if by_id[item_id]["outcome"] != "answered":', "if False:", SOP_AGREE, file=SOP),
+    m("sop_fake_probe_ignored", "the fake engine's surface labels the run fake",
+      'fake = target == "fake" or await is_fake(client)', 'fake = target == "fake"',
+      SOP_PERF, file=SOP),
+    m("sop_declared_fake_measured", "a declared fake target is never meas.",
+      'fake = target == "fake" or await is_fake(client)', "fake = await is_fake(client)",
+      SOP_PERF, file=SOP),
+    m("sop_p50_guessed", "p50 is refused below 6 samples",
+      "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 1, 60", SOP_PERF, file=SOP),
+    m("sop_p95_guessed", "p95 is refused below 60 samples",
+      "MIN_P50, MIN_P95 = 6, 60", "MIN_P50, MIN_P95 = 6, 6", SOP_PERF, file=SOP),
     m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
       "        if got.content is None:\n", "        if False:\n", C2, file=FT,
       dies_by=("AttributeError",)),
