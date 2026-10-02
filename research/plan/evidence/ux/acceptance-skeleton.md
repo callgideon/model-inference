@@ -67,7 +67,7 @@ of every metric or status the shot shows. None is captured in batch 2.
 
 ## 5. Open-gap register (mapped to backend/UX ids)
 
-Rows open at preparation (the matrix run at `d0c2ec0f`, lane evidence `../w7/ux-verify-*.md`); the final
+Rows open at preparation (the matrix run at `e7a0961e`, `matrix-e7a0961.json`, lane evidence `../w7/ux-verify-*.md`); the final
 report carries each forward with its state.
 
 | Gap | Journeys | Owner (unblocks) | Ids |
@@ -115,5 +115,6 @@ build or a fixture run).
 
 ## Verification log
 
-- 2026-10-02 (ux-verify, wave 7 batch 2): skeleton written; the matrix prepared and run at `d0c2ec0f`
-  (BLOCKED: 6 parts PASS, 22 BLOCKED with owners, 0 FAIL; fixtures 29 covered, 12 gaps, 0 dangling).
+- 2026-10-02 (ux-verify, wave 7 batch 2): skeleton written; the matrix prepared and run at `e7a0961e`
+  on a clean tree (`matrix-e7a0961.json`: BLOCKED; 6 parts PASS, 21 BLOCKED with owners, 0 FAIL; all 13
+  journeys BLOCKED; fixtures 29 covered, 12 gaps, 0 dangling).
