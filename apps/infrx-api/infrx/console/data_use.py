@@ -32,6 +32,7 @@ ponytail: direct statements on the platform pool (`service_role`, as `PgAccessSt
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Literal
 
@@ -150,6 +151,20 @@ async def _all(conn, sql: str, params: tuple) -> list:
     return await (await conn.execute(sql, params)).fetchall()
 
 
+@asynccontextmanager
+async def _transaction(conn):
+    """BEGIN/COMMIT on `execute` alone (as `console.actions`): the gateway pool's connection
+    (`pilot._Pooled`) is execute + close and has no `transaction()`, and a pooled
+    connection never goes back to the pool mid-transaction."""
+    await conn.execute("begin")
+    try:
+        yield conn
+    except BaseException:
+        await conn.execute("rollback")
+        raise
+    await conn.execute("commit")
+
+
 class DataUse:
     """The five operations behind `routes.console_data_use`. `actor` is the server's own."""
 
@@ -199,7 +214,7 @@ class DataUse:
             uuid.UUID(key_id)
         except ValueError:
             raise errors.NotFound("no such key") from None
-        async with rpc.connection(self.connect) as conn, conn.transaction():
+        async with rpc.connection(self.connect) as conn, _transaction(conn):
             await conn.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))",
                                (f"consent_history/{org}",))
             key = await _one(conn, "select trace_mode from public.api_keys where id = %s and "

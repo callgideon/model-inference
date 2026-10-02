@@ -265,7 +265,9 @@ lab-compositions:
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/w/test_worker_traces_pg.py
 	cd $(API) && INFRX_D_TASK=t2f INFRX_T2F_STACK=1 .venv/bin/python -m pytest -q tests/t/capture/test_capture_stack.py
 	# AP-07b/07d: the composed trace proof on the ap7 block (PG + ClickHouse + MinIO; containers per the file's header)
-	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py
+	cd $(API) && INFRX_D_TASK=ap7 INFRX_AP7_STACK=1 .venv/bin/python -m pytest -q tests/ap07/test_trace_stack.py tests/ap07/test_eligible.py
+	# AP-07 eligible mutants (WR-AP07B-2): need ClickHouse + MinIO; the api-mutants line skips them visibly
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_AP7_STACK=1 uv run --frozen pytest -q tests/ap07/test_mutants.py -k "el_ or well_formed or every_case"
 
 # E3L: the LAB-OPERATE gate (tests/integration/lab_operate); not in check. verdict.json lands in the evidence dir.
 lab-operate:

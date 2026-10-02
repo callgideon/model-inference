@@ -32,6 +32,7 @@ from infrx.state.jobstore import connector
 
 from ..d import checks_admission as ca
 from ..d import checks_credit as cc
+from ..ap03 import racer
 from ..d import pgharness
 from ..l.access.conftest import CASE
 
@@ -203,6 +204,26 @@ def test_data_use__a_replay_writes_nothing_and_a_stale_view_conflicts(pg_world):
     stale = put_capture(c, key, "minimal", 0)
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "state_conflict"
     assert [row[0] for row in consent_rows(w, w.C1)] == [1]
+    assert gateway_mode(w, w.C1, key) is TraceMode.full
+
+
+def test_data_use__capture_runs_on_the_gateway_pools_connection(pg_world):
+    """Oracle (SR-AP11C-1): the gateway's pool hands out `pilot._Pooled` - execute and close,
+    no `transaction()` - and takes each connection back only outside a transaction. A
+    decision commits on it, a stale one (409) rolls back on it; neither returns a connection
+    mid-transaction (`ExecuteOnly.close` asserts that)."""
+    w = pg_world
+    app = FastAPI()
+    routes.register(app, SimpleNamespace(
+        data_use=data_use.DataUse(racer.pooled(pgharness.dsn(CASE))),
+        actors=control.StaticActors(session(w.BOTH, w.C1))))
+    c = TestClient(app, raise_server_exceptions=False)
+    key = keys_of(w, w.C1)[0]
+    answer = put_capture(c, key, "full", 0)
+    assert answer.status_code == 200, answer.text
+    stale = put_capture(c, key, "minimal", 0)
+    assert stale.status_code == 409, stale.text
+    assert [row[:2] for row in consent_rows(w, w.C1)] == [(1, "full")]
     assert gateway_mode(w, w.C1, key) is TraceMode.full
 
 

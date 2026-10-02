@@ -47,7 +47,8 @@ def everything(sid: str, kind: str = "", message: str = "") -> list[tuple[str, s
 
 
 def scenario_sources() -> dict[str, str]:
-    return {path.name: path.read_text() for path in HERE.glob("scenarios_*.py")}
+    return {path.name: path.read_text()
+            for path in (*HERE.glob("scenarios_*.py"), HERE / runner.BOX_VARIANT)}
 
 
 def test_e5l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
@@ -59,7 +60,7 @@ def test_e5l_the_matrix_carries_the_manifest_test_ids_and_the_brief_cases():
     assert tuple(e5l["test_ids"]) == runner.TEST_IDS
     for tid in runner.TEST_IDS:
         assert any(tid in spec["test_ids"] for spec in runner.SCENARIOS.values()), tid
-    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 10
+    assert set(runner.REQUIRED) == set(runner.SCENARIOS) and len(runner.SCENARIOS) == 11
     titles = " ".join(spec["title"] for spec in runner.SCENARIOS.values())
     for fault in ("revoked mid-queue", "expired or deleted", "ClickHouse killed",
                   "timed out", "worker restarted"):

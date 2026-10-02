@@ -86,6 +86,9 @@ SCENARIOS = {
             "lanes": []},
     "o10": {"title": "the Lab review panel renders the traces route's answer (browser flow)",
             "test_ids": ["CONSOLE-FLOWS"], "lanes": []},
+    "o11": {"title": "AP-07 on the box: data use decided through /console/v1 reaches capture "
+                     "and the Lab, and a revocation withholds content",
+            "test_ids": ["TRACE-BOUNDS", "LAB-ACCESS"], "lanes": []},
 }
 REQUIRED = {
     "o01": ("test_o01_capture_is_off_by_default_and_a_served_request_leaves_no_trace",
@@ -107,6 +110,7 @@ REQUIRED = {
     "o09": ("test_o09_a_projector_killed_after_its_insert_redelivers_and_projects_once",
             "test_o09_a_box_worker_killed_mid_traffic_restarts_and_finishes_every_job_once"),
     "o10": ("test_o10_the_lab_review_panel_renders_the_routes_answer",),
+    "o11": ("test_o11_data_use_decided_on_the_box_reaches_capture_and_the_lab",),
 }
 #: R222 as amended by R234: the lanes whose NOT RUN is outside local scope, with their ruled
 #: class (as lab_evaluate's runner). Both are kept only to judge recorded verdicts on their own
@@ -122,6 +126,8 @@ ENV_PREREQUISITE = "apps/lab: pnpm install --frozen-lockfile before the gate"
 CASE = re.compile(r"test_(?P<sid>o\d\d)_")
 MARK = re.compile(r"\b(BLOCKED|INVALID)\[")
 LOCK = Path("/tmp") / f"infrx-{NAMESPACE}.runner.lock"
+#: AP-07 W4 (WR-AP07B-1): o11's module, beside the scenario modules.
+BOX_VARIANT = "test_ap07_box_variant.py"
 
 
 def worst(statuses) -> str:
@@ -233,7 +239,7 @@ def provision(report, reuse: bool, pull: bool) -> tuple[bool, str]:
 
 def pytest_run(out: Path, keyword: str | None) -> tuple[dict, str]:
     junit, log = out / "scenarios.xml", out / "scenarios.log"
-    files = sorted(str(path) for path in HERE.glob("scenarios_*.py"))
+    files = sorted(str(path) for path in (*HERE.glob("scenarios_*.py"), HERE / BOX_VARIANT))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
             # WR-E7L-5's repo-root pytest.ini forces --import-mode=importlib, which does not
             # auto-insert a collected file's own directory into sys.path; these scenario
