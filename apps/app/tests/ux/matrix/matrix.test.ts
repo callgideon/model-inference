@@ -6,7 +6,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkFixture, judgePart, overall, parseTap, readMatrix, worst } from "./run-matrix.mjs";
+import { checkFixture, judgePart as judgeAny, overall, parseTap, readMatrix, worst } from "./run-matrix.mjs";
+
+type Verdict = { status: string; cause: string; passed?: number; failed?: number; skipped?: number };
+const judgePart = (p: object, r: object) => {
+  const v = judgeAny(p, r) as Partial<Verdict>;
+  return { ...v, cause: v.cause ?? "" } as Verdict;
+};
 
 const run = (cases: { name: string; ok: boolean; skipped: boolean }[], code = 0, missing: string[] = []) => ({ cases, code, missing });
 const ok = (name: string) => ({ name, ok: true, skipped: false });
