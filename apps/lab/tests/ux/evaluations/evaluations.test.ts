@@ -9,7 +9,7 @@ import { comparison } from "../../../lib/services/evaluation/view.ts";
 import { REPORTS, RUNS } from "../../b/real.ts";
 import "./alias.ts";
 
-const { catalogState, decision, experimentRow, LAUNCH_COPY, PROTOCOL_HELP, reportView } = await import("../../../app/(provider)/evaluations/view.ts");
+const { catalogState, decision, experimentRow, LAUNCH_COPY, LAUNCH_NEEDS, PROTOCOL_HELP, reportView, SUBSCRIBE_NEEDS } = await import("../../../app/(provider)/evaluations/view.ts");
 
 const lab = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(join(lab, path), "utf8");
@@ -36,13 +36,14 @@ test("UX08-C01 a catalog the service could not read is unavailable, never an emp
 
 test("UX08-C02 a catalog that answers but lacks an input names exactly what is missing, for the form that needs it", () => {
   const none = { ...CATALOG, servings: [], evaluators: [] };
-  assert.deepEqual(catalogState(ok(none), ["datasets", "harnesses", "evaluators", "servings"]), { kind: "empty", missing: ["evaluator", "serving revision"] });
-  assert.deepEqual(catalogState(ok({ ...CATALOG, servings: [] }), ["datasets", "harnesses", "evaluators"]).kind, "ready", "a subscription needs no serving revision");
+  assert.deepEqual(catalogState(ok(none), LAUNCH_NEEDS), { kind: "empty", missing: ["evaluator", "serving revision"] });
+  assert.deepEqual(catalogState(ok({ ...CATALOG, servings: [] }), SUBSCRIBE_NEEDS).kind, "ready", "a subscription needs no serving revision");
 });
 
 test("UX08-D01 no report yet is Running or Awaiting comparison, never a score", () => {
   assert.deepEqual(decision(experiment(run("running"), run("queued"), null)), { tone: "neutral", text: "Running: no result yet", scope: null });
   assert.deepEqual(decision(experiment(run("succeeded"), run("running"), null)).text, "Running: no result yet", "one arm still running");
+  assert.deepEqual(decision(experiment(run("succeeded"), run("queued"), null)).text, "Running: no result yet", "one arm still queued");
   assert.deepEqual(decision(experiment(run("succeeded"), run("cancelled"), null)), { tone: "neutral", text: "Awaiting comparison", scope: null });
 });
 

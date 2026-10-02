@@ -1,0 +1,77 @@
+#!/usr/bin/env node
+// UX-08's mutant runner (R32) on the shared Lab harness (tests/l/shell/harness.mjs): each Evaluations /
+// Judge setup decision is one edit that a UX08 case it names must fail by assertion. Unit suites only.
+// Usage: node tests/ux/evaluations/run-mutants.mjs [--only ID,ID]
+import { m, runMutants } from "../../l/shell/harness.mjs";
+
+const SUITE = ["tests/ux/evaluations/evaluations.test.ts", "tests/ux/evaluations/judge.test.ts"];
+const E = "app/(provider)/evaluations";
+const VIEW = `${E}/view.ts`;
+const HUB = `${E}/page.tsx`;
+const SUBS = `${E}/checkpoints/page.tsx`;
+const J = "app/(provider)/judge";
+const JV = `${J}/view.ts`;
+
+const C = {
+  c01: "UX08-C01 a catalog the service could not read is unavailable, never an empty launch form",
+  c02: "UX08-C02 a catalog that answers but lacks an input names exactly what is missing, for the form that needs it",
+  d01: "UX08-D01 no report yet is Running or Awaiting comparison, never a score",
+  d02: "UX08-D02 a stored report's decision is B2's own outcome, scoped to its protocol, with a tone that never certifies",
+  r01: "UX08-R01 an experiment row: the identity, both arms' states, the frozen dataset and the decision, in that order",
+  t01: "UX08-T01 the report leads with the decision and its reasons, keeps every count and slice, and labels insufficiency apart from inferiority",
+  t02: "UX08-T02 mixed units stay one line per unit, and latency is labelled as no performance comparison",
+  t03: "UX08-T03 the launch copy invents no threshold: protocol help carries no number and the limit is stated per run",
+  p01: "UX08-P01 the hub reads the catalog only through catalogState: unavailable and empty render as service states, the form only when ready",
+  p02: "UX08-P02 the protocol and limits are typed by the expert: no default value, and the metric basis starts unchosen",
+  p03: "UX08-P03 readable selectors: every catalog choice shows its label, and its immutable ref is listed beside it",
+  p04: "UX08-P04 the report component leads with the decision and keeps the protocol scope next to it",
+  n01: "UX08-N01 Evaluations lists Experiments, Runs, Checkpoint subscriptions and Judge setup, marking the current one",
+  j01: "UX08-J01 the view reads only fields the committed judge API documents, and names every run state it can return",
+  j02: "UX08-J02 calibrated is said only for a calibrated state; too few reference labels says how many of how many",
+  j03: "UX08-J03 a judge run shows the backend's state and counts; an ambiguous send is unknown, never retried or failed",
+  j04: "UX08-J04 a budget shows limit, reserved and settled each with its own unit, never a sum",
+  j05: "UX08-J05 judge setup sits under Evaluations and says unreadable records are unavailable, not absent",
+};
+
+const MUTANTS = [
+  m("UX08-X01", "an unreadable catalog reads as nothing offered", VIEW, 'if (!catalog.ok) return { kind: "unavailable" };', 'if (!catalog.ok) return { kind: "empty", missing: [] };', [C.c01]),
+  m("UX08-X02", "a catalog missing an input is offered as ready", VIEW, "return missing.length > 0 ?", "return false ?", [C.c02]),
+  m("UX08-X03", "a subscription demands a serving revision", VIEW, 'SUBSCRIBE_NEEDS: (keyof Catalog)[] = ["datasets", "harnesses", "evaluators"];', 'SUBSCRIBE_NEEDS: (keyof Catalog)[] = ["datasets", "harnesses", "evaluators", "servings"];', [C.c02]),
+  m("UX08-X04", "ended runs without a report still say Running", VIEW, 'active ? "Running: no result yet" : "Awaiting comparison"', '"Running: no result yet"', [C.d01]),
+  m("UX08-X05", "a queued arm counts as ended", VIEW, '(r) => r.state === "queued" || r.state === "running"', '(r) => r.state === "running"', [C.d01]),
+  m("UX08-X06", "an accept is shown as certified success", VIEW, 'accept: "info"', 'accept: "success"', [C.d02]),
+  m("UX08-X07", "the decision loses its protocol scope", VIEW, 'scope: "under this protocol only, not a general quality certification" });', "scope: null });", [C.d02]),
+  m("UX08-X08", "the decision is re-worded from the raw outcome", VIEW, "text: comparison(r).outcome,", "text: r.decision.outcome,", [C.d02]),
+  m("UX08-X09", "the row moves the dataset before the decision", VIEW, "decision: decision(e), dataset: e.baseline.dataset_ref,", "dataset: e.baseline.dataset_ref, decision: decision(e),", [C.r01]),
+  m("UX08-X10", "the candidate column shows the baseline", VIEW, "candidate: runRow(role, e.candidate).state", "candidate: runRow(role, e.baseline).state", [C.r01]),
+  m("UX08-X11", "the report's decision is invented", VIEW, "decision: decided(r),", 'decision: { tone: "neutral" as const, text: "Inconclusive", scope: null },', [C.t01]),
+  m("UX08-X12", "teacher judgment loses its source caveat", VIEW, 'r.estimates.basis === "teacher_judgment" ?', "false ?", [C.t02]),
+  m("UX08-X13", "latency is presented as a performance comparison", VIEW, "so it is not a performance comparison.", "so it compares performance.", [C.t02]),
+  m("UX08-X14", "the margin help suggests a threshold", VIEW, "in the metric's own units.", "in the metric's own units; 0.05 is typical.", [C.t03]),
+  m("UX08-X15", "the limit is described as the experiment's total", VIEW, "Each of the two runs may spend up to this limit in provider_dev CREDIT, so the experiment may spend up to twice it.", "The experiment may spend up to this limit in provider_dev CREDIT.", [C.t03]),
+  m("UX08-X16", "a catalog failure hides the records", HUB, "if (!runs.ok || !experiments.ok) return", "if (!runs.ok || !experiments.ok || !catalog.ok) return", [C.p01]),
+  m("UX08-X17", "an unreadable catalog is announced as empty", HUB, '<ServiceState state="unavailable" title="Comparisons', '<ServiceState state="empty" title="Comparisons', [C.p01]),
+  m("UX08-X18", "a catalog failure hides the subscriptions", SUBS, "if (!subscriptions.ok) return", "if (!subscriptions.ok || !catalog.ok) return", [C.p01]),
+  m("UX08-X19", "the metric basis is preselected", HUB, '<option value="">Choose the metric basis</option>\n', "", [C.p02]),
+  m("UX08-X20", "the confidence carries a platform default", HUB, '<input name="confidence" inputMode="decimal" required', '<input name="confidence" inputMode="decimal" defaultValue="0.95" required', [C.p02]),
+  m("UX08-X21", "the immutable refs are not listed", HUB, "<RefList catalog={launch.catalog} />", "", [C.p03]),
+  m("UX08-X22", "the ref list shows labels twice, no ref", `${E}/refs.tsx`, '<code className="lab-id">{o.ref}</code>', '<code className="lab-id">{o.label}</code>', [C.p03]),
+  m("UX08-X23", "the report decision drops its scope", `${E}/report.tsx`, "{v.decision.text}</Badge> {v.decision.scope}</p>", "{v.decision.text}</Badge></p>", [C.p04]),
+  m("UX08-X24", "judge setup is not found from Evaluations", `${E}/nav.tsx`, '  { id: "judge", href: "/judge", label: "Judge setup" },\n', "", [C.n01]),
+  m("UX08-X25", "the current section is not marked", `${E}/nav.tsx`, 'aria-current={current === t.id ? "page" : undefined}', "aria-current={undefined}", [C.n01]),
+  m("UX08-X26", "the subscriptions page loses the section nav", SUBS, '<EvaluationsNav current="checkpoints" />', "", [C.n01]),
+  m("UX08-X27", "an API run state has no copy", JV, '  ambiguous: "outcome unknown: not resent automatically",\n', "", [C.j01, C.j03]),
+  m("UX08-X28", "an ambiguous send reads as failed", JV, 'ambiguous: "outcome unknown: not resent automatically"', 'ambiguous: "failed"', [C.j03]),
+  m("UX08-X29", "enough labels alone is called calibrated", JV, 'if (c.state === "calibrated")', "if (c.labels >= c.required)", [C.j02]),
+  m("UX08-X30", "the configuration row shows the raw state", JV, "calibration: calibration(c.calibration)", "calibration: c.calibration.state", [C.j02]),
+  m("UX08-X31", "an ended run still says cancel requested", JV, "r.cancel_requested && !ENDED.has(r.domain_state)", "r.cancel_requested", [C.j03]),
+  m("UX08-X32", "a requested cancel is not shown", JV, "const cancelling = r.cancel_requested &&", "const cancelling = false &&", [C.j03]),
+  m("UX08-X33", "an unsettled amount reads as zero", JV, '(m === null ? "none"', '(m === null ? "0"', [C.j03]),
+  m("UX08-X34", "rejected samples are dropped", JV, " · ${r.rejected} rejected", "", [C.j03]),
+  m("UX08-X35", "the reserved column shows the limit", JV, "reserved: money(b.reserved)", "reserved: money(b.limit)", [C.j04]),
+  m("UX08-X36", "unreadable judge records read as empty", `${J}/records.tsx`, '<ServiceState state="unavailable" title="Judge records', '<ServiceState state="empty" title="Judge records', [C.j05]),
+  m("UX08-X37", "the page claims empty records it never read", `${J}/page.tsx`, "<JudgeRecords records={null} />", "<JudgeRecords records={{ configs: [], runs: [], budgets: [] }} />", [C.j05]),
+  m("UX08-X38", "judge setup is not placed under Evaluations", `${J}/page.tsx`, 'breadcrumb={[{ href: "/evaluations", label: "Evaluations" }]}', "breadcrumb={[]}", [C.j05]),
+];
+
+process.exit(await runMutants({ suite: SUITE, prefix: "UX08", mutants: MUTANTS }));

@@ -8,7 +8,10 @@ import { budgetRow, calibration, configRow, RUN_STATE, runRow, type Config, type
 
 const lab = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(join(lab, path), "utf8");
-const schemas = JSON.parse(read("../infrx-api/openapi/lab-control.json")).components.schemas;
+// The OpenAPI the Lab client is generated from, found through the linked package (a mutant copy of the
+// Lab has no ../infrx-api beside it).
+const openapi = new URL("../../../apps/infrx-api/openapi/lab-control.json", import.meta.resolve("@infrx/api-client/lab"));
+const schemas = JSON.parse(readFileSync(openapi, "utf8")).components.schemas;
 const PAGE = "app/(provider)/judge/page.tsx";
 
 const RUN: JudgeRun = {
