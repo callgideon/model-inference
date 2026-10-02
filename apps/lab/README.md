@@ -29,7 +29,7 @@ it holds no service-role key, no consumer wallet and no inference gateway.
 | `annotations`, `training` | `pipelines` | `/lab/v1/pipelines` (behind `LAB_PIPELINES`) |
 | `datasets`, `datasets/[ref]`, `datasets/imports/[id]` | `datasets` | the datasets backend |
 | `releases`, `optimizations` | `rollouts` | `/lab/v1/releases`, `/lab/v1/optimizations` (behind `LAB_RELEASES`) |
-| `settings`, sign-in | `control`, `lib/auth/` | Supabase auth + `public.lab_provider_memberships()` |
+| `settings`, sign-in | `control`, `lib/auth/` | the auth facade `/auth/v1/*` + `/lab/v1/workspaces` (AP-09) |
 
 A family whose base URL is unset, or whose backend refuses, renders "unavailable", never a
 stand-in. Which families answer for testers today (some stay 503/404 until carried WRs land) is
@@ -37,12 +37,10 @@ runbook 08 §0 and the state file's carried-work table.
 
 ## Environment (`.env.example`; names only, values in the Vercel project)
 
-- Public: `NEXT_PUBLIC_LAB_URL` (the Lab's https origin, no path), `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key).
-- Server-only base URL: `LAB_API_URL` (lab-api, which serves every family; `lib/auth/config.ts`
-  `labApiUrl`). Deprecated fallbacks, read per family only while `LAB_API_URL` is unset:
-  `LAB_CONTROL_URL`, `LAB_TRACES_API_URL`, `LAB_EVALS_API_URL`, `LAB_PIPELINES_API_URL`,
-  `LAB_RELEASES_API_URL`, `LAB_DATASETS_API_URL`.
+- Public: `NEXT_PUBLIC_LAB_URL` (the Lab's https origin, no path).
+- Server-only base URL: `LAB_API_URL` (lab-api, which serves every family and the Lab shell's
+  sign-in and memberships; `lib/auth/config.ts` `labApiUrl`). Unset, the Lab is misconfigured.
+  The six per-family names and the Supabase URL/key are read nowhere (AP-09, register row 76).
 - Development only (ignored in production): `LAB_CONTROL_PREVIEW`, `LAB_PIPELINES_PREVIEW`,
   `LAB_EVALS_PREVIEW`, `LAB_RELEASES_PREVIEW` — labelled in-memory stand-ins.
 

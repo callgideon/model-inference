@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import * as nodeModule from "node:module";
 import test from "node:test";
+import { ROLE_CAPABILITIES, type Role } from "../../lib/auth/access.ts";
 import type { FakeReleases } from "../../lib/services/rollouts/fake.ts";
 import { A as PROVIDER, EXPAND, POLICY, release } from "./fixtures.ts";
 
@@ -12,16 +13,12 @@ type Resolve = (specifier: string, context: object) => Resolved;
 const { registerHooks } = nodeModule as unknown as {
   registerHooks(hooks: { resolve(specifier: string, context: object, next: Resolve): Resolved }): void;
 };
-const A = { provider_org_id: PROVIDER, provider_name: "Acme", role: "administrator" };
+const A = { provider_org_id: PROVIDER, provider_name: "Acme", role: "administrator", capabilities: ROLE_CAPABILITIES.administrator };
 type World = { rows: unknown[] };
 const world: World = ((globalThis as unknown as { labReleases: World }).labReleases = { rows: [A] });
 const FAKES: Record<string, string> = {
   "next/headers": `export async function cookies() {
-    return { getAll: () => [], get: () => undefined, set: () => {} };
-  }`,
-  "@supabase/ssr": `export function createServerClient() {
-    return { auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
-             rpc: async () => ({ data: globalThis.labReleases.rows, error: null }) };
+    return { getAll: () => [], get: (name) => (name === "infrx-lab-session" ? { name, value: "t" } : undefined), set: () => {} };
   }`,
 };
 registerHooks({
@@ -30,7 +27,9 @@ registerHooks({
     return next(specifier === "next/navigation" ? "next/navigation.js" : specifier, context);
   },
 });
-Object.assign(process.env, { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", LAB_RELEASES_PREVIEW: "1" });
+// AP-09: the guard reads memberships from GET /lab/v1/workspaces; this fake API answers the rows.
+globalThis.fetch = (async () => new Response(JSON.stringify({ data: world.rows }))) as typeof fetch;
+Object.assign(process.env, { LAB_API_URL: "https://lab-control.example", LAB_RELEASES_PREVIEW: "1" });
 const { proposeRelease } = await import("../../lib/services/rollouts/actions.ts");
 const { releasesPort } = await import("../../lib/services/rollouts/port.ts");
 const fake = releasesPort() as FakeReleases;
@@ -49,7 +48,7 @@ const landing = (run: Promise<unknown>) =>
       return digest.startsWith("NEXT_REDIRECT;") ? digest.split(";")[2] : `404:${digest.includes(";404")}`;
     },
   );
-const as = (role: string, provider = A.provider_org_id) => (world.rows = [{ ...A, role, provider_org_id: provider }]);
+const as = (role: string, provider = A.provider_org_id) => (world.rows = [{ ...A, role, provider_org_id: provider, capabilities: ROLE_CAPABILITIES[role as Role] }]);
 const OK = { kind: "rollback", policyRef: POLICY, fence: "3" };
 
 test("R4-A01 a proposal runs as the session's provider and role, whatever the form claims", async () => {
@@ -57,7 +56,7 @@ test("R4-A01 a proposal runs as the session's provider and role, whatever the fo
   const before = fake.calls.length;
   const claims = { ...OK, kind: "expand", providerId: "22222222-2222-4222-8222-222222222222", role: "operator" };
   assert.equal(await landing(proposeRelease(form(claims))), "/releases");
-  assert.deepEqual(fake.calls.slice(before), [["propose", { providerId: PROVIDER, providerName: "Acme", role: "administrator" }, "expand", POLICY, 3]]);
+  assert.deepEqual(fake.calls.slice(before), [["propose", { providerId: PROVIDER, providerName: "Acme", role: "administrator", capabilities: ROLE_CAPABILITIES.administrator }, "expand", POLICY, 3]]);
 });
 
 test("R4-A02 a role without propose_publication is refused before the releases service is asked", async () => {

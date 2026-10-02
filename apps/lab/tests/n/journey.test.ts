@@ -53,7 +53,7 @@ test("N4-J01 import, interrupted and resumed, then a frozen version, its splits,
   try {
     const as = (user: string) => httpDatasets({ baseUrl: url, token: user });
     const port = as(world.dev);
-    const dev: Membership = { providerId: world.provider, providerName: "NemoStation", role: "developer" };
+    const dev: Membership = { providerId: world.provider, providerName: "NemoStation", role: "developer", capabilities: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"] };
     const spec = { ...JSON.parse(readFileSync(resolve(FIXTURES, "benchmark.spec.json"), "utf8")), grant_ref: world.grant_ref };
     const rows = readFileSync(resolve(FIXTURES, "benchmark.jsonl"), "utf8");
     const file = (text: string) => new Blob([text]);

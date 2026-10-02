@@ -1,51 +1,16 @@
-// L1: one request's provider access, from its cookies and a Supabase session client. Everything but
-// the Next/Supabase constructors lives here, so the guard's decisions run under node --test.
+// L1: one request's provider access, from its cookies and the API. Everything but Next's cookie store
+// lives here, so the guard's decisions run under node --test (`send` is the fetch the tests fake).
+import { labApi } from "../api/index.ts";
 import { resolveAccess, type Access } from "./access.ts";
-import { WORKSPACE_COOKIE, authCookieOptions, labConfig, type LabConfig } from "./config.ts";
-import { readMemberships, type RpcClient } from "./memberships.ts";
+import { AUTH_COOKIE, WORKSPACE_COOKIE, labConfig } from "./config.ts";
+import { readMemberships } from "./memberships.ts";
 
-type Cookie = { name: string; value: string };
-export type CookieStore = {
-  getAll(): Cookie[];
-  get(name: string): Cookie | undefined;
-  set(name: string, value: string, options?: object): unknown;
-};
-export type SessionClient = RpcClient & {
-  auth: { getUser(): PromiseLike<{ data: { user: { id: string } | null } }> };
-};
-export type ClientOptions = {
-  cookieOptions: ReturnType<typeof authCookieOptions>;
-  cookies: { getAll(): Cookie[]; setAll(list: (Cookie & { options?: object })[]): void };
-};
+export type CookieStore = { get(name: string): { value: string } | undefined };
 
-/** The Lab session client's options over a request cookie store (guard, sign-in and sign-out). */
-export function clientOptions(config: LabConfig, store: CookieStore): ClientOptions {
-  return {
-    cookieOptions: authCookieOptions(config),
-    cookies: {
-      getAll: () => store.getAll(),
-      setAll: (list) => {
-        try {
-          for (const { name, value, options } of list) store.set(name, value, options);
-        } catch {
-          // A server component cannot set cookies; the next action or route refreshes them.
-        }
-      },
-    },
-  };
-}
-
-export async function accessFromRequest(
-  env: Record<string, string | undefined>,
-  store: CookieStore,
-  makeClient: (url: string, key: string, options: ClientOptions) => SessionClient,
-): Promise<Access> {
+export async function accessFromRequest(env: Record<string, string | undefined>, store: CookieStore, send?: typeof fetch): Promise<Access> {
   const config = labConfig(env);
   if (config === null) return { kind: "unavailable" };
-  const client = makeClient(config.supabaseUrl, config.anonKey, clientOptions(config, store));
-  return resolveAccess({
-    userId: async () => (await client.auth.getUser()).data.user?.id ?? null,
-    memberships: () => readMemberships(client),
-    selected: store.get(WORKSPACE_COOKIE)?.value,
-  });
+  const token = store.get(AUTH_COOKIE)?.value || null;
+  const api = labApi({ baseUrl: config.apiUrl, session: () => ({ token }), fetch: send });
+  return resolveAccess({ signedIn: token !== null, memberships: () => readMemberships(api), selected: store.get(WORKSPACE_COOKIE)?.value });
 }

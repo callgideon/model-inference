@@ -1,4 +1,4 @@
-// L4: the Lab's view of L3's control service (`/lab/v1/control`, WR-L4-1). With LAB_API_URL (else LAB_CONTROL_URL) set the
+// L4: the Lab's view of L3's control service (`/lab/v1/control`, WR-L4-1). With LAB_API_URL set the
 // port is the HTTP adapter (server.ts, WR-E3L-J); unset it is "unavailable" (fails closed), or, only
 // outside production and only when asked for, the labelled preview fake.
 import type { Actor } from "../../auth/access.ts";

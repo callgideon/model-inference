@@ -46,8 +46,8 @@ const C = {
   h04: "R4-H04 without a session token nothing is sent and every call is unavailable",
   h06: "R4-H06 a variant stored before R3 recorded its identities (null) still lists, its serving refs intact; one whose answer omits them is unavailable (R263)",
   h05: "R4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
-  w01: "R4-W01 LAB_RELEASES_API_URL set: the port reads the route as the session's own access token",
-  w02: "R4-W02 a missing LAB_RELEASES_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
+  w01: "R4-W01 LAB_API_URL set: the port reads the route as the session's own access token",
+  w02: "R4-W02 a missing LAB_API_URL or Lab config fails closed: every call unavailable, nothing sent",
 };
 
 const MUTANTS = [
@@ -120,10 +120,10 @@ const MUTANTS = [
   m("R4-X60", "an approval is recorded as the controller's", FAKE, '"expand", operatorId,', '"expand", "controller",', [C.j02]),
   // actions
   m("R4-X61", "a proposal acts as the form's provider", ACTIONS, "releasesPort().propose(w, ", 'releasesPort().propose({ ...w, providerId: String(data.get("providerId")) }, ', [C.a01]),
-  m("R4-X62", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("R4-X62", "the capability check is skipped", COMMON, '!holds(w, capability) ? "denied" : ', "", [C.a02]),
   m("R4-X63", "proposing needs only the dev capability", ACTIONS, 'w, "propose_publication", valid', 'w, "manage_dev_deployment", valid', [C.a02]),
   m("R4-X64", "malformed input reaches the releases service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
-  m("R4-X129", "shape is checked before role (LD-RV-1)", COMMON, '!holds(w.role, capability) ? "denied" : !valid ? "invalid" : null', '!valid ? "invalid" : !holds(w.role, capability) ? "denied" : null', [C.a06]),
+  m("R4-X129", "shape is checked before role (LD-RV-1)", COMMON, '!holds(w, capability) ? "denied" : !valid ? "invalid" : null', '!valid ? "invalid" : !holds(w, capability) ? "denied" : null', [C.a06]),
   m("R4-X65", "an unknown proposal kind is accepted", ACTIONS, '(kind === "expand" || kind === "rollback") && ', "", [C.a03]),
   m("R4-X66", "any policy reference passes the shape check", ACTIONS, "const POLICY_REF = /^lab:policy:", "const POLICY_REF = /^lab:\\w+:", [C.a03]),
   m("R4-X67", "any fence passes the shape check", ACTIONS, "const FENCE = /^\\d{1,15}$/;", "const FENCE = /./;", [C.a03]),
@@ -156,8 +156,7 @@ const MUTANTS = [
   m("R4-X91", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-R4-1): the configured adapter, the session's token, the row check
   m("R4-X92", "the configured adapter is ignored", PORT, "labReleases, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.w01]),
-  m("R4-X93", "another server env names the backend", SERVER, "labApiUrl(env, \"releases\")", "labApiUrl(env, \"pipelines\")", [C.w01]),
-  m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
+  m("R4-X94", "the token is not the session's", SERVER, "token: sessionToken", "token: async () => \"anon\"", [C.w01]),
   m("R4-X95", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
   m("R4-X96", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
   m("R4-X97", "an unknown release state is read", HTTP, 'state: oneOf("running", "approved", "rolled_back"), fence: num,', "state: str, fence: num,", [C.h03]),

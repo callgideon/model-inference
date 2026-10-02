@@ -55,8 +55,8 @@ const C = {
   h03: "B4-H03 the backends' records pass verbatim; one unreadable row fails the whole answer closed",
   h04: "B4-H04 without a session token nothing is sent and every call is unavailable",
   h05: "B4-H05 a session-token getter that rejects is no session: nothing is sent and every call is unavailable",
-  w01: "B4-W01 LAB_EVALS_API_URL set: the port reads the route as the session's own access token",
-  w02: "B4-W02 a missing LAB_EVALS_API_URL or Supabase config fails closed: every call unavailable, nothing sent",
+  w01: "B4-W01 LAB_API_URL set: the port reads the route as the session's own access token",
+  w02: "B4-W02 a missing LAB_API_URL or Lab config fails closed: every call unavailable, nothing sent",
 };
 
 const MUTANTS = [
@@ -138,7 +138,7 @@ const MUTANTS = [
   // actions: the session's actor, the capability, the shapes, the landing
   m("B4-X68", "a launch acts as the form's provider", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, providerId: text(data, "providerId") }, launch!)', [C.a01]),
   m("B4-X69", "the actor's role is not the session's", ACTIONS, "evaluationPort().launch(w, launch!)", 'evaluationPort().launch({ ...w, role: "administrator" as const }, launch!)', [C.a01]),
-  m("B4-X70", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("B4-X70", "the capability check is skipped", COMMON, '!holds(w, capability) ? "denied" : ', "", [C.a02]),
   m("B4-X71", "malformed input reaches the service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("B4-X72", "a ref of any kind passes", ACTIONS, "new RegExp(`^lab:${kind}:", "new RegExp(`^lab:[a-z_]+:", [C.a03]),
   m("B4-X73", "a ref with trailing text passes", ACTIONS, "@sha256:[0-9a-f]{64}$`);", "@sha256:[0-9a-f]{64}`);", [C.a03]),
@@ -198,11 +198,9 @@ const MUTANTS = [
   m("B4-X124", "no answer is invalid", TRANSPORT, "return { ok: false, reason: \"unavailable\" }; // transport", "return { ok: false, reason: \"invalid\" }; // transport", [C.h02]),
   // the swap (WR-B4-1): the configured adapter, the session's token, the row check
   m("B4-X125", "the configured adapter is ignored", PORT, "labEvaluation, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.w01]),
-  m("B4-X126", "another server env names the backend", SERVER, "labApiUrl(env, \"evaluation\")", "labApiUrl(env, \"traces\")", [C.w01]),
-  m("B4-X127", "the publishable key is sent as the credential", SESSION, "data.session?.access_token ?? null", "data.session?.access_token ?? config.anonKey", [C.w01]),
-  m("B4-X128", "the session is read from another cookie", SESSION, "    cookieOptions: authCookieOptions(config),\n", "", [C.w01]),
-  m("B4-X129", "the session cookies are not the request's", SESSION, "getAll: () => store.getAll()", "getAll: () => []", [C.w01]),
-  m("B4-X155", "the evaluation adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken(config)", "token: async () => config.anonKey", [C.w01]),
+  m("B4-X127", "a missing session cookie sends a fixed credential", SESSION, "get(AUTH_COOKIE)?.value || null", "get(AUTH_COOKIE)?.value || \"anon\"", [C.w01]),
+  m("B4-X128", "the session is read from another cookie", SESSION, "get(AUTH_COOKIE)?.value || null", "get(REFRESH_COOKIE)?.value || null", [C.w01]),
+  m("B4-X155", "the evaluation adapter carries the publishable key, not the session's token", SERVER, "token: sessionToken", "token: async () => \"anon\"", [C.w01]),
   m("B4-X130", "a call is sent without a session token", TRANSPORT, "    if (!bearer) return { ok: false, reason: \"unavailable\" }; // no session: nothing is sent\n", "", [C.h04, C.w01]),
   m("B4-X131", "an answer is not checked", TRANSPORT, "return readable(value) ? { ok: true, value: value as T } : { ok: false, reason: \"unavailable\" };", "return { ok: true, value: value as T };", [C.h03]),
   m("B4-X132", "a run in an unknown state is read", HTTP, 'state: oneOf("queued", "running", "succeeded", "failed", "cancelled"),', "state: str,", [C.h03]),

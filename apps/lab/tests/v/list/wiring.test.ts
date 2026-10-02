@@ -1,5 +1,5 @@
 // V1M / WR-V2-1: the request pages' trace port is the Lab adapter, configured only by server env
-// (LAB_TRACES_API_URL, unset = off) and carrying the session's own access token. Next's request APIs
+// (LAB_API_URL, unset = off) and carrying the session's own access token. Next's request APIs
 // are faked with module hooks, as in tests/l/shell/guard.test.ts (plain node --test has no Next runtime).
 import assert from "node:assert/strict";
 import * as nodeModule from "node:module";
@@ -14,14 +14,10 @@ const { registerHooks } = nodeModule as unknown as {
 type World = { token: string | null; cookies: Record<string, string>; clients: unknown[][] };
 const world: World = ((globalThis as unknown as { labTraces: World }).labTraces = { token: null, cookies: {}, clients: [] });
 const FAKES: Record<string, string> = {
+  // AP-09: the session token is the Lab session cookie itself (lib/auth/session.ts).
   "next/headers": `export async function cookies() {
-    const c = globalThis.labTraces.cookies;
-    return { getAll: () => Object.entries(c).map(([name, value]) => ({ name, value })) };
-  }`,
-  "@supabase/ssr": `export function createServerClient(...args) {
-    const w = globalThis.labTraces;
-    w.clients.push(args);
-    return { auth: { getSession: async () => ({ data: { session: w.token === null ? null : { access_token: w.token } } }) } };
+    const t = globalThis.labTraces.token;
+    return { get: (name) => (name === "${AUTH_COOKIE}" && t !== null ? { name, value: t } : undefined) };
   }`,
 };
 registerHooks({
@@ -36,7 +32,7 @@ const { labTraces } = await import("../../../lib/services/traces/server.ts");
 const A = "a0000001-0000-4000-8000-000000000001";
 const REQ = "5c000000-0000-4000-8000-0000000000f1";
 const actor = { providerId: A, role: "developer" as const };
-const ENV = { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", LAB_TRACES_API_URL: "https://api.example" };
+const ENV = { LAB_API_URL: "https://api.example" };
 
 function answering(status: number, body: unknown) {
   const sent: { url: string; auth: string | null }[] = [];
@@ -55,8 +51,6 @@ test("V1M-W01 the detail page's trace port is the Lab adapter, reading with the 
     const sent = answering(404, { refusal: "not_found" });
     assert.deepEqual(await tracePorts().traces.detail(actor, REQ), { ok: false, reason: "not_found" });
     assert.deepEqual(sent, [{ url: `https://api.example/lab/v1/traces/${REQ}?provider_org_id=${A}`, auth: "Bearer eyJ0.session.sig" }]);
-    const [url, key, options] = world.clients[0] as [string, string, { cookieOptions: { name: string }; cookies: { getAll(): unknown[] } }];
-    assert.deepEqual([url, key, options.cookieOptions?.name, options.cookies.getAll()], [ENV.NEXT_PUBLIC_SUPABASE_URL, "anon", AUTH_COOKIE, [{ name: AUTH_COOKIE, value: "c" }]]);
     world.token = null;
     assert.deepEqual(await tracePorts().traces.detail(actor, REQ), { ok: false, reason: "unavailable" }, "no session token: nothing is sent");
     assert.equal(sent.length, 1);
@@ -65,10 +59,10 @@ test("V1M-W01 the detail page's trace port is the Lab adapter, reading with the 
   }
 });
 
-test("V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent", async () => {
+test("V1M-W02 unset LAB_API_URL or Lab config is off: every read unavailable, nothing sent", async () => {
   world.token = "eyJ0.session.sig";
   const sent = answering(200, { data: [], next_cursor: null });
-  for (const env of [{ ...ENV, LAB_TRACES_API_URL: "" }, { ...ENV, NEXT_PUBLIC_SUPABASE_ANON_KEY: "" }]) {
+  for (const env of [{ ...ENV, LAB_API_URL: "" }, { ...ENV, NODE_ENV: "production" }]) {
     const port = labTraces(env);
     assert.deepEqual([await port.list(actor, null), await port.detail(actor, REQ)], [{ ok: false, reason: "unavailable" }, { ok: false, reason: "unavailable" }]);
   }
