@@ -119,7 +119,8 @@ def test_catalog__a_routed_approved_alias_is_listed_and_a_down_route_is_unavaila
     assert other["pricing"]["credit"]["rate_card_version"] == "rc_other"
     assert routes.seen == [(DEP, SRV)]
     for state in ("unavailable", "raise"):
-        assert ids(Second(), Routes(state))[OTHER]["availability"] == "unavailable", state
+        assert ids(Second(), Routes(state)).get(OTHER, {}).get("availability") \
+            == "unavailable", state
     assert ids(Second(), Routes("ready"))["nemostation/marlin-2b"] == \
         ids(Second())["nemostation/marlin-2b"]
 

@@ -251,7 +251,6 @@ def _dev_routes(app: FastAPI, rt: Any) -> None:
     from .. import control as r270
     from .operator_publication import ERRORS, DevKey, DevWallet, once
 
-    domain = pub.operations.control
     router = APIRouter(route_class=r270.R270Route, responses=ERRORS)
     base = CONTROL_PREFIX + "/endpoints/{endpoint_id}/keys"
 
@@ -259,7 +258,7 @@ def _dev_routes(app: FastAPI, rt: Any) -> None:
         actor = await rt.actors.actor(request)
         if actor.audience != "session" or not actor.user_id:
             raise errors.InvalidApiKey("an API key is not a Lab session")
-        await domain.access.require(actor.user_id, provider_org_id, capability)
+        await pub.operations.control.access.require(actor.user_id, provider_org_id, capability)
         return actor.model_copy(update={"provider_org_id": provider_org_id})
 
     def credentials():
@@ -279,8 +278,8 @@ def _dev_routes(app: FastAPI, rt: Any) -> None:
         revision = max(ready, key=lambda d: d.created_at).deployment_revision_id
 
         async def work(op):
-            issued = await domain.issue_dev_key(actor.user_id, provider_org_id, revision,
-                                                body.name)
+            issued = await pub.operations.control.issue_dev_key(
+                actor.user_id, provider_org_id, revision, body.name)
             await pub.ops.advance(op.operation_id, op.fence,
                                   f"issued:{issued.key_id}:{issued.prefix}")
             return DevKeyIssued(key_id=issued.key_id, endpoint_id=endpoint_id,

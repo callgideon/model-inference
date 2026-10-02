@@ -301,7 +301,7 @@ def register(app, rt):
     catalog rows are cached for `price_ttl` seconds (one refresh at a time), so an
     anonymous caller cannot turn discovery into database load; availability is live."""
     guarded = intake.guard(rt.ingress.new_request_id)
-    cache = {"at": None, "rows": None}
+    cache: dict = {"at": None, "rows": None}
     refreshing = asyncio.Lock()
 
     async def rows():

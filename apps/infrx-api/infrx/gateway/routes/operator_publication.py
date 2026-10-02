@@ -33,7 +33,8 @@ from pydantic import Field
 
 from ...console.actions import operator as session_operator
 from ...contracts import api, errors
-from ...contracts.v2.records import DeploymentRevision, DeploymentState, RateCardSnapshot
+from ...contracts.v2.records import (DeploymentRevision, DeploymentState, RateCardSnapshot,
+                                     ServingRevision)
 from ...operations.service import OperatorSession
 from ...state.control_ops import ControlOps, Operation, input_hash
 from .. import control
@@ -255,7 +256,11 @@ class Decisions:
     """The operator half over one `Publication`."""
 
     def __init__(self, pub: Publication) -> None:
-        self.pub, self.control = pub, pub.operations.control
+        self.pub = pub
+
+    @property
+    def control(self):
+        return self.pub.operations.control
 
     async def operator(self, actor: api.Actor) -> OperatorSession:
         """A session whose actor says operator AND whose `profiles.is_operator` the store
@@ -272,9 +277,14 @@ class Decisions:
             raise errors.NotFound("no such publication proposal")
         return found[0], d
 
+    async def _serving(self, d: DeploymentRevision) -> ServingRevision:
+        serving = await self.control.catalog.serving_revision(d.serving_version_id)
+        if serving is None:                    # a revision always has one (0007's FK)
+            raise errors.NotFound("no such serving revision")
+        return serving
+
     async def _alias(self, d: DeploymentRevision) -> str:
-        return (await self.control.catalog.serving_revision(d.serving_version_id)
-                ).public_model_id
+        return (await self._serving(d)).public_model_id
 
     async def proposals(self, actor: api.Actor, provider_org_id: str) -> list[Proposal]:
         await self.operator(actor)
@@ -283,7 +293,7 @@ class Decisions:
     async def detail(self, actor: api.Actor, proposal_id: str) -> ProposalDetail:
         await self.operator(actor)
         proposal, d = await self._proposal(proposal_id)
-        serving = await self.control.catalog.serving_revision(d.serving_version_id)
+        serving = await self._serving(d)
         receipt, availability = None, api.Availability(state="disabled",
                                                        reason="readiness_not_composed")
         if self.pub.readiness is not None:

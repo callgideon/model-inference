@@ -24,11 +24,13 @@ def code(response):
 
 
 def test_publication__nothing_is_mounted_without_a_publication(fake_world):
-    """Oracle: default OFF - no `rt.lab_publication`, no operator or dev-key route."""
+    """Oracle: default OFF - no `rt.lab_publication`, no operator or dev-key route (404)."""
     a = Api(fake_world, mount=False)
-    for path in (P, f"{P}/x/approve", "/operator/v1/dev-wallet-grants",
-                 "/lab/v1/control/dev-wallet", "/lab/v1/control/endpoints/x/keys"):
-        assert a.client.post(path).status_code in (404, 405), path
+    for method, path in (("GET", P), ("POST", f"{P}/x/approve"),
+                         ("POST", "/operator/v1/dev-wallet-grants"),
+                         ("GET", "/lab/v1/control/dev-wallet"),
+                         ("GET", "/lab/v1/control/endpoints/x/keys")):
+        assert a.client.request(method, path).status_code == 404, path
 
 
 def test_publication__a_non_operator_is_refused_before_any_decision(fake_world):
@@ -80,7 +82,8 @@ def test_publication__a_stale_or_missing_readiness_receipt_refuses_approval(fake
     _, source, prop = proposed(w)
     path = f"{P}/{prop.deployment_revision_id}/approve"
     a = Api(w)
-    assert code(a.post(path, approval(), key="key-none-0")) == "state_conflict"
+    none = a.post(path, approval(), key="key-none-0")
+    assert none.status_code == 409 and code(none) == "state_conflict", none.text
     a.readiness.ready(source, ready=False)
     assert a.post(path, approval(), key="key-failed-0").status_code == 409
     a.readiness.ready(source, serving_version_id=IDS_OTHER)
@@ -112,17 +115,23 @@ def test_publication__readiness_is_required_when_none_is_composed(fake_world):
 
 
 def test_publication__a_stale_expected_version_is_a_conflict_and_its_refusal_replays(fake_world):
-    """Oracle: expected version 5 while the alias is at 1 is the store's 409; the same key
-    answers the same refusal (no second attempt), and a new key with the right version wins."""
+    """Oracle: expected version 2 while the alias is at 1 is the store's 409 and is
+    recorded: after another approval moved the alias to 2, the same key answers the same
+    refusal instead of now publishing (same key, same outcome); the listing is [1, 2]."""
     w = fake_world
-    _, source, prop = proposed(w)
+    _, source1, prop1 = proposed(w, "2026-10-01")
+    _, source2, prop2 = proposed(w, "2026-10-02")
     a = Api(w)
-    a.readiness.ready(source)
-    path = f"{P}/{prop.deployment_revision_id}/approve"
-    first = a.post(path, approval(expected_version=5), key="key-stale-1")
-    assert first.status_code == 409, first.text
-    assert a.post(path, approval(expected_version=5), key="key-stale-1").status_code == 409
-    assert a.post(path, approval(), key="key-right-1").status_code == 200
+    a.readiness.ready(source1)
+    a.readiness.ready(source2)
+    early = f"{P}/{prop2.deployment_revision_id}/approve"
+    first = a.post(early, approval(expected_version=2, rate="rc_late"), key="key-stale-1")
+    assert first.status_code == 409 and code(first) == "state_conflict", first.text
+    assert a.post(f"{P}/{prop1.deployment_revision_id}/approve", approval(),
+                  key="key-right-1").status_code == 200
+    a.clock.advance(61)                      # past any lease the first attempt could hold
+    again = a.post(early, approval(expected_version=2, rate="rc_late"), key="key-stale-1")
+    assert again.status_code == 409, again.text
     assert listed(w) == [1, 2]
 
 
