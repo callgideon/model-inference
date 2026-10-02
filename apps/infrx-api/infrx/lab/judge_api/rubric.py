@@ -16,11 +16,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ...contracts.api import Wire
-from ...judge.rubric import MARLIN_VIDEO_V1, NOTES, OVERALL_PASS, Criterion, Rubric
-
-#: The rubric versions the judge worker grades (`submit.collect` uses MARLIN_VIDEO_V1). A new
-#: version is added here only together with the collector that grades it.
-RUBRICS: dict[int, Rubric] = {MARLIN_VIDEO_V1.version: MARLIN_VIDEO_V1}
+from ...judge.rubric import NOTES, OVERALL_PASS, RUBRICS, Criterion, Rubric
 
 Evidence = Literal["media", "text"]
 

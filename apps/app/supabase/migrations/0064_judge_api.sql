@@ -47,6 +47,11 @@
 --       submitting/submitted/ambiguous is NOT moved (its provider batch is reconciled, never
 --       resubmitted or blindly dropped); a queued request is never started (the start step
 --       reads the cancellation). Answers the run row as run_list does.
+--   infrx.lab_judge_queued {limit}: the judge worker's START read (`infrx.judge.start`) - up
+--       to `limit` (1..100) requests with no ledger run yet or a reserved one never sent
+--       (`prepared`, a worker that died between reserve and intent), never a cancelled one,
+--       oldest first, with the config pins and the requester (whose CURRENT permission J2's
+--       `submit` re-checks). EXECUTE: the platform role only (0004's default), the worker's.
 --   public.lab_trace_review(p_args {provider_org_id, request_id, review_id, input_hash,
 --       verdict, comment?, run_id?, rubric_version?}): developer+ and the request's org
 --       CURRENTLY sharing it with the provider (0038's rule: feedback + provider_sharing over
@@ -67,7 +72,8 @@
 --   public.lab_judge_set_budget_keyed(uuid, text, jsonb, text),
 --   public.lab_judge_config_list(uuid, uuid, uuid, int),
 --   public.lab_judge_configure_keyed(uuid, uuid, uuid, uuid, text, int, int),
---   infrx.lab_judge_run_doc(uuid), infrx.lab_review_request_org(uuid, uuid);
+--   infrx.lab_judge_queued(jsonb), infrx.lab_judge_run_doc(uuid),
+--   infrx.lab_review_request_org(uuid, uuid);
 --   drop table infrx.lab_trace_reviews, infrx.lab_judge_cancellations.
 --
 -- Re-runnable: `if not exists`, `create or replace`.
@@ -331,6 +337,24 @@ begin
   return infrx.lab_judge_run_doc(p_run_id);
 end $$;
 
+create or replace function infrx.lab_judge_queued(p_args jsonb) returns jsonb
+language plpgsql stable security definer set search_path = infrx, public, pg_temp as $$
+begin
+  return (select coalesce(jsonb_agg(x.doc order by x.requested_at, x.run_id), '[]') from (
+    select q.requested_at, q.run_id, jsonb_build_object('run_id', q.run_id,
+        'provider_org_id', q.provider_org_id, 'payer_ref', q.payer_ref,
+        'requested_by', q.requested_by, 'grantor_org_id', c.grantor_org_id,
+        'model_id', c.model_id, 'judge_model', c.judge_model,
+        'rubric_version', c.rubric_version, 'sample_size', c.sample_size) doc
+      from infrx.lab_judge_requests q
+      join infrx.lab_judge_configs c on c.config_id = q.config_id
+      left join infrx.lab_judge_runs r on r.run_id = q.run_id
+     where (r.run_id is null or r.state = 'prepared')
+       and not exists (select 1 from infrx.lab_judge_cancellations k where k.run_id = q.run_id)
+     order by q.requested_at, q.run_id
+     limit least(greatest(coalesce((p_args->>'limit')::int, 20), 1), 100)) x);
+end $$;
+
 -- ============================================================ human reviews ===
 -- 0038's rule: a CURRENT developer+ member (else not_found / forbidden), and the request's
 -- org CURRENTLY sharing `feedback` for `provider_sharing` of the job's model with the provider.
@@ -458,7 +482,7 @@ end $$;
 -- ================================================================== privileges ===
 revoke all on function infrx.lab_judge_config_json(infrx.lab_judge_configs),
   infrx.lab_judge_run_doc(uuid), infrx.lab_review_request_org(uuid, uuid),
-  infrx.lab_trace_review_json(infrx.lab_trace_reviews),
+  infrx.lab_judge_queued(jsonb), infrx.lab_trace_review_json(infrx.lab_trace_reviews),
   public.lab_judge_configure_keyed(uuid, uuid, uuid, uuid, text, int, int),
   public.lab_judge_config_list(uuid, uuid, uuid, int),
   public.lab_judge_set_budget_keyed(uuid, text, jsonb, text),
