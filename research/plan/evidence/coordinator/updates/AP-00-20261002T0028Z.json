@@ -1,0 +1,86 @@
+{
+  "task": "AP-00",
+  "lane": "api-schema",
+  "slice": "00d (0060 control operations + idempotency; ControlOps store)",
+  "activity": "review",
+  "at": "2026-10-02T00:28:00Z",
+  "head": "a1c46a6",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-schema",
+  "branch": "codex/w7-api-schema",
+  "owned_paths": [
+    "apps/app/supabase/migrations/0060_control_operations.sql",
+    "apps/app/supabase/migrations/README.md",
+    "apps/infrx-api/infrx/state/control_ops.py",
+    "apps/infrx-api/tests/d/test_control_ops.py",
+    "apps/infrx-api/tests/d/test_control_ops_units.py",
+    "apps/infrx-api/tests/d/test_control_ops_upgrade.py",
+    "apps/infrx-api/tests/d/test_control_ops_mutants.py",
+    "research/plan/evidence/w7/api-schema-a1c46a6.md",
+    "research/plan/evidence/coordinator/updates/AP-00-20261002T0028Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_units.py tests/d/test_control_ops.py (before control_ops.py)",
+      "exit": 2,
+      "summary": "seam red: ModuleNotFoundError infrx.state.control_ops"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap0 uv run --frozen pytest -q <control_ops x3 + 14 schema-wide tests/d, l3sql, tests/i files>",
+      "exit": 1,
+      "summary": "175 passed, 3 xfailed, 2 failed outside owned paths: test_upgrade_lab (W2), test_known_good_proof hosted_migrate pin (W3)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py",
+      "exit": 0,
+      "summary": "105 passed: 59 SQL + 43 Python mutants killed, 0 survivors; every-case guard green"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap0 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/d/test_control_ops.py tests/d/test_control_ops_upgrade.py tests/d/test_control_ops_mutants.py --deselect ...::test_code_mutant_is_killed",
+      "exit": 0,
+      "summary": "74 passed on supabase/postgres 17.6 (11 checks, rehearsal, 59 SQL mutants killed)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/i/test_migrate.py",
+      "exit": 0,
+      "summary": "6 passed"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 458 (baseline 458), no new errors"
+    },
+    {
+      "cmd": "tests/integration/test_makefile_mutant_lists.py",
+      "exit": 1,
+      "summary": "new runner not in api-mutants (W1); 7 passed with W1 on a scratch copy"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "00d done at a1c46a6 (brief 4/7/12, ~6 h spent); remaining = coordinator wiring W1-W3 and the post-merge re-proof of 0060+ on ap0 (plain + supabase, ~15 min machine time per pass) plus one review round",
+    "at": "2026-10-02T00:28:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "W1 Makefile api-mutants: add `cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py` after the 0058 line (composed: tests/integration/test_makefile_mutant_lists.py 7 passed)",
+    "W2 apps/infrx-api/tests/d/test_upgrade_lab.py NEW_TABLES += infrx.control_operations, infrx.control_idempotency (# 0060) (composed: tests/d/test_upgrade_lab.py 7 passed on ap0)",
+    "W3 apps/infrx-api/tests/i/test_known_good_proof.py hosted_migrate pin: EXPECTED_PENDING is a prefix of the files after the anchor and the rest are 0060-0064 (exact body in the evidence file), or edit hosted-migrate.sh at the next window instead"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-schema-a1c46a6.md"
+  ]
+}

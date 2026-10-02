@@ -50,7 +50,8 @@ NEW_TABLES = {"infrx.lab_access_grants",                                    # 00
               *(f"infrx.{t}" for t in ("lab_experiments", "lab_release_proposals",  # 0043
                                        "lab_judge_calibrations")),
               "infrx.lab_import_jobs",                                      # 0051
-              "infrx.lab_variant_identities"}                               # 0058
+              "infrx.lab_variant_identities",                               # 0058
+              "infrx.control_operations", "infrx.control_idempotency"}      # 0060 (R271)
 SEEDED: dict[str, int] = {}                                                 # none yet
 
 
