@@ -34,14 +34,20 @@ DB = f"{pgharness.DATABASE}_r1"
 ALIAS = q.ALIAS
 
 
-def runtime_login():
+@pytest.fixture
+def runtime_dsn(conn):
+    """A real `infrx_runtime` session (pgharness.login), not `set session authorization`,
+    which needs a superuser and so is refused 42501 on the Supabase image."""
+    with pgharness.login("infrx_runtime", DB) as dsn:
+        yield dsn
+
+
+def runtime_login(dsn):
     """The runtime's own login (0021 `infrx_runtime`, D10): no `set role service_role`, only
     what the role holds - the three SR-R1-1 functions are EXECUTE infrx_runtime only."""
     async def connect():
-        conn = await psycopg.AsyncConnection.connect(pgharness.dsn(DB), autocommit=True,
+        return await psycopg.AsyncConnection.connect(dsn, autocommit=True,
                                                      prepare_threshold=None)
-        await conn.execute("set session authorization infrx_runtime")
-        return conn
     return connect
 
 
@@ -74,14 +80,14 @@ def assignments(conn, request_id) -> list:
                         "where request_id = %s", (request_id,)).fetchall()
 
 
-def test_r1_pg_the_cohort_holds_pins_win_and_revocation_is_immediate(conn) -> None:
+def test_r1_pg_the_cohort_holds_pins_win_and_revocation_is_immediate(conn, runtime_dsn) -> None:
     """A 100% canary: C1 (eligible) is admitted on the candidate's R62 pin, again on a repeat,
     and its assignment is D9's one row; an explicit pin is served as asked; BOTH (no grant) is
     ineligible and recorded nowhere; once C1's grant is revoked its next request is on the
     baseline at once and records nothing."""
     ref, body = q.launch(conn, 21, weights=(10_000,))
     try:
-        router = routing.Router(PgRoutingReleases(runtime_login()), Shadows())
+        router = routing.Router(PgRoutingReleases(runtime_login(runtime_dsn)), Shadows())
         c1, both = auth(q.l2.org(conn, q.C1)), auth(q.l2.org(conn, q.BOTH))
         pin = f"{ALIAS}@{q.W['label_2']}"
         first, second = q.uid(1, 0x4e), q.uid(2, 0x4e)
@@ -108,7 +114,7 @@ def test_r1_pg_the_cohort_holds_pins_win_and_revocation_is_immediate(conn) -> No
         q.ok(conn, d9.MOVE, d9.args(body["policy_id"], "stop", 1))
 
 
-def test_r1_pg_a_shadow_duplicate_never_settles(conn) -> None:
+def test_r1_pg_a_shadow_duplicate_never_settles(conn, runtime_dsn) -> None:
     """A shadow release (bound 1): the user's request is admitted unchanged on the baseline and
     recorded once; the provider-funded duplicate runs on the candidate's pin and writes
     nothing - no job, hold, ledger or journal row appears for it."""
@@ -123,7 +129,7 @@ def test_r1_pg_a_shadow_duplicate_never_settles(conn) -> None:
              "infrx.credit_wallet_holds), (select count(*) from infrx.credit_ledger)")
     before = conn.execute(money).fetchone()
     shadows = Shadows()
-    router = routing.Router(PgRoutingReleases(runtime_login()), shadows)
+    router = routing.Router(PgRoutingReleases(runtime_login(runtime_dsn)), shadows)
     rid = q.uid(6, 0x4e)
     assert hooked(router, auth(q.l2.org(conn, q.C1)), request_id=rid).model_revision == ALIAS
     assert [(s, r.model_revision) for s, r in shadows.runs] == [
