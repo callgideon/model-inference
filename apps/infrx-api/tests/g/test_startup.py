@@ -536,6 +536,7 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
     import dataclasses
 
     from infrx.gateway import pilot
+    from infrx.lab import evaluation as ev
     from infrx.lab.access import LabAccess
     from infrx.state.lab_data import PgLabDataStore
 
@@ -556,8 +557,12 @@ def test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enable
         d8 = {"log", "ledger", "evals"} if name == "lab_pipelines" else set()   # WR-P1/P3-D8-C,
         #                                                          WR-E7L-1 (P3's evaluations)
         d9 = {"records", "proposals", "store"} if name == "lab_releases" else set()   # WR-R4-2
-        assert {f for f, port in ports.items() if port is not None} == d7 | d8 | d9, name
+        ap10 = {"experiments", "ledger", "catalog"} if name == "lab_evaluations" else set()
+        assert {f for f, port in ports.items() if port is not None} == d7 | d8 | d9 | ap10, name
         assert all(isinstance(ports[f], PgLabDataStore) for f in d7)
+        if ap10:                                                    # WR-AP10-1
+            assert tuple(type(ports[f]) for f in ("experiments", "ledger", "catalog")) \
+                == (ev.Experiments, ev.Subscriptions, ev.Catalog)
     every = pilot._lab(settings(**{s: True for s, _, _ in LAB_2.values()}), connect=None)
     assert sorted(every) == sorted(LAB_2)
 

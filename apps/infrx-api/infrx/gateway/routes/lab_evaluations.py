@@ -193,7 +193,8 @@ async def launch(x: LabEvaluations, who: Actor, wanted: Launch) -> dict[str, Any
     now = await x.access.store.db_now()
     row = await x.port("experiments").put(who.provider_org_id, {
         "experiment_id": wanted.experiment_id, "created_at": iso_z(now),
-        "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None})
+        "launch": wanted.model_dump(mode="json", exclude_unset=True), "report": None},
+        actor=who.user_id)
     for arm in ARMS:                    # R183: a ref D7 cannot resolve is the form's (422)
         await held(runner.freeze(store, _run_payload(who.provider_org_id, wanted, arm,
                                                      row["created_at"]),

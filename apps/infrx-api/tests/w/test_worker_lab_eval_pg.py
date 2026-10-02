@@ -102,7 +102,10 @@ def test_worker_lab_eval_pg__a_redelivery_after_a_revocation_resumes_and_ends_re
         states = dict(c.rows("select state, count(*)::int from infrx.lab_eval_cases "
                              "where run_id = %s group by state"))
         assert states == {"failed": N} and c.results() == []
-        assert len(c.wallet.calls) == 1                         # only the killed attempt paid
+        # register row 27 (WR-AP10-3; tests/ap10/test_row27_pg.py): one paid attempt per
+        # in-flight case (at most LAB_EVAL_LIMITS.concurrency), none charged twice
+        keys = [x["key"] for x in c.wallet.calls]
+        assert 1 <= len(keys) <= worker_main.LAB_EVAL_LIMITS.concurrency and len(set(keys)) == len(keys)
     finally:
         restore(c.conn)
 
