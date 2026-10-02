@@ -104,6 +104,7 @@ console-mutants:
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
+	cd apps/app && node tests/ux/run-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
@@ -193,6 +194,7 @@ lab-mutants:
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
+	cd apps/lab && node tests/ux/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
 api-client-test:

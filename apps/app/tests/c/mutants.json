@@ -640,7 +640,7 @@
       "id": "CREDITS-13",
       "note": "reviewer X10: the sidebar's unavailable branch is short-circuited, so the amount branch renders with no amount",
       "file": "components/sidebar.tsx",
-      "find": "            {balance === null ? (",
+      "find": "          {balance === null ? (",
       "replace": "            {false ? (",
       "cases": [
         "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"

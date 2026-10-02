@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { ConsoleDataUnavailable } from "@/components/console-data-state";
-import { Sidebar } from "@/components/sidebar";
+import { MAIN_ID, Sidebar } from "@/components/sidebar";
 import { consoleShell } from "@/lib/services/console";
 import { consumerSession } from "@/lib/services/server";
 import { getSession } from "@/lib/session"; // the operator flag only (WR-6)
@@ -39,7 +39,7 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
       <Sidebar email={shell.email} balance={balance} isOperator={isOperator} />
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+      <main id={MAIN_ID} tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none md:px-8 md:py-8">
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
     </div>
