@@ -44,7 +44,7 @@ def test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing
             await op.adjust(USER_A, "6", idempotency_key="adj", reason=R)
         return first, twin
     first, twin = asyncio.run(go())
-    assert twin == first
+    assert twin == {**first, "replayed": True}             # the recorded entry, and it says replay
     assert len(w.ledger.entries) == 2                       # the grant and one adjustment
     assert [e.idempotency_key for e in w.audit.entries] == ["g", "adj"]
 
