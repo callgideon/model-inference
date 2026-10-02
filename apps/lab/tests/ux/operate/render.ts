@@ -9,6 +9,7 @@
 //
 // ponytail: static markup, no hydration - client islands render their server HTML only (a dialog shows
 // its trigger); UX-00's harness (tests/ux/foundations) owns the interactive primitives' behaviour.
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import * as nodeModule from "node:module";
 import { join } from "node:path";
@@ -31,6 +32,12 @@ const { registerHooks } = nodeModule as unknown as {
 
 const NOOP = "export const __stub = true;";
 const ACTIONS = (names: string[]) => names.map((n) => `export async function ${n}() {}`).join("\n");
+const GUARD = `export const providerAccessForRequest = async () => globalThis.__operateAccess;
+export async function requireProviderWorkspace() {
+  const a = globalThis.__operateAccess;
+  if (a?.kind !== "ready") throw new Error("NEXT_NOT_FOUND");
+  return a.workspace;
+}`;
 /** The seams a view may import, by specifier. A server action is inert: forms render, nothing runs. */
 const STUBS: Record<string, string> = {
   "next/link": `import { createElement } from "react";
@@ -39,12 +46,8 @@ export default function Link({ href, prefetch, ...props }) { void prefetch; retu
 export const useRouter = () => ({ refresh() {}, push() {}, replace() {} });
 export function notFound() { throw new Error("NEXT_NOT_FOUND"); }
 export function redirect(to) { throw new Error("NEXT_REDIRECT " + to); }`,
-  "@/lib/auth/guard": `export const providerAccessForRequest = async () => globalThis.__operateAccess;
-export async function requireProviderWorkspace() {
-  const a = globalThis.__operateAccess;
-  if (a?.kind !== "ready") throw new Error("NEXT_NOT_FOUND");
-  return a.workspace;
-}`,
+  "../../auth/guard.ts": GUARD, // lib/services/control/actions.ts's spelling
+  "@/lib/auth/guard": GUARD,
   "./api": "export const artifactPort = () => globalThis.__operateArtifacts;",
   "@/lib/auth/actions": ACTIONS(["selectWorkspace"]),
   "@/lib/auth/sign-in": ACTIONS(["signIn", "signOut"]),
@@ -169,4 +172,25 @@ export async function route(pageFile: string | null, access: Access, path: strin
     body = await Page({ searchParams: Promise.resolve(query), params: Promise.resolve({}) });
   }
   return html(await Layout({ children: body }), path);
+}
+
+/** One Chromium for a test file: `open` a document at a width; `laidOut` checks every width for no
+ *  sideways scroll and that each control Tab reaches is drawn on screen. */
+export async function kit() {
+  const browser = await launch();
+  const open = async (body: string, viewport: { width: number; height: number } = VIEWPORTS[2]): Promise<Shot> => {
+    const p = await browser.newPage({ viewport });
+    await p.setContent(page(body));
+    return p;
+  };
+  const laidOut = async (markup: string, tabs = 12): Promise<void> => {
+    for (const viewport of VIEWPORTS) {
+      const p = await open(markup, viewport);
+      assert.equal(await overflows(p), false, `${viewport.width}px scrolls sideways`);
+      const walk = await tabWalk(p, tabs);
+      assert.ok(walk.every((t) => t.tag === "body" || t.onScreen), `${viewport.width}px focused an off-screen control: ${JSON.stringify(walk)}`);
+      await p.close();
+    }
+  };
+  return { open, laidOut, close: () => browser.close() };
 }

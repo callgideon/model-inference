@@ -6,19 +6,14 @@
 // distinct. Synthetic data only; nothing is captured.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { launch, overflows, page, route, tabWalk, text, VIEWPORTS, type Membership, type Shot } from "./render.ts";
+import { kit, overflows, route, tabWalk, text, VIEWPORTS, type Membership } from "./render.ts";
 
 const LONG = "Synthetic Robotics Research Workspace With An Unusually Long Name For Wrapping Checks";
 const W = (role: Membership["role"], name = "Synthetic Lab"): Membership => ({ providerId: `p-${role}`, providerName: name, role });
 const ready = (path: string, workspaces = [W("developer")]) => route(null, { kind: "ready", workspace: workspaces[0], workspaces }, path);
 
-const browser = await launch();
-test.after(() => browser.close());
-async function open(body: string, viewport: { width: number; height: number }): Promise<Shot> {
-  const p = await browser.newPage({ viewport });
-  await p.setContent(page(body));
-  return p;
-}
+const { open, close } = await kit();
+test.after(close);
 
 test("OP-S01 the shell groups Operate and Improve, marks only the current page and names the workspace and role", async () => {
   const markup = await ready("/deployments");

@@ -3,7 +3,7 @@
 // with synthetic records, laid out in Chromium at 390/768/1440 and walked by keyboard.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { launch, load, mainOf, overflows, page, route, tabWalk, text, VIEWPORTS, type Membership, type Role, type Shot } from "./render.ts";
+import { kit, load, mainOf, route, text, type Membership, type Role } from "./render.ts";
 
 Object.assign(process.env, { LAB_CONTROL_PREVIEW: "1" });
 type Port = typeof import("../../../lib/services/control/port.ts");
@@ -26,23 +26,8 @@ const at = (file: string, path: string, role: Role, providerId = P, query: Recor
   return route(file, { kind: "ready", workspace, workspaces: [workspace] }, path, query);
 };
 
-const browser = await launch();
-test.after(() => browser.close());
-async function open(body: string, viewport: { width: number; height: number } = VIEWPORTS[2]): Promise<Shot> {
-  const p = await browser.newPage({ viewport });
-  await p.setContent(page(body));
-  return p;
-}
-/** At every width: no sideways scroll, and every control Tab reaches is drawn on screen. */
-async function laidOut(markup: string, tabs = 12): Promise<void> {
-  for (const viewport of VIEWPORTS) {
-    const p = await open(markup, viewport);
-    assert.equal(await overflows(p), false, `${viewport.width}px scrolls sideways`);
-    const walk = await tabWalk(p, tabs);
-    assert.ok(walk.every((t) => t.tag === "body" || t.onScreen), `${viewport.width}px focused an off-screen control: ${JSON.stringify(walk)}`);
-    await p.close();
-  }
-}
+const { open, laidOut, close } = await kit();
+test.after(close);
 
 test("OP-P01 overview: an empty workspace has one obvious next action; a viewer is told why it has none", async () => {
   const dev = await at("overview/page.tsx", "/overview", "developer", EMPTY);
