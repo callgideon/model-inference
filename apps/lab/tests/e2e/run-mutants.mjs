@@ -51,7 +51,7 @@ const S = {
   r03: "E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence",
   r04: "E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once",
   r05: "E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing",
-  e01: "E2E-E01 as the gateway composes LAB_EVALS today, the page fails closed: nothing listed, nothing to launch",
+  e01: "E2E-E01 as the gateway composes LAB_EVALS today, the records are listed and the launch is unavailable while its catalog answers 503",
   e02: "E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs",
   e03: "E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none",
   e04: "E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval",
@@ -101,23 +101,31 @@ const suiteRun = (cwd, suite) =>
 async function stackList(only) {
   const declared = new Set(STACK_MUTANTS.flatMap((x) => x.cases));
   const problems = [];
+  const notRun = new Map(); // a case the suite reports `# TODO NOT RUN[...]` ran nothing: its mutants are not judged
   for (const suite of ["observe", "rollout", "evaluate", "improve"]) {
     const base = await suiteRun(lab, suite);
     if (base.code !== 0) problems.push(`the unmutated ${suite} suite does not pass`);
-    const cases = [...base.out.matchAll(/^ *ok \d+ - (E2E-[OREI]\d\d .*)$/gm)].map((x) => x[1].trim());
-    problems.push(...cases.filter((name) => !declared.has(name)).map((name) => `no mutant names "${name}"`));
+    const cases = [...base.out.matchAll(/^ *ok \d+ - (E2E-[OREI]\d\d .*?)(?: # TODO (NOT RUN\[[^\]]+\]).*)?$/gm)];
+    for (const [, name, why] of cases) if (why) notRun.set(name.trim(), why);
+    problems.push(...cases.map((x) => x[1].trim()).filter((name) => !declared.has(name)).map((name) => `no mutant names "${name}"`));
   }
   const known = new Set(Object.values(S).filter((n) => /^E2E-[OREI]\d\d /.test(n)));
   problems.push(...[...declared].filter((name) => !known.has(name)).map((name) => `a mutant names a missing case "${name}"`));
   const selected = only === null ? STACK_MUTANTS : STACK_MUTANTS.filter((x) => only.includes(x.id));
   for (const problem of problems) console.log(`FAIL ${problem}`);
   let survivors = 0;
+  let unjudged = 0;
   for (const mutant of selected) {
+    if (mutant.cases.every((name) => notRun.has(name))) {
+      unjudged += 1;
+      console.log(`not run ${mutant.id} ${mutant.what} — its cases are ${[...new Set(mutant.cases.map((name) => notRun.get(name)))].join(", ")}`);
+      continue;
+    }
     const verdict = await judge(mutant, (root) => suiteRun(root, mutant.suite));
     if (!verdict.startsWith("killed")) survivors += 1;
     console.log(`${verdict.startsWith("killed") ? "killed " : "NOT KILLED"} ${mutant.id} ${mutant.what} — ${verdict}`);
   }
-  console.log(`\nstack: ${declared.size} cases named; ${selected.length} mutants, ${selected.length - survivors} killed, ${survivors} not killed`);
+  console.log(`\nstack: ${declared.size} cases named; ${selected.length} mutants, ${selected.length - survivors - unjudged} killed, ${survivors} not killed, ${unjudged} not run`);
   return problems.length === 0 && survivors === 0 ? 0 : 1;
 }
 
