@@ -91,7 +91,7 @@ def _compose(lab: dict[str, str], store):
     # WR-1 (AP-08): the judge/review family on the unit's login, only with LAB_JUDGE_API; `actors`
     # stays None until AP-01's SessionActors is composed here (the routes answer 503 meanwhile).
     judge = None
-    if settings.deployment.lab_judge_api:
+    if settings.deployment is not None and settings.deployment.lab_judge_api:
         from ..judge_api.doors import SessionDoors
         from ..judge_api.service import JudgeApi
         judge = JudgeApi(SessionDoors(connect))
