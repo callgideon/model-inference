@@ -156,7 +156,7 @@ def test_ap10_release_a_candidate_is_registered_only_through_ap04s_import():
     """Oracle: only an approved (eligible) checkpoint of this run starts AP-04's import, as the
     actor's own workspace, with exactly the files the received descriptor declares (the
     descriptor's bytes must be the receipt's digest); a replay is the same operation; another
-    import for the same checkpoint is a 409. Anything else - not yet eligible, another
+    import for the same checkpoint is a 409 before AP-04 starts it. Anything else - not yet eligible, another
     workspace, other files, a descriptor that is not the received one - starts nothing."""
     r = Rig()
     r.ckpt_key = r.w.put(descriptor(), "pre")
@@ -185,6 +185,7 @@ def test_ap10_release_a_candidate_is_registered_only_through_ap04s_import():
     assert r.register().doc.operation_id == op.doc.operation_id
     with pytest.raises(errors.IdempotencyConflict):
         r.register(key="imp-2")
+    assert list(r.a.started) == ["imp-1"], "another key never reaches AP-04"
 
 
 def test_ap10_release_evidence_pins_the_lineage_once_the_import_is_verified():
