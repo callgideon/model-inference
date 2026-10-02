@@ -1,0 +1,153 @@
+{
+ "adapter": "sft.1",
+ "created_at": "2026-09-20T12:00:00+00:00",
+ "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da7-0000-4000-8000-000000000001@sha256:058c95b43fd838bf95e37f8af0714bddcd2930e7a98d8d37d9046bf6b9056380",
+ "examples_key": "lab/b0000001-0000-4000-8000-000000000001/label-exports/000000e8-0000-4000-8000-000000000002/examples.jsonl",
+ "expires_at": "2026-09-20T13:00:00+00:00",
+ "export_id": "000000e8-0000-4000-8000-000000000002",
+ "format": "infrx.label_export.1",
+ "items": 13,
+ "lineage": [
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:23215516-a3a1-4b35-af96-e604d245ce15@sha256:c81aed6649d0fb08b21e12c3872cce1b43ed29dbae73fba81ac4f34980a01236"
+   ],
+   "methods": [
+    "imported"
+   ],
+   "sample_id": "2c219bbd-71e3-42bf-8691-12fc22f8e492"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:6ed33c61-2777-41aa-b107-72df25b25f74@sha256:155006bc68ed7d457271f5643c813bbc252a5e1d7972af0928017c54582bb017",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:75ab1fa9-8ec3-4aba-b748-19b1c467fef2@sha256:11877f883e8266c9c996e1ae136037043c461e3e97fa89819719aea5962fa73e"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "2c915104-af29-43b1-87df-747db27a5da3"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:b865d280-e072-4c55-8f27-1aa21d382069@sha256:d64435abd2b720690a1ff142482357819c6f089b10dbe6b3e847735f0476d220"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "36e7ec6e-ae63-441a-80b0-e1327a03d85a"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:580cb4f8-87af-4904-815e-e1af375f3487@sha256:c3961b1e62bbd7d6a5a19bb8f2f70724f50e0d6d11fd9c8cc15d090b5b888119",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:d2fb45b1-a8ee-405e-802e-a08ff920434a@sha256:393b597bb6797b0a5d12670cbc5f10caec2352301519eebcb9e1ebaa2de5fbfc"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "50ad02e6-af59-4480-8d7d-59e94a133e17"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:91b55b81-61c0-461f-a7bd-e58433e92e38@sha256:674e48ae8378718136737915deb4d0a694e9079c107b55c5b923732c0d684639"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "5c52582b-ae2e-4145-80e0-fae389afcdb1"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:da641cb5-8673-471e-973d-458ff9dfe221@sha256:7d2a0a4ab4adb21d83c84d77e0d01603061eac06eeb003acb2033da0967717c2"
+   ],
+   "methods": [
+    "imported"
+   ],
+   "sample_id": "8f3c0a44-ea86-4ea2-8543-8b4fed03485c"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:d3c06290-a452-46d7-af53-19757e988949@sha256:d7313f4f56aabcbc41e1de53d847545919b6980294a5ca5ffc7bb4807bf4a231"
+   ],
+   "methods": [
+    "human"
+   ],
+   "sample_id": "aaf2b8dc-c96a-41a1-82e8-27cf6333c75b"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:a221ef04-8dd9-4e97-8dd3-df99afd849ee@sha256:7d01dbd6c167fe8de5ff9d0452683ff87e6377fd795b85ce24304512635811fc",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:db1ae0c5-70be-490f-8fb6-e679ee598de3@sha256:49f4d04f7fa437d9d2ef2760bfd38733d3d017fcc033fb8d8176db76b20d7a6c"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "c8980deb-6377-44ea-8710-47dd4dbb1739"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:880d3bb9-e678-4316-bf0b-d683f7303652@sha256:116cce26960066bad3f9edfee5da69a7cf8e5b7795697f6dc81c82bf78e7b374"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "c8efbc48-e281-440d-840e-a1e8508a589d"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:bf21b570-00bd-482f-9c8a-de95da5004f5@sha256:501d6bddba4946ec24c5e62a66fd33fa910ec2fa7b44af41e9ea2426309171cc"
+   ],
+   "methods": [
+    "synthetic"
+   ],
+   "sample_id": "d2625b97-f35c-4c0f-821c-a65446450ddb"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:729c9ece-6d0c-45a3-b61a-8fae93e9f67b@sha256:4825de355caef45ff10f6f9f36415761fede0f35bd0e21e0ff83483f38e8a6eb",
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:9c6f83e6-56f6-400f-a9f9-39cb5a70da67@sha256:e40fa092bdbd5cb9113460bb6d34fc5aa7589b00e47be5e281fd3a4468d94a8e"
+   ],
+   "methods": [
+    "imported",
+    "synthetic"
+   ],
+   "sample_id": "dbaa3d3e-d05b-419b-8e01-0961aafce4e0"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:d2ac9ba3-536e-40b6-862e-487189763465@sha256:d0b5fc925a6a7c95ce5fab6b761ab84c272706e2e90bb9a7a572013c07972879"
+   ],
+   "methods": [
+    "imported"
+   ],
+   "sample_id": "e05b1bc8-8b84-4d1b-86a2-d1fd967409ba"
+  },
+  {
+   "label_refs": [
+    "lab:annotation:b0000001-0000-4000-8000-000000000001:e1020a57-d1f9-4b02-985b-1f40a643b38c@sha256:ca6d92463d3ca4a15a92ef22917aac37e6ff676f0ba50ebeca16122c52a351bd"
+   ],
+   "methods": [
+    "imported"
+   ],
+   "sample_id": "ecebe79b-9317-4a0a-80c7-b980aba0985c"
+  }
+ ],
+ "omitted": [
+  {
+   "reason": "validation",
+   "sample_id": "268f4b3b-d8a5-43f2-8c11-369d70016e00"
+  },
+  {
+   "reason": "validation",
+   "sample_id": "3f539322-4fb7-48cd-89d8-b0168c078b8a"
+  },
+  {
+   "reason": "holdout",
+   "sample_id": "68f8c8da-a60c-40c3-87de-534ee9933e31"
+  }
+ ],
+ "sha256": "bdd13a495c96be9459863e1a25fe8c443b663d977a3198caa487032099135b0b",
+ "split": "train"
+}

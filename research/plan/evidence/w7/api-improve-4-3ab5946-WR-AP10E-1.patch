@@ -1,0 +1,76 @@
+diff --git a/apps/infrx-api/infrx/lab/control/app.py b/apps/infrx-api/infrx/lab/control/app.py
+index f9c92248..3bac3a5a 100644
+--- a/apps/infrx-api/infrx/lab/control/app.py
++++ b/apps/infrx-api/infrx/lab/control/app.py
+@@ -110,11 +110,20 @@ def _compose(lab: dict[str, str], store):
+         publication = Publication(operations, PgControlOps(connect))
+     # WR-AP04-2 (AP-04): model projects and artifacts on the unit's login, only with
+     # LAB_ARTIFACTS; the Lab objects are required (a missing LAB_S3_BUCKET refuses startup).
+-    artifacts = None
++    artifacts = improve = None
+     if settings.deployment is not None and settings.deployment.lab_artifacts:
+         from ..artifacts.compose import surface
+         from ..workers.__main__ import lab_objects
+         artifacts = surface(connect, lab_objects(MODE, os.environ))
++        # WR-AP10E-1 (AP-10 10e): the training-run routes ride LAB_ARTIFACTS (AP-04's import is
++        # the candidate's only door): D7, D8's run ledger, 0060 and the Lab objects, this login.
++        from ...gateway.routes.lab_improve import LabImprove
++        from ...state.control_ops import PgControlOps
++        from ...state.lab_data import PgLabDataStore
++        from ...state.lab_pipeline import PgRunLedger
++        from ..compose import RunLedger
++        improve = LabImprove(access, PgLabDataStore(connect), lab_objects(MODE, os.environ),
++                             RunLedger(PgRunLedger(connect)), PgControlOps(connect), artifacts)
+     # WR-AP05-2 (AP-05): private deployments on the unit's login (0060-0062), only with
+     # LAB_HOSTING; without a configured slot (`HOSTING_*`) the profile reads `unavailable`.
+     hosting = None
+@@ -132,6 +141,7 @@ def _compose(lab: dict[str, str], store):
+                            identity=actors and actors.identity,
+                            lab_access=access if actors else None,
+                            lab_publication=publication, lab_artifacts=artifacts,
++                           lab_improve=improve,
+                            lab_hosting=hosting, auth_facade=_auth_facade(settings, lab),
+                            **_families(settings, lab, connect)), control, traces
+ 
+@@ -200,14 +210,15 @@ def create_app() -> FastAPI:
+         return {"status": "ready"}
+ 
+     from ...gateway.routes import (auth, console_me, lab_checkpoints, lab_control, lab_datasets,
+-                                   lab_evaluations, lab_judge, lab_pipelines, lab_releases,
+-                                   lab_reviews, lab_traces, lab_workspaces, operator_publication)
++                                   lab_evaluations, lab_improve, lab_judge, lab_pipelines,
++                                   lab_releases, lab_reviews, lab_traces, lab_workspaces,
++                                   operator_publication)
+     rt, control, traces = _compose(lab, store)
+     lab_control.register(app, rt, control)
+     lab_traces.register(app, rt, traces)
+     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
+                    lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication,
+-                   auth):
++                   auth, lab_improve):              # WR-AP10E-1: nothing while LAB_ARTIFACTS is off
+         family.register(app, rt)
+     from ..artifacts.compose import WorkspaceActors, mount   # WR-AP04-2: nothing while off
+     mount(app, rt)
+diff --git a/apps/infrx-api/tests/l/control/test_operations.py b/apps/infrx-api/tests/l/control/test_operations.py
+index 53544d0e..64c3d171 100644
+--- a/apps/infrx-api/tests/l/control/test_operations.py
++++ b/apps/infrx-api/tests/l/control/test_operations.py
+@@ -482,12 +482,16 @@ def test_control_app__mounts_the_artifact_families_only_with_lab_artifacts(world
+     monkeypatch.setattr(workers, "lab_objects", lambda mode, env: (
+         workers.settings(mode, env, (workers.BUCKET,)) and "bucket"))
+     monkeypatch.setenv("LAB_S3_BUCKET", "lab-bucket")
++    training = (f"/lab/v1/providers/{w.A}/training-runs/"            # WR-AP10E-1 (AP-10 10e)
++                "e0000001-0000-4000-8000-000000000001/export")
+     monkeypatch.delenv("LAB_ARTIFACTS", raising=False)
+-    assert TestClient(control_app.create_app()).get(projects, params=params).status_code == 404
++    off = TestClient(control_app.create_app())
++    assert off.get(projects, params=params).status_code == 404
++    assert off.post(training, headers={"Idempotency-Key": "k" * 8}, json={}).status_code == 404
+     monkeypatch.setenv("LAB_ARTIFACTS", "1")
+     on = TestClient(control_app.create_app())
+     for method, path in (("GET", projects), ("GET", "/lab/v1/operations/x"),
+-                         ("POST", "/lab/v1/artifacts/imports")):
++                         ("POST", "/lab/v1/artifacts/imports"), ("POST", training)):
+         r = on.request(method, path, params=params, headers={"Idempotency-Key": "k" * 8},
+                        json={})
+         assert r.status_code in (503, 422), (path, r.status_code)
