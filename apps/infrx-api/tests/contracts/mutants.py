@@ -68,6 +68,8 @@ def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mu
 
 
 S = "contracts/fakes/state.py"          # JobStore + StreamStore
+OX = "contracts/openapi/export.py"      # AP-00 00b
+OI = "contracts/openapi/inventory.py"   # AP-00 00a
 J = "contracts/fakes/judge.py"
 M = "contracts/fakes/media.py"
 T = "contracts/traces_accounting.py"   # the shared trace accounting (F2R item 3)
@@ -1888,6 +1890,48 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("r270_error_response_is_cacheable", "an error response is no-store",
        "gateway/control.py", "    headers = dict(NO_STORE)\n", "    headers = {}\n",
        "test_r270_error_response_is_no_store_with_the_status"),
+    # AP-00 00a/00b (wave 7): the OpenAPI export and the route inventory
+    # (infrx/contracts/openapi/), and the lab_control family typed behind the refusal adapter.
+    _m("ap00_operation_id_drops_the_method", "an operationId is unique per (method, path)",
+       OX, '    return method.lower() + "".join(', '    return "".join(',
+       "test_ap00_every_operation_is_named_secured_and_present",
+       "test_ap00_an_unclassified_route_family_refuses_the_export"),
+    _m("ap00_key_routes_documented_public", "a /v1 route declares the API-key scheme",
+       OX, '    ("/v1/", [{"ApiKeyAuth": []}], "openai",', '    ("/v1/", PUBLIC, "openai",',
+       "test_ap00_every_operation_is_named_secured_and_present"),
+    _m("ap00_unclassified_route_documented_public", "a route in no family refuses the export",
+       OX, "            found = family(path)\n",
+       '            found = family(path) or (PUBLIC, "none", "public")\n',
+       "test_ap00_an_unclassified_route_family_refuses_the_export"),
+    _m("ap00_hidden_route_undocumented", "every mounted route is documented (/metrics too)",
+       OX, "        route.include_in_schema = True\n", "        pass\n",
+       "test_ap00_every_operation_is_named_secured_and_present"),
+    _m("ap00_raw_request_counts_as_typed", "a handler reading the raw Request is legacy",
+       OX, '"raw" if route.dependant.request_param_name else "none"', '"none"',
+       "test_ap00_a_schema_less_route_is_legacy_and_a_typed_one_is_not"),
+    _m("ap00_response_model_ignored", "a declared response model is a typed response",
+       OX, "    declared = route.response_model is not None or any(", "    declared = any(",
+       "test_ap00_a_schema_less_route_is_legacy_and_a_typed_one_is_not"),
+    _m("ap00_inventory_skips_a_composition", "the inventory covers every composition",
+       OI, "    for name, app in apps.items():\n        for route in export.routes(app):",
+       "    for name, app in list(apps.items())[:1]:\n        for route in export.routes(app):",
+       "test_ap00_inventory_names_every_mounted_route_of_every_composition"),
+    _m("ap00_db_action_unflagged", "an action reaching a product table is flagged",
+       OI, '"flag": transport in BYPASS}', '"flag": transport == ADMIN}',
+       "test_ap00_inventory_joins_web_actions_to_target_operations"),
+    _m("ap00_target_never_existing", "a mounted target operation reads existing",
+       OI, '"existing" if (method, shape_of(path)) in mounted else "target"', '"target"',
+       "test_ap00_inventory_joins_web_actions_to_target_operations"),
+    _m("ap00_parameter_names_compared", "a target matches a route whatever its parameter names",
+       OI, '    return re.sub(r"\\{[^}]*\\}", "{}", path)', "    return path",
+       "test_ap00_inventory_joins_web_actions_to_target_operations"),
+    _m("ap00_lab_control_response_undeclared", "a control route declares its response model",
+       "gateway/routes/lab_control.py", "response_model=response_model,", "response_model=None,",
+       "test_ap00_lab_control_documents_its_bodies_responses_and_refusals",
+       "test_ap00_the_baseline_is_exact_and_only_shrinks"),
+    _m("ap00_lab_control_refusals_undocumented", "a control route documents the {refusal} answers",
+       "gateway/routes/lab_control.py", "responses=lab_auth.REFUSED,", "responses={},",
+       "test_ap00_lab_control_documents_its_bodies_responses_and_refusals"),
     _m("lw0_lane_port_outside_the_band", "every Lab lane port sits in 57500-57599",
        "contracts/tasklocal.py", '"dlab": {"postgres": 57500}', '"dlab": {"postgres": 57600}',
        "test_every_lab_lane_port_sits_in_one_band"),
@@ -3029,7 +3073,8 @@ CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.
                                               "tests/contracts/v2/test_lifecycle.py",
                                               "tests/contracts/v2/test_lifecycle_capability.py",
                                               "tests/contracts/test_cancel_cause.py",
-                                              "tests/contracts/test_api_wire.py"))   # R270 (wave 7)
+                                              "tests/contracts/test_api_wire.py",    # R270 (wave 7)
+                                              "tests/contracts/test_openapi_export.py"))  # AP-00
 
 
 def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,

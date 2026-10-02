@@ -27,12 +27,14 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
 from collections.abc import Awaitable, Callable
 
 import httpx
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..contracts import errors
@@ -154,14 +156,20 @@ async def held(answer: Awaitable[T]) -> T:
         raise errors.InvalidRequest("the form names what the provider does not hold") from None
 
 
-async def lab_body(request: Request, rt: Any, model: type[M],
-                   max_bytes: int = MAX_BODY_BYTES) -> M:
-    """A JSON object body, bounded, validated by `model` (422 otherwise)."""
+async def json_object(request: Request, rt: Any, max_bytes: int) -> tuple[bytes, dict]:
+    """A bounded `application/json` object body: its bytes and the object (else a refusal)."""
     intake.check_content_type(request)
     raw = await intake.read_body(request, max_bytes=max_bytes,
                                  timeout_s=rt.settings.pilot.intake_timeout_s, clock=rt.clock)
+    return raw, intake.parse_object(intake.decode_utf8(raw))
+
+
+async def lab_body(request: Request, rt: Any, model: type[M],
+                   max_bytes: int = MAX_BODY_BYTES) -> M:
+    """A JSON object body, bounded, validated by `model` (422 otherwise)."""
+    _, body = await json_object(request, rt, max_bytes)
     try:
-        return model.model_validate(intake.parse_object(intake.decode_utf8(raw)))
+        return model.model_validate(body)
     except ValidationError:
         raise errors.InvalidRequest("invalid body") from None
 
@@ -195,3 +203,55 @@ def guarded(handler: Handler) -> Handler:
         except Exception as exc:                 # noqa: BLE001 - rendered, never re-raised
             return refusal(exc)
     return wrapped
+
+
+class Refusal(BaseModel):
+    """Every failure of a Lab route (`REFUSALS`' reasons, `unavailable` for the rest)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    refusal: Literal["unauthenticated", "not_found", "denied", "invalid", "conflict", "gone",
+                     "unavailable"]
+
+
+#: The refusals a typed Lab route documents. Declaring 422 also keeps FastAPI from
+#: documenting its own validation shape, which a Lab route never sends.
+REFUSED: dict[int | str, dict[str, Any]] = {
+    status: {"model": Refusal, "description": reason}
+    for status, reason in [(status, reason) for _, status, reason in REFUSALS]
+    + [(503, "unavailable")]}
+
+
+def refusal_route(rt: Any) -> type[APIRoute]:
+    """AP-00 (R270): the `{refusal}` adapter for TYPED Lab handlers - pydantic bodies and
+    `response_model`s as FastAPI parameters (so the OpenAPI export documents them), the
+    identity a dependency, and the wire exactly `guarded`'s:
+
+    - a body is buffered first, bounded and checked like `lab_body` (`json_object`); one that
+      fails is withheld (FastAPI then sees none), so the identity dependency still answers
+      first - an unreadable body from a stranger is a 401/403, never a 422 - and its own
+      refusal is the answer once identity passes (a deadline stays 503, the rest 422);
+    - FastAPI's validation error is the 422 `invalid`, every other failure `refusal(exc)`.
+    ponytail: the bounded bytes (<= MAX_BODY_BYTES, the intake deadline) are read before the
+    session is verified, where `lab_body` read none; nothing is parsed or acted on first."""
+
+    class Refused(APIRoute):
+        def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+            handle = super().get_route_handler()
+            typed = self.body_field is not None
+
+            async def adapted(request: Request) -> Response:
+                withheld: Exception | None = None
+                try:
+                    if typed:
+                        try:
+                            request._body, _ = await json_object(request, rt, MAX_BODY_BYTES)
+                        except errors.DomainError as refused:
+                            request._body, withheld = b"", refused
+                    return await handle(request)
+                except RequestValidationError:
+                    return refusal(withheld or errors.InvalidRequest("invalid body"))
+                except Exception as failure:     # noqa: BLE001 - rendered, never re-raised
+                    return refusal(failure)
+            return adapted
+
+    return Refused

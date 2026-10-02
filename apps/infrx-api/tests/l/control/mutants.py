@@ -312,13 +312,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("rejection_undated", "a rejected proposal carries the operator's instant", OPS,
        '        rejected = {e.subject: e.at for e in events if e.action == "lab_transition"',
        '        rejected = {e.subject: e.at for e in events if False', O_REJECT, O_ROUTE),
+    # AP-00: the route is typed; the operator is a dependency and an unreadable body is
+    # withheld until it answers (`lab_auth.refusal_route`).
     _m("reject_body_before_operator", "the operator is checked before the body is read (R175)",
-       ROUTE, "        operator = await operations().operator(\n"
-       "            await lab_auth.authenticate(request, control.sessions))\n"
-       "        decision = await body(request, Rejection)\n",
-       "        decision = await body(request, Rejection)\n"
-       "        operator = await operations().operator(\n"
-       "            await lab_auth.authenticate(request, control.sessions))\n", O_ROUTE),
+       "gateway/lab_auth.py", "                        except errors.DomainError as refused:\n"
+       "                            request._body, withheld = b\"\", refused\n",
+       "                        except errors.DomainError:\n                            raise\n",
+       O_ROUTE),
     _m("reject_reason_optional", "a rejection body names its reason", ROUTE,
        "    reason: str = Field(min_length=1, max_length=500)",
        '    reason: str = "declined"', O_ROUTE),
@@ -330,8 +330,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "listed = versions[-1].deployment_revision_id if versions else None",
        "listed = versions[0].deployment_revision_id if versions else None", O_LISTED),
     _m("reject_unmounted", "the operator's rejection is served", ROUTE,
-       '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject")\n',
-       '    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject-x")\n', O_ROUTE),
+       '    route("POST", "/proposals/{proposal_id}/reject", reject, Proposal)\n',
+       '    route("POST", "/proposals/{proposal_id}/reject-x", reject, Proposal)\n', O_ROUTE),
 )
 
 #: The service's edits, killed by the same cases on PostgreSQL (after L3-SQL merges).

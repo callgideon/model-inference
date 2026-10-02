@@ -1,0 +1,36 @@
+{
+  "task": "AP-00",
+  "lane": "api-contracts",
+  "slice": "00a route inventory, 00b OpenAPI export + baseline + lab_control typed behind the {refusal} adapter, 00c packages/api-client + App/Lab transport ports",
+  "activity": "review",
+  "at": "2026-10-02T00:32:00Z",
+  "head": "b9e8ca47",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-contracts",
+  "branch": "codex/w7-api-contracts",
+  "owned_paths": ["apps/infrx-api/infrx/contracts/openapi/", "apps/infrx-api/openapi/", "apps/infrx-api/tests/contracts/test_openapi_export.py", "apps/infrx-api/tests/contracts/mutants.py", "packages/api-client/", "apps/app/lib/api/", "apps/lab/lib/api/", "research/plan/api-lifecycle/evidence/route-inventory.json", "research/plan/api-lifecycle/evidence/route-inventory.md", "apps/infrx-api/infrx/gateway/lab_auth.py (worked example)", "apps/infrx-api/infrx/gateway/routes/lab_control.py (worked example)", "apps/infrx-api/tests/g/lab_control/ (anchors)", "apps/infrx-api/tests/l/control/mutants.py (anchors)", "apps/infrx-api/tests/contracts/test_mutants.py (RECORD_TESTS)", "apps/infrx-api/tests/contracts/lab/frozen_contracts.json (pin)"],
+  "commands": [
+    {"cmd": "pytest tests/contracts/test_openapi_export.py (before 00a/00b)", "exit": 2, "summary": "RED: infrx.contracts.openapi absent"},
+    {"cmd": "same cases on a copy with base lab_control.py/lab_auth.py", "exit": 1, "summary": "RED: 3 failed (stale artifact, baseline, lab_control bodies undocumented)"},
+    {"cmd": "pnpm --dir packages/api-client test (before ports)", "exit": 1, "summary": "RED: 2 failed (ports absent)"},
+    {"cmd": "pytest tests/contracts/test_openapi_export.py", "exit": 0, "summary": "9 passed"},
+    {"cmd": "pytest tests/contracts -m 'not pg'", "exit": 1, "summary": "1434 passed, 1 skipped, 3 failed = v2 *_pg.py on the foreign d1 container (environment)"},
+    {"cmd": "pytest tests/g tests/l -m 'not pg' (no mutant files)", "exit": 1, "summary": "865 passed, 19 skipped, 20 failed = *_pg.py on the foreign d1 container (environment)"},
+    {"cmd": "python -m tests.contracts.mutants (all 536, 4 shards)", "exit": 0, "summary": "536/536 killed"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/g/lab_control/test_mutants.py", "exit": 0, "summary": "30 passed"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/l/control/test_mutants.py", "exit": 1, "summary": "83 memory mutants killed; 29 pg mutants NOT RUN (pristine pg baseline on foreign d1; untouched files; need INFRX_D_TASK=l3)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "458 (baseline 458)"},
+    {"cmd": "pnpm --dir packages/api-client test && typecheck && test:mutants", "exit": 0, "summary": "6/6, tsc clean, 10/10 killed"},
+    {"cmd": "make console-test lab-test console-typecheck lab-typecheck console-lint lab-lint lab-build console-built", "exit": 0, "summary": "592/0 fail, 263/0 fail, clean, clean, 0 errors, 0 errors, built, built"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "7 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "two mechanical wiring requests whose composed tests already pass; pessimistic = a review round on the adapter's pre-identity body buffering or hand-named operationIds", "at": "2026-10-02T00:32:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "apps/app/package.json + apps/lab/package.json: dependency \"@infrx/api-client\": \"link:../../packages/api-client\" (+ pnpm install, lockfiles); apps/{app,lab}/lib/api/index.ts imports -> @infrx/api-client/{consumer|lab,transport}; composed: make console-typecheck lab-typecheck console-test lab-test lab-build console-built + pnpm --dir packages/api-client test",
+    "Makefile: api-client-test (cd packages/api-client && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test) in check; api-client-mutants (pnpm test:mutants); .PHONY; composed: make api-client-test api-client-mutants"
+  ],
+  "evidence": ["research/plan/evidence/w7/api-contracts-b9e8ca47.md"]
+}

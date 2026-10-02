@@ -1,0 +1,354 @@
+{
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "bearerFormat": "sk-infrx",
+        "description": "A consumer or provider-dev API key (`/v1/*`).",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "CheckpointSignature": {
+        "description": "HMAC of the raw body by a LAB_CHECKPOINT_KEYS key.",
+        "in": "header",
+        "name": "X-Infrx-Signature",
+        "type": "apiKey"
+      },
+      "OperatorKey": {
+        "bearerFormat": "sk-infrx",
+        "description": "An operator-audience API key.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "SessionBearer": {
+        "bearerFormat": "JWT",
+        "description": "The signed-in user's Supabase session, forwarded by the web app's server; verified by the auth server.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "infrx consumer",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Health"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Public and generic (01): liveness only, no component state, no counters.",
+        "operationId": "getHealthz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Healthz"
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "getMetrics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Metrics"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Readiness for the host itself: component state for a direct loopback peer (I2B's\n`deploy/lib.sh wait_ready` polls it unauthenticated), the unknown-path answer for\nanyone else. A request relayed by the edge carries a proxy header, so it is refused\nhere even if the edge rule that 404s `/readyz` were lost (observe/route.py's rule).",
+        "operationId": "getReadyz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Readyz"
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "operationId": "postV1ChatCompletions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Chat"
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "operationId": "postV1Feedback",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Submit Feedback"
+      }
+    },
+    "/v1/jobs": {
+      "post": {
+        "description": "The chat body, always async. A `Prefer` header here is ignored - the route is the\npreference - so none is reported applied. A streaming body is refused as what the\nclient sent (`param=\"stream\"`), never as a `Prefer` it did not send (review N3).",
+        "operationId": "postV1Jobs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Create Job"
+      }
+    },
+    "/v1/jobs/{handle}": {
+      "delete": {
+        "operationId": "deleteV1JobsByHandle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Cancel Job"
+      },
+      "get": {
+        "operationId": "getV1JobsByHandle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Job Status"
+      }
+    },
+    "/v1/jobs/{handle}/events": {
+      "get": {
+        "operationId": "getV1JobsByHandleEvents",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Job Events"
+      }
+    },
+    "/v1/jobs/{handle}/result": {
+      "get": {
+        "operationId": "getV1JobsByHandleResult",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Job Result"
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "getV1Models",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "List Models"
+      }
+    },
+    "/v1/traces": {
+      "get": {
+        "operationId": "getV1Traces",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Export Traces"
+      }
+    },
+    "/v1/uploads": {
+      "post": {
+        "operationId": "postV1Uploads",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Create Upload"
+      }
+    },
+    "/v1/uploads/{handle}": {
+      "put": {
+        "operationId": "putV1UploadsByHandle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Put Upload"
+      }
+    },
+    "/v1/uploads/{handle}/complete": {
+      "post": {
+        "operationId": "postV1UploadsByHandleComplete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Complete Upload"
+      }
+    }
+  }
+}

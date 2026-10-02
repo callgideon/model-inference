@@ -21,7 +21,8 @@ import pytest
 from infrx.contracts.conformance import SUITES, V2_SUITES
 
 from . import mutants as mutation_list
-from . import test_api_wire, test_cancel_cause, test_config_and_imports, test_fixtures, test_money
+from . import (test_api_wire, test_cancel_cause, test_config_and_imports, test_fixtures, test_money,
+               test_openapi_export)
 from .v2 import test_conformance_v2, test_lifecycle, test_lifecycle_capability
 
 ALL = mutation_list.MUTANTS
@@ -31,7 +32,7 @@ CASE_NAMES = {case.__name__ for suites in (SUITES, V2_SUITES)
 # F2R: record and config invariants die in these modules, which the runner also targets.
 RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports,
                                     test_conformance_v2, test_cancel_cause, test_lifecycle,
-                                    test_lifecycle_capability, test_api_wire)
+                                    test_lifecycle_capability, test_api_wire, test_openapi_export)
                 for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a

@@ -1,0 +1,1826 @@
+{
+  "routes": [
+    {
+      "audience": "public",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "none",
+      "method": "GET",
+      "path": "/health",
+      "request_schema": "none",
+      "response_schema": "none"
+    },
+    {
+      "audience": "public",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "none",
+      "method": "GET",
+      "path": "/healthz",
+      "request_schema": "none",
+      "response_schema": "none"
+    },
+    {
+      "audience": "signed training loop",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/checkpoints",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts aggregates"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/aggregates",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts deployments"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts smoke"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/deployments/{deployment_revision_id}/smoke",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts models"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/models",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts proposals"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/proposals",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts propose"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/proposals",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/proposals/{proposal_id}/reject",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/control/http.ts register"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/register",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/catalog",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/experiments",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/evaluations/experiments",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/runs",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/evaluations/runs/{run_id}/cancel",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/evaluations/subscriptions",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/evaluation/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/evaluations/subscriptions",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/rollouts/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/optimizations",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/adjudications",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/assignments",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/checkpoints",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/checkpoints",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/checkpoints/{checkpoint_id}/approve",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/disagreements",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/label-exports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/label-exports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/label-imports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/label-imports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/labels",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/reviews",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/teacher-batches",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/teacher-batches",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/teacher-batches/{batch_id}/approve",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/training-runs",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/training-runs",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/pipelines/training-runs/{external_run_id}/bundle",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/training-runs/{external_run_id}/cancel",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/training-runs/{external_run_id}/finish",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/pipelines/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/pipelines/training-runs/{external_run_id}/submit",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/exports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/exports/{export_id}/parts/{part}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/imports",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/imports/preview",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/imports/{import_id}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/imports/{import_id}/requeue",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/versions",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/providers/{provider}/datasets/versions",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/datasets/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/versions/{ref}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/rollouts/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/releases",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/rollouts/http.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/releases/proposals",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/traces/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/traces",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/traces/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/traces/{request_id}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "loopback",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "none",
+      "method": "GET",
+      "path": "/metrics",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "public",
+      "compositions": [
+        "consumer",
+        "consumer-launched",
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "none",
+      "method": "GET",
+      "path": "/readyz",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "POST",
+      "path": "/v1/feedback",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "POST",
+      "path": "/v1/jobs",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "DELETE",
+      "path": "/v1/jobs/{handle}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "GET",
+      "path": "/v1/jobs/{handle}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "GET",
+      "path": "/v1/jobs/{handle}/events",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "GET",
+      "path": "/v1/jobs/{handle}/result",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "public",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [
+        "apps/app/app/(console)/models/catalog.ts loadCatalog"
+      ],
+      "envelope": "openai",
+      "method": "GET",
+      "path": "/v1/models",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "GET",
+      "path": "/v1/traces",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "POST",
+      "path": "/v1/uploads",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "PUT",
+      "path": "/v1/uploads/{handle}",
+      "request_schema": "raw",
+      "response_schema": "none"
+    },
+    {
+      "audience": "consumer or provider_dev key",
+      "compositions": [
+        "consumer",
+        "consumer-launched"
+      ],
+      "consumers": [],
+      "envelope": "openai",
+      "method": "POST",
+      "path": "/v1/uploads/{handle}/complete",
+      "request_schema": "raw",
+      "response_schema": "none"
+    }
+  ],
+  "targets": [
+    {
+      "method": "POST",
+      "path": "/auth/v1/sign-in",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/v1/sign-up",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/v1/refresh",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/v1/sign-out",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/v1/recovery",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/v1/password",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/v1/callback",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/v1/availability",
+      "state": "target",
+      "surface": "auth"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/me",
+      "state": "target",
+      "surface": "app shell"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/capabilities",
+      "state": "target",
+      "surface": "app shell"
+    },
+    {
+      "method": "POST",
+      "path": "/console/v1/signup-grant/claim",
+      "state": "target",
+      "surface": "welcome"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/keys",
+      "state": "target",
+      "surface": "api keys"
+    },
+    {
+      "method": "POST",
+      "path": "/console/v1/keys",
+      "state": "target",
+      "surface": "api keys"
+    },
+    {
+      "method": "DELETE",
+      "path": "/console/v1/keys/{id}",
+      "state": "target",
+      "surface": "api keys"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "state": "existing",
+      "surface": "models and docs"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/requests",
+      "state": "target",
+      "surface": "usage"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/requests/{id}",
+      "state": "target",
+      "surface": "usage"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/requests/{id}/result",
+      "state": "target",
+      "surface": "usage"
+    },
+    {
+      "method": "POST",
+      "path": "/console/v1/requests/{id}/feedback",
+      "state": "target",
+      "surface": "feedback"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/feedback",
+      "state": "existing",
+      "surface": "feedback"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/credits",
+      "state": "target",
+      "surface": "credits"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/credit-ledger",
+      "state": "target",
+      "surface": "credits"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/legacy-statement",
+      "state": "target",
+      "surface": "credits"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/account/members",
+      "state": "target",
+      "surface": "teams"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/data-use",
+      "state": "target",
+      "surface": "privacy"
+    },
+    {
+      "method": "PUT",
+      "path": "/console/v1/keys/{id}/capture",
+      "state": "target",
+      "surface": "privacy"
+    },
+    {
+      "method": "POST",
+      "path": "/console/v1/data-grants",
+      "state": "target",
+      "surface": "privacy"
+    },
+    {
+      "method": "GET",
+      "path": "/console/v1/data-grants",
+      "state": "target",
+      "surface": "privacy"
+    },
+    {
+      "method": "DELETE",
+      "path": "/console/v1/data-grants/{id}",
+      "state": "target",
+      "surface": "privacy"
+    },
+    {
+      "method": "GET",
+      "path": "/operator/v1/accounts",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "GET",
+      "path": "/operator/v1/wallet-drift",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "GET",
+      "path": "/operator/v1/unknown-usage",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "GET",
+      "path": "/operator/v1/audit",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "POST",
+      "path": "/operator/v1/credit-adjustments",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "POST",
+      "path": "/operator/v1/suspensions",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "POST",
+      "path": "/operator/v1/key-revocations",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "POST",
+      "path": "/operator/v1/providers",
+      "state": "target",
+      "surface": "operator"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/workspaces",
+      "state": "target",
+      "surface": "lab shell"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/capabilities",
+      "state": "target",
+      "surface": "lab shell"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/workspaces/{id}/members",
+      "state": "target",
+      "surface": "lab shell"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/workspaces/{id}/members",
+      "state": "target",
+      "surface": "lab shell"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lab/v1/workspaces/{id}/members/{user}",
+      "state": "target",
+      "surface": "lab shell"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/aggregates",
+      "state": "existing",
+      "surface": "lab overview"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/models",
+      "state": "existing",
+      "surface": "lab overview"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/deployments",
+      "state": "existing",
+      "surface": "lab overview"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/model-projects",
+      "state": "target",
+      "surface": "lab models"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/control/model-projects",
+      "state": "target",
+      "surface": "lab models"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/model-projects/{id}/revisions",
+      "state": "target",
+      "surface": "lab models"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/control/model-projects/{id}/revisions",
+      "state": "target",
+      "surface": "lab models"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/control/deployments",
+      "state": "target",
+      "surface": "lab deployments"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{id}",
+      "state": "target",
+      "surface": "lab deployments"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{id}/readiness",
+      "state": "target",
+      "surface": "lab deployments"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/control/proposals",
+      "state": "existing",
+      "surface": "lab publication"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/traces",
+      "state": "existing",
+      "surface": "lab requests"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/traces/{id}",
+      "state": "existing",
+      "surface": "lab requests"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/traces/{id}/feedback",
+      "state": "target",
+      "surface": "lab requests"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/traces/{id}/reviews",
+      "state": "target",
+      "surface": "lab requests"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/judge/configs",
+      "state": "target",
+      "surface": "lab judge"
+    },
+    {
+      "method": "PUT",
+      "path": "/lab/v1/judge/budgets/{payer_id}",
+      "state": "target",
+      "surface": "lab judge"
+    },
+    {
+      "method": "POST",
+      "path": "/lab/v1/judge/runs",
+      "state": "target",
+      "surface": "lab judge"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/judge/runs",
+      "state": "target",
+      "surface": "lab judge"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/judge/calibration",
+      "state": "target",
+      "surface": "lab judge"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/providers/{provider}/datasets/versions",
+      "state": "existing",
+      "surface": "lab datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/evaluations/runs",
+      "state": "existing",
+      "surface": "lab evaluations"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/pipelines/labels",
+      "state": "existing",
+      "surface": "lab annotations"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/releases",
+      "state": "existing",
+      "surface": "lab releases"
+    },
+    {
+      "method": "GET",
+      "path": "/lab/v1/optimizations",
+      "state": "existing",
+      "surface": "lab releases"
+    }
+  ],
+  "web_actions": [
+    {
+      "action": "signInWithPassword",
+      "app": "app",
+      "flag": false,
+      "source": "app/(auth)/login/login-form.tsx",
+      "surface": "login",
+      "targets": [
+        "POST /auth/v1/sign-in"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "signUp",
+      "app": "app",
+      "flag": false,
+      "source": "app/(auth)/signup/signup-form.tsx",
+      "surface": "signup",
+      "targets": [
+        "POST /auth/v1/sign-up"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "resend",
+      "app": "app",
+      "flag": false,
+      "source": "app/(auth)/verify-email/resend-form.tsx",
+      "surface": "verify-email",
+      "targets": [
+        "POST /auth/v1/sign-up"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "resetPasswordForEmail",
+      "app": "app",
+      "flag": false,
+      "source": "app/(auth)/forgot-password/page.tsx",
+      "surface": "forgot-password",
+      "targets": [
+        "POST /auth/v1/recovery"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "updateUser",
+      "app": "app",
+      "flag": false,
+      "source": "app/(auth)/update-password/page.tsx",
+      "surface": "update-password",
+      "targets": [
+        "POST /auth/v1/password"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "completeCallback",
+      "app": "app",
+      "flag": false,
+      "source": "app/auth/callback/route.ts",
+      "surface": "callback",
+      "targets": [
+        "GET /auth/v1/callback"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "signOut",
+      "app": "app",
+      "flag": false,
+      "source": "app/actions.ts",
+      "surface": "shell",
+      "targets": [
+        "POST /auth/v1/sign-out"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "claimSignupGrant",
+      "app": "app",
+      "flag": true,
+      "source": "app/(auth)/grant.ts (rpc claim_signup_grant)",
+      "surface": "welcome",
+      "targets": [
+        "POST /console/v1/signup-grant/claim"
+      ],
+      "transport": "service-role"
+    },
+    {
+      "action": "claimOnboarding",
+      "app": "app",
+      "flag": true,
+      "source": "app/(auth)/welcome/actions.ts",
+      "surface": "welcome",
+      "targets": [
+        "POST /console/v1/signup-grant/claim"
+      ],
+      "transport": "service-role"
+    },
+    {
+      "action": "walletSummary",
+      "app": "app",
+      "flag": true,
+      "source": "app/(auth)/welcome/page.tsx (rpc console_wallet_summary)",
+      "surface": "welcome",
+      "targets": [
+        "GET /console/v1/credits"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "getSession",
+      "app": "app",
+      "flag": true,
+      "source": "lib/session.ts (profiles)",
+      "surface": "shell",
+      "targets": [
+        "GET /console/v1/me"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "resolveConsumerContext",
+      "app": "app",
+      "flag": true,
+      "source": "lib/services/console.ts (org_members, wallet)",
+      "surface": "shell",
+      "targets": [
+        "GET /console/v1/me",
+        "GET /console/v1/capabilities"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "keysList",
+      "app": "app",
+      "flag": true,
+      "source": "lib/services/console.ts (named query keys_list)",
+      "surface": "api-keys",
+      "targets": [
+        "GET /console/v1/keys"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "createConsumerKey",
+      "app": "app",
+      "flag": true,
+      "source": "app/actions.ts -> lib/services/actions.ts (generateKey + api_keys insert)",
+      "surface": "api-keys",
+      "targets": [
+        "POST /console/v1/keys"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "revokeConsumerKey",
+      "app": "app",
+      "flag": true,
+      "source": "app/actions.ts -> lib/services/actions.ts (api_keys update)",
+      "surface": "api-keys",
+      "targets": [
+        "DELETE /console/v1/keys/{id}"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "loadCatalog",
+      "app": "app",
+      "flag": false,
+      "source": "app/(console)/models/catalog.ts",
+      "surface": "models",
+      "targets": [
+        "GET /v1/models"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "keysForExamples",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/models/page.tsx (api_keys)",
+      "surface": "models",
+      "targets": [
+        "GET /console/v1/keys"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "keysForExamples",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/docs/page.tsx (api_keys)",
+      "surface": "docs",
+      "targets": [
+        "GET /console/v1/keys"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "creditReads",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/billing/credit-reads.ts (console_credit_wallets, consumer_credit_ledger, console_credit_ledger)",
+      "surface": "billing",
+      "targets": [
+        "GET /console/v1/credits",
+        "GET /console/v1/credit-ledger"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "legacyStatement",
+      "app": "app",
+      "flag": true,
+      "source": "lib/services/console.ts (rpc console_legacy_usd_statement)",
+      "surface": "billing",
+      "targets": [
+        "GET /console/v1/legacy-statement"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "requests",
+      "app": "app",
+      "flag": true,
+      "source": "lib/services/console.ts (rpc consumer_jobs)",
+      "surface": "usage",
+      "targets": [
+        "GET /console/v1/requests"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "requestDetail",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/usage/[requestId]/request-reads.ts (rpc consumer_jobs, consumer_job_result)",
+      "surface": "usage",
+      "targets": [
+        "GET /console/v1/requests/{id}",
+        "GET /console/v1/requests/{id}/result"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "submitFeedback",
+      "app": "app",
+      "flag": true,
+      "source": "lib/services/feedback.ts (rpc submit_feedback; unwired)",
+      "surface": "usage",
+      "targets": [
+        "POST /console/v1/requests/{id}/feedback"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "members",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/teams/page.tsx (org_members, profiles)",
+      "surface": "teams",
+      "targets": [
+        "GET /console/v1/account/members"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "operatorReads",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/admin/operator-reads.ts (console_admin_orgs, operator_wallet_drift, operator_unknown_usage, operator_audit)",
+      "surface": "admin",
+      "targets": [
+        "GET /operator/v1/accounts",
+        "GET /operator/v1/wallet-drift",
+        "GET /operator/v1/unknown-usage",
+        "GET /operator/v1/audit"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "operatorAction",
+      "app": "app",
+      "flag": true,
+      "source": "app/(console)/admin/operator-port.ts (rpc operator_adjust_credit / operator_set_suspension / operator_revoke_key)",
+      "surface": "admin",
+      "targets": [
+        "POST /operator/v1/credit-adjustments",
+        "POST /operator/v1/suspensions",
+        "POST /operator/v1/key-revocations"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "signIn",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/auth/sign-in.ts",
+      "surface": "sign-in",
+      "targets": [
+        "POST /auth/v1/sign-in"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "signOut",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/auth/sign-in.ts",
+      "surface": "shell",
+      "targets": [
+        "POST /auth/v1/sign-out"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "authCallback",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/auth/routes.ts",
+      "surface": "callback",
+      "targets": [
+        "GET /auth/v1/callback"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "refreshSession",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/auth/routes.ts",
+      "surface": "shell",
+      "targets": [
+        "POST /auth/v1/refresh"
+      ],
+      "transport": "identity-provider"
+    },
+    {
+      "action": "memberships",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/auth/memberships.ts (rpc lab_provider_memberships)",
+      "surface": "shell",
+      "targets": [
+        "GET /lab/v1/workspaces"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "control",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/control/http.ts",
+      "surface": "models",
+      "targets": [
+        "GET /lab/v1/control/models",
+        "GET /lab/v1/control/deployments",
+        "GET /lab/v1/control/aggregates",
+        "POST /lab/v1/control/proposals"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "traces",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/traces/port.ts",
+      "surface": "requests",
+      "targets": [
+        "GET /lab/v1/traces",
+        "GET /lab/v1/traces/{id}"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "reviewFeedback",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/review/index.ts (rpc lab_review_feedback)",
+      "surface": "requests",
+      "targets": [
+        "GET /lab/v1/traces/{id}/feedback"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "review",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/review/actions.ts (rpc lab_review_feedback)",
+      "surface": "requests",
+      "targets": [
+        "POST /lab/v1/traces/{id}/reviews"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "configure",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/judge/core.ts (rpc lab_judge_configure)",
+      "surface": "judge",
+      "targets": [
+        "POST /lab/v1/judge/configs"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "setBudget",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/judge/core.ts (rpc lab_judge_set_budget)",
+      "surface": "judge",
+      "targets": [
+        "PUT /lab/v1/judge/budgets/{payer_id}"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "requestRun",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/judge/core.ts (rpc lab_judge_request_run)",
+      "surface": "judge",
+      "targets": [
+        "POST /lab/v1/judge/runs"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "calibration",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/judge/core.ts (rpc lab_judge_calibration)",
+      "surface": "judge",
+      "targets": [
+        "GET /lab/v1/judge/calibration"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "runs",
+      "app": "lab",
+      "flag": true,
+      "source": "lib/services/judge/runs.ts, components/traces/judge/port.ts (rpc lab_judge_runs)",
+      "surface": "judge",
+      "targets": [
+        "GET /lab/v1/judge/runs"
+      ],
+      "transport": "supabase-db"
+    },
+    {
+      "action": "datasets",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/datasets/port.ts",
+      "surface": "datasets",
+      "targets": [
+        "GET /lab/v1/providers/{provider}/datasets/versions"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "evaluation",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/evaluation/http.ts",
+      "surface": "evaluations",
+      "targets": [
+        "GET /lab/v1/evaluations/runs"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "pipelines",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/pipelines/http.ts",
+      "surface": "annotations",
+      "targets": [
+        "GET /lab/v1/pipelines/labels"
+      ],
+      "transport": "api"
+    },
+    {
+      "action": "rollouts",
+      "app": "lab",
+      "flag": false,
+      "source": "lib/services/rollouts/http.ts",
+      "surface": "releases",
+      "targets": [
+        "GET /lab/v1/releases",
+        "GET /lab/v1/optimizations"
+      ],
+      "transport": "api"
+    }
+  ]
+}

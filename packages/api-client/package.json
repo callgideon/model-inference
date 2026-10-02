@@ -1,0 +1,25 @@
+{
+  "name": "@infrx/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AP-00 00c: TypeScript clients generated from the checked OpenAPI artifacts (apps/infrx-api/openapi/) plus the thin fetch transport. apps/app imports ./consumer, apps/lab imports ./lab; neither imports the other's.",
+  "type": "module",
+  "exports": {
+    "./consumer": "./src/consumer.ts",
+    "./lab": "./src/lab.ts",
+    "./transport": "./src/transport.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../apps/infrx-api/openapi/consumer.json -o src/consumer.ts && openapi-typescript ../../apps/infrx-api/openapi/lab-control.json -o src/lab.ts",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc -p .",
+    "test:mutants": "node tests/mutants.mjs"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}
