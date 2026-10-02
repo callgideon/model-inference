@@ -54,3 +54,27 @@ def register(app: FastAPI, rt: Any) -> None:
              operation_id="console_legacy_statement")
     async def legacy_statement(request: Request) -> JSONResponse:
         return await answer(request, reads.legacy_statement)
+
+    @app.get("/console/v1/requests", response_model=api.ListPage[r.RequestSummary],
+             responses=ERRORS, operation_id="console_requests")
+    async def requests(request: Request, limit: str | None = LIMIT, cursor: str | None = CURSOR,
+                       model: str | None = Query(None, description="requested model or revision"),
+                       key_id: str | None = Query(None, description="the key the request used"),
+                       from_: str | None = Query(None, alias="from",
+                                                 description="ISO-8601 instant, inclusive"),
+                       to: str | None = Query(None, description="ISO-8601 instant, exclusive"),
+                       ) -> JSONResponse:
+        async def read(actor: api.Actor) -> Any:
+            filters = r.request_filters(model, key_id, from_, to)
+            return await reads.requests(actor, limit, cursor, filters)
+        return await answer(request, read)
+
+    @app.get("/console/v1/requests/{request_id}", response_model=r.RequestSummary,
+             responses=ERRORS, operation_id="console_request")
+    async def one_request(request: Request, request_id: str) -> JSONResponse:
+        return await answer(request, lambda a: reads.request(a, request_id))
+
+    @app.get("/console/v1/requests/{request_id}/result", response_model=r.RequestResult,
+             responses=ERRORS, operation_id="console_request_result")
+    async def result(request: Request, request_id: str) -> JSONResponse:
+        return await answer(request, lambda a: reads.result(a, request_id))

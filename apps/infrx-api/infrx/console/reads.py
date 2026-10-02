@@ -268,6 +268,14 @@ def _request(row: Mapping[str, Any]) -> RequestSummary:
         result_expires_at=_opt_instant(row["result_expires_at"]))
 
 
+#: What the result route answers for each read outcome but `available` (request-view-model.ts
+#: RESULT_STATUS): not ready 409, no result 404, no persisted expiry 503, expired 410.
+WITHHELD: dict[str, type[errors.DomainError]] = {
+    "pending": errors.ResultPending, "held_unknown": errors.ResultPending,
+    "no_result": errors.NotFound, "unavailable": errors.DependencyUnavailable,
+    "expired": errors.ResultExpired}
+
+
 # ------------------------------------------------------------------------------ requests
 def page_size(limit: str | None) -> int:
     """R270: 25 by default, 1..100 or `invalid_request` (never clamped silently)."""
@@ -445,7 +453,7 @@ class ConsoleReads:
     async def _job(self, conn: Any, request_id: str) -> RequestSummary:
         rows = await self._rows(conn, "select * from public.consumer_jobs(p_limit => 1, "
                                       "p_request_id => %s::uuid)", (request_id,))
-        if not rows or str(rows[0]["request_id"]) != request_id:
+        if not rows:
             raise errors.NotFound("no such request")
         return _request(rows[0])
 
@@ -460,15 +468,8 @@ class ConsoleReads:
         found = _request_id(request_id)
         async with self._as(actor) as conn:
             job = await self._job(conn, found)
-            access = job.result_access
-            if access in ("pending", "held_unknown"):
-                raise errors.ResultPending("the result is not ready")
-            if access == "no_result":
-                raise errors.NotFound("this request has no result")
-            if access == "unavailable":
-                raise errors.DependencyUnavailable("the result has no persisted expiry")
-            if access == "expired":
-                raise errors.ResultExpired("the result expired")
+            if job.result_access != "available":
+                raise WITHHELD[job.result_access](f"result {job.result_access}")
             rows = await self._rows(conn, "select public.consumer_job_result(%s::uuid) as text",
                                     (found,))
         return RequestResult(request_id=found, text=_text(rows[0]["text"]),
