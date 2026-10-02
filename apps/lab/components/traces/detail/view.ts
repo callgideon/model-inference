@@ -1,7 +1,9 @@
-// V2: rows and copy for one request, derived only from the read records. Nothing here remembers
-// what a button did, and content reads as a sentence about its state, never a blank.
+// One request: rows and copy derived only from the read record. Content access is the route's
+// `access_state` (AP-07c); the body is shown only when that state says it is readable AND the record
+// is a granted one carrying text - any other combination states why nothing is shown.
 import type { ReviewResult } from "../../../lib/services/review/index.ts";
-import type { TraceDetail, TraceRefusal } from "./port.ts";
+import { accessLabel, elapsed, lossDetail, utc, type AccessLabel } from "../list/view-model.ts";
+import type { AccessState, TraceDetail, TraceRefusal } from "./port.ts";
 
 /** Another provider's request and one T2I has not projected yet are the same answer (TRACE-TENANT). */
 export const TRACE_COPY: Record<TraceRefusal, string> = {
@@ -9,43 +11,59 @@ export const TRACE_COPY: Record<TraceRefusal, string> = {
   denied: "Your role in this workspace sees aggregate health only, not individual requests.",
   unavailable: "Request records could not be read. Nothing is shown until they can be; try again shortly.",
 };
-
-export type ContentState = "available" | "not_captured" | "lost" | "metadata_only" | "expired";
-/** The Lab reads no content yet (C2 through the Lab is WR-V2-2): each state is a sentence, never a link. */
-export const CONTENT_COPY: Record<ContentState, string> = {
-  available: "This request's content was captured and is shared with this workspace, but content reads are not yet available in the Lab.",
-  not_captured: "Content was not captured for this request: capture was off or metadata-only for its key.",
-  lost: "This request's capture was lost before it was stored; only its metadata exists.",
-  metadata_only: "Metadata only: this request's organization has no current grant sharing its content with this workspace (never given, revoked or expired).",
-  expired: "This request's content is past its retention or was deleted, so it is not shown.",
+export const TRACE_TITLE: Record<TraceRefusal, string> = {
+  not_found: "Request not found",
+  denied: "Individual requests aren't available to your role",
+  unavailable: "We couldn't load this request",
 };
+
+/** Why there is no body, one sentence per state (03-lab.md L-05's access table). */
+export const CONTENT_COPY: Record<Exclude<AccessState, "content" | "partial">, string> & { unread: string; unknown: string } = {
+  metadata: "Content isn't shared with this workspace: its organization has no current grant sharing request content with you.",
+  revoked: "Content access was revoked or has lapsed: the organization's grant to this workspace is no longer current, so nothing is shown.",
+  expired: "This request's content is past its retention or was deleted, so it is not shown.",
+  not_captured: "Content was not captured for this request.",
+  unread: "The content could not be read just now. Nothing is shown until it can be; try again shortly.",
+  unknown: "This request's content access could not be determined, so nothing is shown.",
+};
+export const PARTIAL_COPY = "Partial capture: the answer broke off, so the content below is incomplete.";
+
+export type ContentRegion =
+  | { kind: "body"; text: string; partial: boolean; provenance: [string, string][] }
+  | { kind: "none"; copy: string };
+
+/** The content region: a body only for content/partial on a granted record that carries text. */
+export function contentRegion(d: TraceDetail): ContentRegion {
+  const state = d.access_state;
+  if (state === "content" || state === "partial") {
+    if (d.access !== "content") return { kind: "none", copy: CONTENT_COPY.unknown };
+    if (typeof d.content !== "string") return { kind: "none", copy: CONTENT_COPY.unread };
+    const provenance: [string, string][] = [["Shared by organization", d.grantor_org_id], ["Grant", d.grant_ref], ["Size", `${d.content_bytes} bytes`]];
+    return { kind: "body", text: d.content, partial: state === "partial", provenance };
+  }
+  if (state === "not_captured") {
+    const why = lossDetail(d.loss_reason);
+    return { kind: "none", copy: why === null ? `${CONTENT_COPY.not_captured} Capture was ${d.mode} for its key.` : `${CONTENT_COPY.not_captured} The capture was lost: ${why}.` };
+  }
+  return { kind: "none", copy: Object.hasOwn(CONTENT_COPY, state) ? CONTENT_COPY[state] : CONTENT_COPY.unknown };
+}
+
+export const access = (d: TraceDetail): AccessLabel => accessLabel(d.access_state);
 
 /** Named fields only: anything else a record carries (an identity, content) is never rendered. */
 export function metadataRows(d: TraceDetail): [string, string][] {
-  const done = d.completed_at === null ? null : Date.parse(d.completed_at) - Date.parse(d.started_at);
-  const rows: [string, string][] = [
-    ["Request", d.request_id],
-    ["Started", d.started_at],
-    ["Completed", d.completed_at ?? "in progress"],
-    ["Duration", done === null ? "—" : `${done} ms`],
-    ["Model", d.model_id],
+  return [
+    ["Started", utc(d.started_at)],
+    ["Completed", d.completed_at === null ? "Unfinished" : utc(d.completed_at)],
+    ["Elapsed", elapsed(d.elapsed_ms)],
     ["Model revision", d.model_revision],
-    ["Serving version", d.serving_version_id],
-    ["Rate card", d.rate_card_version ?? "unpriced"],
-    ["Policy", d.policy_version ?? "—"],
     ["Capture", d.mode],
-    ["Loss", d.loss_reason === "none" ? "—" : d.loss_reason],
+    ["Loss", lossDetail(d.loss_reason) ?? "—"],
+    ["Rate card", d.rate_card_version ?? "unpriced"],
+    ["Price version", d.price_version],
+    ["Policy", d.policy_version ?? "—"],
+    ["Request schema", String(d.request_schema_version)],
   ];
-  if (d.access === "content") rows.push(["Organization", d.grantor_org_id], ["Content size", `${d.content_bytes} bytes`]);
-  return rows;
-}
-
-/** What the records say about content before anyone asks for it. */
-export function contentState(d: TraceDetail): ContentState {
-  if (d.mode !== "full") return "not_captured";
-  if (d.loss_reason !== "none") return "lost";
-  if (d.access === "metadata") return "metadata_only";
-  return d.content_available ? "available" : "expired";
 }
 
 export const FEEDBACK_COPY = {

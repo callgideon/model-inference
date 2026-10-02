@@ -1,24 +1,29 @@
 /**
- * V1M — the request list's view model (moved from the App's trace list, V1): a provider trace page in,
- * everything the markup renders out. Pure, so `tests/v/list` pins it under `node --test`.
+ * The request list's view model: a provider trace page in, everything the markup renders out. Pure, so
+ * it runs under `node --test`.
  *
- * Rows come only from the provider trace read's named fields, so an organization, key, size or content
- * cannot reach the list; content is labelled, never shown (the detail page states it; C2 reads are WR-V2-2). A
- * missing piece of content is a state, and only a lost capture is a failure, with its reason. Requests
- * made with capture off have no trace row, so their absence is explained rather than drawn as a loss.
+ * Rows come only from the trace read's named fields, so an organization, key, size or content cannot
+ * reach the list. Content access is the route's `access_state` (AP-07c), labelled, never re-derived;
+ * the loss reason is its own column. A filter is the route's: a row outside it means the read is not
+ * what the page says it is, so the page is unavailable rather than a list that looks filtered.
  */
-import type { Result, TraceDetail, TraceRefusal } from "../detail/port.ts";
-import { contentState, TRACE_COPY, type ContentState } from "../detail/view.ts";
+import type { Tone } from "../../ui/badge.tsx";
+import { NO_FILTER, type AccessState, type Result, type TraceDetail, type TraceFilter, type TraceRefusal } from "../detail/port.ts";
 import type { TracePage } from "../../../lib/services/traces/port.ts";
 import { listHref } from "./query.ts";
 
-export const CONTENT_LABEL: Record<ContentState, string> = {
-  available: "Shared",
-  metadata_only: "Metadata only",
-  not_captured: "Not captured",
-  lost: "Lost",
-  expired: "Expired",
+export type AccessLabel = { label: string; tone: Tone };
+export const ACCESS_LABEL: Record<AccessState, AccessLabel> = {
+  content: { label: "Shared", tone: "info" },
+  partial: { label: "Partial capture", tone: "warning" },
+  metadata: { label: "Metadata only", tone: "neutral" },
+  revoked: { label: "Access revoked", tone: "neutral" },
+  expired: { label: "Expired", tone: "neutral" },
+  not_captured: { label: "Not captured", tone: "neutral" },
 };
+const UNKNOWN: AccessLabel = { label: "Unknown", tone: "warning" };
+/** A state outside the route's ladder is unknown: never shared, never content. */
+export const accessLabel = (state: string): AccessLabel => ACCESS_LABEL[state as AccessState] ?? UNKNOWN;
 
 /** The trace contract's loss reasons (infrx/contracts/records.py TraceLossReason). */
 type TraceLossReason =
@@ -36,44 +41,80 @@ const LOSS_DETAIL: Readonly<Record<TraceLossReason, string>> = {
   malformed: "the captured trace was rejected as malformed",
   abandoned: "the capture was abandoned before it finished",
 };
+/** null when nothing was lost. */
+export const lossDetail = (reason: string): string | null =>
+  reason === "none" ? null : (LOSS_DETAIL[reason as TraceLossReason] ?? reason);
+
+/** An instant as UTC to the second (the ISO value stays in `<time dateTime>`); unparseable is shown raw. */
+export function utc(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? iso : `${at.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
+export const elapsed = (ms: number | null): string => (ms === null ? "Unfinished" : `${ms} ms`);
 
 export const LIST_COPY = {
-  empty: "No requests on this workspace's deployments yet. Requests made with capture off leave no trace record, so they are never listed here.",
+  empty: "No requests returned for this workspace",
+  filteredEmpty: "No requests returned for this filter",
+  emptyWhy: "Requests made with capture off leave no trace record, so they are never listed here.",
   gap: "Nothing on this page is still retained (deleted or past retention). Older requests may follow.",
-  not_found: "This workspace's requests could not be listed for this account. Reload, or choose the workspace again.",
+  unavailable: "We couldn't load requests",
+  unavailableWhy: "The request records could not be read. Nothing is shown until they can be.",
+  denied: "Individual requests aren't available to your role",
+  deniedWhy: "Your role in this workspace sees aggregate health only, not individual requests.",
+  not_found: "This workspace's requests could not be listed",
+  notFoundWhy: "This account could not list this workspace's requests. Reload, or choose the workspace again.",
 } as const;
+const REFUSED: Record<TraceRefusal, { title: string; message: string }> = {
+  unavailable: { title: LIST_COPY.unavailable, message: LIST_COPY.unavailableWhy },
+  denied: { title: LIST_COPY.denied, message: LIST_COPY.deniedWhy },
+  not_found: { title: LIST_COPY.not_found, message: LIST_COPY.notFoundWhy },
+};
 
-export type RequestRow = { requestId: string; href: string; started: string; duration: string; model: string; content: string };
+export type RequestRow = {
+  requestId: string; href: string; startedAt: string; started: string; elapsed: string;
+  model: string; modelHref: string; revision: string; mode: string; access: AccessLabel; loss: string | null;
+};
 export type ListView =
   | { kind: "rows"; rows: RequestRow[]; note: string | null; nextHref: string | null; firstHref: string | null }
-  | { kind: "empty"; message: string }
-  | { kind: "error"; message: string; firstHref: string | null };
+  | { kind: "empty"; title: string; message: string; clearHref: string | null }
+  | { kind: "error"; state: TraceRefusal; title: string; message: string; retryHref: string; firstHref: string | null };
 
 function row(d: TraceDetail): RequestRow {
-  const state = contentState(d);
-  const reason = LOSS_DETAIL[d.loss_reason as TraceLossReason] ?? d.loss_reason;
   return {
     requestId: d.request_id,
     href: `/requests/${encodeURIComponent(d.request_id)}`,
-    started: d.started_at,
-    duration: d.completed_at === null ? "in progress" : `${Date.parse(d.completed_at) - Date.parse(d.started_at)} ms`,
-    model: d.model_revision,
-    content: state === "lost" ? `${CONTENT_LABEL.lost}: ${reason}` : CONTENT_LABEL[state],
+    startedAt: d.started_at,
+    started: utc(d.started_at),
+    elapsed: elapsed(d.elapsed_ms),
+    model: d.model_id,
+    modelHref: listHref(null, { ...NO_FILTER, model_id: d.model_id }),
+    revision: d.model_revision,
+    mode: d.mode,
+    access: accessLabel(d.access_state),
+    loss: lossDetail(d.loss_reason),
   };
 }
 
+const outside = (d: TraceDetail, f: TraceFilter) =>
+  (f.model_id !== null && d.model_id !== f.model_id) || (f.serving_version_id !== null && d.serving_version_id !== f.serving_version_id);
+
 /** `cursor` is the page being shown (null = the first), so a later page can offer the way back. */
-export function buildListView(result: Result<TracePage, TraceRefusal>, cursor: string | null): ListView {
-  const firstHref = cursor === null ? null : listHref(null);
-  if (!result.ok) return { kind: "error", message: result.reason === "not_found" ? LIST_COPY.not_found : TRACE_COPY[result.reason], firstHref };
+export function buildListView(result: Result<TracePage, TraceRefusal>, cursor: string | null, filter: TraceFilter = NO_FILTER): ListView {
+  const firstHref = cursor === null ? null : listHref(null, filter);
+  const refused = (state: TraceRefusal): ListView => ({ kind: "error", state, ...REFUSED[state], retryHref: listHref(cursor, filter), firstHref });
+  if (!result.ok) return refused(result.reason);
   const { items, next_cursor } = result.value;
-  if (items.length === 0 && next_cursor === null && cursor === null) return { kind: "empty", message: LIST_COPY.empty };
+  if (items.some((d) => outside(d, filter))) return refused("unavailable");
+  const filtered = filter.model_id !== null || filter.serving_version_id !== null;
+  if (items.length === 0 && next_cursor === null && cursor === null) {
+    return { kind: "empty", title: filtered ? LIST_COPY.filteredEmpty : LIST_COPY.empty, message: LIST_COPY.emptyWhy, clearHref: filtered ? listHref(null) : null };
+  }
   return {
     kind: "rows",
     rows: items.map(row),
     // T3 hides deleted and expired requests after the page is cut, so a page can be empty mid-walk.
     note: items.length === 0 ? LIST_COPY.gap : null,
-    nextHref: next_cursor === null ? null : listHref(next_cursor),
+    nextHref: next_cursor === null ? null : listHref(next_cursor, filter),
     firstHref,
   };
 }
