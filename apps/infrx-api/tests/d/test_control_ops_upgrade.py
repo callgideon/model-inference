@@ -92,9 +92,10 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     hosted = tuple(f for f in everything if "0027" <= number.get(f[0], "0000") <= "0059")
     wave7 = tuple(f for f in everything if number.get(f[0], "") > "0059")
     labels = [label for label, _ in wave7]
-    assert all("0060" <= label[:4] <= "0066" for label in labels) and \
+    # 0062 (api-hosting) and 0067 (R271's late allocation) are admitted, never required
+    assert all("0060" <= label[:4] <= "0067" for label in labels) and \
         {"0060_control_operations.sql", *MINE} <= set(labels), \
-        f"R271: past 0059 only the wave-7 range 0060-0066: {labels}"
+        f"R271: past 0059 only the wave-7 range 0060-0067: {labels}"
     pgharness.ensure()
     pgharness.recreate(DB)
     pgharness.apply(DB, early)

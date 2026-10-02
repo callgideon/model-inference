@@ -76,6 +76,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py
 	# 0060's SQL list + control_ops.py's Python list (api-schema, AP-00 00d, R271): the SQL needs Docker, skips visibly without it; task-local key ap0
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
+	# 0065's and 0066's SQL lists (api-schema-2, AP-00 00d remainder, R271): need Docker, skip visibly without it; task-local key ap0
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py
 	# AP-02's console reads (wave 7): PostgreSQL half needs Docker, skips visibly without it; task-local key ap2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
 	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7

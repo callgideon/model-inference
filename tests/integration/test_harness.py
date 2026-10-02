@@ -220,7 +220,8 @@ def test_the_movable_clock_cannot_exist_in_a_deployed_database():
 
 def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     files = pgstate.migration_files()
-    assert [path.name for path in files] == [
+    names = [path.name for path in files]
+    pinned = [
         "0001_init.sql", "0002_seed_models.sql", "0003_pilot_durable_schema.sql",
         "0004_pilot_roles_and_rpcs.sql", "0005_console_read_surface.sql",
         # D1R (additive CREDIT accounting, provider registry, read surface, operator seams)
@@ -294,6 +295,11 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     "0065_identity_functions.sql",
     "0066_wave7_grants_and_reads.sql",
     ]
+    # 0062 (api-hosting) and 0067 (R271's late allocation) are optional until their merges
+    optional = ("0062", "0067")
+    assert names == sorted(names)
+    assert [n for n in names if n[:4] not in optional] == \
+        [n for n in pinned if n[:4] not in optional]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
     assert [name for name, _ in digests] == [path.name for path in files]

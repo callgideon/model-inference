@@ -725,7 +725,8 @@ def check_the_control_login_is_bounded_and_lab_only(conn) -> str:
                "ref_issue": f"select infrx.lab_content_ref_issue({lab})",
                "ref_redeem": f"select infrx.lab_content_ref_redeem({lab})",
                "ref_held": f"select infrx.lab_content_ref_held({lab})",
-               "other_lab": f"select infrx.lab_list_datasets({lab})",
+               # 0066 (SR-AP10-3) grants the route reads; a worker-only door stays out
+               "other_lab": f"select infrx.lab_tombstone_samples({lab})",
                "admit": "select infrx.admit('{}'::jsonb)",
                "jobs": "select count(*) from infrx.jobs",
                "wallets": "select count(*) from infrx.credit_wallets",
