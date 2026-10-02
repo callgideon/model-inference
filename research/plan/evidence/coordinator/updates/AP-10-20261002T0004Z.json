@@ -1,0 +1,70 @@
+{
+  "task": "AP-10",
+  "slice": "10a,10b",
+  "activity": "review",
+  "head": "47ab6e9a",
+  "worktree": ".claude/worktrees/codex-w7-api-improve",
+  "branch": "codex/w7-api-improve",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/evaluation/",
+    "apps/infrx-api/tests/ap10/"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10",
+      "exit": 0,
+      "summary": "40 passed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10 tests/g/lab_evaluations tests/b/runner/test_runner.py",
+      "exit": 0,
+      "summary": "93 passed, 1 skipped (b3-only _pg)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap10/test_mutants.py",
+      "exit": 0,
+      "summary": "17 mutants killed, 0 survivors; every-case green"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 458 (baseline 458, no new)"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 1,
+      "summary": "7 failed until WR-AP10-4 (ap10 list not in api-mutants); 7 passed with it applied transiently"
+    },
+    {
+      "cmd": "WR-AP10-1 transient: pytest tests/g/test_startup.py -k lab_api_2; g mutants -k lab_evaluations_*",
+      "exit": 0,
+      "summary": "3 passed; 10 passed incl. new lab_evaluations_ports_unwired"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "10a/10b done on the branch; remaining = WR-AP10-1..4 (verified transiently), SR-AP10-1/2/3 small SQL+grant pins by the schema owner, a one-line adapter change for SR-AP10-1(b), E6L j09 rerun on the e6l stack (~15 min)",
+    "at": "2026-10-02T00:04Z"
+  },
+  "blockers": [
+    "E6L j09 rerun needs the e6l block (57200-57299), not key ap10: coordinator runs `apps/infrx-api/.venv/bin/python tests/integration/lab_evaluate/runner.py --only j09`",
+    "POST /lab/v1/evaluations/experiments stays 503 until SR-AP10-1 + WR-AP10-2"
+  ],
+  "wiring_requests": [
+    "WR-AP10-1 compose.py evaluation_ports + test_startup ap10 ports + g mutant re-anchor/new",
+    "WR-AP10-2 lab_evaluations.py launch passes actor=who.user_id to put",
+    "WR-AP10-3 tests/w/test_worker_lab_eval_pg.py:105 corrected row-27 oracle",
+    "WR-AP10-4 Makefile api-mutants += tests/ap10/test_mutants.py"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-improve-47ab6e9.md"
+  ]
+}
