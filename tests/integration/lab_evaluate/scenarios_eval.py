@@ -364,13 +364,13 @@ def test_j10_the_provider_ui_launches_compares_and_cancels(workdir):
     page's form freezes two real D7 runs (B1, L2), progress and a cancel come from D7's records,
     B2's stored report is shown with its slices and intervals, and the unsafe variants are
     refused. A red suite fails this case; a green one is NOT RUN while the gateway's own
-    composition lacks the experiments/catalog/ledger ports (WR-B4-2, WR-LAB2-2, WR-B3-1)."""
+    composition does not carry the catalog (SR-AP10-1: its listing answers 503 until then)."""
     e2e = _e2e()
     got = e2e.run("evaluate", workdir)
     lw.save(workdir, "j10.json", {k: v for k, v in got.items() if k != "tail"})
     absent = e2e.missing(got)
     if absent:
-        lw.not_run("j10", "WR-B4-2", "WR-LAB2-2", "WR-B3-1",
+        lw.not_run("j10", "SR-AP10-1",
                    why=f"{e2e.command('evaluate')} passed ({got['pass']} cases) over D7/B1/L2 "
-                       f"with the route suite's experiments/catalog/ledger, but pilot._lab_2 "
-                       f"composes LabEvaluations without {absent}")
+                       f"with the route suite's experiments/catalog/ledger, but the gateway's own "
+                       f"composition does not carry {absent}")

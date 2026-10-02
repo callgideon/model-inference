@@ -1,0 +1,30 @@
+{
+  "task": "AP-04",
+  "lane": "api-artifacts-2",
+  "slice": "WR-AP04-2 composition (0060 ops, Lab unit surface/mount, artifacts role, secret refs, kill test) + stub rehearsal of the real import/adoption",
+  "activity": "review",
+  "at": "2026-10-02T04:15:00Z",
+  "head": "4a5a2579",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-artifacts-2",
+  "branch": "codex/w7-api-artifacts-2",
+  "owned_paths": ["apps/infrx-api/infrx/lab/artifacts/compose.py", "apps/infrx-api/tests/ap04/", "research/plan/evidence/w7/api-artifacts-2-4a5a257.md", "research/plan/evidence/w7/api-artifacts-2-WR-AP04-2.patch"],
+  "commands": [
+    {"cmd": "pytest -q tests/ap04/test_artifacts.py -m 'not pg' (conftest on DurableOps, compose.py absent)", "exit": 4, "summary": "red: ModuleNotFoundError infrx.lab.artifacts.compose"},
+    {"cmd": "pytest -q tests/ap04/test_artifacts.py -m 'not pg' (new composition cases, before implementation)", "exit": 1, "summary": "red: 3 failed, 31 passed"},
+    {"cmd": "INFRX_D_TASK=ap4 pytest -q tests/ap04/test_artifacts.py", "exit": 0, "summary": "64 passed (34 fake + 30 pg on PgControlOps as infrx_lab_control + MinIO)"},
+    {"cmd": "INFRX_D_TASK=ap4 INFRX_D1_IMAGE=supabase pytest -q tests/ap04/test_artifacts.py -m pg", "exit": 0, "summary": "30 passed"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/ap04/test_mutants.py", "exit": 0, "summary": "66 fake mutants killed, 0 survivors; every-case guard green (32 cases)"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap4 pytest -q tests/ap04/test_mutants.py -k pg_mutant", "exit": 0, "summary": "5 PG mutants killed"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "458 errors (baseline 458)"},
+    {"cmd": "pytest -q tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "7 passed"},
+    {"cmd": "WR-AP04-2 patch applied: INFRX_D_TASK=ap4 pytest -q tests/l/control/test_operations.py tests/contracts/test_config_and_imports.py tests/i/lab_control tests/i/lab", "exit": 0, "summary": "448 passed (patch reverted after)"},
+    {"cmd": "WR-AP04-2 patch applied: INFRX_MUTANTS=all INFRX_D_TASK=ap4 pytest -q tests/l/control/test_mutants.py -k artifacts_", "exit": 0, "summary": "4 killed (fake + pg)"},
+    {"cmd": "pytest -q tests/l/control/test_mutants.py -k every_case (clean base)", "exit": 1, "summary": "pre-existing: the AP-08 judge mount case has no mutant (not this lane)"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium", "basis": "composition, restart and worker role proven on ap4; remaining = coordinator applies WR-AP04-2 + api-identity-2 Lab-unit actors, the R151 window for 0060/0061, and the real HF import/adoption run (Xet/redirect and 5 GB transfer times unmodelled by the stub)", "at": "2026-10-02T04:15:00Z"},
+  "blockers": ["real Marlin import + adoption: coordinator run, BLOCKED on an R151 window for 0060-0061, WR-AP04-2 + api-identity-2 actors on the Lab unit, /model-inference/hf_token", "api_lifecycle stages 02-03: BLOCKED until WR-AP04-2 and the Lab-unit rt.actors merge"],
+  "wiring_requests": ["WR-AP04-2 research/plan/evidence/w7/api-artifacts-2-WR-AP04-2.patch: config.py lab_artifacts=False + pin; lab/control/app.py compose surface + mount(app, rt); workers ROLES/NEEDS/BUILD artifacts; 50-lab-role.sh + lib.sh ROLES; deploy/lab/artifacts/infrx-lab-artifacts.service (8018, NVMe spool, AWS_DEFAULT_REGION); tests/i/lab pins; composed test tests/l/control/test_operations.py::test_control_app__mounts_the_artifact_families_only_with_lab_artifacts + 2 l/control mutants"],
+  "evidence": ["research/plan/evidence/w7/api-artifacts-2-4a5a257.md", "research/plan/evidence/w7/api-artifacts-2-WR-AP04-2.patch"]
+}

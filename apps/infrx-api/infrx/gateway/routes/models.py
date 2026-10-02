@@ -59,6 +59,8 @@ OWNED_BY = "nemostation"
 # The approved release profile: Marlin-2B as release bda1586 deploys it (F2C.c's record of
 # `/etc/marlin2b-gateway.env`: 82 s). A runtime past it advertises nothing.
 APPROVED = deployed_profile()
+# `publish`'s route for the served model: the gateway's own engine and its probes.
+SERVED = "served"
 # E3L-F1 fallback only: a catalog with no `listing_version` reader (an adapter this lane
 # does not own) reports this instead of crashing. The real and fake directories both
 # implement it now, so a served model normally reports the listing it actually resolved.
@@ -130,13 +132,13 @@ def enforced_profile(rt, deployment, serving) -> pm.ServingProfile:
         max_pixels_per_frame=settings.px_per_frame, execution_modes=served_modes(rt, serving))
 
 
-async def catalog_rows(rt):
-    """The served model as a consumer's key resolves it now: (deployment, serving, card,
-    USD price, listing version), or None. A catalog that cannot answer is a retryable 503,
-    never an empty list or a stale claim."""
+async def catalog_rows(rt, model_id: str | None = None):
+    """The served model (or `model_id`) as a consumer's key resolves it now: (deployment,
+    serving, card, USD price, listing version), or None. A catalog that cannot answer is a
+    retryable 503, never an empty list or a stale claim."""
     catalog, settings = rt.ingress.catalog, rt.settings
     deployment = await _dependency(catalog.resolve(
-        settings.model_id, audience=CredentialAudience.consumer, endpoint_id=None))
+        model_id or settings.model_id, audience=CredentialAudience.consumer, endpoint_id=None))
     if deployment is None:
         return None
     serving = await _dependency(catalog.serving_revision(deployment.serving_version_id))
@@ -164,23 +166,31 @@ def provisional(card) -> bool:
     return unapproved(card.approved_by) is not None
 
 
-def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
+def publish(rt, rows, now: datetime, route: str | None = SERVED) -> list[pm.PublishedModel]:
     """The published entry of `rows`, or nothing: unpriced, not this deployment's card,
-    not publishable (`project`'s refusal) or past a profile."""
-    if rows is None:
+    not publishable (`project`'s refusal) or past a profile. `route` is `route_state`'s:
+    the served model is the gateway's own engine (`SERVED`: today's entry, byte for byte);
+    another alias needs a route serving it - none hides it, a down one is `unavailable`."""
+    if rows is None or route is None:
         return []
     deployment, serving, card, usd, listing_version = rows
     settings = rt.settings
     regime = settings.deployment.accounting_regime
-    if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:
+    served = route == SERVED
+    if served and regime == CREDIT \
+            and card.rate_card_version != settings.pilot.active_rate_card_version:
         return []                                     # not the card this deployment serves
+    if not served and provisional(card):
+        return []                     # another alias: only an operator-approved card lists it
     profile = enforced_profile(rt, deployment, serving)
-    available = all(state == OK for state in component_state(rt.ingress.checks).values())
+    available = all(state == OK for state in component_state(rt.ingress.checks).values()) \
+        and route in (SERVED, "ready")
     try:
         published = pm.project(
             serving=serving, deployment=deployment, listing_version=listing_version,
             regime=regime, credit_card=card, credit_provisional=provisional(card), usd_price=usd,
-            capability=profile.capability, profile=profile, owned_by=OWNED_BY,
+            capability=profile.capability, profile=profile,
+            owned_by=OWNED_BY if served else serving.public_model_id.partition("/")[0],
             available=available, as_of=now)
     except (errors.NotFound, errors.InvalidRequest):
         return []            # project's refusal: unpublishable, or past the enforced profile
@@ -189,6 +199,36 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
         log.error("%s is not published: %s", serving.model_revision, "; ".join(overclaims))
         return []
     return [published]
+
+
+async def listed_rows(rt) -> list:
+    """AP-06 06c: what discovery considers - the served model first (today's document), then
+    each other alias the registry lists (`published_aliases`, the catalog's reader - absent,
+    the served model alone), as `(rows, served)` pairs."""
+    found = [(await catalog_rows(rt), True)]
+    reader = getattr(rt.ingress.catalog, "published_aliases", None)
+    for alias in (await _dependency(reader())) if reader is not None else ():
+        if alias != rt.settings.model_id:
+            found.append((await catalog_rows(rt, alias), False))
+    return found
+
+
+async def route_state(rt, rows, served: bool) -> str | None:
+    """`SERVED` for the gateway's own model; for another alias what `rt.routes` (an engine
+    route serving exactly this pinned revision: AP-05's endpoints, a wiring request) says -
+    "ready", "unavailable" (also when the route table cannot answer: explicit, never hidden
+    as healthy) - or None: no route, not listed. Without a route table only the served model
+    is routable: the relay's one upstream serves Marlin and nothing else."""
+    if served:
+        return SERVED
+    routes = getattr(rt, "routes", None)
+    if routes is None or rows is None:
+        return None
+    try:
+        return await routes.state(rows[0], rows[1])
+    except Exception:                     # noqa: BLE001 - an outage is unavailable, not absent
+        log.warning("route table unavailable for %s", rows[1].public_model_id)
+        return "unavailable"
 
 
 def price_check(catalog, settings):
@@ -261,14 +301,14 @@ def register(app, rt):
     catalog rows are cached for `price_ttl` seconds (one refresh at a time), so an
     anonymous caller cannot turn discovery into database load; availability is live."""
     guarded = intake.guard(rt.ingress.new_request_id)
-    cache = {"at": None, "rows": None}
+    cache: dict = {"at": None, "rows": None}
     refreshing = asyncio.Lock()
 
     async def rows():
         async with refreshing:
             at = cache["at"]
             if at is None or not 0 <= rt.clock() - at < rt.settings.price_ttl:
-                cache["rows"] = await catalog_rows(rt)
+                cache["rows"] = await listed_rows(rt)
                 cache["at"] = rt.clock()
             return cache["rows"]
 
@@ -276,7 +316,8 @@ def register(app, rt):
     @guarded
     async def list_models(request: Request, request_id: str):
         now = datetime.fromtimestamp(rt.clock(), timezone.utc)
-        data = [entry.model_dump(mode="json") for entry in publish(rt, await rows(), now)]
+        data = [entry.model_dump(mode="json") for found, served in await rows()
+                for entry in publish(rt, found, now, await route_state(rt, found, served))]
         return JSONResponse({"object": "list", "data": data},
                             headers={wire.HEADER_INFERENCE_ID: request_id})
 

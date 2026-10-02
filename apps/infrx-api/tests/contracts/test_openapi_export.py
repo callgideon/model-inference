@@ -199,7 +199,9 @@ def test_ap00_lab_control_documents_its_bodies_responses_and_refusals(apps):
     assert refused == {"$ref": "#/components/schemas/Refusal"}
     control = [op for path, item in paths.items() if path.startswith("/lab/v1/control/")
                for op in item.values()]
-    assert len(control) == 8 and "HTTPValidationError" not in json.dumps(control)
+    # L3's eight + AP-06's four dev-key/dev-wallet operations (WR-AP06-3, LAB_PUBLICATION)
+    # + AP-04's four model-project/revision operations (WR-AP04-2, LAB_ARTIFACTS)
+    assert len(control) == 16 and "HTTPValidationError" not in json.dumps(control)
     models = paths["/lab/v1/control/models"]["get"]["responses"]["200"]
     listed = models["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[1]
     assert schemas[listed]["properties"]["data"]["items"] == {"$ref": "#/components/schemas/Model"}

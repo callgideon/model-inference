@@ -1,0 +1,90 @@
+{
+  "task": "UX-05",
+  "lane": "ux-lab-requests",
+  "slice": "UX-05 complete (request list + detail on AP-07c projections and UX-00 primitives; UX05 suite 16 cases; 67 mutants)",
+  "activity": "review",
+  "at": "2026-10-02T03:40:00Z",
+  "head": "ebcdb6f2",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-ux-lab-requests",
+  "branch": "codex/w7-ux-lab-requests",
+  "owned_paths": [
+    "apps/lab/app/(provider)/requests/",
+    "apps/lab/components/traces/list/",
+    "apps/lab/components/traces/detail/",
+    "apps/lab/tests/ux/requests/",
+    "research/plan/evidence/w7/ux-lab-requests-ebcdb6f.md",
+    "research/plan/evidence/w7/ux-lab-requests-ebcdb6f-WR-UX05-1.patch",
+    "research/plan/evidence/w7/ux-lab-requests-ebcdb6f-WR-UX05-2.patch",
+    "research/plan/evidence/coordinator/updates/UX-05-20261002T0340Z.json"
+  ],
+  "deviations": "superseded pins of the owned files updated/moved: apps/lab/tests/v/{list,detail}/* (view/page cases -> UX05), tests/v/{list,detail}/run-mutants.mjs, tests/e2e/observe/stack.test.ts + tests/e2e/run-mutants.mjs S01-S04/S06 (stack suites NOT RUN: l4/lab-v1m keys)",
+  "commands": [
+    {
+      "cmd": "node --test tests/ux/requests/requests.test.ts (at 7ee1f5d9, before slice 2)",
+      "exit": 1,
+      "summary": "red: 15 of 16 fail by assertion"
+    },
+    {
+      "cmd": "pnpm test (make lab-test)",
+      "exit": 0,
+      "summary": "289 tests, 275 pass, 0 fail, 14 skipped (base 286/272/0/14)"
+    },
+    {
+      "cmd": "make lab-typecheck",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "make lab-lint",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "make lab-build",
+      "exit": 0,
+      "summary": "build OK"
+    },
+    {
+      "cmd": "node tests/ux/requests/run-mutants.mjs",
+      "exit": 0,
+      "summary": "16 cases all named; 67 mutants, 67 killed"
+    },
+    {
+      "cmd": "make lab-mutants (existing list, detached)",
+      "exit": 0,
+      "summary": "14 runners all named, 0 survivors (e2e stack list not run: l4)"
+    },
+    {
+      "cmd": "node tests/v/{list,detail,judge}/run-mutants.mjs, tests/l/shared, tests/e2e (harness list)",
+      "exit": 0,
+      "summary": "46/46, 13/13, 36/36, 9/9 killed; e2e stack list NOT RUN (l4)"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 1,
+      "summary": "7 failed until WR-UX05-2; 7 passed with it (scratch tree)"
+    },
+    {
+      "cmd": "WR-UX05-1 applied (scratch tree): pnpm test / lint / typecheck / tests/v/list/run-mutants.mjs",
+      "exit": 0,
+      "summary": "290/276/0/14; clean; clean; 54/54 killed"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "all slices green on fixtures; remaining = apply WR-UX05-1 (merge-blocking) + WR-UX05-2, run the l4/lab-v1m stack suites, review findings",
+    "at": "2026-10-02T03:40:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-UX05-1 (merge-blocking): apply research/plan/evidence/w7/ux-lab-requests-ebcdb6f-WR-UX05-1.patch (apps/lab/lib/services/traces/port.ts keeps access_state/elapsed_ms/price_version/request_schema_version, a granted detail's inline content, sends list filters; adapter tests V1M-A05 + mutants X74-X81). Composed: pnpm test 290/276/0/14; tests/v/list/run-mutants.mjs 54/54; then make lab-e2e (l4)",
+    "WR-UX05-2: Makefile lab-mutants append `cd apps/lab && node tests/ux/requests/run-mutants.mjs` (patch ux-lab-requests-ebcdb6f-WR-UX05-2.patch). Composed: test_makefile_mutant_lists.py 7 passed; make lab-mutants prints '67 mutants, 67 killed'"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/ux-lab-requests-ebcdb6f.md"
+  ]
+}

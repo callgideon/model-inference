@@ -7,7 +7,7 @@ import test from "node:test";
 import { ACCESS_COPY } from "../../../lib/auth/access.ts";
 import { CONTENT_COPY, FEEDBACK_COPY, TRACE_COPY } from "../../../components/traces/detail/view.ts";
 import { JUDGE_COPY } from "../../../components/traces/judge/view.ts";
-import { CONTENT_LABEL, LIST_COPY } from "../../../components/traces/list/view-model.ts";
+import { ACCESS_LABEL, LIST_COPY } from "../../../components/traces/list/view-model.ts";
 import { door, record, SKIP, stack, type Browser } from "../harness.ts";
 
 type Name = "granted" | "ungranted" | "lost" | "foreign" | "deleted" | "expired" | "ancient";
@@ -24,7 +24,9 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
     return b;
   };
   const dev = await as("dev_a");
-  const row = (page: string, id: string) => new RegExp(`${id} [^·]+ · [^·]+ · [^·]+ · ([A-Za-z ]+(: [a-z_]+)?)`).exec(page)?.[1].trim() ?? null;
+  // UX-05: a table row reads "<id> <started> UTC <elapsed> <model> <revision> <mode> <access label>[ Lost: <reason>]".
+  const LABELS = Object.values(ACCESS_LABEL).map((l) => l.label).join("|");
+  const row = (page: string, id: string) => new RegExp(`${id}[\\s\\S]*?\\s(${LABELS})(\\s+Lost: [a-z_]+)?`).exec(page)?.slice(1).filter(Boolean).join("").replace(/\s+/g, " ").trim() ?? null;
   const page = (id: string, query = "") => dev.get(`/requests/${id}${query}`);
 
   await t.test("E2E-O01 a developer's list shows its own deployment's requests with each one's content state, and nothing else", async () => {
@@ -32,20 +34,18 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
     assert.equal(list.status, 200);
     assert.deepEqual(
       Object.fromEntries((["granted", "ungranted", "lost", "expired"] as const).map((n) => [n, row(list.text, ids[n])])),
-      { granted: CONTENT_LABEL.available, ungranted: CONTENT_LABEL.metadata_only, lost: `${CONTENT_LABEL.lost}: spool_full`, expired: CONTENT_LABEL.expired });
+      { granted: ACCESS_LABEL.content.label, ungranted: ACCESS_LABEL.metadata.label, lost: `${ACCESS_LABEL.not_captured.label} Lost: spool_full`, expired: ACCESS_LABEL.expired.label });
     for (const gone of ["foreign", "deleted", "ancient"] as const) assert.ok(!list.text.includes(ids[gone]), `${gone} is listed`);
   });
 
-  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: content stated and never read, the feedback door, the judge door", async () => {
+  await t.test("E2E-O02 the review page shows the record, then each panel's own answer: granted content inline with its provenance, the feedback door, the judge door", async () => {
     const shared = await page(ids.granted);
-    assert.match(shared.text, new RegExp(`Request ${ids.granted} .* Capture full Loss — Organization [0-9a-f-]{36} Content size 15 bytes`));
-    assert.ok(shared.text.includes(CONTENT_COPY.available) && !shared.text.includes("Show content"), "content is stated, never offered");
+    assert.match(shared.text, new RegExp(`Request ${ids.granted} .* Capture full .* Shared by organization [0-9a-f-]{36} Grant lab:grant:\\S+ Size 15 bytes`));
+    assert.ok(!shared.text.includes(CONTENT_COPY.unread) && !shared.text.includes("Show content"), "granted content is read inline with the record (AP-07c)");
     assert.ok(shared.text.includes(FEEDBACK_COPY.not_found), "the feedback panel is 0038's door's answer (no feedback grant)");
     assert.ok(shared.text.includes(JUDGE_COPY.unavailable), "the judge panel is 0043's door's answer (submission off)");
-    const asked = await page(ids.granted, "?content=1");
-    assert.ok(asked.text.includes(CONTENT_COPY.available) && !asked.text.includes('"prompt"'), "?content=1 reads nothing: C2 reads are not wired (WR-V2-2)");
     assert.ok((await page(ids.expired)).text.includes(CONTENT_COPY.expired));
-    assert.ok((await page(ids.lost)).text.includes(CONTENT_COPY.lost));
+    assert.ok((await page(ids.lost)).text.includes(CONTENT_COPY.not_captured));
     const deleted = await page(ids.deleted);
     assert.ok(deleted.text.includes(TRACE_COPY.not_found) && !deleted.text.includes("Capture full"), "a deleted request has no record");
   });
@@ -66,11 +66,11 @@ test("E2E-O o10 the Lab review panel renders the provider trace route's answer",
     assert.ok(anon.text.includes("Sign in") && !anon.text.includes(ids.granted));
   });
 
-  await t.test("E2E-O04 the grantor revokes: the same request reads as metadata only, with no organization or content offer", async () => {
+  await t.test("E2E-O04 the grantor revokes: the same request reads as revoked, with no organization or content", async () => {
     await door(s.api, "revoke");
-    assert.equal(row((await dev.get("/requests")).text, ids.granted), CONTENT_LABEL.metadata_only);
+    assert.equal(row((await dev.get("/requests")).text, ids.granted), ACCESS_LABEL.revoked.label);
     const after = await page(ids.granted);
-    assert.ok(after.text.includes(CONTENT_COPY.metadata_only) && !after.text.includes("Organization") && !after.text.includes("Show content"));
+    assert.ok(after.text.includes(CONTENT_COPY.revoked) && !after.text.includes("Shared by organization") && !after.text.includes("Size 15 bytes"));
   });
   record("observe", { cell: "E5L o10", stand_ins: s.world.stand_ins, composed: {} });
 });

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import shutil
 import sys
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
@@ -19,7 +20,8 @@ if str(API_DIR) not in sys.path:
 from tests.contracts import mutants as shared  # noqa: E402
 from tests.contracts.mutants import Mutant, Result, Runner  # noqa: E402
 
-SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py")
+SUITES = ("tests/ap10/test_evaluation_ports.py", "tests/ap10/test_row27.py",
+          "tests/ap10/test_from_traces.py")
 P = "lab/evaluation/__init__.py"
 
 STORED = "test_ap10_an_experiment_is_stored_once_as_its_two_run_records_and_a_resubmit_is_the_first"
@@ -32,6 +34,19 @@ POOL = "test_ap10_the_ports_share_one_pool"
 ROUTES = "test_ap10_authorized_empty_reads_are_200_empty_and_a_failed_read_is_503"
 INFLIGHT = "test_ap10_row27_a_kill_with_both_attempts_in_flight_is_two_cases_each_charged_once"
 GAP = "test_ap10_row27_after_the_kill_every_key_is_debited_once_and_the_gap_is_the_kill"
+FT = "lab/datasets/from_traces.py"
+HOLDOUT = "test_ap10_selection_then_materialisation_is_an_immutable_version_with_its_holdout"
+REVOKED = "test_ap10_a_revocation_between_selection_and_materialisation_refuses"
+NEWVERSION = "test_ap10_a_new_grant_version_or_an_expiry_after_selection_refuses"
+SELECTION = "test_ap10_the_selection_needs_both_purposes_and_a_developer_of_the_provider"
+KEYREUSE = "test_ap10_a_key_reused_with_another_body_conflicts_even_after_a_crash_before_start"
+RESUME = "test_ap10_a_crash_mid_materialisation_resumes_to_the_same_refs_once"
+CANCEL = "test_ap10_a_cancelled_operation_publishes_nothing"
+C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
+#: LAB-E2E evaluate's backend lives outside the package: its mutants run on `PROBE` (below).
+PROBE_SUITE = "tests/ap10/test_e2e_probe.py"
+BACKEND = "../../lab/tests/e2e/evaluate/backend.py"
+J10 = "test_ap10_j10_a_catalog_answering_503_is_not_carried"
 
 
 def m(name, invariant, old, new, *cases, file=P, dies_by=(), occurrences=1):
@@ -91,12 +106,69 @@ MUTANTS: tuple[Mutant, ...] = (
       "                                    concurrency=2)",
       "                                    concurrency=1)", INFLIGHT, GAP,
       file="worker/__main__.py"),
+    # --- 10c: the trace -> dataset operation
+    m("ft_training_not_required", "the selection needs the training purpose",
+      "PURPOSES = (DataPurpose.provider_sharing, DataPurpose.training)",
+      "PURPOSES = (DataPurpose.provider_sharing,)", SELECTION, file=FT),
+    m("ft_sharing_not_required", "the selection needs provider_sharing to read content",
+      "PURPOSES = (DataPurpose.provider_sharing, DataPurpose.training)",
+      "PURPOSES = (DataPurpose.training,)", SELECTION, file=FT),
+    m("ft_any_audience", "a selection is made in a web session only",
+      'if actor.audience != "session" or provider is None', "if provider is None",
+      SELECTION, file=FT),
+    m("ft_no_holdout_accepted", "a trace dataset keeps a holdout",
+      "self.train_bp + self.validation_bp >= 10_000", "self.train_bp + self.validation_bp > 10_000",
+      SELECTION, file=FT),
+    m("ft_selection_rewritten", "a recorded selection is never rewritten under its key",
+      "    if stored is None:\n        await write_once(objects, _key(provider, sid)",
+      "    if True:\n        await write_once(objects, _key(provider, sid)", KEYREUSE, file=FT),
+    m("ft_hash_unchecked", "a key reused with another body is a 409 even before start",
+      'elif json.loads(stored)["input_hash"] != digest:', "elif False:", KEYREUSE, file=FT),
+    m("ft_version_unbound", "materialisation needs the selected grant VERSION",
+      '(grant.grant_id, grant.version) != (sel["grant_id"], sel["grant_version"])',
+      'grant.grant_id != sel["grant_id"]', NEWVERSION, file=FT),
+    m("ft_materialise_ungated", "materialisation re-checks the grant's purposes and expiry",
+      "    grant = await gate(p.access, user_id=user, provider_org_id=provider,\n"
+      "                       grantor_org_id=grantor, model_id=body.model_id)\n",
+      "    grant = await p.access.store.current_grant(grantor, provider)\n", NEWVERSION,
+      file=FT),
+    m("ft_refusal_unnamed", "a rights refusal names the grant",
+      "if isinstance(refused, errors.Forbidden):", "if False:", REVOKED, NEWVERSION, file=FT),
+    m("ft_split_overwrites_selection", "the split is a new version over the selection",
+      "version=body.version + 1, created_at=at", "version=body.version, created_at=at",
+      HOLDOUT, file=FT),
+    m("ft_holdout_unrecorded", "the outcome records the manifest's holdout",
+      '"holdout": list(manifest.splits.holdout),', '"holdout": [],', HOLDOUT, file=FT),
+    m("ft_clock_not_the_selection", "a resumed materialisation republishes the same bytes",
+      "selection_id=sid, dataset_id=dataset_id, version=body.version, created_at=at,",
+      "selection_id=sid, dataset_id=dataset_id, version=body.version,"
+      " created_at=iso_z(p.retention.clock()),", RESUME, file=FT),
+    m("ft_transient_fails", "a 5xx refusal is retried, never a failed operation",
+      "except (errors.ServerError, errors.RateLimitError):", "except (errors.RateLimitError,):",
+      RESUME, file=FT),
+    m("ft_crash_raises", "an unexpected failure leaves the lease to lapse",
+      '            log.exception("trace dataset %s did not finish", operation_id)\n'
+      '            done["retry"] += 1\n            continue\n',
+      "            raise\n", RESUME, file=FT, dies_by=("RuntimeError",)),
+    m("ft_cancel_ignored_first", "a cancel requested before the work is honoured",
+      '"selecting")).state == "cancel_requested"', '"selecting")).state == "never"', CANCEL,
+      file=FT),
+    m("ft_cancel_ignored_split", "a cancel requested mid-work stops before the split",
+      '"splitting")).state == "cancel_requested"', '"splitting")).state == "never"', CANCEL,
+      file=FT),
+    m("ft_c2_purpose", "C2 refs are issued for training",
+      "purpose=DataPurpose.training)", "purpose=DataPurpose.provider_sharing)", C2, file=FT),
+    m("j10_catalog_presence_is_carried", "a catalog answering 503 is not carried (j10 NOT RUN)",
+      '    if got["catalog"]:\n', "    if False:\n", J10, file=BACKEND),
+    m("ft_c2_empty_sample", "content C2 does not serve is Gone, never an empty sample",
+      "        if got.content is None:\n", "        if False:\n", C2, file=FT,
+      dies_by=("AttributeError",)),
 )
 
 
 def case_names() -> set[str]:
     names = set()
-    for suite in SUITES:
+    for suite in (*SUITES, PROBE_SUITE):
         tree = ast.parse((API_DIR / suite).read_text())
         names |= {node.name for node in tree.body
                   if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
@@ -106,8 +178,26 @@ def case_names() -> set[str]:
 RUNNER = Runner(name="ap10", targets=SUITES, require_every_case=True)
 
 
+def _with_backend(tmp: pathlib.Path) -> pathlib.Path:
+    """The default copy under `infrx-api/`, plus the e2e backend (and the `stack` it
+    imports) where the probe case finds it, `../lab/tests/e2e/`."""
+    root = tmp / "infrx-api"
+    root.mkdir()
+    shared._copy(root, RUNNER)
+    e2e = tmp / "lab/tests/e2e"
+    (e2e / "evaluate").mkdir(parents=True)
+    source = API_DIR.parent / "lab/tests/e2e"
+    shutil.copy2(source / "stack.py", e2e / "stack.py")
+    shutil.copy2(source / "evaluate/backend.py", e2e / "evaluate/backend.py")
+    return root
+
+
+PROBE = Runner(name="ap10-probe", targets=(PROBE_SUITE,), require_every_case=True,
+               layout=_with_backend)
+
+
 def run_mutant(mutant: Mutant) -> Result:
-    return shared.run_mutant(mutant, RUNNER)
+    return shared.run_mutant(mutant, PROBE if mutant.file == BACKEND else RUNNER)
 
 
 if __name__ == "__main__":

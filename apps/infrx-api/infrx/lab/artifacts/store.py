@@ -7,10 +7,8 @@ provider (another provider's row is absent), `update` is a compare-and-set on `s
 `FakeArtifactStore` keeps dicts; `PgArtifactStore` runs the same statements on 0061.
 
 `ControlOps` is api-schema's 0060 protocol as wave-7's plan publishes it (start / lease /
-advance / finish / cancel / get). Until 0060 is on the base, `MemoryControlOps` implements
-it here (process memory: an operation does not survive a restart; the schema request in
-the AP-04 evidence names what the PostgreSQL store must add). It replaces nothing: there is
-no generic operation store before 0060 (maps §A).
+advance / finish / cancel / get); `compose.DurableOps` implements it over 0060's
+`ControlOps` (`PgControlOps`, or `FakeControlOps` in tests).
 
 `Objects` is the byte port: `S3Objects` reuses `infrx.media.s3.S3ObjectStore` (its client,
 prefix discipline and typed failures) and adds what artifacts need beyond media - a
@@ -22,7 +20,7 @@ import dataclasses
 import hashlib
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, ClassVar, Literal, Protocol, TypeVar
 
 from pydantic import Field
@@ -331,71 +329,6 @@ class ControlOps(Protocol):
     async def finish(self, operation_id: str, fence: int, state: str,
                      error: api.ErrorBody | None = None) -> Operation: ...
     async def cancel(self, operation_id: str) -> Operation: ...
-
-
-class MemoryControlOps:
-    """`ControlOps` in process memory, on the store clock. ponytail: lost on restart; the
-    PostgreSQL store over 0060 (api-schema) replaces it at the batch-2 switch."""
-
-    def __init__(self, clock: Callable[[], Awaitable[datetime]]) -> None:
-        self.clock, self.ops = clock, {}
-        self.keys: dict[tuple[str, str], str] = {}
-
-    async def start(self, *, kind, resource_kind, resource_id, actor, scope, key, input_hash):
-        existing = self.keys.get((scope, key))
-        if existing is not None:
-            op = self.ops[existing]
-            if op.input_hash != input_hash:
-                raise errors.IdempotencyConflict("this key was used for another request")
-            return op, True
-        now = (await self.clock()).isoformat()
-        doc = api.OperationDoc(operation_id=str(uuid.uuid4()), kind=kind, state="queued",
-                               phase="queued", resource_id=resource_id, created_at=now,
-                               updated_at=now, retry_after_s=2)
-        op = Operation(doc, actor, resource_kind, scope, key, input_hash)
-        self.ops[doc.operation_id] = op
-        self.keys[(scope, key)] = doc.operation_id
-        return op, False
-
-    async def get(self, operation_id):
-        return self.ops.get(operation_id)
-
-    async def _move(self, op: Operation, **changes) -> Operation:
-        op.doc = op.doc.model_copy(update={**changes,
-                                           "updated_at": (await self.clock()).isoformat()})
-        return op
-
-    async def lease(self, operation_id, owner, ttl_s):
-        op, now = self.ops[operation_id], await self.clock()
-        if op.doc.state in api.TERMINAL_STATES or (
-                op.lease_until is not None and op.lease_until > now):
-            return None
-        op.fence, op.lease_owner = op.fence + 1, owner
-        op.lease_until = now + timedelta(seconds=ttl_s)
-        if op.doc.state == "queued":
-            await self._move(op, state="running")
-        return op.fence
-
-    def _fenced(self, operation_id: str, fence: int) -> Operation:
-        op = self.ops[operation_id]
-        if fence != op.fence or op.doc.state in api.TERMINAL_STATES:
-            raise errors.StaleLease("a newer lease holds this operation")
-        return op
-
-    async def advance(self, operation_id, fence, phase):
-        return await self._move(self._fenced(operation_id, fence), phase=phase)
-
-    async def finish(self, operation_id, fence, state, error=None):
-        op = self._fenced(operation_id, fence)
-        op.lease_owner = op.lease_until = None
-        return await self._move(op, state=state, phase=state, error=error, retry_after_s=None)
-
-    async def cancel(self, operation_id):
-        op = self.ops[operation_id]
-        if op.doc.state in api.TERMINAL_STATES:
-            return op
-        return await self._move(op, state="cancelled" if op.doc.state == "queued"
-                                else "cancel_requested")
 
 
 # ======================================================================== objects ===

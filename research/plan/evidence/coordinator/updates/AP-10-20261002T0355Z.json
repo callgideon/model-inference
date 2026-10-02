@@ -1,0 +1,78 @@
+{
+  "task": "AP-10",
+  "slice": "10c",
+  "activity": "review",
+  "head": "837cbb27",
+  "worktree": ".claude/worktrees/codex-w7-api-improve-2",
+  "branch": "codex/w7-api-improve-2",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/datasets/from_traces.py",
+    "apps/lab/tests/e2e/evaluate/backend.py",
+    "apps/infrx-api/tests/ap10/"
+  ],
+  "commands": [
+    {
+      "cmd": "uv run --frozen pytest -q tests/ap10/test_from_traces.py (module set aside)",
+      "exit": 2,
+      "summary": "1 collection error (red)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/ap10/test_e2e_probe.py (before carried)",
+      "exit": 1,
+      "summary": "1 failed (red)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=ap10 uv run --frozen pytest -q tests/ap10 tests/n tests/w/test_lab_workers.py tests/g/lab_datasets tests/g/lab_evaluations",
+      "exit": 0,
+      "summary": "206 passed, 1 skipped"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap10/test_mutants.py",
+      "exit": 0,
+      "summary": "36 mutants killed (19 new), 0 survivors; every-case green"
+    },
+    {
+      "cmd": "pytest tests/integration/test_makefile_mutant_lists.py",
+      "exit": 0,
+      "summary": "7 passed"
+    },
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 458 (baseline 458, none new)"
+    },
+    {
+      "cmd": "WR-AP10C-1 transient: pytest tests/w/test_lab_workers.py; w lab-workers mutants -k lw_trace_datasets|lw_import_jobs",
+      "exit": 0,
+      "summary": "35 passed; 15 passed incl. 3 new mutants; pyright no new error"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 7,
+    "confidence": "medium",
+    "basis": "10c done on the branch at module/PG/worker-composition level; remaining = WR-AP10C-1 (verified transiently), WR-AP10C-2 label edit, WR-AP10C-3 Lab journey re-point (~2 h), WR-AP10C-4 thin R270 route + composed PgControlOps (~1-2 h), SR-AP10C-1 grants only",
+    "at": "2026-10-02T03:55Z"
+  },
+  "blockers": [
+    "No route starts dataset.from_traces until WR-AP10C-4",
+    "The datasets pass needs SR-AP10C-1 grants before LAB_TRACE_DATASETS=1",
+    "j10 binds only after SR-AP10-1"
+  ],
+  "wiring_requests": [
+    "WR-AP10C-1",
+    "WR-AP10C-2",
+    "WR-AP10C-3",
+    "WR-AP10C-4"
+  ],
+  "evidence": [
+    "research/plan/evidence/w7/api-improve-2-837cbb2.md",
+    "research/plan/evidence/w7/api-improve-2-837cbb2-WR-AP10C-1.patch"
+  ]
+}

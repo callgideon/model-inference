@@ -88,6 +88,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/d/test_upgrade_0061_mutants.py
 	# AP-04's list: fake world, then its PostgreSQL + MinIO half in its own process (the copy starts the D harness); task-local key ap4
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
+	# AP-06's list: fake world, then its PostgreSQL half (two-process race) in its own process; task-local key ap6
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap6 uv run --frozen pytest -q tests/ap06/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -205,7 +207,8 @@ lab-mutants:
 	cd apps/lab && node tests/n/run-mutants.mjs
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
-	cd apps/lab && node tests/ux/run-mutants.mjs
+	cd apps/lab && node tests/ux/run-mutants.mjs && node tests/ux/improve/run-mutants.mjs
+	cd apps/lab && node tests/ux/requests/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).

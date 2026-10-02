@@ -353,7 +353,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -365,7 +366,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -377,7 +379,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -389,7 +392,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -401,7 +405,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -479,7 +484,56 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/lab/v1/control/dev-wallet",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/lab/v1/control/endpoints/{endpoint_id}/keys",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/lab/v1/control/endpoints/{endpoint_id}/keys",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "DELETE",
+      "path": "/lab/v1/control/endpoints/{endpoint_id}/keys/{key_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -491,7 +545,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -503,7 +558,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -515,7 +571,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -861,7 +918,8 @@
     {
       "audience": "provider session",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "refusal",
@@ -1464,7 +1522,8 @@
     {
       "audience": "operator",
       "compositions": [
-        "consumer"
+        "consumer",
+        "lab-control"
       ],
       "consumers": [],
       "envelope": "r270",
@@ -1500,6 +1559,30 @@
     {
       "audience": "operator",
       "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/deployments/{deployment_revision_id}/dev-rate",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/dev-wallet-grants",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
         "consumer"
       ],
       "consumers": [],
@@ -1512,12 +1595,72 @@
     {
       "audience": "operator",
       "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/listings/{model_id}/rollback",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
         "consumer"
       ],
       "consumers": [],
       "envelope": "r270",
       "method": "POST",
       "path": "/operator/v1/providers",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/publication-proposals",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/operator/v1/publication-proposals/{proposal_id}",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/publication-proposals/{proposal_id}/approve",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/publication-proposals/{proposal_id}/reject",
       "request_schema": "typed",
       "response_schema": "typed"
     },

@@ -434,6 +434,19 @@ class DeploymentSettings:
     # by default: no such route exists. On, the routes answer 503 until AP-01's session actors
     # are composed on the unit; JUDGE_MODE stays dry_run (live judging waits on P-10).
     lab_judge_api: bool = False
+    # AP-06 (WR-AP06-1): the publication door on the Lab unit - `/operator/v1/publication-
+    # proposals*`, `/operator/v1/listings/{alias}/rollback`, `/operator/v1/dev-wallet-grants`,
+    # `/operator/v1/deployments/{id}/dev-rate`, `/lab/v1/control/endpoints/{id}/keys`,
+    # `/lab/v1/control/dev-wallet` - over L3's LabControl and 0060's receipts. Off by default:
+    # no such route exists. On, it needs AP-01's session actors on the unit (refused without).
+    lab_publication: bool = False
+    # WR-AP04-2 (AP-04, api-artifacts): the Lab control unit mounts the model-project and
+    # artifact families (/lab/v1/control/model-projects, /lab/v1/artifacts/*,
+    # /lab/v1/operations/{id}, /operator/v1/artifacts/adopt) over
+    # `infrx.lab.artifacts.compose.surface` on its own login, 0060's durable operations and the
+    # Lab objects (LAB_S3_BUCKET, required). Off by default: no such route exists. On, the
+    # routes answer 503 until AP-01's session actors are composed on the unit.
+    lab_artifacts: bool = False
     # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
     # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
     # `console.session.SessionActors` (the verified Supabase session, or an operator key at

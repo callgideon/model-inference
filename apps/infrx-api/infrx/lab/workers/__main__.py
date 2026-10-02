@@ -48,6 +48,10 @@ never runs in a consumer process.
                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
                submitted chunk run of every approved teacher batch (WR-P4B-2).
 * `training`   no worker pass exists on this base (see `_training`); it refuses by name.
+* `artifacts`  LAB_S3_BUCKET (+ LAB_ARTIFACT_SECRET_REFS, the only secret references an import
+               may name, e.g. `ssm:/model-inference/hf_token`): AP-04's `ArtifactWorker` over
+               0060's operations and 0061 (`lab.artifacts.compose.role`, WR-AP04-2) - upload
+               verification, pinned imports and the expired-session sweep every 5 s.
 """
 from __future__ import annotations
 
@@ -81,7 +85,8 @@ from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
-ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")
+ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets",
+         "artifacts")
 REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
@@ -89,7 +94,7 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
          "rollout": (BUCKET, "LAB_OPERATOR_ID"),
-         "datasets": (BUCKET, *TRACES)}
+         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,)}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
 LAB_PREFIX = "infrx/"
@@ -100,6 +105,7 @@ JUDGE_BATCH = 100                     # runs per provider, state and pass (oldes
 JUDGE_WORK = ("ambiguous", "submitted")   # the states the pass works (0053's provider listing)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
+TRACE_DATASET_PASS_S = 5.0            # AP-10 10c: pending dataset.from_traces operations (0060)
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
 ROLLOUT_STATES = ("running", "rolled_back")   # what the pass steps (R216: converge only)
@@ -415,10 +421,17 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import imports
     from ...state.lab_data import PgLabDataStore, PgLabImportJobs
     jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)
+    traced = {}
+    if env.get("LAB_TRACE_DATASETS") == "1":  # AP-10 10c, OFF unless the env file says so
+        from ...state.control_ops import PgControlOps
+        from ..datasets import from_traces
+        ops, ports = PgControlOps(connect), from_traces.pg_ports(connect, objects, retention)
+        traced["trace_datasets"] = lambda: every(TRACE_DATASET_PASS_S, lambda: from_traces.work(
+            ops, ports, worker_id=worker_id), "trace datasets")
     return {"lineage_reconcile": lambda: every(LINEAGE_PASS_S, reconcile_all,
                                                "lineage reconcile"),
             "import_jobs": lambda: every(IMPORT_PASS_S, lambda: imports.work(
-                jobs, store, objects, worker_id=worker_id), "import jobs")}, None
+                jobs, store, objects, worker_id=worker_id), "import jobs"), **traced}, None
 
 
 async def rollout_pass(objects, store, releases, controller, live, reads) -> dict[str, int]:
@@ -532,9 +545,14 @@ def _training(mode, env, connect, objects, worker_id, **_):
                                "run is prepared, submitted and finished through the Lab route")
 
 
+def _artifacts(mode, env, connect, objects, worker_id, **sources):
+    from ..artifacts.compose import role
+    return role(mode, env, connect, objects, worker_id, **sources)
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
-         "datasets": _datasets}
+         "datasets": _datasets, "artifacts": _artifacts}
 
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:

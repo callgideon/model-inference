@@ -1,0 +1,272 @@
+diff --git a/apps/infrx-api/deploy/lab/artifacts/infrx-lab-artifacts.service b/apps/infrx-api/deploy/lab/artifacts/infrx-lab-artifacts.service
+new file mode 100644
+index 00000000..f634552a
+--- /dev/null
++++ b/apps/infrx-api/deploy/lab/artifacts/infrx-lab-artifacts.service
+@@ -0,0 +1,44 @@
++[Unit]
++Description=infrx Lab artifacts worker - AP-04 upload verification and pinned imports - OFF unless /etc/infrx-lab/artifacts.env exists
++# WR-AP04-2 (AP-04). Disabled by default: nothing writes the env file below, so the unit does
++# not start (a skipped condition, not a failure) until the operator enables this one role
++# (infra/lab/rollout/steps/50-lab-role.sh ROLE=artifacts). No Requires=/PartOf= on the
++# consumer units, and none of them names this one: a Lab outage never touches inference.
++ConditionPathExists=/etc/infrx-lab/artifacts.env
++Requires=docker.service
++After=docker.service network-online.target
++Wants=network-online.target
++StartLimitIntervalSec=600
++StartLimitBurst=5
++
++[Service]
++User=ubuntu
++# Its own env file (mode 0600): LAB_DATABASE_URL (by SSM name), LAB_S3_BUCKET and
++# LAB_ARTIFACT_SECRET_REFS (the only secret references an import may name, e.g.
++# ssm:/model-inference/hf_token - resolved at fetch time on the instance role, never a value).
++EnvironmentFile=/etc/infrx-lab/artifacts.env
++ExecStartPre=-/usr/bin/docker rm -f infrx-lab-artifacts
++# An import spools one file at a time (a Marlin shard is ~5 GB): the spool is on the NVMe,
++# never the bounded tmpfs; emptied at every start (an interrupted import is re-fetched).
++ExecStartPre=+/bin/rm -rf /opt/dlami/nvme/infrx-lab-artifacts
++ExecStartPre=+/usr/bin/install -d -o 10005 -g 10000 -m 0700 /opt/dlami/nvme/infrx-lab-artifacts
++# The entry point exits 2 naming a missing setting, answers /readyz and /metrics on
++# 127.0.0.1:8018, and drains on SIGTERM (an unfinished lease expires and the next pass
++# re-runs the operation under a new fence).
++ExecStart=/usr/bin/docker run --rm --init --name infrx-lab-artifacts --network host \
++  --user 10005:10000 --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
++  -v /opt/dlami/nvme/infrx-lab-artifacts:/spool:rw -e TMPDIR=/spool -e AWS_DEFAULT_REGION=us-east-1 \
++  --cap-drop ALL --security-opt no-new-privileges \
++  --memory 2g --memory-swap 2g --cpus 1 --cpu-shares 256 --pids-limit 128 \
++  --env-file /etc/infrx-lab/artifacts.env -e LAB_WORKER_HEALTH_PORT=8018 \
++  ${INFRX_IMAGE} python -m infrx.lab.workers artifacts
++ExecStop=/usr/bin/docker stop -t 60 infrx-lab-artifacts
++TimeoutStopSec=90
++KillSignal=SIGTERM
++KillMode=mixed
++Restart=on-failure
++RestartPreventExitStatus=2
++RestartSec=10
++
++[Install]
++WantedBy=multi-user.target
+diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
+index 85464cc4..42109173 100644
+--- a/apps/infrx-api/infrx/config.py
++++ b/apps/infrx-api/infrx/config.py
+@@ -434,6 +434,13 @@ class DeploymentSettings:
+     # by default: no such route exists. On, the routes answer 503 until AP-01's session actors
+     # are composed on the unit; JUDGE_MODE stays dry_run (live judging waits on P-10).
+     lab_judge_api: bool = False
++    # WR-AP04-2 (AP-04, api-artifacts): the Lab control unit mounts the model-project and
++    # artifact families (/lab/v1/control/model-projects, /lab/v1/artifacts/*,
++    # /lab/v1/operations/{id}, /operator/v1/artifacts/adopt) over
++    # `infrx.lab.artifacts.compose.surface` on its own login, 0060's durable operations and the
++    # Lab objects (LAB_S3_BUCKET, required). Off by default: no such route exists. On, the
++    # routes answer 503 until AP-01's session actors are composed on the unit.
++    lab_artifacts: bool = False
+     # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
+     # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
+     # `console.session.SessionActors` (the verified Supabase session, or an operator key at
+diff --git a/apps/infrx-api/infrx/lab/control/app.py b/apps/infrx-api/infrx/lab/control/app.py
+index d12ff176..203fef49 100644
+--- a/apps/infrx-api/infrx/lab/control/app.py
++++ b/apps/infrx-api/infrx/lab/control/app.py
+@@ -95,7 +95,15 @@ def _compose(lab: dict[str, str], store):
+         from ..judge_api.doors import SessionDoors
+         from ..judge_api.service import JudgeApi
+         judge = JudgeApi(SessionDoors(connect))
++    # WR-AP04-2 (AP-04): model projects and artifacts on the unit's login, only with
++    # LAB_ARTIFACTS; the Lab objects are required (a missing LAB_S3_BUCKET refuses startup).
++    artifacts = None
++    if settings.deployment is not None and settings.deployment.lab_artifacts:
++        from ..artifacts.compose import surface
++        from ..workers.__main__ import lab_objects
++        artifacts = surface(connect, lab_objects(MODE, os.environ))
+     return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=None,
++                           lab_artifacts=artifacts,
+                            **_families(settings, lab, connect)), control, traces
+ 
+ 
+@@ -138,4 +146,6 @@ def create_app() -> FastAPI:
+     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
+                    lab_judge, lab_reviews):
+         family.register(app, rt)
++    from ..artifacts.compose import mount          # WR-AP04-2: nothing while it is off
++    mount(app, rt)
+     return app
+diff --git a/apps/infrx-api/infrx/lab/workers/__main__.py b/apps/infrx-api/infrx/lab/workers/__main__.py
+index 93d59b44..7391786e 100644
+--- a/apps/infrx-api/infrx/lab/workers/__main__.py
++++ b/apps/infrx-api/infrx/lab/workers/__main__.py
+@@ -48,6 +48,10 @@ never runs in a consumer process.
+                P2's `TeacherWiring` with N2's redaction (WR-P2-4); its pass collects every
+                submitted chunk run of every approved teacher batch (WR-P4B-2).
+ * `training`   no worker pass exists on this base (see `_training`); it refuses by name.
++* `artifacts`  LAB_S3_BUCKET (+ LAB_ARTIFACT_SECRET_REFS, the only secret references an import
++               may name, e.g. `ssm:/model-inference/hf_token`): AP-04's `ArtifactWorker` over
++               0060's operations and 0061 (`lab.artifacts.compose.role`, WR-AP04-2) - upload
++               verification, pinned imports and the expired-session sweep every 5 s.
+ """
+ from __future__ import annotations
+ 
+@@ -81,7 +85,8 @@ from ..time import iso_z
+ 
+ log = logging.getLogger("infrx.lab.workers")
+ 
+-ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets")
++ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets",
++         "artifacts")
+ REFUSED = 2
+ DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
+ TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
+@@ -89,7 +94,7 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
+          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
+          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
+          "rollout": (BUCKET, "LAB_OPERATOR_ID"),
+-         "datasets": (BUCKET, *TRACES)}
++         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,)}
+ #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
+ #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
+ LAB_PREFIX = "infrx/"
+@@ -532,9 +537,14 @@ def _training(mode, env, connect, objects, worker_id, **_):
+                                "run is prepared, submitted and finished through the Lab route")
+ 
+ 
++def _artifacts(mode, env, connect, objects, worker_id, **sources):
++    from ..artifacts.compose import role
++    return role(mode, env, connect, objects, worker_id, **sources)
++
++
+ BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
+          "annotation": _annotation, "training": _training, "rollout": _rollout,
+-         "datasets": _datasets}
++         "datasets": _datasets, "artifacts": _artifacts}
+ 
+ 
+ def compose(role: str, env, *, objects=None, **sources) -> Worker:
+diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+index 0a9e73a7..f315ea46 100644
+--- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
++++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+@@ -588,6 +588,8 @@ DEPLOYMENT_EXPECTED = {
+     "CONSOLE_DATA_USE": False,
+     # WR-1 (AP-08, api-judge): the Lab unit's judge/review routes switch, off
+     "LAB_JUDGE_API": False,
++    # WR-AP04-2 (AP-04, api-artifacts): the Lab unit's model-project/artifact routes, off
++    "LAB_ARTIFACTS": False,
+     # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
+     # origins and the facade's publishable key (unset)
+     "IDENTITY_API": False,
+diff --git a/apps/infrx-api/tests/i/lab/test_lab_packaging.py b/apps/infrx-api/tests/i/lab/test_lab_packaging.py
+index 1299eefa..875bdd9d 100644
+--- a/apps/infrx-api/tests/i/lab/test_lab_packaging.py
++++ b/apps/infrx-api/tests/i/lab/test_lab_packaging.py
+@@ -431,7 +431,7 @@ def test_i2l__a_lab_worker_that_refuses_to_start_is_not_restarted_in_a_loop():
+              if "python -m infrx.lab.workers" in path.read_text()}
+     assert {path.stem for path in units} == {
+         f"infrx-lab-{role}" for role in ("eval", "checkpoints", "datasets", "judge",
+-                                         "annotation", "training", "rollout")}
++                                         "annotation", "training", "rollout", "artifacts")}
+     for path, text in units.items():
+         service = text.split("[Service]", 1)[1].split("\n[", 1)[0]
+         lines = [line.strip() for line in service.splitlines()]
+diff --git a/apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py b/apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py
+index b52bd74b..5eac6e3c 100644
+--- a/apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py
++++ b/apps/infrx-api/tests/i/lab/test_lab_rollout_steps.py
+@@ -439,7 +439,7 @@ def test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app(tm
+              map(json.loads, (stub / "calls.log").read_text().splitlines())]
+     disables = [i for i, (tool, argv) in enumerate(order) if argv[:1] == ["disable"]]
+     reload_at = next(i for i, (tool, argv) in enumerate(order) if tool == "docker")
+-    assert len(disables) == 8 and max(disables) < reload_at
++    assert len(disables) == 9 and max(disables) < reload_at
+     assert [argv[-1] for tool, argv in order[reload_at + 1:]] == \
+         ["http://127.0.0.1:8001/readyz", "http://127.0.0.1:8002/readyz"]
+     assert (root / "etc/systemd/system/infrx-lab-eval.service").exists()
+diff --git a/apps/infrx-api/tests/l/control/mutants.py b/apps/infrx-api/tests/l/control/mutants.py
+index c3e45393..17b4a22b 100644
+--- a/apps/infrx-api/tests/l/control/mutants.py
++++ b/apps/infrx-api/tests/l/control/mutants.py
+@@ -61,6 +61,7 @@ O_APP_REG = "test_operations__the_lab_apps_registration_shape_registers"
+ O_SERVING = "test_serving_control__rollback_is_a_fenced_alias_cas_that_keeps_pins"
+ O_APP = "test_control_app__serves_readiness_and_no_consumer_route"
+ O_MOUNT = "test_control_app__mounts_only_the_lab_routers_on_its_own_settings"
++O_ARTIFACTS = "test_control_app__mounts_the_artifact_families_only_with_lab_artifacts"
+ O_REJECT = "test_operations__an_operator_rejects_a_proposal_and_it_publishes_nothing"
+ O_TERMINAL = "test_operations__a_retired_proposal_lists_as_a_terminal_row"
+ O_ROUTE = "test_control_route__only_an_operator_rejects_a_proposal"
+@@ -267,6 +268,12 @@ MUTANTS: tuple[Mutant, ...] = (
+        "FastAPI(docs_url=None, redoc_url=None, openapi_url=None)", "FastAPI()", O_APP),
+     _m("control_routes_unmounted", "the unit serves L3's routes (WR-I2L-2b)", APP,
+        "    lab_control.register(app, rt, control)\n", "", O_MOUNT),
++    _m("artifacts_mounted_without_the_switch", "AP-04 is on the unit only with LAB_ARTIFACTS",
++       APP, "    if settings.deployment is not None and settings.deployment.lab_artifacts:\n"
++            "        from ..artifacts",
++       "    if settings.deployment is not None:\n        from ..artifacts", O_ARTIFACTS),
++    _m("artifacts_never_mounted", "the unit mounts AP-04's families (WR-AP04-2)", APP,
++       "    mount(app, rt)\n", "", O_ARTIFACTS),
+     _m("lab_setting_waved_through", "a missing INFRX_LAB_* setting refuses startup", APP,
+        "    if missing:\n        raise RuntimeMisconfigured", "    if False:\n        raise RuntimeMisconfigured",
+        O_MOUNT),
+diff --git a/apps/infrx-api/tests/l/control/test_operations.py b/apps/infrx-api/tests/l/control/test_operations.py
+index daf1f44a..53544d0e 100644
+--- a/apps/infrx-api/tests/l/control/test_operations.py
++++ b/apps/infrx-api/tests/l/control/test_operations.py
+@@ -468,3 +468,33 @@ def test_control_app__mounts_the_judge_family_only_with_lab_judge_api(world, lab
+     unavailable = TestClient(on).get(judge, params={"provider_org_id": w.A})
+     assert unavailable.status_code == 503
+     assert unavailable.json()["error"]["code"] == "dependency_unavailable"
++
++
++def test_control_app__mounts_the_artifact_families_only_with_lab_artifacts(world, lab_env):
++    """Oracle (WR-AP04-2): with `LAB_ARTIFACTS` the unit mounts AP-04's model-project and
++    artifact families on its own login and the Lab objects; until AP-01's session actors are
++    composed they answer 503, never act. On without `LAB_S3_BUCKET` the unit refuses to start
++    naming it. Off (the default), no AP-04 path exists."""
++    from infrx.lab.workers import __main__ as workers
++    w, monkeypatch = world, lab_env
++    monkeypatch.setattr(control_app, "_store", lambda: w.control.store)
++    projects, params = "/lab/v1/control/model-projects", {"provider_org_id": w.A}
++    monkeypatch.setattr(workers, "lab_objects", lambda mode, env: (
++        workers.settings(mode, env, (workers.BUCKET,)) and "bucket"))
++    monkeypatch.setenv("LAB_S3_BUCKET", "lab-bucket")
++    monkeypatch.delenv("LAB_ARTIFACTS", raising=False)
++    assert TestClient(control_app.create_app()).get(projects, params=params).status_code == 404
++    monkeypatch.setenv("LAB_ARTIFACTS", "1")
++    on = TestClient(control_app.create_app())
++    for method, path in (("GET", projects), ("GET", "/lab/v1/operations/x"),
++                         ("POST", "/lab/v1/artifacts/imports")):
++        r = on.request(method, path, params=params, headers={"Idempotency-Key": "k" * 8},
++                       json={})
++        assert r.status_code in (503, 422), (path, r.status_code)
++    unavailable = on.get(projects, params=params)
++    assert unavailable.status_code == 503
++    assert unavailable.json()["error"]["code"] == "dependency_unavailable"
++    monkeypatch.delenv("LAB_S3_BUCKET")
++    with pytest.raises(RuntimeMisconfigured) as refused:
++        control_app.create_app()
++    assert refused.value.missing == ("LAB_S3_BUCKET",)
+diff --git a/infra/lab/rollout/lib.sh b/infra/lab/rollout/lib.sh
+index bd9e9e22..6a43e3eb 100644
+--- a/infra/lab/rollout/lib.sh
++++ b/infra/lab/rollout/lib.sh
+@@ -12,7 +12,7 @@ UNIT_DIR=$R/etc/systemd/system
+ LAB_UNITS=$repo/apps/infrx-api/deploy/lab
+ LAB_LOG=${LAB_LOG:-$R/var/log/infrx-lab-rollout.log}
+ BOX_LOG=$LAB_LOG STEP=${STEP:-lab}               # say's log and line prefix
+-ROLES=(eval checkpoints judge annotation training rollout datasets)
++ROLES=(eval checkpoints judge annotation training rollout datasets artifacts)
+ CONTROL_PORT=8003
+ 
+ lab_image() {
+diff --git a/infra/lab/rollout/steps/50-lab-role.sh b/infra/lab/rollout/steps/50-lab-role.sh
+index 7473b0ed..74369e0b 100755
+--- a/infra/lab/rollout/steps/50-lab-role.sh
++++ b/infra/lab/rollout/steps/50-lab-role.sh
+@@ -47,6 +47,7 @@ case "$role" in
+   training) names="$common LAB_TRAINING_CONCURRENCY LAB_TRAINING_CONNECTOR LAB_TRAINING_CONNECTOR_URL LAB_TRAINING_CONNECTOR_TOKEN LAB_TRAINING_BUDGET_USD LAB_TRAINING_PAYER_REF"
+             needs="LAB_S3_BUCKET" ;;
+   rollout) names="$common LAB_ROLLOUT_CONCURRENCY LAB_OPERATOR_ID"; needs="LAB_S3_BUCKET LAB_OPERATOR_ID" ;;
++  artifacts) names="$common LAB_S3_PREFIX LAB_ARTIFACT_SECRET_REFS"; needs="LAB_S3_BUCKET" ;;
+ esac
+ # the roles whose work source is not on this release: each refuses by name (R198/R211)
+ pending=" checkpoints training rollout "

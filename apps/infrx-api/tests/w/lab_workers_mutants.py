@@ -32,6 +32,7 @@ SWEEP = C + "the_judge_pass_sweeps_silent_submissions"
 JPASS = C + "the_judge_pass_reconciles_and_collects_every_providers_runs"
 DATASETS = C + "datasets_reconcile_every_providers_lineage_page_by_page"
 IMPORTS = C + "the_datasets_role_works_the_durable_import_job_queue"
+TRACED = C + "the_datasets_role_works_trace_dataset_operations_only_when_on"
 ROLLOUT = C + "the_rollout_pass_steps_every_released_policy_on_its_stored_plan"
 STOP = C + "an_emergency_rollback_is_r2s_for_the_named_operator"
 DECIDE = C + "an_operator_decides_a_lab_proposal_through_d9s_cas"
@@ -152,6 +153,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lw_import_jobs_other_objects", "imports read and write the role's Lab objects",
        "                jobs, store, objects, worker_id=worker_id)",
        "                jobs, store, None, worker_id=worker_id)", IMPORTS),
+    # AP-10 10c (WR-AP10C-1): the trace-dataset pass, OFF unless LAB_TRACE_DATASETS=1
+    _m("lw_trace_datasets_always_on", "the trace-dataset pass is off without its switch",
+       'if env.get("LAB_TRACE_DATASETS") == "1":', "if True:", TRACED),
+    _m("lw_trace_datasets_off_the_pool", "the operations are on the role's database",
+       "ops, ports = PgControlOps(connect), from_traces.pg_ports(",
+       'ops, ports = PgControlOps(connector("")), from_traces.pg_ports(', TRACED),
+    _m("lw_trace_datasets_cadence", "pending operations are worked every TRACE_DATASET_PASS_S",
+       "lambda: every(TRACE_DATASET_PASS_S,", "lambda: every(LINEAGE_PASS_S,", TRACED),
     # --- judge ------------------------------------------------------------------------------------
     # WR-LSQ-C2A (composition-5): the collect/reconcile pass
     _m("lw_judge_pass_unscheduled", "the judge role runs its collect/reconcile pass",

@@ -439,7 +439,7 @@ def test_ldp__revert_turns_every_switch_off_then_the_site_then_checks_the_app(tm
              map(json.loads, (stub / "calls.log").read_text().splitlines())]
     disables = [i for i, (tool, argv) in enumerate(order) if argv[:1] == ["disable"]]
     reload_at = next(i for i, (tool, argv) in enumerate(order) if tool == "docker")
-    assert len(disables) == 8 and max(disables) < reload_at
+    assert len(disables) == 9 and max(disables) < reload_at
     assert [argv[-1] for tool, argv in order[reload_at + 1:]] == \
         ["http://127.0.0.1:8001/readyz", "http://127.0.0.1:8002/readyz"]
     assert (root / "etc/systemd/system/infrx-lab-eval.service").exists()

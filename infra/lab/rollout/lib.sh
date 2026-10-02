@@ -12,7 +12,7 @@ UNIT_DIR=$R/etc/systemd/system
 LAB_UNITS=$repo/apps/infrx-api/deploy/lab
 LAB_LOG=${LAB_LOG:-$R/var/log/infrx-lab-rollout.log}
 BOX_LOG=$LAB_LOG STEP=${STEP:-lab}               # say's log and line prefix
-ROLES=(eval checkpoints judge annotation training rollout datasets)
+ROLES=(eval checkpoints judge annotation training rollout datasets artifacts)
 CONTROL_PORT=8003
 
 lab_image() {

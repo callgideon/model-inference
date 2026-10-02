@@ -3,8 +3,8 @@
 through the shared runner (`tests/contracts/mutants.py`).
 
 `MUTANTS` run the fake world (`-m "not pg"`, no Docker). `PG_MUTANTS` edit
-`PgArtifactStore` and are killed on PostgreSQL + MinIO (`-m pg`, `INFRX_D_TASK=ap4`, a copy
-that carries the migrations). 0061's own SQL decisions are `tests/d/test_upgrade_0061_mutants.py`.
+`PgArtifactStore` and the composition's durable store and are killed on PostgreSQL + MinIO
+(`-m pg`, `INFRX_D_TASK=ap4`, a copy that carries the migrations). 0061's own SQL decisions are `tests/d/test_upgrade_0061_mutants.py`.
 
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap04/test_mutants.py
     INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
@@ -32,6 +32,7 @@ V = "lab/artifacts/verify.py"
 M = "lab/artifacts/manifest.py"
 S = "lab/artifacts/store.py"
 RA = "gateway/routes/lab_artifacts.py"
+CO = "lab/artifacts/compose.py"
 
 
 def c(name: str) -> str:
@@ -51,6 +52,7 @@ EXPIRES = c("an_interrupted_upload_expires_cleanly")
 DUPLICATE = c("a_duplicate_completion_returns_the_one_operation")
 FENCED = c("a_worker_killed_while_hashing_is_fenced_out")
 RETRY = c("a_retry_after_the_artifact_write_keeps_one_artifact")
+HEARTBEAT = c("a_verification_longer_than_its_lease_keeps_it_by_heartbeat")
 CAS = c("a_session_moves_only_from_the_state_it_was_read_in")
 OP_SCOPE = c("an_operation_is_read_only_inside_its_workspace")
 IMPORT = c("a_pinned_import_fetches_and_verifies_every_file")
@@ -62,8 +64,13 @@ LABELS = c("two_revisions_of_one_artifact_never_race_for_a_label")
 PROFILE = c("the_profile_is_the_measured_marlin_serving_version")
 ADOPT = c("an_operator_adopts_existing_bytes_keeping_the_production_identity")
 ADOPT_NO = c("adoption_refuses_non_operators_foreign_resources_and_other_bytes")
-OPS = c("the_memory_operations_replay_and_cancel_by_the_protocol")
+RACE = c("a_completion_that_loses_the_race_keeps_the_winners_operation")
 UNWIRED = c("nothing_mounts_while_the_surface_is_unwired")
+WORKSPACE = c("a_session_names_its_workspace_and_every_door_checks_it")
+SECRETS = c("an_import_resolves_only_the_secret_refs_its_role_names")
+BOX = c("the_box_manifest_becomes_the_import_request")
+UNIT = c("the_lab_unit_surface_runs_on_its_own_login")
+KILLED = c("an_operation_survives_a_killed_worker_process")
 RP = "gateway/routes/lab_model_projects.py"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -141,25 +148,58 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("completion_ignores_manifest", "completion confirms the session's own manifest",
        U, "        if body.manifest_sha256 != upload.manifest_sha256:\n", "        if False:\n",
        DUPLICATE),
+    _m("race_loser_cancels_the_winner", "a completion that loses the session race cancels only "
+       "an operation it started (never the winner's replayed one)",
+       U, "            if not replayed:", "            if True:", RACE),
     _m("artifact_id_random", "a rerun writes the same artifact, once",
        U, 'artifact_id=stable_id("artifact", row.key)',
        'artifact_id=str(__import__("uuid").uuid4())', RETRY, PARTS),
     _m("fake_update_not_cas", "an intake row moves only from the state it was read in",
        S, 'if stored is None or getattr(stored, "state") != expected_state:',
        "if stored is None:", CAS),
-    _m("live_lease_taken", "a live lease is never taken over",
-       S, "op.lease_until is not None and op.lease_until > now):", "False):", FENCED),
-    _m("stale_fence_writes", "a superseded worker's writes are refused",
-       S, "if fence != op.fence or op.doc.state in api.TERMINAL_STATES:",
-       "if op.doc.state in api.TERMINAL_STATES:", FENCED),
+    # --- WR-AP04-2: AP-04's operations over 0060 (`compose.DurableOps`) -------------------
+    _m("live_lease_refusal_raised", "a lease another worker holds is skipped, not a crash",
+       CO, "        except errors.Conflict:\n            return None\n",
+       "        except ZeroDivisionError:\n            return None\n", FENCED),
+    _m("stale_advance_untyped", "a superseded worker's phase write is stale_lease",
+       CO, "return _op(await self.ops.advance(operation_id, fence, phase))\n"
+           "        except errors.Conflict:",
+       "return _op(await self.ops.advance(operation_id, fence, phase))\n"
+       "        except ZeroDivisionError:", FENCED),
+    _m("stale_finish_untyped", "a superseded worker's finish is stale_lease",
+       CO, "return _op(await self.ops.finish(operation_id, fence, state, error))\n"
+           "        except errors.Conflict:",
+       "return _op(await self.ops.finish(operation_id, fence, state, error))\n"
+       "        except ZeroDivisionError:", FENCED),
+    _m("no_heartbeat", "every phase renews the worker's own lease",
+       CO, "            if (operation_id, fence) in self.held:\n", "            if False:\n",
+       HEARTBEAT),
+    _m("system_read_scoped", "the system reads any operation; the route scopes it",
+       CO, "_op(await self.ops.get(operation_id, SYSTEM))",
+       '_op(await self.ops.get(operation_id, api.Actor(audience="session", user_id="x")))',
+       OP_SCOPE),
     _m("operation_read_across_workspaces", "an operation is read only in its workspace",
        RA, "if op is None or op.actor.provider_org_id != actor.provider_org_id:",
        "if op is None:", OP_SCOPE),
-    _m("ops_replay_ignores_body", "same scope+key and another input is 409",
-       S, "            if op.input_hash != input_hash:\n", "            if False:\n", OPS),
-    _m("ops_cancel_never_terminal", "cancelling a queued operation is terminal at once",
-       S, 'state="cancelled" if op.doc.state == "queued"',
-       'state="cancel_requested" if op.doc.state == "queued"', OPS),
+    # --- WR-AP04-2: the Lab unit's composition and the worker role --------------------------
+    _m("workspace_never_named", "a web session's workspace is the request's provider_org_id",
+       CO, '"provider_org_id": request.query_params.get("provider_org_id") or None})',
+       '"provider_org_id": None})', WORKSPACE),
+    _m("query_overrides_a_credential", "a credential that carries its provider keeps it",
+       CO, '        if actor.audience != "session" or actor.provider_org_id is not None:\n',
+       "        if False:\n", WORKSPACE),
+    _m("unwired_actors_crash", "without session actors the families are a 503, not a 500",
+       CO, "        if self.actors is None:\n            raise", "        if False:\n            raise",
+       WORKSPACE),
+    _m("any_secret_ref", "only the references the role lists are resolved",
+       CO, "        if ref not in allowed:\n", "        if False:\n", SECRETS),
+    _m("ssm_not_decrypted", "an ssm: reference is read decrypted",
+       CO, "WithDecryption=True)", "WithDecryption=False)", SECRETS),
+    _m("manifest_keeps_hidden_files", "a hidden or code-bearing file is never declared",
+       CO, 'for e in doc["files"] if refuse_path(e["path"]) is None]',
+       'for e in doc["files"]]', BOX),
+    _m("import_at_a_branch", "the import is pinned to the manifest's commit",
+       CO, '"commit": doc["model"]["commit"]}}', '"commit": "main"}}', BOX),
     # --- 04c: imports -----------------------------------------------------------------------
     _m("mutable_ref_accepted", "an import is pinned to a 40-hex commit",
        I, "        if not re.fullmatch(COMMIT, commit):\n", "        if False:\n", REFS),
@@ -239,8 +279,11 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("pg_slug_conflict_untyped", "a taken slug is a 409 conflict (PostgreSQL)",
        S, "    if isinstance(failed, pg.UniqueViolation):\n",
        "    if isinstance(failed, ZeroDivisionError):\n", SLUG),
+    _m("surface_ops_in_memory", "the composed operations are 0060's durable store",
+       CO, "DurableOps(control_ops.PgControlOps(connect))",
+       "DurableOps(control_ops.FakeControlOps())", UNIT, KILLED),
 )
-FAKE_ONLY = (OPS, PROFILE, UNWIRED)
+FAKE_ONLY = (PROFILE, UNWIRED, WORKSPACE, SECRETS, BOX)
 
 
 def case_names() -> set[str]:
@@ -250,7 +293,8 @@ def case_names() -> set[str]:
 def _layout(root: pathlib.Path) -> pathlib.Path:
     """The default copy one level down as `apps/infrx-api`, beside copies of what the suite
     reads from the repository: the migrations (`infrx.state.migrations`), the measured Marlin
-    files and `models/marlin2b/serving-version.json` (the fixture of truth)."""
+    files, `models/marlin2b/serving-version.json` (the fixture of truth) and
+    `infra/runbooks/artifacts.py` (the box manifest the real import is built from)."""
     api = root / "apps" / "infrx-api"
     api.mkdir(parents=True)
     shared._copy(api, _PLAIN)
@@ -261,6 +305,9 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     (root / "models" / "marlin2b").mkdir(parents=True)
     shutil.copy(repo / "models" / "marlin2b" / "serving-version.json",
                 root / "models" / "marlin2b" / "serving-version.json")
+    (root / "infra" / "runbooks").mkdir(parents=True)     # the box manifest tool (WR-AP04-2)
+    shutil.copy(repo / "infra" / "runbooks" / "artifacts.py",
+                root / "infra" / "runbooks" / "artifacts.py")
     return api
 
 

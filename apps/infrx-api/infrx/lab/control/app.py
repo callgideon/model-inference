@@ -84,7 +84,8 @@ def _compose(lab: dict[str, str], store):
                                                 timeout=httpx.Timeout(5, connect=2)),
                               lab[SUPABASE_KEY])
     access = LabAccess(PgAccessStore(connect))
-    control = Routes(sessions, access, lab_operations(connect, access))
+    operations = lab_operations(connect, access)
+    control = Routes(sessions, access, operations)
     pilot = settings.pilot
     traces = lab_traces(settings, connect, sessions, access) \
         if pilot.clickhouse_url.strip() or pilot.s3_trace_bucket.strip() else None
@@ -95,8 +96,34 @@ def _compose(lab: dict[str, str], store):
         from ..judge_api.doors import SessionDoors
         from ..judge_api.service import JudgeApi
         judge = JudgeApi(SessionDoors(connect))
-    return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=None,
+    actors = _actors(connect)
+    # WR-AP06-2 (AP-06): the publication door, only with LAB_PUBLICATION, over L3's operations
+    # and 0060's receipts on the unit's login (its `lab_control_*`/`control_op_*` grants).
+    # Readiness is AP-05's adapter and the dev credentials SR-AP06-1's: 503 until composed.
+    publication = None
+    if settings.deployment is not None and settings.deployment.lab_publication:
+        if actors is None:
+            raise RuntimeMisconfigured(MODE, detail="LAB_PUBLICATION needs AP-01's session "
+                                       "actors on the unit (not composed)")
+        from ...gateway.routes.operator_publication import Publication
+        from ...state.control_ops import PgControlOps
+        publication = Publication(operations, PgControlOps(connect))
+    # WR-AP04-2 (AP-04): model projects and artifacts on the unit's login, only with
+    # LAB_ARTIFACTS; the Lab objects are required (a missing LAB_S3_BUCKET refuses startup).
+    artifacts = None
+    if settings.deployment is not None and settings.deployment.lab_artifacts:
+        from ..artifacts.compose import surface
+        from ..workers.__main__ import lab_objects
+        artifacts = surface(connect, lab_objects(MODE, os.environ))
+    return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
+                           lab_publication=publication, lab_artifacts=artifacts,
                            **_families(settings, lab, connect)), control, traces
+
+
+def _actors(connect):
+    """AP-01's `SessionActors` on the unit: not composed yet (api-identity-2's Lab-unit
+    wiring), so the judge family answers 503 and LAB_PUBLICATION refuses startup."""
+    return None
 
 
 def _families(settings, lab: dict[str, str], connect) -> dict:
@@ -131,11 +158,13 @@ def create_app() -> FastAPI:
 
     from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
                                    lab_judge, lab_pipelines, lab_releases, lab_reviews,
-                                   lab_traces)
+                                   lab_traces, operator_publication)
     rt, control, traces = _compose(lab, store)
     lab_control.register(app, rt, control)
     lab_traces.register(app, rt, traces)
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
-                   lab_judge, lab_reviews):
+                   lab_judge, lab_reviews, operator_publication):
         family.register(app, rt)
+    from ..artifacts.compose import mount          # WR-AP04-2: nothing while it is off
+    mount(app, rt)
     return app

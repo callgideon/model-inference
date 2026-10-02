@@ -1,0 +1,12 @@
+diff --git a/Makefile b/Makefile
+index 3082f6cf..c224641c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -202,6 +202,7 @@ lab-mutants:
+ 	cd apps/lab && node tests/e2e/run-mutants.mjs
+ 	cd apps/lab && node tests/l/shared/run-mutants.mjs
+ 	cd apps/lab && node tests/ux/run-mutants.mjs
++	cd apps/lab && node tests/ux/requests/run-mutants.mjs
+ 
+ # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
+ api-client-test:

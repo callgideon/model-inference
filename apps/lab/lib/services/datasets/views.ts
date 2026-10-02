@@ -71,3 +71,55 @@ export function leakageWarnings(result: { derived?: Derived; leaks?: Leak[] }): 
   }
   return out;
 }
+
+// --- UX-06 (L-07): the guided import and the split, as pure decisions -------------------------------
+
+/** An exact percentage with at most two decimals ("80", "12.5", "0.25") as integer basis points, or
+ * null: the digits are read as text, never through float arithmetic (0.29 % is 29 bp, not 28.99…). */
+export function percentToBp(text: string): number | null {
+  const hit = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(text.trim());
+  if (hit === null) return null;
+  const bp = Number(hit[1]) * 100 + Number((hit[2] ?? "").padEnd(2, "0"));
+  return bp <= 10_000 ? bp : null;
+}
+
+/** Basis points as a percentage with two decimals: 8025 → "80.25%". */
+export const bpPercent = (bp: number): string => `${Math.trunc(bp / 100)}.${String(bp % 100).padStart(2, "0")}%`;
+
+export type SplitPlan = { ok: true; trainBp: number; validationBp: number; holdoutBp: number } | { ok: false; message: string };
+
+/** Train and validation as typed; holdout is the remainder, so all three are shown before a submit. */
+export function splitPlan(train: string, validation: string): SplitPlan {
+  const trainBp = percentToBp(train);
+  const validationBp = percentToBp(validation);
+  if (trainBp === null || validationBp === null) return { ok: false, message: "Enter train and validation as percentages with at most two decimals (for example 80 or 12.5)." };
+  if (trainBp + validationBp > 10_000) return { ok: false, message: "Train and validation add up to more than 100%." };
+  return { ok: true, trainBp, validationBp, holdoutBp: 10_000 - trainBp - validationBp };
+}
+
+export type SourceFile = { name: string; size: number; lastModified: number } | null;
+
+/** What a preview checked: the mapping text and the file. A preview counts only while this is unchanged. */
+export const previewKey = (spec: string, file: SourceFile): string => JSON.stringify([spec, file?.name ?? null, file?.size ?? null, file?.lastModified ?? null]);
+
+export const IMPORT_STEPS = ["source", "mapping", "validate", "import"] as const;
+export type ImportStep = (typeof IMPORT_STEPS)[number];
+
+/** Source → Mapping → Validate → Import. `previewed` is the key of the last successful preview; an
+ * edit to the file or the mapping after it sends the provider back to Validate. */
+export function importStep({ file, spec, previewed }: { file: SourceFile; spec: string; previewed: string | null }): ImportStep {
+  if (file === null) return "source";
+  if (spec.trim() === "") return "mapping";
+  return previewed === previewKey(spec, file) ? "import" : "validate";
+}
+
+/** The import spec (infrx.dataset_import.1) with this workspace's provider and ids minted for this one
+ * import. Licence, grant, annotation version and the content path are left empty: the backend refuses
+ * them until the provider fills them, so nothing is authorised or labelled on the provider's behalf. */
+export function importTemplate({ providerId, importId, datasetId, createdAt }: { providerId: string; importId: string; datasetId: string; createdAt: string }): string {
+  return JSON.stringify({
+    format: "infrx.dataset_import.1", provider_org_id: providerId, import_id: importId, dataset_id: datasetId, version: 1,
+    created_at: createdAt, modality: "text", ownership: "provider_owned", license: "", use_restrictions: [], grant_ref: "",
+    annotation: { method: "imported", method_version: "" }, fields: { content: "" },
+  }, null, 2);
+}

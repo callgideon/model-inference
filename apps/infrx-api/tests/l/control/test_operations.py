@@ -468,3 +468,33 @@ def test_control_app__mounts_the_judge_family_only_with_lab_judge_api(world, lab
     unavailable = TestClient(on).get(judge, params={"provider_org_id": w.A})
     assert unavailable.status_code == 503
     assert unavailable.json()["error"]["code"] == "dependency_unavailable"
+
+
+def test_control_app__mounts_the_artifact_families_only_with_lab_artifacts(world, lab_env):
+    """Oracle (WR-AP04-2): with `LAB_ARTIFACTS` the unit mounts AP-04's model-project and
+    artifact families on its own login and the Lab objects; until AP-01's session actors are
+    composed they answer 503, never act. On without `LAB_S3_BUCKET` the unit refuses to start
+    naming it. Off (the default), no AP-04 path exists."""
+    from infrx.lab.workers import __main__ as workers
+    w, monkeypatch = world, lab_env
+    monkeypatch.setattr(control_app, "_store", lambda: w.control.store)
+    projects, params = "/lab/v1/control/model-projects", {"provider_org_id": w.A}
+    monkeypatch.setattr(workers, "lab_objects", lambda mode, env: (
+        workers.settings(mode, env, (workers.BUCKET,)) and "bucket"))
+    monkeypatch.setenv("LAB_S3_BUCKET", "lab-bucket")
+    monkeypatch.delenv("LAB_ARTIFACTS", raising=False)
+    assert TestClient(control_app.create_app()).get(projects, params=params).status_code == 404
+    monkeypatch.setenv("LAB_ARTIFACTS", "1")
+    on = TestClient(control_app.create_app())
+    for method, path in (("GET", projects), ("GET", "/lab/v1/operations/x"),
+                         ("POST", "/lab/v1/artifacts/imports")):
+        r = on.request(method, path, params=params, headers={"Idempotency-Key": "k" * 8},
+                       json={})
+        assert r.status_code in (503, 422), (path, r.status_code)
+    unavailable = on.get(projects, params=params)
+    assert unavailable.status_code == 503
+    assert unavailable.json()["error"]["code"] == "dependency_unavailable"
+    monkeypatch.delenv("LAB_S3_BUCKET")
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        control_app.create_app()
+    assert refused.value.missing == ("LAB_S3_BUCKET",)
