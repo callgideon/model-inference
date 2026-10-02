@@ -2,6 +2,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
 import { evaluationPort, isPreview } from "@/lib/services/evaluation/port";
 import { comparison, REFUSAL_COPY, runRow } from "@/lib/services/evaluation/view";
 import { RunsTable } from "../../evaluations/runs";
+import { ComparisonReport } from "../../evaluations/report";
 import { PreviewNote } from "@/components/preview-note";
 
 export const metadata = { title: "Experiment · infrx Lab" };
@@ -31,34 +32,7 @@ export default async function ExperimentPage({ params }: PageProps<"/experiments
         <p>Pending: B2 compares the runs once both have ended.</p>
       ) : (
         <>
-          <p role="status">{c.outcome}</p>
-          <ul>{c.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-          <p>{`${c.pairing} · ${c.basis} · ${c.confidence} · ${c.paired}`}</p>
-          <table>
-            <thead>
-              <tr><th>Estimate</th><th>Cases</th><th>Candidate − baseline</th><th>Interval</th><th>Margin</th><th>Verdict</th><th /></tr>
-            </thead>
-            <tbody>
-              {c.estimates.map((r) => (
-                <tr key={r.name}><td>{r.name}</td><td>{r.paired}</td><td>{r.diff}</td><td>{r.interval}</td><td>{r.margin}</td><td>{r.verdict}</td><td>{r.improved}</td></tr>
-              ))}
-            </tbody>
-          </table>
-          <table>
-            <thead>
-              <tr><th>Run</th><th>Mean over all cases</th><th>Missing</th><th>Errored</th><th>Not comparable</th><th>Cost</th><th>Latency</th></tr>
-            </thead>
-            <tbody>
-              {c.runs.map((r) => (
-                <tr key={r.name}>
-                  <td>{r.name}</td><td>{r.mean}</td><td>{r.missing}</td><td>{r.errors}</td><td>{r.notComparable}</td>
-                  <td>{r.costs.map((x) => <div key={x}>{x}</div>)}</td><td>{r.latency}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p>Cost difference, per unit: {c.costDelta.join(" · ")}</p>
-          <dl>{c.identity.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+          <ComparisonReport report={e.report!} />
           <p><a href={`/experiments/${e.experiment_id}/report`} download>Export the report (JSON)</a></p>
         </>
       )}

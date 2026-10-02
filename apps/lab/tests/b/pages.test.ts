@@ -28,12 +28,12 @@ test("B4-P01 each page reads the evaluation records as the session's workspace a
 });
 
 test("B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id", () => {
-  assert.match(read(EVALS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+<form action=\{launchExperiment\}>/);
+  assert.match(read(EVALS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+launch\.kind === "unavailable" \? [\s\S]*?\) : \(\n\s+<form action=\{launchExperiment\}>/);
   assert.match(read(EVALS), /<input type="hidden" name="experiment_id" value=\{crypto\.randomUUID\(\)\} \/>/);
-  assert.match(read(CHECKPOINTS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+<form action=\{subscribeCheckpoints\}>/);
+  assert.match(read(CHECKPOINTS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+offered\.kind === "unavailable" \? [\s\S]*?\) : \(\n\s+<form action=\{subscribeCheckpoints\}>/);
   assert.match(read(CHECKPOINTS), /<input type="hidden" name="subscription_id" value=\{crypto\.randomUUID\(\)\} \/>/);
   assert.match(read(RUNS), /\{r\.cancel && \(\n\s+<form action=\{cancelRun\}>/);
-  assert.match(read(EVALS), /<select name="harness_ref" required>\{c\.harnesses\.map/, "H1 revisions are picked, never typed");
+  assert.match(read(EVALS), /<select name="harness_ref" required>\{launch\.catalog\.harnesses\.map/, "H1 revisions are picked, never typed");
 });
 
 test("B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists", () => {
@@ -43,7 +43,7 @@ test("B4-P03 an experiment is found only among the workspace's own, compared onl
   assert.match(page, /\{c === null \? \(\n\s+<p>Pending: B2 compares the runs once both have ended\.<\/p>/);
   assert.equal(page.split("/report`").length - 1, 1, "one export link, inside the report branch");
   assert.ok(page.indexOf("/report`") > page.indexOf("{c === null ?"));
-  assert.match(page, /<p role="status">\{c\.outcome\}<\/p>/);
+  assert.match(page, /<ComparisonReport report=\{e\.report!\} \/>/, "UX-08: B2's report, decision first (evaluations/report.tsx)");
 });
 
 test("B4-P04 the preview stand-in is labelled on every page only when it is on", () => {
