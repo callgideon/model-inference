@@ -47,6 +47,7 @@ C2 = "test_ap10_c2_refs_are_bound_to_the_selected_grant_version_for_training"
 RT = "gateway/routes/lab_datasets.py"
 RT_START = "test_ap10_route_a_session_starts_one_operation_and_a_replay_is_the_same"
 RT_REFUSED = "test_ap10_route_refusals_are_r270_envelopes"
+RT_READ = "test_ap10_route_the_outcome_read_is_the_operation_and_then_its_dataset_refs"
 SOP = "lab/improve/sop.py"
 SOP_REPORT = "test_ap10_sop_the_report_pins_identity_and_lists_every_failure_and_abstention"
 SOP_BLOCKED = "test_ap10_sop_quality_is_blocked_on_p07_and_validity_is_counted_apart"
@@ -195,6 +196,19 @@ MUTANTS: tuple[Mutant, ...] = (
     m("rt_start_is_200", "a start is 202 + Location at the operation",
       'return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")',
       "return control.ok(doc)", RT_START, file=RT),
+    # --- row 105: the from-traces outcome read
+    m("rt_read_any_kind", "the read answers only a trace -> dataset operation",
+      "        if op.kind != from_traces.KIND:\n", "        if False:\n", RT_READ, file=RT),
+    m("rt_read_no_member", "a session of no member never reads a workspace's operation",
+      "        await x.access.require(", "        0 and await x.access.require(", RT_READ,
+      file=RT),
+    m("rt_read_no_outcome", "a succeeded operation's read carries its outcome",
+      "        return control.ok(TraceDatasetRead(operation=op.doc(), outcome=outcome))",
+      "        return control.ok(TraceDatasetRead(operation=op.doc()))", RT_READ, file=RT),
+    m("rt_read_unscoped", "the read is scoped to the path's workspace",
+      "        return scoped(await actors.actor(request), provider)",
+      "        return await actors.actor(request)", RT_READ, RT_START, file=RT,
+      dies_by=("KeyError",)),
     # --- 10d: the SOP benchmark report
     m("sop_no_media_sent", "an item without its video is an abstention, never sent",
       "        if item.video is None:\n", "        if False:\n", SOP_REPORT, file=SOP,

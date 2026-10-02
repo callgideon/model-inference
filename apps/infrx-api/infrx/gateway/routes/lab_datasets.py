@@ -15,10 +15,12 @@ Stores: D7 (`PgLabDataStore`), L2 (`LabAccess` over `PgAccessStore`) and the Lab
 the media store under `lab/<provider>/` (R182). Mounted only when the composition put a
 `LabDatasets` on `rt.lab_datasets` (LAB_DATASETS, off).
 
-`POST .../from-traces` (WR-AP10C-4, AP-10 row 92) is the one R270 route here: 202 + 0060's
-OperationDoc for `from_traces.start` (Location: AP-04's `GET /lab/v1/operations/{id}`). The
-actor is `rt.actors`' scoped to the path's workspace; without a composed `ops` (0060's
-`PgControlOps`) or session actors it answers 503.
+`POST .../from-traces` (WR-AP10C-4, AP-10 row 92) and `GET .../from-traces/{operation_id}`
+(row 105) are the R270 routes here: 202 + 0060's OperationDoc for `from_traces.start`
+(Location: AP-04's `GET /lab/v1/operations/{id}`), and the operation with its outcome (the
+dataset refs `from_traces.work` wrote once it succeeded, else null). The actor is
+`rt.actors`' scoped to the path's workspace; without a composed `ops` (0060's
+`PgControlOps`) or session actors both answer 503.
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ from fastapi.routing import APIRoute
 
 from ...contracts import api as wire
 from ...contracts import errors
+from ...contracts.v2.records import ProviderCapability
 from ...datasets import acting_provider, imports, lineage, versions
 from ...lab.datasets import from_traces
 from ...lab.time import iso_z
@@ -258,21 +261,52 @@ def register(app: FastAPI, rt: Any, datasets: LabDatasets | None = None
     return x
 
 
+class TraceDatasetRead(wire.Wire):
+    """A trace -> dataset operation and, once it succeeded, its outcome (`from_traces`'s
+    record: the selected and split dataset refs, the split digest, the holdout, omissions)."""
+
+    operation: wire.OperationDoc
+    outcome: dict[str, Any] | None = None
+
+
+def scoped(actor: wire.Actor, provider: str) -> wire.Actor:
+    """The actor acting in the path's workspace: a web session (no workspace) claims it - a
+    claim only, every door checks the membership - and any other workspace is 404."""
+    if actor.audience == "session" and actor.provider_org_id is None:
+        return actor.model_copy(update={"provider_org_id": provider})
+    elif actor.provider_org_id != provider:
+        raise errors.NotFound("no such provider workspace")
+    return actor
+
+
 def traced(x: LabDatasets, actors: control.ActorSource | None) -> APIRouter:
-    """WR-AP10C-4: the R270 trace -> dataset start."""
+    """WR-AP10C-4: the R270 trace -> dataset start; row 105: its outcome read."""
     r270 = APIRouter(route_class=control.R270Route, responses=ERRORS)
+
+    async def actor_of(request: Request, provider: str) -> wire.Actor:
+        if x.ops is None or actors is None:
+            raise errors.DependencyUnavailable("trace datasets are not composed")
+        return scoped(await actors.actor(request), provider)
 
     @r270.post(PREFIX + "/from-traces", status_code=202, response_model=wire.OperationDoc,
                operation_id="startTraceDataset")
     async def from_traces_start(request: Request, provider: str,
                                 body: from_traces.TraceDataset, key: IdempotencyKey):
-        if x.ops is None or actors is None:
-            raise errors.DependencyUnavailable("trace datasets are not composed")
-        actor = await actors.actor(request)
-        if actor.audience == "session" and actor.provider_org_id is None:
-            actor = actor.model_copy(update={"provider_org_id": provider})   # a claim: start
-        elif actor.provider_org_id != provider:                            # checks membership
-            raise errors.NotFound("no such provider workspace")
-        doc = (await from_traces.start(x.ops, x.access, x.objects, actor, key, body)).operation.doc()
+        actor = await actor_of(request, provider)
+        ops = cast("ControlOps", x.ops)
+        doc = (await from_traces.start(ops, x.access, x.objects, actor, key, body)).operation.doc()
         return control.accepted(doc, f"/lab/v1/operations/{doc.operation_id}")
+
+    @r270.get(PREFIX + "/from-traces/{operation_id}", response_model=TraceDatasetRead,
+              operation_id="getTraceDataset")
+    async def from_traces_read(request: Request, provider: str, operation_id: str):
+        actor = await actor_of(request, provider)
+        await x.access.require(actor.user_id or "", provider,
+                               ProviderCapability.read_aggregate_health)
+        op = await cast("ControlOps", x.ops).get(operation_id, actor)  # another tenant's: 404
+        if op.kind != from_traces.KIND:
+            raise errors.NotFound("no such trace dataset operation")
+        outcome = await from_traces.outcome(x.objects, provider_org_id=provider,
+                                            selection_id=op.resource_id or "")
+        return control.ok(TraceDatasetRead(operation=op.doc(), outcome=outcome))
     return r270
