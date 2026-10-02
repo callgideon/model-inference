@@ -162,7 +162,8 @@ test("UXV-A04 reduced motion: opening and closing the mobile menu moves nothing"
 
 // WR-UXVF-3: the App has no prefers-reduced-motion rule; its dialog and menus zoom/slide in (tw-animate)
 // whatever the setting. Reported FAIL in the acceptance report; this case passes once the WR lands, and
-// its todo comes off then (a todo keeps console-test green while the defect is open, never hides it).
+// its todo comes off then (the todo keeps the suite green while the defect is open; the matrix reads a
+// TODO FAIL[...] as FAIL, so it never hides it).
 test("UXV-A05 reduced motion: the App's dialog and dropdown menu popups, as committed, move nothing", { todo: "FAIL[WR-UXVF-3]: no prefers-reduced-motion rule in app/globals.css" }, async () => {
   const page = await open(DESKTOP);
   const popups = [classesOf("components/ui/dialog.tsx", "zoom-in-95"), classesOf("components/ui/dropdown-menu.tsx", "slide-in-from-top-2")];
