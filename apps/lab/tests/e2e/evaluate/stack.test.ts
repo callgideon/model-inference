@@ -3,8 +3,10 @@
 // (LAB_EVALS as the gateway composes it: D7, B1's freeze and L2 real) on key l4 (backend.py): a launch
 // through the page's form, progress and a cancel from the records, the comparison with its slices and
 // uncertainty, and the unsafe variants. E02-E05 drive the launch form, whose catalog the gateway's own
-// composition answers 503 until SR-AP10-1 (0066): while `world.composed.catalog` is false they are
-// reported TODO "NOT RUN[SR-AP10-1]" and run nothing - never a pass over the route suite's fake catalog
+// composition answers 503 until SR-AP10-1 (0066's SQL is on the tree; its Python caller is WR-UXVF-1):
+// while `world.composed.catalog` is false, or the journey still composes the route suite's fakes over
+// ports the unit carries (WR-UXVF-2), they are reported TODO "NOT RUN[...]" and run nothing - never a pass
+// over the route suite's fake catalog
 // (TODO, not SKIP: gate.py's `missing` reads a skipped case as a red suite; the cell is NOT RUN through
 // the record's `composed`). Skipped unless LAB_E2E_REAL=1 (Docker, l4):
 //   cd apps/lab && LAB_E2E_REAL=1 INFRX_D_TASK=l4 node --test tests/e2e/evaluate/stack.test.ts
@@ -31,9 +33,16 @@ test("E2E-E j10 the provider UI launches, compares and cancels", { skip: SKIP },
   const runRowOf = (page: string, id: string) => new RegExp(`lab:run:${w.A}:${id}@sha256:[0-9a-f]{64} (\\S+) `).exec(page)?.[1] ?? null;
   let experiment = "";
   let runs: string[] = [];
-  /** A launch-form case: run only once the unit's own composition carries the catalog (backend.carried). */
-  const launching = (name: string, fn: () => Promise<void>) =>
-    w.composed.catalog ? t.test(name, fn) : t.test(name, { todo: "NOT RUN[SR-AP10-1]: the composed catalog answers 503 until 0066's lab_eval_catalog" });
+  /** A launch-form case: run only once the unit's own composition carries the catalog (backend.carried),
+   * and only over the carried ports: while the journey composition still swaps the route suite's fakes in
+   * for experiments/catalog/ledger (its stand_ins say so), a pass would prove the fakes, not the unit. */
+  const faked = w.stand_ins.some((s) => s.startsWith("experiments/catalog/B3 ledger: the route suite's fakes"));
+  const notRun = !w.composed.catalog
+    ? "NOT RUN[SR-AP10-1]: the composed catalog answers 503 - 0066's lab_eval_catalog has no caller in infrx/lab/evaluation (WR-UXVF-1)"
+    : faked
+      ? "NOT RUN[WR-UXVF-2]: the journey composition swaps fakes in for ports the unit carries"
+      : null;
+  const launching = (name: string, fn: () => Promise<void>) => (notRun === null ? t.test(name, fn) : t.test(name, { todo: notRun }));
 
   await t.test("E2E-E01 as the gateway composes LAB_EVALS today, the records are listed and the launch is unavailable while its catalog answers 503", async () => {
     await door(s.api, "composition", { as: "gateway" });
