@@ -233,8 +233,6 @@ def s14(ctx) -> None:
         raise Blocked("BLOCKED[P-10] an approved media-capable judge, its secret reference, "
                       "payer and spend limit (config `judge`: live), or an isolated dry run")
     q12, rid = ctx.outputs("12"), ctx.outputs("13")["request_id"]
-    if mode == "dry_run":                  # only a stage that runs carries the label
-        ctx.label(DRY_RUN)
     if ctx.composed("AP-02"):
         ctx.publish(credits_before=_json(ctx.call("GET", "/console/v1/credits",
                                                   actor="consumer_a_web")))
@@ -245,9 +243,15 @@ def s14(ctx) -> None:
               (offered == "configured") == bool(models.get("data")), offered)
     rubrics = _json(ctx.call("GET", "/lab/v1/judge/rubrics", origin="lab", actor=ADMIN,
                              query=_workspace(ctx))).get("data") or []
-    rubric = max(rubrics, key=lambda r: r.get("version") or 0, default={})
-    ctx.require("a reviewed rubric version with criteria and an output schema",
-                rubric.get("criteria") and rubric.get("output_schema"), len(rubrics))
+    # a `definition_pending` skeleton (P-07) is listed without an output schema: never pinned
+    reviewed = [r for r in rubrics if r.get("criteria") and r.get("output_schema")]
+    if not reviewed:
+        raise Blocked(f"BLOCKED[P-07] no reviewed rubric version with criteria and an output "
+                      f"schema ({len(rubrics)} listed): the SOP definition and reviewed gold "
+                      "labels are the operator's")
+    rubric = max(reviewed, key=lambda r: r.get("version") or 0)
+    if mode == "dry_run":                  # only a stage that runs carries the label
+        ctx.label(DRY_RUN)
     body = {"grantor_org_id": q12["grantor_org_id"], "model_id": ctx.config["model_uuid"],
             "judge_model": ctx.config.get("judge_model", "ap11-judge"),
             "rubric_version": rubric["version"], "sample_size": 1}

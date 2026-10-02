@@ -591,3 +591,20 @@ def test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite(files, gate
     four = stage(verdict, "04")
     assert four["status"] == "BLOCKED" and "CANDIDATE-ENGINE" in " ".join(four["reasons"])
     assert gateway.posts("/lab/v1/control/deployments") == []
+
+
+def test_ap11_the_judge_pins_the_newest_reviewed_rubric_never_a_pending_one(files, gateway):
+    """Broken: the highest listed version taken, so the P-07 SOP skeleton (no output schema,
+    never configurable) fails stage 14; or, with no reviewed version, a FAIL instead of
+    BLOCKED[P-07] and a configuration attempted anyway."""
+    gateway.rubrics.append({**gateway.rubrics[0], "version": 3})   # a later reviewed one
+    _, verdict = run(files, gateway)
+    assert stage(verdict, "14")["status"] == "PASS", stage(verdict, "14")["reasons"]
+    assert stage(verdict, "14")["evidence"]["versions"]["judge"]["rubric_version"] == 3
+    fresh = type(gateway)()                          # a new target with only the skeleton
+    fresh.rubrics = [r for r in fresh.rubrics if r["state"] != "active"]
+    code, verdict = run(files, fresh, "--state", str(files[2].with_name("pending.json")))
+    fourteen = stage(verdict, "14")
+    assert fourteen["status"] == "BLOCKED" and code == 3, fourteen["reasons"]
+    assert "BLOCKED[P-07]" in " ".join(fourteen["reasons"]) and fourteen["label"] is None
+    assert not fresh.posts("/lab/v1/judge/configs")
