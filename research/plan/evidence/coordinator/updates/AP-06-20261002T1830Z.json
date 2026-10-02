@@ -1,0 +1,26 @@
+{
+  "task": "AP-06",
+  "lane": "api-publication-2",
+  "slice": "register row 103: WR-AS3-2 PgDevCredentials over 0068's dev-key/wallet doors; WR-AS3-3 the Lab workers' role-login connector",
+  "activity": "review",
+  "at": "2026-10-02T18:30:00Z",
+  "head": "1516ae8",
+  "base": "29b9df84",
+  "worktree": ".claude/worktrees/codex-w7-api-publication-2",
+  "branch": "codex/w7-api-publication-2",
+  "owned_paths": ["apps/infrx-api/infrx/lab/publication/", "apps/infrx-api/infrx/lab/workers/__main__.py", "apps/infrx-api/tests/ap06/", "research/plan/evidence/w7/api-publication-2-1516ae8.md", "research/plan/evidence/w7/api-publication-2-1516ae8-WR-AP06-6.patch", "research/plan/evidence/coordinator/updates/AP-06-20261002T1830Z.json"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=ap6 pytest -q tests/ap06/test_publication_pg.py (seam red, before implementation)", "exit": 1, "summary": "2 failed: infrx.lab.publication absent; role login refused 'permission denied to set role service_role'"},
+    {"cmd": "INFRX_D_TASK=ap6 pytest -q tests/ap06 tests/g/lab_control tests/w/test_lab_workers.py -k 'not test_mutants' (plain)", "exit": 0, "summary": "76 passed"},
+    {"cmd": "same with INFRX_D1_IMAGE=supabase", "exit": 0, "summary": "76 passed"},
+    {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap6 pytest -q tests/ap06/test_mutants.py", "exit": 0, "summary": "53 passed: 36 unit + 13 PG mutants killed (9 new), guards green"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "457 errors (baseline 458); 0 new"},
+    {"cmd": "tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "7 passed"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "medium-high", "basis": "both items done and proved on ap6, both images (~2.5 h of 3/5/9); remaining = WR-AP06-6 at merge + one review round", "at": "2026-10-02T18:30:00Z"},
+  "blockers": [],
+  "wiring_requests": ["WR-AP06-6 infrx/lab/control/app.py _compose: Publication(..., credentials=PgDevCredentials(connect)); composed test tests/ap06/test_composed.py::test_composed__the_lab_unit_composes_0068s_dev_credentials (patch: evidence/w7/api-publication-2-1516ae8-WR-AP06-6.patch)"],
+  "schema_requests": [],
+  "evidence": ["research/plan/evidence/w7/api-publication-2-1516ae8.md"]
+}

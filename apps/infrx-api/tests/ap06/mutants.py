@@ -26,6 +26,8 @@ PG_FILE = "tests/ap06/test_publication_pg.py"
 OP = "gateway/routes/operator_publication.py"
 LC = "gateway/routes/lab_control.py"
 MO = "gateway/routes/models.py"
+PUB = "lab/publication/__init__.py"
+LW = "lab/workers/__main__.py"
 U, D, C = "test_publication__", "test_dev_keys__", "test_catalog__"
 PG = "test_publication_pg__"
 
@@ -206,6 +208,37 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        LC, "            await pub.ops.advance(op.operation_id, op.fence,\n"
            "                                  f\"issued:{issued.key_id}:{issued.prefix}\")\n", "",
        PG + "a_dev_key_is_issued_once_on_postgres"),
+    # --- WR-AS3-2: PgDevCredentials over 0068's doors ---------------------------------------
+    _m("pg_dev_credentials_malformed_id_queried", "a malformed id is not_found, never a 500",
+       PUB, "        if not all(_uuid(v)", "        if False and all(_uuid(v)",
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    _m("pg_dev_credentials_key_id_unguarded", "every id is checked, the key's included",
+       PUB, 'if k.endswith("_id"))', 'if k.endswith("t_id"))',
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    _m("pg_dev_revoke_actor_dropped", "the revocation is audited as the session's member",
+       PUB, '"actor": actor, "idempotency_key"', '"actor": "lab", "idempotency_key"',
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    _m("pg_dev_revoke_unkeyed", "the audit entry carries the request's Idempotency-Key",
+       PUB, '"idempotency_key": idempotency_key}', '"idempotency_key": None}',
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    _m("pg_dev_wallet_always_opened", "an unopened dev wallet reads closed, not open at 0",
+       PUB, 'opened=row["opened"]', "opened=True",
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    _m("pg_dev_wallet_in_usd", "the dev wallet is CREDIT, never USD",
+       PUB, 'unit="CREDIT"', 'unit="USD"',
+       PG + "dev_keys_and_the_wallet_answer_from_0068s_doors"),
+    # --- WR-AS3-3: the Lab workers' connector -----------------------------------------------
+    _m("pg_role_login_switches_role", "a role login (member of nothing) sets no role",
+       LW, 'set_role=False if login_user(dsn).startswith("infrx_") else None)',
+       "set_role=None)",
+       PG + "a_role_login_connects_without_the_switch_and_the_service_login_switches"),
+    _m("pg_service_login_never_switches", "the owner login still runs as service_role",
+       LW, '.startswith("infrx_") else None)', '.startswith("infrx_") else False)',
+       PG + "a_role_login_connects_without_the_switch_and_the_service_login_switches"),
+    _m("pg_compose_ignores_the_role_login", "the composed worker uses the role-aware connector",
+       LW, "    connect = lab_connector(values[DATABASE])\n",
+       "    connect = connector(values[DATABASE])\n",
+       PG + "a_role_login_connects_without_the_switch_and_the_service_login_switches"),
 )
 
 
