@@ -34,6 +34,8 @@ SIGNATURES: dict[str, tuple[str, ...]] = {
     "lab_review_feedback": ("jsonb",),
     "lab_trace_review": ("jsonb",),
     "lab_trace_reviews": ("jsonb",),
+    "lab_judge_rubric_create": ("jsonb",),       # SR-AP08-1
+    "lab_judge_rubric_list": ("uuid",),          # SR-AP08-1
 }
 CLAIMS = ("select set_config('request.jwt.claims', %s, true), "
           "set_config('request.jwt.claim.sub', %s, true), "

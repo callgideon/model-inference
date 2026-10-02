@@ -23,12 +23,14 @@ Three invariants here are not shape checks:
 from __future__ import annotations
 
 import decimal
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 from ..contracts import limits
 
+MAX_SOP_STEPS, MAX_STEP_CHARS = 50, 500
 # The judge's non-criterion fields (`research/traces/06` §3.3's output schema).
 OVERALL_PASS = "overall_pass"
 NOTES = "notes"
@@ -136,6 +138,8 @@ class Rubric:
     max_rationale_chars: int = 300
     min_rationale_chars: int = 1
     max_notes_chars: int = 500
+    #: AP-08: the SOP a SOP rubric verifies, versioned with it (P-07); empty for the others.
+    sop_steps: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rubric_id, str) or not self.rubric_id.strip():
@@ -152,6 +156,11 @@ class Rubric:
         _bounded_int(self.max_rationale_chars, "max_rationale_chars", self.min_rationale_chars,
                      limits.MAX_FEEDBACK_TEXT_CHARS)
         _bounded_int(self.max_notes_chars, "max_notes_chars", 1, limits.MAX_FEEDBACK_TEXT_CHARS)
+        if type(self.sop_steps) is not tuple or len(self.sop_steps) > MAX_SOP_STEPS or not all(
+                type(step) is str and 0 < len(step.strip()) and len(step) <= MAX_STEP_CHARS
+                for step in self.sop_steps):
+            raise ValueError(f"SOP steps are at most {MAX_SOP_STEPS} non-empty texts of at "
+                             f"most {MAX_STEP_CHARS} characters")
 
     @property
     def requires_media(self) -> bool:
@@ -486,3 +495,75 @@ class ScoreLedger:
 #: AP-08: the rubric versions the worker grades, by the integer version a configuration pins
 #: (0037 `lab_judge_configs.rubric_version`). A version is added with the rubric it names.
 RUBRICS: dict[int, Rubric] = {MARLIN_VIDEO_V1.version: MARLIN_VIDEO_V1}
+
+
+# --- AP-08 (api-judge-2): rubric versions as stored definitions --------------------------------
+_CRITERION_KEYS = frozenset({"name", "min_score", "max_score", "pass_at", "evidence"})
+_DEFINITION_KEYS = frozenset({"rubric_id", "version", "criteria", "min_rationale_chars",
+                              "max_rationale_chars", "max_notes_chars", "sop_steps"})
+_EVIDENCE = {"media": True, "text": False}
+
+#: The SOP rubric, version 2 RESERVED (P-07): its criteria and their evidence are fixed here -
+#: instruction following and output validity read the text, step evidence and task correctness
+#: need the video (contracts.md section 8) - while its thresholds and SOP steps wait for the
+#: operator's SOP definition. Listed `definition_pending`; never configured or graded.
+SOP_VIDEO_V2 = Rubric(rubric_id="sop-video", version=2, criteria=(
+    Criterion("instruction_following"), Criterion("output_validity"),
+    Criterion("step_evidence", requires_media=True),
+    Criterion("task_correctness", requires_media=True)))
+#: version -> (its skeleton, why it is pending). A stored definition for it ends the wait.
+PENDING: dict[int, tuple[Rubric, str]] = {SOP_VIDEO_V2.version: (
+    SOP_VIDEO_V2, "P-07: the operator has not supplied the SOP definition (its steps and "
+                  "pass thresholds) or the reviewed gold labels")}
+
+
+def definition(rubric: Rubric) -> dict:
+    """A rubric version as data: what SR-AP08-1 stores and `digest` hashes."""
+    return {"rubric_id": rubric.rubric_id, "version": rubric.version,
+            "criteria": [{"name": c.name, "min_score": c.min_score, "max_score": c.max_score,
+                          "pass_at": c.pass_at,
+                          "evidence": "media" if c.requires_media else "text"}
+                         for c in rubric.criteria],
+            "min_rationale_chars": rubric.min_rationale_chars,
+            "max_rationale_chars": rubric.max_rationale_chars,
+            "max_notes_chars": rubric.max_notes_chars, "sop_steps": list(rubric.sop_steps)}
+
+
+def digest(rubric: Rubric) -> str:
+    """A version's identity: the hash of its canonical definition."""
+    canonical = json.dumps(definition(rubric), sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def from_definition(doc: object) -> Rubric:
+    """The rubric a stored (or posted) definition names; `ValueError` for anything else. A
+    definition of a reserved version fills its skeleton: same id, same criteria and evidence,
+    and (the SOP's) at least one step."""
+    if type(doc) is not dict or set(doc) != _DEFINITION_KEYS:
+        raise ValueError(f"a rubric definition has exactly {sorted(_DEFINITION_KEYS)}")
+    raw = doc["criteria"]
+    if type(raw) is not list or not all(type(c) is dict and set(c) == _CRITERION_KEYS
+                                        and c["evidence"] in _EVIDENCE for c in raw):
+        raise ValueError(f"each criterion has exactly {sorted(_CRITERION_KEYS)} and evidence "
+                         f"media or text")
+    steps = doc["sop_steps"]
+    if type(steps) is not list:
+        raise ValueError("sop_steps is a list")
+    rubric = Rubric(
+        rubric_id=doc["rubric_id"], version=doc["version"],
+        criteria=tuple(Criterion(c["name"], c["min_score"], c["max_score"], c["pass_at"],
+                                 _EVIDENCE[c["evidence"]]) for c in raw),
+        min_rationale_chars=doc["min_rationale_chars"],
+        max_rationale_chars=doc["max_rationale_chars"],
+        max_notes_chars=doc["max_notes_chars"], sop_steps=tuple(steps))
+    pending = PENDING.get(rubric.version)
+    if pending is not None:
+        skeleton = pending[0]
+        shape = [(c.name, c.requires_media) for c in skeleton.criteria]
+        if (rubric.rubric_id, [(c.name, c.requires_media) for c in rubric.criteria]) != \
+                (skeleton.rubric_id, shape):
+            raise ValueError(f"version {rubric.version} fills the {skeleton.rubric_id} "
+                             f"skeleton: criteria {shape}")
+        if not rubric.sop_steps:
+            raise ValueError(f"version {rubric.version} names its SOP steps")
+    return rubric

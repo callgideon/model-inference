@@ -47,6 +47,7 @@ class FakeDoors:
         self.calibration = {"state": "uncalibrated", "labels": 0, "required": 30,
                             "agreement": None, "interval": None}
         self.refuse: errors.DomainError | None = None
+        self.rubrics: dict[int, dict] = {}       # SR-AP08-1's store, keyed by version
 
     async def call(self, user, door, *args):
         self.calls.append((user, door, *args))
@@ -80,6 +81,21 @@ class FakeDoors:
                     "created_at": "2026-10-01T00:00:00+00:00", "replayed": False}
         if door in ("lab_review_feedback", "lab_trace_reviews"):
             return []
+        if door == "lab_judge_rubric_create":    # SR-AP08-1: once per version, by digest
+            a = args[0]
+            row = self.rubrics.setdefault(a["rubric_version"], {
+                **a, "created_by": user, "created_at": "2026-10-02T00:00:00+00:00"})
+            if row["digest"] != a["digest"]:
+                raise errors.IdempotencyConflict("this version is stored with another definition")
+            return row
+        if door == "lab_judge_rubric_list":
+            return [self.rubrics[v] for v in sorted(self.rubrics)]
+        if door == "lab_judge_configure_keyed":
+            _, config, grantor, model, judge_model, version, samples = args
+            return {"config_id": config, "grantor_org_id": grantor, "model_id": model,
+                    "judge_model": judge_model, "rubric_version": version,
+                    "sample_size": samples, "created_at": "2026-10-02T00:00:00+00:00",
+                    "calibration": self.calibration}
         raise AssertionError(f"unexpected door {door}")
 
 
@@ -182,7 +198,7 @@ def test_ap08_routes__the_estimate_is_a_report_and_no_unpriced_model_is_offered(
     assert (e["priced"], e["authorizes_spend"], e["worst_case"], e["samples_max"]) == \
         (False, False, None, 20)
     rubrics = c.get(f"{lab_judge.PREFIX}/rubrics", params=Q).json()
-    assert [r["version"] for r in rubrics["data"]] == [1]
+    assert [r["version"] for r in rubrics["data"]] == [1, 2]
 
 
 def test_ap08_routes__a_configuration_names_a_graded_rubric_and_calibration_is_honest():
