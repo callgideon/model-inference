@@ -71,6 +71,46 @@
         "title": "Actor",
         "type": "object"
       },
+      "ApiKey": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "key_id",
+          "name",
+          "prefix",
+          "created_at"
+        ],
+        "title": "ApiKey",
+        "type": "object"
+      },
       "AuditEntry": {
         "additionalProperties": false,
         "properties": {
@@ -202,6 +242,111 @@
         "title": "Availability",
         "type": "object"
       },
+      "CaptureRequest": {
+        "additionalProperties": false,
+        "description": "The key's mode plus the organization-level consent it is decided under.",
+        "properties": {
+          "consent_version": {
+            "minimum": 0.0,
+            "title": "Consent Version",
+            "type": "integer"
+          },
+          "evaluation_consent": {
+            "default": false,
+            "title": "Evaluation Consent",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "retention_days": {
+            "default": 30,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "consent_version"
+        ],
+        "title": "CaptureRequest",
+        "type": "object"
+      },
+      "Consent": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "evaluation_consent": {
+            "title": "Evaluation Consent",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "mode",
+          "retention_days",
+          "evaluation_consent",
+          "effective_at",
+          "revoked_at"
+        ],
+        "title": "Consent",
+        "type": "object"
+      },
       "ConsoleCapabilities": {
         "additionalProperties": false,
         "properties": {
@@ -225,6 +370,53 @@
           "features"
         ],
         "title": "ConsoleCapabilities",
+        "type": "object"
+      },
+      "CreditAdjusted": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "replayed",
+          "amount"
+        ],
+        "title": "CreditAdjusted",
+        "type": "object"
+      },
+      "CreditAdjustment": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 40,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "amount",
+          "reason"
+        ],
+        "title": "CreditAdjustment",
         "type": "object"
       },
       "Credits": {
@@ -282,6 +474,57 @@
           "signup_granted_at"
         ],
         "title": "Credits",
+        "type": "object"
+      },
+      "DataCategory": {
+        "enum": [
+          "request_content",
+          "response_content",
+          "media",
+          "usage_metadata",
+          "feedback"
+        ],
+        "title": "DataCategory",
+        "type": "string"
+      },
+      "DataPurpose": {
+        "description": "Four separate permissions (`01-architecture.md`). Capture implies none of\nthe other three, and a role is never consent.",
+        "enum": [
+          "capture",
+          "provider_sharing",
+          "external_judging",
+          "training"
+        ],
+        "title": "DataPurpose",
+        "type": "string"
+      },
+      "DataUseDoc": {
+        "additionalProperties": false,
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/Consent"
+          },
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            },
+            "title": "Grants",
+            "type": "array"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyCapture"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "consent",
+          "keys",
+          "grants"
+        ],
+        "title": "DataUseDoc",
         "type": "object"
       },
       "ErrorBody": {
@@ -356,6 +599,93 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "FeedbackAccepted": {
+        "additionalProperties": false,
+        "description": "201 means PostgreSQL accepted it; provenance is server-set.",
+        "properties": {
+          "author_role": {
+            "title": "Author Role",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/FeedbackChannel"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "replayed": {
+            "default": false,
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "request_id",
+          "channel",
+          "author_role",
+          "created_at"
+        ],
+        "title": "FeedbackAccepted",
+        "type": "object"
+      },
+      "FeedbackChannel": {
+        "enum": [
+          "api",
+          "console"
+        ],
+        "title": "FeedbackChannel",
+        "type": "string"
+      },
+      "FeedbackCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "FeedbackCreate",
+        "type": "object"
+      },
       "FieldError": {
         "additionalProperties": false,
         "properties": {
@@ -378,6 +708,213 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "Grant": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/DataCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "grant_id": {
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "provider_org_id": {
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "purposes": {
+            "items": {
+              "$ref": "#/components/schemas/DataPurpose"
+            },
+            "title": "Purposes",
+            "type": "array"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grant_id",
+          "version",
+          "provider_org_id",
+          "model_ids",
+          "categories",
+          "purposes",
+          "retention_days",
+          "effective_at",
+          "expires_at",
+          "revoked_at",
+          "state"
+        ],
+        "title": "Grant",
+        "type": "object"
+      },
+      "GrantClaim": {
+        "additionalProperties": false,
+        "description": "`claim_signup_grant`'s answer: a grant (`credit` + `granted_at`) or why not.",
+        "properties": {
+          "credit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "status": {
+            "enum": [
+              "granted",
+              "replayed",
+              "unverified",
+              "identity_reused",
+              "rollout_hold",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "GrantClaim",
+        "type": "object"
+      },
+      "GrantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/DataCategory"
+            },
+            "minItems": 1,
+            "title": "Categories",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "grant_version": {
+            "minimum": 0.0,
+            "title": "Grant Version",
+            "type": "integer"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "provider_org_id": {
+            "format": "uuid",
+            "title": "Provider Org Id",
+            "type": "string"
+          },
+          "purposes": {
+            "items": {
+              "$ref": "#/components/schemas/DataPurpose"
+            },
+            "minItems": 1,
+            "title": "Purposes",
+            "type": "array"
+          },
+          "retention_days": {
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider_org_id",
+          "model_ids",
+          "categories",
+          "purposes",
+          "retention_days",
+          "grant_version"
+        ],
+        "title": "GrantRequest",
         "type": "object"
       },
       "GrantStatus": {
@@ -431,6 +968,138 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "KeyCapture": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Effective Mode",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "off",
+              "minimal",
+              "full"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "name",
+          "mode",
+          "effective_mode"
+        ],
+        "title": "KeyCapture",
+        "type": "object"
+      },
+      "KeyCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "KeyCreate",
+        "type": "object"
+      },
+      "KeyCreated": {
+        "additionalProperties": false,
+        "description": "`secret` is set only on the call that created the row; a replay carries null and\n`secret_returned: false` - a lost secret is a revoke and a new key, never a re-reveal.",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ApiKey"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "secret_returned": {
+            "title": "Secret Returned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "secret",
+          "secret_returned",
+          "replayed"
+        ],
+        "title": "KeyCreated",
+        "type": "object"
+      },
+      "KeyRevocation": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "format": "uuid",
+            "title": "Key Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "reason"
+        ],
+        "title": "KeyRevocation",
+        "type": "object"
+      },
+      "KeyRevoked": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key_id",
+          "replayed"
+        ],
+        "title": "KeyRevoked",
         "type": "object"
       },
       "KeySummary": {
@@ -640,6 +1309,34 @@
           "data"
         ],
         "title": "ListPage[AuditEntry]",
+        "type": "object"
+      },
+      "ListPage_Grant_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Grant"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ListPage[Grant]",
         "type": "object"
       },
       "ListPage_KeySummary_": {
@@ -1520,6 +2217,57 @@
         "title": "SignUp",
         "type": "object"
       },
+      "Suspension": {
+        "additionalProperties": false,
+        "properties": {
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "org_id",
+          "suspended",
+          "reason"
+        ],
+        "title": "Suspension",
+        "type": "object"
+      },
+      "SuspensionSet": {
+        "additionalProperties": false,
+        "properties": {
+          "org_id": {
+            "title": "Org Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "org_id",
+          "suspended",
+          "replayed"
+        ],
+        "title": "SuspensionSet",
+        "type": "object"
+      },
       "UnknownUsage": {
         "additionalProperties": false,
         "description": "A request whose usage is unknown: the hold is quarantined, never charged.",
@@ -2168,7 +2916,8 @@
             "SessionBearer": []
           }
         ],
-        "summary": "Sign Out"
+        "summary": "Sign Out",
+        "x-infrx-no-body": true
       }
     },
     "/auth/v1/sign-up": {
@@ -2588,6 +3337,137 @@
         "summary": "Credits"
       }
     },
+    "/console/v1/data-grants": {
+      "get": {
+        "operationId": "getConsoleV1DataGrants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPage_Grant_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "List Grants"
+      },
+      "post": {
+        "operationId": "postConsoleV1DataGrants",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Put Grant"
+      }
+    },
+    "/console/v1/data-grants/{grant_id}": {
+      "delete": {
+        "operationId": "deleteConsoleV1DataGrantsByGrantId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Grant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke Grant"
+      }
+    },
+    "/console/v1/data-use": {
+      "get": {
+        "operationId": "getConsoleV1DataUse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataUseDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Read Data Use"
+      }
+    },
     "/console/v1/keys": {
       "get": {
         "operationId": "getConsoleV1Keys",
@@ -2717,6 +3597,173 @@
           }
         ],
         "summary": "Handler"
+      },
+      "post": {
+        "operationId": "postConsoleV1Keys",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Create Key"
+      }
+    },
+    "/console/v1/keys/{key_id}": {
+      "delete": {
+        "operationId": "deleteConsoleV1KeysByKeyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Revoke Key"
+      }
+    },
+    "/console/v1/keys/{key_id}/capture": {
+      "put": {
+        "operationId": "putConsoleV1KeysByKeyIdCapture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataUseDoc"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Put Capture"
       }
     },
     "/console/v1/legacy-statement": {
@@ -3142,6 +4189,70 @@
         "summary": "One Request"
       }
     },
+    "/console/v1/requests/{request_id}/feedback": {
+      "post": {
+        "operationId": "postConsoleV1RequestsByRequestIdFeedback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Submit Feedback"
+      }
+    },
     "/console/v1/requests/{request_id}/result": {
       "get": {
         "operationId": "getConsoleV1RequestsByRequestIdResult",
@@ -3244,6 +4355,59 @@
           }
         ],
         "summary": "Result"
+      }
+    },
+    "/console/v1/signup-grant/claim": {
+      "post": {
+        "description": "No body: the individual is the session's. An Idempotency-Key is accepted and not\nneeded - the grant is keyed by the individual (R71), so every retry replays.",
+        "operationId": "postConsoleV1SignupGrantClaim",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantClaim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Claim Grant",
+        "x-infrx-no-body": true
       }
     },
     "/health": {
@@ -3784,6 +4948,120 @@
         "summary": "Handler"
       }
     },
+    "/operator/v1/credit-adjustments": {
+      "post": {
+        "operationId": "postOperatorV1CreditAdjustments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditAdjustment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditAdjusted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Adjust"
+      }
+    },
+    "/operator/v1/key-revocations": {
+      "post": {
+        "operationId": "postOperatorV1KeyRevocations",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyRevocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyRevoked"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Revoke"
+      }
+    },
     "/operator/v1/providers": {
       "post": {
         "operationId": "postOperatorV1Providers",
@@ -3828,6 +5106,63 @@
           }
         ],
         "summary": "Create"
+      }
+    },
+    "/operator/v1/suspensions": {
+      "post": {
+        "operationId": "postOperatorV1Suspensions",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Suspension"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuspensionSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          },
+          {
+            "OperatorKey": []
+          }
+        ],
+        "summary": "Suspend"
       }
     },
     "/operator/v1/unknown-usage": {

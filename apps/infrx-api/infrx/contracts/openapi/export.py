@@ -102,7 +102,31 @@ def shape(route: APIRoute) -> tuple[str, str]:
 
 
 def routes(app: FastAPI) -> list[APIRoute]:
-    return [r for r in app.routes if isinstance(r, APIRoute)]
+    """Every APIRoute the app serves. FastAPI 0.141 records `app.include_router(router)` as a
+    lazy `_IncludedRouter` entry (its `original_router` holds the routes), so the export walks
+    into those too; the repo's own convention is the app's table, but a lane that mounted a
+    router is still documented."""
+    found: list[APIRoute] = []
+    def walk(entries, prefix=""):
+        for r in entries:
+            if isinstance(r, APIRoute):
+                found.append(r if not prefix else _prefixed(r, prefix))
+            elif hasattr(r, "original_router"):
+                ctx = getattr(r, "include_context", None)
+                walk(r.original_router.routes, prefix + (getattr(ctx, "prefix", "") or ""))
+    walk(app.routes)
+    return found
+
+
+def _prefixed(route: APIRoute, prefix: str) -> APIRoute:
+    """A copy whose path carries the include prefix (none of the wave-7 routers use one)."""
+    clone = copy.copy(route)
+    clone.path = prefix + route.path
+    clone.path_format = prefix + route.path_format
+    return clone
+
+
+NO_BODY_MARK = "x-infrx-no-body"   # openapi_extra: a body method that declares it takes no body
 
 
 BODY_METHODS = {"POST", "PUT", "PATCH"}
@@ -115,7 +139,8 @@ def legacy(apps: dict[str, FastAPI]) -> dict[str, list[str]]:
     parses that raw request by hand (no typed body)."""
     def undocumented(route: APIRoute, method: str) -> bool:
         request, response = shape(route)
-        return response == "none" or (method in BODY_METHODS and request == "raw")
+        no_body = bool((route.openapi_extra or {}).get(NO_BODY_MARK))
+        return response == "none" or (method in BODY_METHODS and request == "raw" and not no_body)
     return {name: sorted(f"{method} {route.path_format}" for route in routes(app)
                          for method in route.methods or () if undocumented(route, method))
             for name, app in apps.items()}

@@ -129,7 +129,8 @@ def register(app, rt) -> None:
         facade.check_origin(request.headers.get("origin"))
         return control.ok(await facade.refresh(body.refresh_token.get_secret_value()))
 
-    @router.post("/auth/v1/sign-out", status_code=204, operation_id="auth_sign_out")
+    @router.post("/auth/v1/sign-out", status_code=204, operation_id="auth_sign_out",
+                 openapi_extra={"x-infrx-no-body": True})   # the bearer is a header, not a body
     async def sign_out(request: Request):
         facade.check_origin(request.headers.get("origin"))
         await facade.sign_out(bearer(request))

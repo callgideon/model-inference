@@ -116,10 +116,6 @@
     "apps/infrx-api/infrx/contracts/ids.py": "ec8f37430d8ea219e95bb0a66b8599ca78dd43e65b8cec945d94a10a17fad2a0",
     "apps/infrx-api/infrx/contracts/limits.py": "5a5eb2b43146e68cf129f592f618e661a57bf31076423f9900cffeacb3ab2022",
     "apps/infrx-api/infrx/contracts/money.py": "c40bbac22c111f6590179300cee1794cf86452aa3b3775da8f72444cee1602ac",
-    "apps/infrx-api/infrx/contracts/openapi/__init__.py": "66f00a71c0d50269759b202aa45a5f0ac4c86962da08f8aeafcd126a816a1002",
-    "apps/infrx-api/infrx/contracts/openapi/baseline.json": "1aeb1b56bbe393329edad2c62242b0b1a65c66ec87988d655b210a7a1cc663be",
-    "apps/infrx-api/infrx/contracts/openapi/export.py": "e99796f99f3f6078dc7d3e69272de5f078fb713dc8e6ab77f11fc0bb67125ef8",
-    "apps/infrx-api/infrx/contracts/openapi/inventory.py": "4002c0e738e3c29ed0547282b86319643d0a5e9466fb584dbfea83d6d16d28cf",
     "apps/infrx-api/infrx/contracts/ports.py": "39a1d0f3913deb245080b98bd835014a7e2a7dc38a713eb0af74f262f3b0bed6",
     "apps/infrx-api/infrx/contracts/records.py": "91ccfefbcb5a783c1752915ebf101c8d3425d2aa50e479838121142d26095836",
     "apps/infrx-api/infrx/contracts/tasklocal.py": "cc91af5076b99ea44ce1826e3e57f4fa212a05d0b66e8f6b1bdeef4f0b8e9772",
@@ -151,7 +147,7 @@
     "apps/app/lib/contracts/v2/consumer.ts": "4c2da58ddc94572cbacabe879c435c16ddd6af24bc345648aab8dfb61ee3a0db",
     "apps/app/lib/contracts/v2/lifecycle.ts": "04501b3195bab317413ce12ad79097c09d9f9d7913397120b37790d0834976ea",
     "apps/app/lib/contracts/v2/money-units.ts": "113544a1453b130d54d87d2bcf94b882019d3d593ea1deac2a4fec6073aadeed",
-    "apps/app/lib/contracts/v2/published-model.ts": "d329fd81b72ad8af125e97f796bd8c98c0c633fe5283b88fab0d011f1a447511",
+    "apps/app/lib/contracts/v2/published-model.ts": "0a8a27071990451cb4c511321d257db3c054cd4226357424f039c661b5ef26e6",
     "apps/app/lib/contracts/v2/types.ts": "8829662d7f894055c1fba6c5cff0ff47b28d17073a36f43112f525fd27dc3116"
   },
   "note": "sha256 of every v1/v2 contract file (Python and console) at the F3 base, read from git objects; tests/contracts/lab/test_lab_contracts.py::test_lab_existing_frozen_contracts_are_byte_identical compares the tree to it. A deliberate contract revision (or the lab export wiring in infrx/contracts/__init__.py) updates its line here.",
@@ -175,6 +171,20 @@
         "apps/infrx-api/infrx/contracts/openapi/inventory.py"
       ],
       "why": "AP-00 00a/00b: infrx/contracts/openapi/ added (the OpenAPI export of the enabled compositions, the route inventory, and baseline.json - the schema-less routes, which may only shrink)"
+    },
+    {
+      "at": "2026-10-02",
+      "ruling": "R270/AP-00",
+      "files": [
+        "apps/app/lib/contracts/v2/published-model.ts"
+      ],
+      "dropped": [
+        "apps/infrx-api/infrx/contracts/openapi/__init__.py",
+        "apps/infrx-api/infrx/contracts/openapi/baseline.json",
+        "apps/infrx-api/infrx/contracts/openapi/export.py",
+        "apps/infrx-api/infrx/contracts/openapi/inventory.py"
+      ],
+      "why": "infrx/contracts/openapi/ is AP-00's export tooling, excluded from the frozen set like contracts/lab/; the openapi artifacts have their own regeneration test"
     }
   ]
 }

@@ -117,7 +117,7 @@ def register(app: FastAPI, rt: Any) -> None:
         user = await session_user(rt, request)
         return control.ok(await judge.results(user, provider_org_id, run_id, cursor, limit))
 
-    @r.post("/runs/{run_id}/cancel", response_model=s.RunDoc)
+    @r.post("/runs/{run_id}/cancel", response_model=s.RunDoc, openapi_extra={"x-infrx-no-body": True})   # the run id only, no body
     async def cancel(request: Request, run_id: str, provider_org_id: str = Query(),
                      idempotency_key: str = KEY):
         user = await session_user(rt, request)

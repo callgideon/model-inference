@@ -72,7 +72,7 @@ def register(app, rt):
                          idempotency_key: str | None = Header(None, alias=IDEMPOTENCY)):
         return control.ok(await repo.revoke_key(who, str(key_id), idempotency_key))
 
-    @router.post("/console/v1/signup-grant/claim", response_model=acts.GrantClaim)
+    @router.post("/console/v1/signup-grant/claim", response_model=acts.GrantClaim, openapi_extra={"x-infrx-no-body": True})
     async def claim_grant(request: Request, who: api.Actor = actor,
                           idempotency_key: str | None = Header(None, alias=IDEMPOTENCY)):
         """No body: the individual is the session's. An Idempotency-Key is accepted and not

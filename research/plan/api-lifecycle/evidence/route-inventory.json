@@ -152,8 +152,92 @@
       "consumers": [],
       "envelope": "r270",
       "method": "GET",
+      "path": "/console/v1/data-grants",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/console/v1/data-grants",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "DELETE",
+      "path": "/console/v1/data-grants/{grant_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
+      "path": "/console/v1/data-use",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "GET",
       "path": "/console/v1/keys",
       "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/console/v1/keys",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "DELETE",
+      "path": "/console/v1/keys/{key_id}",
+      "request_schema": "none",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "PUT",
+      "path": "/console/v1/keys/{key_id}/capture",
+      "request_schema": "typed",
       "response_schema": "typed"
     },
     {
@@ -211,8 +295,32 @@
       ],
       "consumers": [],
       "envelope": "r270",
+      "method": "POST",
+      "path": "/console/v1/requests/{request_id}/feedback",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
       "method": "GET",
       "path": "/console/v1/requests/{request_id}/result",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "consumer session",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/console/v1/signup-grant/claim",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -473,6 +581,174 @@
       "path": "/lab/v1/evaluations/subscriptions",
       "request_schema": "raw",
       "response_schema": "none"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/budgets",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "PUT",
+      "path": "/lab/v1/judge/budgets/{payer_ref}",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/calibration",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/configs",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/configs",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/configs/{config_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/estimates",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/models",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/rubrics",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/runs",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/runs",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/runs/{run_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/judge/runs/{run_id}/cancel",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/judge/runs/{run_id}/results",
+      "request_schema": "raw",
+      "response_schema": "typed"
     },
     {
       "audience": "provider session",
@@ -967,6 +1243,34 @@
     {
       "audience": "provider session",
       "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/traces/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/traces/{request_id}/feedback",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [
+        "apps/lab/lib/services/traces/port.ts"
+      ],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/traces/{request_id}/reviews",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
         "consumer"
       ],
       "consumers": [],
@@ -1057,7 +1361,43 @@
       "consumers": [],
       "envelope": "r270",
       "method": "POST",
+      "path": "/operator/v1/credit-adjustments",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/key-revocations",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
       "path": "/operator/v1/providers",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "operator",
+      "compositions": [
+        "consumer"
+      ],
+      "consumers": [],
+      "envelope": "r270",
+      "method": "POST",
+      "path": "/operator/v1/suspensions",
       "request_schema": "typed",
       "response_schema": "typed"
     },
@@ -1320,7 +1660,7 @@
     {
       "method": "POST",
       "path": "/console/v1/signup-grant/claim",
-      "state": "target",
+      "state": "existing",
       "surface": "welcome"
     },
     {
@@ -1332,13 +1672,13 @@
     {
       "method": "POST",
       "path": "/console/v1/keys",
-      "state": "target",
+      "state": "existing",
       "surface": "api keys"
     },
     {
       "method": "DELETE",
       "path": "/console/v1/keys/{id}",
-      "state": "target",
+      "state": "existing",
       "surface": "api keys"
     },
     {
@@ -1368,7 +1708,7 @@
     {
       "method": "POST",
       "path": "/console/v1/requests/{id}/feedback",
-      "state": "target",
+      "state": "existing",
       "surface": "feedback"
     },
     {
@@ -1404,31 +1744,31 @@
     {
       "method": "GET",
       "path": "/console/v1/data-use",
-      "state": "target",
+      "state": "existing",
       "surface": "privacy"
     },
     {
       "method": "PUT",
       "path": "/console/v1/keys/{id}/capture",
-      "state": "target",
+      "state": "existing",
       "surface": "privacy"
     },
     {
       "method": "POST",
       "path": "/console/v1/data-grants",
-      "state": "target",
+      "state": "existing",
       "surface": "privacy"
     },
     {
       "method": "GET",
       "path": "/console/v1/data-grants",
-      "state": "target",
+      "state": "existing",
       "surface": "privacy"
     },
     {
       "method": "DELETE",
       "path": "/console/v1/data-grants/{id}",
-      "state": "target",
+      "state": "existing",
       "surface": "privacy"
     },
     {
@@ -1458,19 +1798,19 @@
     {
       "method": "POST",
       "path": "/operator/v1/credit-adjustments",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "POST",
       "path": "/operator/v1/suspensions",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
       "method": "POST",
       "path": "/operator/v1/key-revocations",
-      "state": "target",
+      "state": "existing",
       "surface": "operator"
     },
     {
@@ -1590,43 +1930,43 @@
     {
       "method": "GET",
       "path": "/lab/v1/traces/{id}/feedback",
-      "state": "target",
+      "state": "existing",
       "surface": "lab requests"
     },
     {
       "method": "POST",
       "path": "/lab/v1/traces/{id}/reviews",
-      "state": "target",
+      "state": "existing",
       "surface": "lab requests"
     },
     {
       "method": "POST",
       "path": "/lab/v1/judge/configs",
-      "state": "target",
+      "state": "existing",
       "surface": "lab judge"
     },
     {
       "method": "PUT",
       "path": "/lab/v1/judge/budgets/{payer_id}",
-      "state": "target",
+      "state": "existing",
       "surface": "lab judge"
     },
     {
       "method": "POST",
       "path": "/lab/v1/judge/runs",
-      "state": "target",
+      "state": "existing",
       "surface": "lab judge"
     },
     {
       "method": "GET",
       "path": "/lab/v1/judge/runs",
-      "state": "target",
+      "state": "existing",
       "surface": "lab judge"
     },
     {
       "method": "GET",
       "path": "/lab/v1/judge/calibration",
-      "state": "target",
+      "state": "existing",
       "surface": "lab judge"
     },
     {

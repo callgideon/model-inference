@@ -341,7 +341,8 @@ def frozen_files() -> dict[str, str]:
         for path in sorted(root.rglob("*")):
             relative = path.relative_to(REPO).as_posix()
             if (path.is_file() and "__pycache__" not in path.parts
-                    and not relative.startswith("apps/infrx-api/infrx/contracts/lab/")):
+                    and not relative.startswith("apps/infrx-api/infrx/contracts/lab/")
+                    and not relative.startswith("apps/infrx-api/infrx/contracts/openapi/")):  # AP-00 tooling, not a frozen contract
                 found[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     return found
 
