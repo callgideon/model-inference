@@ -32,7 +32,7 @@ const PRIVACY: PrivacyRow[] = [
     title: "Serving retention",
     status: "Stored for limited periods",
     detail:
-      "To run a request we store its content (the request body, the source video, the prepared frames, the result and the streamed output) for limited periods, then delete it. This is not zero data retention. Docs lists each period.",
+      "To run a request we store its content (the request body, the source video, the prepared frames, the result and the streamed output) for limited periods, after which it can no longer be read. This is not zero data retention. Docs lists each period.",
     href: "/docs#retention",
   },
   {

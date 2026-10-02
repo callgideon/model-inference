@@ -1,0 +1,29 @@
+{
+  "_comment": "UX-07 (R32): one single-edit mutant per decision the UXU cases claim; node tests/ux/usage/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
+  "mutants": [
+    {
+      "id": "UXU-X01",
+      "what": "the readable result's note claims its content is removed at expiry (WR-UXF-4)",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "After that the result is no longer available;",
+      "replace": "After that the content is removed;",
+      "cases": ["UXU-01 result notes say when the result stops being readable, never that content is removed or deleted"]
+    },
+    {
+      "id": "UXU-X02",
+      "what": "the expired result's note claims its content was removed (WR-UXF-4)",
+      "file": "app/(console)/usage/[requestId]/request-view-model.ts",
+      "find": "return `The result stopped being available at ${at}. Request status and usage remain available.`;",
+      "replace": "return `The result expired at ${at} and its content was removed.`;",
+      "cases": ["UXU-01 result notes say when the result stops being readable, never that content is removed or deleted"]
+    },
+    {
+      "id": "UXU-X03",
+      "what": "Settings promises deletion after the retention periods (WR-UXF-5)",
+      "file": "app/(console)/settings/view-model.ts",
+      "find": "for limited periods, after which it can no longer be read.",
+      "replace": "for limited periods, then delete it.",
+      "cases": ["UXU-02 Settings' serving retention says stored content stops being readable, with no deletion promise"]
+    }
+  ]
+}

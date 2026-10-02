@@ -128,9 +128,9 @@ function resultNote(access: ReadOutcome, expiresAt: string | null): string {
   const at = expiresAt === null ? "" : instantLabel(expiresAt);
   switch (access) {
     case "available":
-      return `Kept until ${at}. After that the content is removed; this page keeps the request's details and charge.`;
+      return `Readable until ${at}. After that the result is no longer available; this page keeps the request's details and charge.`;
     case "expired":
-      return `The result expired at ${at} and its content was removed. The request's details and charge stay here.`;
+      return `The result stopped being available at ${at}. Request status and usage remain available.`;
     case "pending":
       return "The result appears here when the request finishes.";
     case "held_unknown":

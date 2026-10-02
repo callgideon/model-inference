@@ -697,11 +697,11 @@ test("expired-display: past its persisted expiry the request detail shows the re
   try {
     await page.goBack();
     await page.waitForURL((url) => url.pathname === `/usage/${requestId}`);
-    await expect(page.getByText(/The result expired/).first(), "back to the page: expired").toBeVisible();
+    await expect(page.getByText(/The result stopped being available/).first(), "back to the page: expired").toBeVisible();
     await expect(page.locator("main pre"), "no content restored from a cache").toHaveCount(0);
     expect((await page.locator("main").textContent()) ?? "").not.toContain(content);
     await page.reload();
-    await expect(page.getByText(/The result expired at /).first(), "the persisted expiry, read from the store").toBeVisible();
+    await expect(page.getByText(/The result stopped being available at /).first(), "the persisted expiry, read from the store").toBeVisible();
     await expect(page.locator("main pre")).toHaveCount(0);
     expect((await page.locator("main").textContent()) ?? "").not.toContain(content);
     await expect(page.getByText(requestId).first(), "the request's details stay").toBeVisible();
