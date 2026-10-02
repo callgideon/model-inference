@@ -1,0 +1,27 @@
+{
+  "task": "AP-11",
+  "lane": "api-lifecycle",
+  "slice": "11a, 11b (inspect + isolated modes on ap11); 11c-11e are batches 2-3",
+  "activity": "review",
+  "at": "2026-10-02T00:30:00Z",
+  "head": "ea353c12",
+  "base": "cd9f517c",
+  "worktree": ".claude/worktrees/codex-w7-api-lifecycle",
+  "branch": "codex/w7-api-lifecycle",
+  "owned_paths": ["tests/integration/api_lifecycle/", "infra/runbooks/api-lifecycle.md", "research/plan/api-lifecycle/evidence/README.md", "research/plan/evidence/w7/api-lifecycle-ea353c1.md", "research/plan/evidence/w7/AP11-isolated-ea353c1-verdict.json", "research/plan/evidence/coordinator/updates/AP-11-20261002T0030Z.json"],
+  "commands": [
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/api_lifecycle/test_runner.py (before implementation)", "exit": 2, "summary": "RED: ImportError, no runner module"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/api_lifecycle/", "exit": 0, "summary": "53 passed"},
+    {"cmd": "INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/api_lifecycle/test_mutants.py", "exit": 0, "summary": "74 passed: 70/70 mutants killed, every-case guard green, self-tests green (first full run 4 gaps, fixed)"},
+    {"cmd": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state <0700>/state.json --out <dir>", "exit": 3, "summary": "BLOCKED as expected: 09 PASS; 01/08/10/11 mounted halves green, BLOCKED on AP-01/02/03; 02-07/12-18 BLOCKED naming AP-04..AP-08, GPU target, P-10, trace composition"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed; ruff 0.15.12 on tests/integration/api_lifecycle clean"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 458 errors (baseline 458)"},
+    {"cmd": "tests/integration/test_makefile_mutant_lists.py with WR-AP11-1 applied (reverted)", "exit": 0, "summary": "7 passed (without it: 7 failed, list not named)"},
+    {"cmd": "tests/integration/test_lab_package_isolation.py with WR-AP11-2 applied (reverted)", "exit": 0, "summary": "2 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "11a/11b done and evidenced; remaining is review fixes. 11c-11e (later batches, live target) separately 8/14/26 h, confidence low: ~1-2 h per unblocked stage on this framework plus live-target setup, GPU-window scheduling and cleanup", "at": "2026-10-02T00:30:00Z"},
+  "blockers": ["stages 02-07, 12-18 wait on AP-04/05/06/07/08 routes, a GPU target and P-10; stages 01/08/10/11 wait on AP-01/02/03 for their console halves"],
+  "wiring_requests": ["WR-AP11-1 Makefile: api-mutants line for tests/integration/api_lifecycle/test_mutants.py + api-lifecycle target + .PHONY", "WR-AP11-2 tests/integration/test_lab_package_isolation.py: CASES += api_lifecycle runner-identity case", "WR-AP11-3 tests/integration/api-lifecycle.sh (new wrapper)", "WR-AP11-4 infra/runbooks/README.md index row", "WR-AP11-5 tests/integration/ENVIRONMENT.md wrapper row (optional)"],
+  "evidence": ["research/plan/evidence/w7/api-lifecycle-ea353c1.md", "research/plan/evidence/w7/AP11-isolated-ea353c1-verdict.json"]
+}
