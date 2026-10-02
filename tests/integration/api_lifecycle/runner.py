@@ -38,6 +38,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -141,6 +142,28 @@ def load_config(path: Path | None, mode: str) -> dict:
     if not config.get("target"):
         raise InvalidRun("the config names no target")
     return config
+
+
+SSM_NAME = re.compile(r"ssm:/[A-Za-z0-9_./-]+")
+
+
+def live_inputs(config: dict) -> list[str]:
+    """AP-11 11d: the operator's inputs a live run needs beyond a well-formed config. Each
+    missing one BLOCKs the run by name before any request (never a value in the reason)."""
+    missing = []
+    if config.get("judge") != "live" or not SSM_NAME.fullmatch(
+            str(config.get("judge_secret_ref") or "")):
+        missing.append("BLOCKED[P-10] the approved media-capable judge, configured live with its "
+                       "secret by SSM parameter name (config `judge`: live, `judge_secret_ref`: "
+                       "ssm:/...), its payer and spend limit")
+    if not config.get("live_target"):
+        missing.append("BLOCKED[GPU-TARGET] the approved live target (config `live_target`: the "
+                       "isolated candidate slot and its resource budget; verification.md "
+                       "prerequisite 3)")
+    if not Path(str(config.get("window_record") or "")).is_file():
+        missing.append("BLOCKED[WINDOW] the operator's window record for this run (config "
+                       "`window_record`: an existing file; never overlapping E4C)")
+    return missing
 
 
 class Session:
@@ -389,8 +412,10 @@ def run_stages(session: Session, selected: set[str], results: list[dict]) -> lis
                          reasons=[f"passed at {recorded['at']}; resumed from the state file"])
             continue
         composed = frozenset(session.config.get("composed") or ())
+        causes = session.config.get("uncomposed") or {}     # the world's own reasons
         missing = [f"BLOCKED[{owner}] {', '.join(routes)}: not served by the target "
-                   "(config `composed`)" for owner, routes in stage.missing(composed).items()]
+                   f"({causes.get(owner) or 'config `composed`'})"
+                   for owner, routes in stage.missing(composed).items()]
         served = [r for r in stage.routes if r.owner is None or r.owner in composed]
         if stage.run is None or not served:      # nothing of it is served: never called
             entry.update(status=BLOCKED, reasons=missing + [
@@ -496,10 +521,14 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
         with sources(args) as (config_path, secrets_path):
             config = load_config(config_path, args.mode)
             secrets = Secrets.load(secrets_path)
-            state = State.open(args.state, target=config.get("target"))
-            load_minted(args.state, secrets)
-            session = Session(args.mode, config, secrets, state, transport)
-            if args.mode == "cleanup":
+            reasons = live_inputs(config) if args.mode == "live" else []
+            if not reasons:
+                state = State.open(args.state, target=config.get("target"))
+                load_minted(args.state, secrets)
+                session = Session(args.mode, config, secrets, state, transport)
+            if reasons:
+                verdict = BLOCKED
+            elif args.mode == "cleanup":
                 rows = cleanup(session)
                 verdict = worst([FAIL if row["outcome"].startswith("failed") else PASS
                                  for row in rows] or [PASS])

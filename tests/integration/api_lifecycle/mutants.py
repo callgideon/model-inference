@@ -79,6 +79,8 @@ HOSTED = "test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol"
 HOSTING_DEFECT = "test_ap11_a_hosting_defect_fails_its_stage"
 NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail"
 NO_TARGET = "test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite"
+UNCOMPOSED_CAUSE = "test_ap11_a_package_the_world_could_not_compose_is_blocked_with_its_cause"
+LIVE_INPUTS = "test_ap11_live_is_blocked_naming_each_missing_operator_input"
 RUBRIC = "test_ap11_the_judge_pins_the_newest_reviewed_rubric_never_a_pending_one"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -316,6 +318,23 @@ MUTANTS: tuple[Mutant, ...] = (
        '    reviewed = [r for r in rubrics if r.get("criteria")]', SERVED, RUBRIC),
     _m("no_reviewed_rubric_fails", "no reviewed rubric is BLOCKED[P-07], never a FAIL", L,
        "    if not reviewed:\n", "    if False:\n", RUBRIC),
+    _m("uncomposed_cause_dropped", "a package the world could not compose names its cause", R,
+       "f\"({causes.get(owner) or 'config `composed`'})\"", "\"(config `composed`)\"",
+       UNCOMPOSED_CAUSE),
+    _m("live_inputs_skipped", "11d: a live run checks the operator's inputs first", R,
+       '            reasons = live_inputs(config) if args.mode == "live" else []',
+       "            reasons = []", LIVE_INPUTS),
+    _m("live_judge_mode_unchecked", "11d: P-10 means a judge configured live", R,
+       '    if config.get("judge") != "live" or not SSM_NAME.fullmatch(',
+       "    if not SSM_NAME.fullmatch(", LIVE_INPUTS),
+    _m("ssm_name_unchecked", "11d: P-10's secret is named by an SSM parameter, never a value", R,
+       'SSM_NAME = re.compile(r"ssm:/[A-Za-z0-9_./-]+")', 'SSM_NAME = re.compile(r".+")',
+       LIVE_INPUTS),
+    _m("live_target_unchecked", "11d: a live run names its approved target", R,
+       '    if not config.get("live_target"):', "    if False:", LIVE_INPUTS),
+    _m("window_record_unread", "11d: the operator's window record exists", R,
+       '    if not Path(str(config.get("window_record") or "")).is_file():',
+       '    if not config.get("window_record"):', LIVE_INPUTS),
     _m("oldest_reviewed_rubric", "14 pins the NEWEST reviewed rubric version", L,
        '    rubric = max(reviewed, key=lambda r: r.get("version") or 0)',
        '    rubric = min(reviewed, key=lambda r: r.get("version") or 0)', RUBRIC),

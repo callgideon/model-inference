@@ -174,9 +174,38 @@ def test_ap11_live_is_refused_without_its_explicit_config(files, gateway, change
     assert (code, verdict["verdict"]) == (4, "INVALID") and gateway.sent == []
 
 
+def ready_for_live(files) -> dict:
+    """11d's three operator inputs: P-10 by SSM name, the approved target, the window record."""
+    window = files[0].with_name("window.md")
+    window.write_text("operator window record (layer-1 stand-in)")
+    return {"judge": "live", "judge_secret_ref": "ssm:/model-inference/judge/ap11",
+            "live_target": "marlin2b-candidate-8101", "window_record": str(window)}
+
+
+def test_ap11_live_is_blocked_naming_each_missing_operator_input(files, gateway):
+    """Broken: a live run started without P-10's secret by SSM name, an approved live target
+    or the operator's window record - or one missing input reported, the others hidden, or a
+    request sent before they exist (11d is never run without them)."""
+    ready = ready_for_live(files)
+    absent = str(files[0].with_name("absent.md"))
+    for broken, named in (({"judge": "dry_run"}, "P-10"),
+                          ({"judge_secret_ref": "AKIA-not-a-name"}, "P-10"),
+                          ({"live_target": None}, "GPU-TARGET"),
+                          ({"window_record": absent}, "WINDOW")):
+        edit(files[0], **LIVE, fixtures={}, **{**ready, **broken})
+        code, verdict = run(files, gateway, mode="live")
+        assert (code, verdict["verdict"]) == (3, "BLOCKED") and gateway.sent == [], broken
+        assert [r.split("]")[0] for r in verdict["reasons"]] == [f"BLOCKED[{named}"], broken
+        assert "AKIA" not in json.dumps(verdict["reasons"]) and verdict["stages"] == []
+    edit(files[0], **ready)                # all three given: the run proceeds
+    code, verdict = run(files, gateway, mode="live")
+    assert not [r for r in verdict["reasons"] if r.startswith("BLOCKED[")], verdict["reasons"]
+    assert gateway.sent
+
+
 def test_ap11_live_never_uses_a_seeded_credential(files, gateway):
     """Broken: a live pass on a key seeded behind the runner's back (verification.md 2)."""
-    edit(files[0], **LIVE, fixtures={}, composed=["AP-01"])
+    edit(files[0], **LIVE, **ready_for_live(files), fixtures={}, composed=["AP-01"])
     code, verdict = run(files, gateway, mode="live")
     assert code == 3 and stage(verdict, "09")["status"] == "BLOCKED"
     assert "AP-03" in " ".join(stage(verdict, "09")["reasons"])
@@ -608,3 +637,16 @@ def test_ap11_the_judge_pins_the_newest_reviewed_rubric_never_a_pending_one(file
     assert fourteen["status"] == "BLOCKED" and code == 3, fourteen["reasons"]
     assert "BLOCKED[P-07]" in " ".join(fourteen["reasons"]) and fourteen["label"] is None
     assert not fresh.posts("/lab/v1/judge/configs")
+
+
+def test_ap11_a_package_the_world_could_not_compose_is_blocked_with_its_cause(files, gateway):
+    """Broken: AP-04 composed while its worker role is down (stage 02's verification waits
+    `queued` and FAILs), or left out of `composed` with no cause in the verdict."""
+    why = "the Lab `artifacts` worker role did not start: exited 2"
+    edit(files[0], composed=[c for c in json.loads(files[0].read_text())["composed"]
+                             if c != "AP-04"], uncomposed={"AP-04": why})
+    _, verdict = run(files, gateway)
+    for sid in ("02", "03"):
+        reasons = " ".join(stage(verdict, sid)["reasons"])
+        assert stage(verdict, sid)["status"] == "BLOCKED" and why in reasons, (sid, reasons)
+    assert not [p for _, p, _ in gateway.sent if p.startswith("/lab/v1/artifacts")]
