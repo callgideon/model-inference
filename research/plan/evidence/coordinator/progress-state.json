@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "39065ef0 (= claude/consumer-v1 tip)",
- "integration_head": "39065ef0",
+ "main": "59a36b2f (= claude/consumer-v1 tip)",
+ "integration_head": "59a36b2f",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,8 +40,8 @@
    }
   ]
  },
- "revision": 411,
- "updated": "2026-10-02T18:59:05Z",
+ "revision": 412,
+ "updated": "2026-10-02T21:43:36Z",
  "agent_slots": {
   "total": 18,
   "active": 0,
@@ -13049,22 +13049,22 @@
   {
    "id": "W7-api-publication-2",
    "task": "AP-06",
-   "slice": "row 103: PgDevCredentials over 0068 doors (WR-AS3-2); role-login connector (WR-AS3-3) (wf_2caff617-e76) (batch 4)",
+   "slice": "row 103: PgDevCredentials over 0068 doors (WR-AS3-2); role-login connector (WR-AS3-3) (wf_2caff617-e76) (batch 4); merge #102 integrated (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-api-publication-2",
    "worktree": ".claude/worktrees/codex-w7-api-publication-2",
    "base": "29b9df84",
-   "head": null,
+   "head": "a4c0d911",
    "isolation": {
     "ports": "tasklocal key ap6",
     "prefix": "infrx-ap6-*",
     "db": "infrx_ap6"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T21:43:36Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -13073,7 +13073,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-publication-2-1516ae8.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/gateway/routes/operator_publication.py",
@@ -13086,22 +13088,22 @@
   {
    "id": "W7-api-improve-4",
    "task": "AP-10",
-   "slice": "row 105: 10e routes + composed AP-04 test; the from-traces outcome read (wf_fb30eaf0-65b) (batch 4)",
+   "slice": "row 105: 10e routes + composed AP-04 test; the from-traces outcome read (wf_fb30eaf0-65b) (batch 4); merge #103 integrated (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-api-improve-4",
    "worktree": ".claude/worktrees/codex-w7-api-improve-4",
    "base": "29b9df84",
-   "head": null,
+   "head": "51538733",
    "isolation": {
     "ports": "tasklocal key ap10",
     "prefix": "infrx-ap10-*",
     "db": "infrx_ap10"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T21:43:36Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -13110,7 +13112,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-improve-4-3ab5946.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infrx/lab/improve/",
@@ -13123,22 +13127,22 @@
   {
    "id": "W7-d-supabase-reds",
    "task": "AP-00",
-   "slice": "the Supabase-image reds in tests/d (role-switch class), the harness production test, the r151_post_check_file_name anchor (wf_49f3e750-c5b) (batch 4)",
+   "slice": "the Supabase-image reds in tests/d (role-switch class), the harness production test, the r151_post_check_file_name anchor (wf_49f3e750-c5b) (batch 4); merge #105 integrated (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-d-supabase-reds",
    "worktree": ".claude/worktrees/codex-w7-d-supabase-reds",
    "base": "29b9df84",
-   "head": null,
+   "head": "64de7d7b",
    "isolation": {
     "ports": "tasklocal key ap0",
     "prefix": "infrx-ap0-*",
     "db": "infrx_ap0"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T21:43:36Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -13147,7 +13151,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/d-supabase-reds-7931d15.md"
+   ],
    "commands": [],
    "owned_paths": [
     "tests/d/",
@@ -13160,22 +13166,22 @@
   {
    "id": "W7-ux-app-3",
    "task": "UX-07",
-   "slice": "C-07 data-use controls in Settings through the generated client + App transport (wf_cd8215a5-3b9) (batch 4)",
+   "slice": "C-07 data-use controls in Settings through the generated client + App transport (wf_cd8215a5-3b9) (batch 4); merge #104 integrated (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-ux-app-3",
    "worktree": ".claude/worktrees/codex-w7-ux-app-3",
    "base": "29b9df84",
-   "head": null,
+   "head": "6060b356",
    "isolation": {
     "ports": "tasklocal key none",
     "prefix": "none",
     "db": "none"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T21:43:36Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -13184,7 +13190,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-app-3-608b21f.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/app/(console)/settings/",
@@ -13196,22 +13204,22 @@
   {
    "id": "W7-lab-followups",
    "task": "UX-08",
-   "slice": "WR-UX08-3 JudgeRecords; NO_CATALOG + docstring housekeeping; the inventory note (wf_e1f5746a-efb) (batch 4)",
+   "slice": "WR-UX08-3 JudgeRecords; NO_CATALOG + docstring housekeeping; the inventory note (wf_e1f5746a-efb) (batch 4); merge #102 integrated (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-lab-followups",
    "worktree": ".claude/worktrees/codex-w7-lab-followups",
    "base": "29b9df84",
-   "head": null,
+   "head": "097f60c1",
    "isolation": {
     "ports": "tasklocal key none",
     "prefix": "none",
     "db": "none"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
+   "updated": "2026-10-02T21:43:36Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 3,
@@ -13220,7 +13228,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/lab-followups-5ba5197.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/(provider)/judge/",
@@ -13233,22 +13243,22 @@
   {
    "id": "W7-r151-prep",
    "task": "AP-00",
-   "slice": "row 99: the R151 window for 0060–0068 prepared on a branch that stays unmerged until the window: EXPECTED_PENDING, the known-good reproof, infra/runbooks/r151-0060-0068.md (wf_9d4d67c9-2ad) (batch 4)",
+   "slice": "row 99: the R151 window for 0060–0068 prepared on a branch that stays unmerged until the window: EXPECTED_PENDING, the known-good reproof, infra/runbooks/r151-0060-0068.md (wf_9d4d67c9-2ad) (batch 4); handed back; the branch stays UNMERGED until the R151 window (register row 106) (59a36b2f)",
    "agent": "opus",
    "branch": "codex/w7-r151-prep",
    "worktree": ".claude/worktrees/codex-w7-r151-prep",
    "base": "29b9df84",
-   "head": null,
+   "head": "c211b9e6",
    "isolation": {
     "ports": "tasklocal key ap1",
     "prefix": "infrx-ap1-*",
     "db": "infrx_ap1"
    },
-   "activity": "running",
+   "activity": "deferred",
    "started": "2026-10-02T18:59:05Z",
-   "updated": "2026-10-02T18:59:05Z",
-   "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=102)",
+   "updated": "2026-10-02T21:43:36Z",
+   "blocker": "merged only inside the R151 window (operator; register row 106)",
+   "next_action": "merge inside the R151 window (operator)",
    "estimate": {
     "optimistic_h": 3,
     "likely_h": 5,
@@ -13257,7 +13267,9 @@
     "basis": "batch-4 brief",
     "at": "2026-10-02T18:59:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/r151-prep-5dbfb8d.md"
+   ],
    "commands": [],
    "owned_paths": [
     "infra/rollout/hosted-migrate.sh (EXPECTED_PENDING + post-check)",
@@ -17087,6 +17099,46 @@
   {
    "at": "2026-10-02T18:59:05Z",
    "event": "batch 4 (the pending items) dispatched from main 29b9df84: api-publication-2, api-improve-4, d-supabase-reds, ux-app-3, lab-followups, r151-prep (six Opus lanes)"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "event": "batch 4 (the pending items) integrated: merges #102–#105 on claude/consumer-v1 at 59a36b2f — lab-followups, api-publication-2, api-improve-4, ux-app-3, d-supabase-reds; r151-prep handed back on its own branch (row 106), merged only inside the R151 window; the full api-test on d6 runs on the tip before main moves"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']",
+   "source": "updates/AP-06-20261002T1830Z.json"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-10-20261002T1906Z.json"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-08-20261002T1906Z.json"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/AP-10-20261002T1928Z.json"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition queued → review: work that never ran cannot be in review, integration or complete",
+   "source": "updates/UX-07-20261002T1942Z.json"
+  },
+  {
+   "at": "2026-10-02T21:43:36Z",
+   "by": "tracker",
+   "what": "rejected update: malformed: estimate at: timestamp '2026-10-02' has no UTC offset",
+   "source": "updates/AP-00-20261002T2135Z.json"
   }
  ],
  "history": {
@@ -19349,10 +19401,40 @@
    "status": "rejected",
    "at": "2026-10-02T10:51:03Z",
    "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-06-20261002T1830Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T18:30:00Z",
+   "reason": "malformed: estimate confidence 'medium-high' not in ['unknown', 'low', 'medium', 'high']"
+  },
+  "AP-10-20261002T1906Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T19:06:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-08-20261002T1906Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T19:06:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-10-20261002T1928Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T19:28:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "UX-07-20261002T1942Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T19:42:00Z",
+   "reason": "impossible transition queued → review: work that never ran cannot be in review, integration or complete"
+  },
+  "AP-00-20261002T2135Z.json": {
+   "status": "rejected",
+   "at": "2026-10-02T21:35:00Z",
+   "reason": "malformed: estimate at: timestamp '2026-10-02' has no UTC offset"
   }
  },
  "eta": {
-  "computed_at": "2026-10-02T12:30:10Z",
+  "computed_at": "2026-10-02T21:43:36Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,

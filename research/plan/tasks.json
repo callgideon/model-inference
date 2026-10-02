@@ -4974,7 +4974,7 @@
       "acceptance": "A newly approved internal test listing appears in /v1/models and routes to its engine; consumer and operator keys cannot call a private endpoint; approval is atomic and audited; the existing Marlin alias and card are preserved and never overwritten by an unqualified candidate.",
       "failure_oracle": "A public model from a record+price+generic text response; a private candidate discoverable via an alias; a dev key spending a consumer wallet; a stale smoke receipt accepted at approval.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness. Dev credentials over 0068's doors composed 2026-10-02 (api-publication-2, merge #102; register row 103 closed)."
     },
     {
       "id": "AP-07",
@@ -5145,7 +5145,7 @@
       "acceptance": "Evaluation and pipeline listings are backed by the database; the killed-attempt debit race is reproduced, fixed at the authoritative boundary and re-proven; an authorized trace set becomes an immutable dataset; a repeatable SOP benchmark report compares revisions on the same cases.",
       "failure_oracle": "The eval worker enabled before 10b passes; a weakened kill/restart oracle; checkpoint import relabelled as hosted training; a comparison inferred from different cases.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 10a–10c implemented 2026-10-02 (merges #85, #92); 10d/10e remain (batch 3, api-improve-3). 10d/10e implemented 2026-10-02 (api-improve-3, merge #99): the SOP benchmark report (quality BLOCKED[P-07]; the real-candidate run BLOCKED[GPU-window]) and the release-evidence path; register row 105 lists what remains."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Slices 10a–10c implemented 2026-10-02 (merges #85, #92); 10d/10e remain (batch 3, api-improve-3). 10d/10e implemented 2026-10-02 (api-improve-3, merge #99): the SOP benchmark report (quality BLOCKED[P-07]; the real-candidate run BLOCKED[GPU-window]) and the release-evidence path; register row 105 lists what remains. 10e routes composed and the from-traces outcome read landed 2026-10-02 (api-improve-4, merge #103); only the GPU-window and P-07 halves of 10d remain."
     },
     {
       "id": "AP-11",
@@ -5465,7 +5465,7 @@
       "acceptance": "Ready/running/failed/expired/not-found/unavailable result fixtures; expiry while the tab is open and back navigation; wallet failure never zero; a tiny nonzero debit never free; no double charge or new inference from Retry.",
       "failure_oracle": "A hold labelled spent; a failed query rendering zero spent; a Retry that submits a new paid request.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness. C-07 data-use controls landed 2026-10-02 (ux-app-3, merge #104), live only with CONSOLE_DATA_USE on."
     },
     {
       "id": "UX-08",
@@ -5500,7 +5500,7 @@
       "acceptance": "Accept/reject/inconclusive, insufficient/missing/error, mixed units, changed immutable refs, duplicate launch and cancel race exercised; no inferred scientific decision in the frontend; no seeded quality threshold as a silent default.",
       "failure_oracle": "A platform-invented scientific threshold; zero accuracy for no result; a comparison across non-comparable hardware labelled conclusive.",
       "slice_sizing": "2–8 engineer-hour slices (planning estimate, excluding review, GPU waits and deployment windows); split again if investigation exceeds that.",
-      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness."
+      "amendment": "Registered 2026-10-01 at the lifecycle-plan merge 2eeff879 (planning commit 3012dfb0); planned, undispatched until a lane record names base, worktree and owned paths. Status implemented 2026-10-02 at the batch-2 integration 49114933 (merges #85–#89, #92, #94–#97; evidence research/plan/evidence/w7/); every new switch stays off and migrations 0060–0067 are LOCAL-ONLY, so implemented is not production readiness. WR-UX08-3 judge records landed 2026-10-02 (lab-followups, merge #102)."
     },
     {
       "id": "UX-09",
