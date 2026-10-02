@@ -242,6 +242,19 @@ async def collect(run_id: str, *, wiring: JudgeWiring,
     return await wiring.ledger.settle(run.run_id, polled.cost)
 
 
+def egress_hosts(mode: str, allowlist: str) -> frozenset[str]:
+    """AP-08 P-10 seam: the operator-approved judge provider hosts (`JUDGE_PROVIDER_ALLOWLIST`,
+    comma-separated bare host names), honoured only when the mode is exactly `live` (R57);
+    any other mode, or no list, keeps egress on loopback. Approving a host is the operator's
+    P-10 decision, never a default."""
+    if mode != JUDGE_MODE_LIVE:
+        return frozenset()
+    hosts = frozenset(h.strip().lower() for h in allowlist.split(",") if h.strip())
+    if any(not h.replace("-", "").replace(".", "").isalnum() for h in hosts):
+        raise errors.InvalidRequest("JUDGE_PROVIDER_ALLOWLIST names bare host names")
+    return hosts
+
+
 class HttpJudgeProvider:
     """`JudgeProvider` over HTTP, to the local judge fake only (P-10 gates anything else).
 
@@ -252,9 +265,11 @@ class HttpJudgeProvider:
     than 200, a 3xx or a 5xx may have been accepted, so it is ambiguous, never a failure.
     """
 
-    def __init__(self, base_url: str, *, timeout_s: float = 10.0) -> None:
+    def __init__(self, base_url: str, *, timeout_s: float = 10.0,
+                 allowed_hosts: frozenset[str] = frozenset()) -> None:
         parts = urlsplit(base_url)
-        if parts.scheme != "http" or parts.hostname not in LOCAL_HOSTS:
+        approved = parts.scheme == "https" and parts.hostname in allowed_hosts
+        if not approved and (parts.scheme != "http" or parts.hostname not in LOCAL_HOSTS):
             raise errors.InvalidRequest("judge egress is limited to the local judge fake "
                                         "until P-10")
         self.base_url, self.timeout_s = base_url.rstrip("/"), timeout_s
