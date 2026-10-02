@@ -51,6 +51,11 @@ TRACES_SQL = (f"SELECT request_id FROM {TABLE} FINAL WHERE org_id = {{org:UUID}}
               "ORDER BY started_at DESC, trace_id DESC LIMIT {limit:UInt32}")
 
 
+async def _rows(connect, sql: str, params: tuple) -> list[tuple]:
+    rows = await pg_rows(connect, sql, params)
+    return rows if isinstance(rows, list) else []
+
+
 class TraceEligible:
     def __init__(self, connect, retention) -> None:
         self.connect, self.retention = connect, retention
@@ -59,7 +64,7 @@ class TraceEligible:
     async def _serving(self, grantor: str, model: str) -> list[str]:
         """The model's serving versions whose provider holds a current judging grant."""
         by_provider: dict[str, list[str]] = {}
-        for provider, version in await pg_rows(self.connect, SERVING_SQL, (model,)):
+        for provider, version in await _rows(self.connect, SERVING_SQL, (model,)):
             by_provider.setdefault(provider, []).append(version)
         now = await self.store.db_now()
         open_: list[str] = []
@@ -87,6 +92,6 @@ class TraceEligible:
         # push them into the query when deletions are common enough to starve a sample.
         stones = await t3.store.get({(grantor, r) for r in ids})
         ids = [r for r in ids if not {REQUEST, CONTENT} & set(stones.get((grantor, r), {}))]
-        video = {r for (r,) in await pg_rows(self.connect, VIDEO_SQL, (ids,))} \
+        video = {r for (r,) in await _rows(self.connect, VIDEO_SQL, (ids,))} \
             if ids else set()
         return [(r, r in video) for r in ids]
