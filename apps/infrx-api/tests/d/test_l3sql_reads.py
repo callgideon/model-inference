@@ -91,7 +91,12 @@ def check_the_control_login_holds_what_operations_reads(conn) -> str:
     (T3's retention is ClickHouse/S3 only); it still cannot write a listing (publication is
     the CAS RPC's) or read the jobs."""
     _published(conn)
-    login = as_control_login(conn.info.dbname)
+    with pgharness.login("infrx_lab_control", conn.info.dbname) as dsn:
+        return _control_reads(dsn)
+
+
+def _control_reads(dsn: str) -> str:
+    login = as_control_login(dsn)
     got = _answered(_reads(PgControlStore(login)))
     assert got == EXPECTED, got
     card = _answered(PgCatalogDirectory(login).active_rate_card(t.P2))
@@ -99,18 +104,15 @@ def check_the_control_login_holds_what_operations_reads(conn) -> str:
 
     def as_control(sql: str) -> str | None:
         try:
-            with conn.transaction():
-                conn.execute("set local session authorization infrx_lab_control")
-                conn.execute(sql)
-                raise psycopg.Rollback()
+            with psycopg.connect(dsn) as control, control.transaction(force_rollback=True):
+                control.execute(sql)
         except psycopg.Error as refused:
             return refused.sqlstate
         return None
-    with conn.transaction():                    # lab_traces' PgServing.SQL (tip), verbatim
-        conn.execute("set local session authorization infrx_lab_control")
-        servings = conn.execute("select serving_version_id::text, model_id::text from "
-                                "infrx.serving_versions where provider_org_id = %s",
-                                (NEMO,)).fetchall()
+    with psycopg.connect(dsn) as control:       # lab_traces' PgServing.SQL (tip), verbatim
+        servings = control.execute("select serving_version_id::text, model_id::text from "
+                                   "infrx.serving_versions where provider_org_id = %s",
+                                   (NEMO,)).fetchall()
     assert sorted(s for s, _ in servings) == [t.S1, t.S2], servings
     refused = {"list": "insert into infrx.catalog_listings select * from infrx.catalog_listings "
                        "limit 0",
@@ -257,24 +259,23 @@ def check_the_router_functions_are_the_runtime_logins_alone(conn) -> str:
 
     from infrx.state.lab_rollout import PgRoutingReleases
 
-    def session(role: str):
-        async def connect():
-            c = await psycopg.AsyncConnection.connect(pgharness.dsn(conn.info.dbname),
-                                                      autocommit=True, prepare_threshold=None)
-            await c.execute(f"set session authorization {role}")
-            return c
-        return connect
-
     class Auth:
         org_id = str(uuid.uuid4())
 
-    async def attempt(role: str):
-        store = PgRoutingReleases(session(role))
+    async def attempt(dsn: str):
+        async def connect():
+            return await psycopg.AsyncConnection.connect(dsn, autocommit=True,
+                                                         prepare_threshold=None)
+        store = PgRoutingReleases(connect)
         try:
             return (await store.active(ALIAS), await store.eligible(str(uuid.uuid4()), Auth()))
         except Exception as failed:                     # noqa: BLE001 - the answer is its type
             return type(failed).__name__
-    got = {role: asyncio.run(attempt(role)) for role in ("infrx_runtime", "infrx_lab_control")}
+
+    def as_login(role: str):
+        with pgharness.login(role, conn.info.dbname) as dsn:
+            return asyncio.run(attempt(dsn))
+    got = {role: as_login(role) for role in ("infrx_runtime", "infrx_lab_control")}
     assert got == {"infrx_runtime": (None, False), "infrx_lab_control": "InsufficientPrivilege"}, got
     return f"runtime answers {got['infrx_runtime']}; the control login is refused"
 

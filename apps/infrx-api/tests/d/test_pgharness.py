@@ -295,3 +295,41 @@ def test_a_run_killed_mid_provision_is_cleaned_up_by_the_next_one():
         f"the leftover was adopted rather than replaced: {replaced['id']} vs {leftover}"
     assert _container_id() == "", \
         "and the replacement is removed at exit, leaving nothing behind"
+
+
+@needs_docker
+def test_a_role_is_assumed_and_logged_in_as_on_either_image_and_put_back():
+    """The Supabase-image reds (`permission denied to set role`/`session authorization`):
+    the harness login is no superuser there and holds a role it created WITH ADMIN only.
+    `become` switches to such a role in the caller's transaction and leaves no grant behind;
+    `login` is a real session of the role (its session user, so it cannot `set role` back to
+    the harness login) and puts the role back to NOLOGIN after. Oracle: a bare `set local
+    role` (42501 on the Supabase image), a grant that outlives the transaction, a login left
+    open."""
+    import psycopg
+
+    from . import pgharness
+    probe, db = "infrx_harness_probe", f"{pgharness.DATABASE}_roles"
+    pgharness.ensure()
+    pgharness.recreate(db)
+    with pgharness.connect(db) as conn:
+        conn.execute(f"drop role if exists {probe}")
+        conn.execute(f"create role {probe} nologin")
+        try:
+            held = (f"select count(*) from pg_auth_members where roleid = '{probe}'::regrole "
+                    "and member = current_user::regrole and set_option")
+            before = conn.execute(held).fetchone()[0]
+            with conn.transaction(force_rollback=True):
+                pgharness.become(conn, probe)
+                assert conn.execute("select current_user").fetchone()[0] == probe
+            assert conn.execute(held).fetchone()[0] == before, "the grant outlived the check"
+            with pgharness.login(probe, db) as dsn, psycopg.connect(dsn) as session:
+                assert session.execute("select session_user").fetchone()[0] == probe
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    session.execute("set role postgres")
+            assert conn.execute("select rolcanlogin from pg_roles where rolname = %s",
+                                (probe,)).fetchone()[0] is False
+            with pytest.raises(psycopg.OperationalError):
+                psycopg.connect(dsn).close()
+        finally:
+            conn.execute(f"drop role if exists {probe}")
