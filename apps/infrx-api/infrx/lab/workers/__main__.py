@@ -10,7 +10,11 @@ What the I5/I6/I7/I2L-OBS units run (`apps/infrx-api/deploy/lab/*/infrx-lab-<rol
 one role per process, each OFF until its `/etc/infrx-lab/<role>.env` exists (the unit's
 `ConditionPathExists`). A role reads only its environment (the env file): `LAB_DATABASE_URL`
 (the Lab's own login on the transaction pooler; stores get a connection per call) and
-`LAB_WORKER_HEALTH_PORT` (the unit's), plus the role's own names below. A missing one exits 2
+`LAB_WORKER_HEALTH_PORT` (the unit's), plus the role's own names below. `LAB_DATABASE_URL` has
+two shapes (`lab_connector`): the transaction pooler (`<login>.<project-ref>@…:6543`), where
+nothing is SET and the login's own defaults hold; or a direct DSN (`…:5432`), where the owner
+login runs `set role service_role` and an `infrx_*` role login (0043/0068: member of nothing,
+e.g. `infrx_lab_datasets`) sets nothing - it could not, and its grants are its own. A missing one exits 2
 naming it, never a value. `/livez` (every pass running), `/readyz` (that, and the database
 answers) and `/metrics` on 127.0.0.1 only; SIGTERM stops the passes and exits 0 (an
 unfinished lease expires and `lab_recover` returns it); a pass that ends exits 1.
@@ -84,7 +88,7 @@ from ...contracts.lab import records as lab
 from ...contracts.v2.records import Environment, Visibility
 from ...evaluation import checkpoints
 from ...evaluation.runner import HttpDevEndpoint
-from ...state.jobstore import connector
+from ...state.jobstore import connector, login_user
 from ...worker import __main__ as worker_main
 from ...worker.__main__ import every
 from ..compose import (  # noqa: F401 - A1: shared with the gateway, re-exported
@@ -213,6 +217,12 @@ def _traces(mode: str, env, objects=None, connect=None):
     except Exception as failure:          # noqa: BLE001 - every failure refuses startup
         raise RuntimeMisconfigured(mode, detail="CLICKHOUSE_URL or S3_TRACE_BUCKET did not "
                                                 f"answer ({type(failure).__name__})") from None
+
+
+def lab_connector(dsn: str):
+    """WR-AS3-3: `connector` for `LAB_DATABASE_URL` - an `infrx_*` role login never switches
+    role (False); any other login keeps I8's port rule (None: switch off the pooler only)."""
+    return connector(dsn, set_role=False if login_user(dsn).startswith("infrx_") else None)
 
 
 def database(connect):
@@ -600,7 +610,7 @@ def compose(role: str, env, *, objects=None, **sources) -> Worker:
     if role not in BUILD:
         raise RuntimeMisconfigured(mode, detail=f"the role must be one of {', '.join(ROLES)}")
     values = settings(mode, env, (DATABASE, PORT, *NEEDS[role]))
-    connect = connector(values[DATABASE])
+    connect = lab_connector(values[DATABASE])
     if BUCKET in values and objects is None:
         objects = lab_objects(mode, env)
     worker_id = f"lab-{role}-{uuid.uuid4().hex[:8]}"
@@ -625,7 +635,7 @@ async def emergency_rollback(env, policy_ref: str, reason: str) -> int:
     from ...rollouts.control import Controller
     from ...state.lab_data import PgLabDataStore
     from ...state.lab_rollout import PgReleaseStore
-    connect, operator = connector(values[DATABASE]), values["LAB_OPERATOR_ID"]
+    connect, operator = lab_connector(values[DATABASE]), values["LAB_OPERATOR_ID"]
     try:
         policy = await PgLabDataStore(connect).resolve(policy_ref,
                                                        provider_org_id=match.group(2))
@@ -662,7 +672,7 @@ async def launch_release(env, policy_ref: str, plan_path: str, reason: str) -> i
     except (OSError, ValueError) as unreadable:
         raise RuntimeMisconfigured(mode, detail=f"--plan is not R2's plan "
                                                 f"({type(unreadable).__name__})") from None
-    connect, provider = connector(values[DATABASE]), match.group(2)
+    connect, provider = lab_connector(values[DATABASE]), match.group(2)
     try:
         policy = await PgLabDataStore(connect).resolve(policy_ref, provider_org_id=provider)
         await write_once(lab_objects(mode, env), plan_key(provider, policy.policy_id),
@@ -725,7 +735,7 @@ async def decide_proposal(env, policy_ref: str, proposal_id: str, approve: bool,
     from ...rollouts.control import Controller
     from ...state.lab_data import PgLabDataStore
     from ...state.lab_rollout import PgReleaseProposals, PgReleaseStore
-    connect, operator, provider = connector(values[DATABASE]), values["LAB_OPERATOR_ID"], \
+    connect, operator, provider = lab_connector(values[DATABASE]), values["LAB_OPERATOR_ID"], \
         match.group(2)
     proposals, decided = PgReleaseProposals(connect), False
     try:

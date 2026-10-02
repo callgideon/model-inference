@@ -61,9 +61,12 @@ test("UX08-J04 a budget shows limit, reserved and settled each with its own unit
 test("UX08-J05 judge setup sits under Evaluations and says unreadable records are unavailable, not absent", () => {
   const page = read(PAGE);
   assert.match(page, /<PageHeader\s+title="Judge setup"\s+breadcrumb=\{\[\{ href: "\/evaluations", label: "Evaluations" \}\]\}/);
-  assert.match(page, /<JudgeRecords records=\{null\} \/>/);
+  // WR-UX08-3: the records come from the judge API's list reads (records.test.ts), null on any refusal.
+  assert.match(page, /const records = await readJudgeRecords\(workspace\);/);
+  assert.match(page, /<JudgeRecords records=\{records\} \/>/);
   const records = read("app/(provider)/judge/records.tsx");
   assert.match(records, /if \(records === null\)\s+return <ServiceState state="unavailable"/);
+  assert.match(records, /\{records\.more && <p>More configurations or runs exist than are shown here/);
   assert.match(page, /not ground truth/);
 });
 

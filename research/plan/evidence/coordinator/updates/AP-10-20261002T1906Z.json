@@ -1,0 +1,50 @@
+{
+  "task": "AP-10",
+  "lane": "lab-followups",
+  "slice": "housekeeping: remove unused NO_CATALOG + stale SR-AP10-1 503 docstring (infrx/lab/evaluation/__init__.py); inventory.py note: stand-in smoke consumer holds only while LAB_HOSTING is off",
+  "activity": "review",
+  "at": "2026-10-02T19:06:00Z",
+  "head": "5ba51971",
+  "base": "29b9df84",
+  "worktree": ".claude/worktrees/codex-w7-lab-followups",
+  "branch": "codex/w7-lab-followups",
+  "owned_paths": [
+    "apps/infrx-api/infrx/lab/evaluation/__init__.py",
+    "apps/infrx-api/infrx/contracts/openapi/inventory.py"
+  ],
+  "commands": [
+    {
+      "cmd": "make api-lint",
+      "exit": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "cmd": "make api-typecheck",
+      "exit": 0,
+      "summary": "pyright 457 errors (baseline 458)"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/contracts/test_openapi_export.py tests/ap10 -k 'not test_mutants'",
+      "exit": 0,
+      "summary": "43 passed, 27 skipped (ap10 PG cases NOT RUN: ap10 key held by api-improve-4)"
+    },
+    {
+      "cmd": "python3 research/plan/scripts/validate_plan.py",
+      "exit": 0,
+      "summary": "PASS"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "both slices green (lab-test 385/0/10 skipped real gates; mutants 65/65 + 74/74; api-lint clean; pyright 457 <= 458); remaining = review + merge check",
+    "at": "2026-10-02T19:06:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/w7/lab-followups-5ba5197.md"
+  ]
+}

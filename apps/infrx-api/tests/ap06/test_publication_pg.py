@@ -23,7 +23,8 @@ from infrx.state.jobstore import connector
 from tests.d import pgharness
 
 from .conftest import CASE, pg_unavailable
-from .support import ALIAS, Api, approval, proposed, ready_dev, run, session
+from .support import (ALIAS, IDS, Api, approval, operator_actor, proposed, ready_dev, run,
+                      session)
 
 pytestmark = [pytest.mark.pg, pytest.mark.skipif(
     pg_unavailable() is not None, reason=str(pg_unavailable()))]
@@ -126,3 +127,99 @@ def test_publication_pg__a_dev_key_is_issued_once_on_postgres(pg_world):
                             "replayed": True}
     assert w.conn.execute("select count(*) from public.api_keys where endpoint_id = %s",
                           (d.endpoint_id,)).fetchone()[0] == 1
+
+
+LOGIN_PASSWORD = "infrx-ap6-role-login"       # the task-local container's only
+
+
+def login(w, role: str) -> str:
+    """A direct DSN for `role` (0043/0068 leave the Lab roles to the operator's login)."""
+    w.conn.execute(f"alter role {role} login password '{LOGIN_PASSWORD}'")
+    return w.dsn.replace(f"postgres:{pgharness.PASSWORD}@", f"{role}:{LOGIN_PASSWORD}@")
+
+
+def test_publication_pg__dev_keys_and_the_wallet_answer_from_0068s_doors(pg_world):
+    """WR-AS3-2, composed as the Lab unit composes it: `PgDevCredentials` on the control
+    login (`infrx_lab_control`, set_role=False). Oracle: a provider's wallet is closed at 0 CREDIT, then
+    exactly the operator's grant (the seeded provider's balance as stored); the listing names the issued key (never its hash); a revoke
+    is 200 and another key's replay answers the first `revoked_at` with one audit entry, the
+    revoker's, keyed by the first request; another provider's scope, the prod endpoint and a
+    malformed id are 404 - never an empty list or a 500."""
+    from infrx.lab.publication import PgDevCredentials
+    w = pg_world
+    _, d = ready_dev(w)
+    creds = PgDevCredentials(connector(login(w, "infrx_lab_control"), set_role=False))
+    a = Api(w, ops=PgControlOps(connector(w.dsn)), credentials=creds).as_(session(w.DEV_A))
+    path, wallet = f"/lab/v1/control/endpoints/{d.endpoint_id}/keys", "/lab/v1/control/dev-wallet"
+    seeded = a.get(wallet, provider_org_id=w.A)
+    assert seeded.status_code == 200, seeded.text
+    assert seeded.json() == {"provider_org_id": w.A, "opened": True,
+                             "balance": {"amount": "500.00000000", "unit": "CREDIT"}}
+    issued = a.post(path, {"name": "ci"}, key="pg-devkey-2", provider_org_id=w.A).json()
+    listed = a.get(path, provider_org_id=w.A)
+    assert listed.status_code == 200, listed.text
+    [row] = listed.json()["data"]
+    assert row == {**row, "key_id": issued["key_id"], "endpoint_id": d.endpoint_id,
+                   "name": "ci", "prefix": issued["prefix"], "revoked_at": None}
+
+    def revoke(key_id, key, provider=w.A):
+        return a.client.delete(f"{path}/{key_id}", params={"provider_org_id": provider},
+                               headers={"Idempotency-Key": key})
+    first = revoke(issued["key_id"], "pg-revoke-1")
+    assert first.status_code == 200 and first.json()["revoked_at"], first.text
+    assert revoke(issued["key_id"], "pg-revoke-2").json() == first.json()
+    assert w.conn.execute(
+        "select actor_principal, idempotency_key from infrx.audit_entries where "
+        "after->>'key_id' = %s", (issued["key_id"],)).fetchall() == [
+        (f"lab:{w.DEV_A}", f"lab_dev_key_revoke:{issued['key_id']}:pg-revoke-1")]
+    assert [k["revoked_at"] for k in a.get(path, provider_org_id=w.A).json()["data"]] \
+        == [first.json()["revoked_at"]]
+    prod = run(w.control_store.deployment(IDS.prod_deployment)).endpoint_id
+    assert a.get(f"/lab/v1/control/endpoints/{prod}/keys", provider_org_id=w.A).status_code \
+        == 404
+    assert a.get("/lab/v1/control/endpoints/not-a-uuid/keys",
+                 provider_org_id=w.A).status_code == 404
+    assert revoke("not-a-uuid", "pg-revoke-3").status_code == 404
+    a.as_(session(w.DEV_B))
+    assert a.get(path, provider_org_id=w.B).status_code == 404
+    assert revoke(issued["key_id"], "pg-revoke-4", w.B).status_code == 404
+    assert a.get(wallet, provider_org_id=w.B).json() == {
+        "provider_org_id": w.B, "opened": False,
+        "balance": {"amount": "0.00000000", "unit": "CREDIT"}}
+    a.as_(operator_actor(w))
+    assert a.post("/operator/v1/dev-wallet-grants", {"provider_org_id": w.B, "amount": "12.5",
+                                                     "reason": "preview budget"},
+                  key="pg-fund-2").status_code == 201
+    assert a.as_(session(w.DEV_B)).get(wallet, provider_org_id=w.B).json() == {
+        "provider_org_id": w.B, "opened": True,
+        "balance": {"amount": "12.50000000", "unit": "CREDIT"}}
+
+
+def test_publication_pg__a_role_login_connects_without_the_switch_and_the_service_login_switches(
+        pg_world, tmp_path):
+    """WR-AS3-3: the Lab workers' connector on a direct (non-pooler) DSN. Oracle: a worker
+    composed on the datasets role's own login (0068, member of nothing) is ready, and that
+    login runs as itself; the service login still runs as `service_role`."""
+    from infrx.lab.workers import __main__ as lab_workers
+    from infrx.media.store import InMemoryObjectStore
+    w = pg_world
+    role = login(w, "infrx_lab_datasets")
+
+    def answer(coro):          # a refused login is a compared outcome, not a crash
+        try:
+            return run(coro)
+        except Exception as refused:          # noqa: BLE001
+            return f"{type(refused).__name__}: {refused}"
+
+    async def current_user(dsn):
+        conn = await lab_workers.lab_connector(dsn)()
+        try:
+            return (await (await conn.execute("select current_user")).fetchone())[0]
+        finally:
+            await conn.close()
+    worker = lab_workers.compose("checkpoints", {
+        "LAB_DATABASE_URL": role, "LAB_WORKER_HEALTH_PORT": "18013",
+        "LAB_S3_BUCKET": "infrx-lab"}, objects=InMemoryObjectStore())
+    assert answer(worker.ready()) is True
+    assert answer(current_user(role)) == "infrx_lab_datasets"
+    assert answer(current_user(w.dsn)) == "service_role"

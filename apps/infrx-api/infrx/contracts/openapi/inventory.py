@@ -40,6 +40,8 @@ CONSUMERS: tuple[tuple[str, str], ...] = (
     ("GET /lab/v1/control/proposals", f"{LAB}/control/http.ts proposals"),
     ("GET /lab/v1/control/aggregates", f"{LAB}/control/http.ts aggregates"),
     ("POST /lab/v1/control/register", f"{LAB}/control/http.ts register"),
+    # The stand-in smoke's consumer holds only while LAB_HOSTING is off: with `rt.lab_hosting`
+    # composed, AP-05's hosting routes own this path (lab_control.py, WR-AP05-2).
     ("POST /lab/v1/control/deployments/{deployment_revision_id}/smoke",
      f"{LAB}/control/http.ts smoke"),
     ("POST /lab/v1/control/proposals", f"{LAB}/control/http.ts propose"),

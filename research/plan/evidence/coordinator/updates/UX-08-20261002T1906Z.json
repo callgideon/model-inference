@@ -1,0 +1,56 @@
+{
+  "task": "UX-08",
+  "lane": "lab-followups",
+  "slice": "WR-UX08-3: judge page JudgeRecords from GET /lab/v1/judge/{configs,runs,budgets} via lib/services/judge/records.ts (fail-closed null = unavailable; more flag); UX08-K01..K05 + X48..X65",
+  "activity": "review",
+  "at": "2026-10-02T19:06:00Z",
+  "head": "5ba51971",
+  "base": "29b9df84",
+  "worktree": ".claude/worktrees/codex-w7-lab-followups",
+  "branch": "codex/w7-lab-followups",
+  "owned_paths": [
+    "apps/lab/app/(provider)/judge/",
+    "apps/lab/lib/services/judge/records.ts",
+    "apps/lab/tests/ux/evaluations/"
+  ],
+  "commands": [
+    {
+      "cmd": "node --test tests/ux/evaluations/records.test.ts tests/ux/evaluations/judge.test.ts (before slice 1)",
+      "exit": 1,
+      "summary": "red: records.ts missing; UX08-J05 fails on records={null}"
+    },
+    {
+      "cmd": "make lab-test",
+      "exit": 0,
+      "summary": "395: 385 pass, 0 fail, 10 skipped (real-service gates, NOT RUN)"
+    },
+    {
+      "cmd": "make lab-lint / lab-typecheck / lab-build",
+      "exit": 0,
+      "summary": "0 errors (1 pre-existing warning, not owned) / clean / built"
+    },
+    {
+      "cmd": "node tests/ux/evaluations/run-mutants.mjs",
+      "exit": 0,
+      "summary": "65 mutants, 65 killed; 25 cases all named"
+    },
+    {
+      "cmd": "node tests/c/judge/run-mutants.mjs",
+      "exit": 0,
+      "summary": "74 mutants, 74 killed; 19 cases all named"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "high",
+    "basis": "both slices green (lab-test 385/0/10 skipped real gates; mutants 65/65 + 74/74; api-lint clean; pyright 457 <= 458); remaining = review + merge check",
+    "at": "2026-10-02T19:06:00Z"
+  },
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": [
+    "research/plan/evidence/w7/lab-followups-5ba5197.md"
+  ]
+}
