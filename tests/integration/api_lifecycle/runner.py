@@ -95,8 +95,6 @@ def load_config(path: Path | None, mode: str) -> dict:
             problems.append("origins")
         if not config.get("identities"):
             problems.append("identities")
-        if not config.get("target"):
-            problems.append("target")
         try:
             api.Money.model_validate(config.get("budget") or {})
         except ValueError:
@@ -172,8 +170,7 @@ class Context:
         secret = found["secret"]
         fixture = secret in (self.config.get("fixtures") or {})
         if found.get("audience") == "consumer" \
-                and name not in self.session.state.data.get("minted", {}) \
-                and (self.mode == "live" or not fixture):
+                and name not in self.session.state.data.get("minted", {}) and not fixture:
             raise Blocked(f"BLOCKED[AP-03] {name}'s consumer key must be created through POST "
                           "/console/v1/keys (stage 08); a seeded key is only an isolated "
                           "mode's declared fixture")
@@ -288,13 +285,16 @@ class Context:
         self.ev["owned"].append({"kind": kind, "id": resource_id})
 
 
-def run_stages(session: Session, selected: set[str]) -> list[dict]:
-    results, stop = [], None
+def run_stages(session: Session, selected: set[str], results: list[dict]) -> list[dict]:
+    """Appends each stage's entry to `results` as it goes, so an INVALID run still reports
+    what ran before it."""
+    stop = None
     for stage in contracts.STAGES:
         entry = {"id": stage.sid, "title": stage.title, "proves": stage.proves,
                  "selected": stage.sid in selected, "status": NOT_RUN, "reasons": [],
                  "routes": [f"{r}" + (f" [{r.owner}]" if r.owner else "") for r in stage.routes],
-                 "prerequisites": list(stage.prerequisites), "resumed": False, "evidence": None}
+                 "needs": list(stage.needs), "prerequisites": list(stage.prerequisites),
+                 "resumed": False, "evidence": None}
         results.append(entry)
         if not entry["selected"]:
             entry["reasons"].append(f"not selected in {session.mode} mode / --only")
@@ -316,8 +316,6 @@ def run_stages(session: Session, selected: set[str]) -> list[dict]:
         evidence, blocked = new_evidence(), []
         ctx = Context(session, stage.sid, evidence)
         try:
-            for need in stage.needs:
-                ctx.outputs(need)
             stage.run(ctx)
         except Blocked as why:
             blocked.append(str(why))
@@ -337,8 +335,9 @@ def run_stages(session: Session, selected: set[str]) -> list[dict]:
         evidence["ended"] = utc_now()
         status = status_of([a["ok"] for a in evidence["assertions"]], blocked, missing)
         entry.update(status=status, evidence=evidence, reasons=blocked + missing)
-        session.state.data["stages"][stage.sid] = {
-            "status": status, "outputs": ctx.published, "at": utc_now(), "evidence": evidence}
+        session.state.data["stages"][stage.sid] = {     # redacted here too: no echo leaks
+            "status": status, "outputs": ctx.published, "at": utc_now(),
+            "evidence": session.secrets.redact(evidence)}
         session.state.save()
     return results
 
@@ -404,7 +403,7 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
         with sources(args) as (config_path, secrets_path):
             config = load_config(config_path, args.mode)
             secrets = Secrets.load(secrets_path)
-            state = State.open(args.state, target=config["target"])
+            state = State.open(args.state, target=config.get("target"))
             session = Session(args.mode, config, secrets, state, transport)
             if args.mode == "cleanup":
                 rows = cleanup(session)
@@ -414,7 +413,7 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
                 selected = {s.sid for s in contracts.STAGES
                             if (s.reads_only or args.mode != "inspect")
                             and (not only or s.sid in only)}
-                results = run_stages(session, selected)
+                run_stages(session, selected, results)
                 verdict = worst(r["status"] for r in results if r["selected"])
     except InvalidRun as invalid:
         verdict, reasons = INVALID, [f"INVALID {invalid}"]

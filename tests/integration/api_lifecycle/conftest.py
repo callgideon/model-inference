@@ -22,12 +22,21 @@ SESSIONS = {"eyJhbGci.eyJzdWIi.adminSIG": ("admin", True), "eyJhbGci.eyJzdWIi.ou
 PROVIDER = "b0000001-0000-4000-8000-000000000001"
 
 
+#: Product defects the fake can be told to have, each one a stage's failure oracle.
+DEFECTS = ("replay_new_job", "conflict_accepted", "artifact_upload", "foreign_read",
+           "result_model", "no_usage", "sse_no_done", "sse_plain", "sse_wrong_model",
+           "sync_async", "sync_no_usage", "no_member", "outsider_member", "forged_accepted",
+           "anon_allowed", "key_unauthenticated")
+
+
 class FakeGateway:
     """The base's consumer routes and the Lab session read, as their wire contracts state
     them. `lose_ack` names "METHOD path" whose NEXT call commits and then times out (a lost
-    acknowledgement: the server did the work, the client never heard)."""
+    acknowledgement: the server did the work, the client never heard). `defects` turns on
+    named product defects (DEFECTS)."""
 
     def __init__(self) -> None:
+        self.defects: set[str] = set()
         self.sent: list[tuple[str, str, str | None]] = []
         self.jobs: dict[str, dict] = {}
         self.idem: dict[tuple[str, str], tuple[str, str]] = {}
@@ -60,12 +69,19 @@ class FakeGateway:
                 {"id": m, "object": "model", "owned_by": "nemostation"} for m in self.models]})
         if path == "/lab/v1/control/models":
             token = request.headers.get("authorization", "").removeprefix("Bearer ")
-            if token not in SESSIONS:
+            if token not in SESSIONS and "forged_accepted" not in self.defects:
                 return httpx.Response(401, json={"refusal": "unauthenticated"})
-            member = SESSIONS[token][1] and request.url.params.get("provider_org_id") == PROVIDER
+            member = SESSIONS.get(token, ("", True))[1] \
+                and request.url.params.get("provider_org_id") == PROVIDER
+            member = (member and "no_member" not in self.defects) \
+                or (not member and "outsider_member" in self.defects)
             return httpx.Response(200 if member else 403,
                                   json={"models": []} if member else {"refusal": "not_a_member"})
         org = self._org(request)
+        if path == "/v1/jobs/job_ap11probe" and (
+                (org is None and "anon_allowed" in self.defects)
+                or (org is not None and "key_unauthenticated" in self.defects)):
+            return httpx.Response(404 if org is None else 401, json={"error": {}})
         if org is None:
             return httpx.Response(401, json={"error": {"code": "invalid_api_key"}})
         if method == "POST" and path == "/v1/uploads":
@@ -75,20 +91,24 @@ class FakeGateway:
         if method == "PUT" and path.startswith("/v1/uploads/"):
             return httpx.Response(204)
         if method == "POST" and path.endswith("/complete"):
-            return httpx.Response(200, json={"upload_handle": path.split("/")[3],
-                                             "state": "finalized", "media": {"kind": "video"}})
+            return httpx.Response(200, json={
+                "upload_handle": path.split("/")[3], "state": "finalized",
+                "media": {"kind": "video"},
+                **({"artifact_id": "art_1"} if "artifact_upload" in self.defects else {})})
         if method == "POST" and path in ("/v1/jobs", "/v1/chat/completions"):
             return self.infer(request, org, path)
         if method == "GET" and path.startswith("/v1/jobs/"):
             handle = path.split("/")[3]
             job = self.jobs.get(handle)
-            if job is None or job["org"] != org:
+            if job is None or (job["org"] != org and "foreign_read" not in self.defects):
                 return httpx.Response(404, json={"error": {"code": "not_found"}})
             if path.endswith("/result"):
                 return httpx.Response(200, json={
                     "job_handle": handle, "request_id": job["request_id"], "state": "succeeded",
-                    "cause": "completed", "usage": {"prompt_tokens": 9, "completion_tokens": 3},
-                    "response": {"model": job["model"], "object": "chat.completion",
+                    "cause": "completed", "usage": None if "no_usage" in self.defects
+                    else {"prompt_tokens": 9, "completion_tokens": 3},
+                    "response": {"model": "other" if "result_model" in self.defects
+                                 else job["model"], "object": "chat.completion",
                                  "choices": [{"message": {"content": "a van"}}]}})
             return httpx.Response(200, json={"job_handle": handle, "state": "succeeded",
                                              "request_id": job["request_id"]})
@@ -101,10 +121,10 @@ class FakeGateway:
         replayed = False
         if key is not None and (org, key) in self.idem:
             seen, handle = self.idem[(org, key)]
-            if seen != digest:
+            if seen != digest and "conflict_accepted" not in self.defects:
                 return httpx.Response(409, json={"error": {"code": "idempotency_conflict"}})
             replayed = True
-        else:
+        if not replayed or "replay_new_job" in self.defects:
             self.created += 1
             handle = f"job_{uuid.uuid4().hex}"
             self.jobs[handle] = {"org": org, "request_id": str(uuid.uuid4()),
@@ -117,13 +137,17 @@ class FakeGateway:
                                              "request_id": job["request_id"], "state": "queued",
                                              "idempotency_replayed": replayed})
         if body.get("stream"):
-            chunk = {"object": "chat.completion.chunk", "model": job["model"],
-                     "choices": [{"delta": {"content": "a van"}}]}
-            text = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n"
-            return httpx.Response(200, text=text, headers={"content-type": "text/event-stream"})
-        return httpx.Response(200, json={"object": "chat.completion", "model": job["model"],
-                                         "choices": [{"message": {"content": "a van"}}],
-                                         "usage": {"prompt_tokens": 9, "completion_tokens": 3}})
+            chunk = {"object": "chat.completion.chunk", "choices": [{"delta": {"content": "x"}}],
+                     "model": "other" if "sse_wrong_model" in self.defects else job["model"]}
+            text = f"data: {json.dumps(chunk)}\n\n" + \
+                ("" if "sse_no_done" in self.defects else "data: [DONE]\n\n")
+            kind = "application/json" if "sse_plain" in self.defects else "text/event-stream"
+            return httpx.Response(200, text=text, headers={"content-type": kind})
+        return httpx.Response(202 if "sync_async" in self.defects else 200, json={
+            "object": "chat.completion", "model": job["model"],
+            "choices": [{"message": {"content": "a van"}}],
+            **({} if "sync_no_usage" in self.defects
+               else {"usage": {"prompt_tokens": 9, "completion_tokens": 3}})})
 
 
 @pytest.fixture

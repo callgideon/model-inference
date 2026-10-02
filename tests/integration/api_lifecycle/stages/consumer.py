@@ -59,10 +59,10 @@ def s08(ctx) -> None:
     world's declared fixture until stage 07 publishes one through AP-06."""
     listed = ctx.call("GET", "/v1/models")
     rows = {row.get("id"): row for row in _json(listed).get("data", []) if isinstance(row, dict)}
-    model = ctx.config["model"]
+    row = rows.get(ctx.config["model"])
     ctx.require("the catalog lists the model under test",
-                listed.status_code == 200 and model in rows, sorted(rows))
-    ctx.version("listing", {k: v for k, v in rows[model].items()
+                listed.status_code == 200 and row is not None, sorted(rows))
+    ctx.version("listing", {k: v for k, v in (row or {}).items()
                             if k in ("id", "owned_by", "created", "listing_version")})
 
 
@@ -133,8 +133,7 @@ def s10(ctx) -> None:
         if state in FINISHED or time.monotonic() > deadline:
             break
         time.sleep(float(ctx.config.get("poll_interval_s", 0.5)))
-    ctx.require("the job reached a terminal state", state in FINISHED, state)
-    ctx.check("the job succeeded", state == "succeeded", state)
+    ctx.require("the job succeeded", state == "succeeded", state)
     result = _json(ctx.call("GET", "/v1/jobs/{handle}/result", params=handle, actor=actor))
     ctx.check("the result names the model under test",
               (result.get("response") or {}).get("model") == ctx.config["model"],
@@ -148,7 +147,9 @@ def s10(ctx) -> None:
 def _sse(response) -> dict:
     frames = [line[6:] for line in response.text.splitlines() if line.startswith("data: ")]
     chunks = []
-    for frame in frames[:-1]:
+    for frame in frames:
+        if frame == "[DONE]":
+            continue
         try:
             chunks.append(json.loads(frame))
         except ValueError:

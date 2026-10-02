@@ -30,7 +30,9 @@ def run(files, gateway, *extra: str, mode: str = "isolated"):
 
 
 def stage(verdict: dict, sid: str) -> dict:
-    return next(entry for entry in verdict["stages"] if entry["id"] == sid)
+    found = [entry for entry in verdict["stages"] if entry["id"] == sid]
+    assert found, f"no stage {sid} in the verdict: {verdict['reasons']}"
+    return found[0]
 
 
 def edit(path: Path, **changes) -> None:
@@ -117,11 +119,11 @@ def test_ap11_restart_reconciles_a_recorded_mutation_by_get_and_never_resends_it
     assert code == 3
     before = len(gateway.sent)
     run(files, gateway)
-    resumed = gateway.sent[before:]
+    resumed = [(m, p) for m, p, _ in gateway.sent[before:]
+               if p.startswith("/v1/jobs") and "ap11probe" not in p]       # 01's probe aside
+    handle = json.loads(files[2].read_text())["mutations"]["09.job"]["outputs"]["job_handle"]
     assert len(gateway.posts("/v1/uploads")) == 1
-    first_job_call = next(i for i, (m, p, _) in enumerate(resumed) if p.startswith("/v1/jobs"))
-    method, path, _ = resumed[first_job_call]
-    assert method == "GET" and path.startswith("/v1/jobs/job_"), resumed
+    assert resumed[0] == ("GET", f"/v1/jobs/{handle}"), resumed
 
 
 def test_ap11_a_finished_stage_is_not_repeated_on_restart(files, gateway):
@@ -185,6 +187,12 @@ def test_ap11_inspect_mode_sends_only_reads(files, gateway):
     assert {method for method, _, _ in gateway.sent} == {"GET"}
     assert stage(verdict, "09")["selected"] is False and stage(verdict, "09")["status"] == "NOT RUN"
     assert code == 3 and verdict["complete_lifecycle"] is False
+    owned = st.State.open(files[2], target="fake-gateway")      # a stage misdeclared reads-only
+    session = runner.Session("inspect", {"origins": {"gateway": "http://g.test"}},
+                             st.Secrets({}), owned, gateway.transport)
+    with pytest.raises(st.InvalidRun):
+        runner.Context(session, "01", runner.new_evidence()).call("POST", "/v1/uploads")
+    assert {method for method, _, _ in gateway.sent} == {"GET"}
 
 
 def test_ap11_cleanup_touches_only_state_owned_resources(files, gateway):
@@ -213,7 +221,9 @@ def test_ap11_exit_codes_and_the_gate_follow_environment_md(files, gateway):
 
 
 def test_ap11_no_secret_reaches_the_verdict_the_output_or_the_state(files, gateway, capsys):
-    """Broken: a key, session, DSN password or Authorization header in evidence or logs."""
+    """Broken: a key, session, DSN password or Authorization header in evidence or logs -
+    including a credential a server echoes back into an assertion's detail."""
+    gateway.models = [MODEL, SECRET_VALUES[0]]
     run(files, gateway)
     seen = capsys.readouterr().out + files[3].joinpath("verdict.json").read_text() \
         + files[2].read_text()
@@ -286,6 +296,10 @@ def test_ap11_a_dependent_stage_is_blocked_while_its_predecessor_has_not_passed(
     assert stage(verdict, "10")["status"] == "BLOCKED"
     assert "needs stage 09" in " ".join(stage(verdict, "10")["reasons"])
     assert stage(verdict, "09")["selected"] is False and gateway.sent == []
+    earlier = st.State.open(files[2], target="fake-gateway")    # 09 ran but did not pass
+    earlier.checkpoint("09", "BLOCKED", {"job_handle": "job_stale"})
+    code, verdict = run(files, gateway, "--only", "10")
+    assert stage(verdict, "10")["status"] == "BLOCKED" and gateway.sent == []
 
 
 def test_ap11_every_stage_records_utc_times_routes_statuses_ids_and_counters(files, gateway):
@@ -311,7 +325,7 @@ def test_ap11_the_consumer_stages_prove_their_rows_on_the_mounted_routes(files, 
     assert {"a replay returns the same job", "a changed body under the key is 409"} \
         <= set(checks(stage(verdict, "09")))
     ten = checks(stage(verdict, "10"))
-    assert ten == {"the job reached a terminal state": True, "the job succeeded": True,
+    assert ten == {"the job succeeded": True,
                    "the result names the model under test": True, "the result reports usage": True,
                    "consumer B cannot read A's job": True}
     eleven = checks(stage(verdict, "11"))
@@ -326,6 +340,23 @@ def test_ap11_the_consumer_stages_prove_their_rows_on_the_mounted_routes(files, 
                    "a non-member session is refused": True,
                    "a forged session is refused 401": True}
     assert {stage(verdict, s)["status"] for s in ("01", "10", "11")} == {"BLOCKED"}
+
+
+FAILS = {"replay_new_job": "09", "conflict_accepted": "09", "artifact_upload": "09",
+         "foreign_read": "10", "result_model": "10", "no_usage": "10", "sse_no_done": "11",
+         "sse_plain": "11", "sse_wrong_model": "11", "sync_async": "11", "sync_no_usage": "11",
+         "no_member": "01", "outsider_member": "01", "forged_accepted": "01",
+         "anon_allowed": "01", "key_unauthenticated": "01"}
+
+
+@pytest.mark.parametrize("defect", sorted(FAILS))
+def test_ap11_a_product_defect_fails_its_stage(files, gateway, defect):
+    """Broken: an assertion that cannot see the defect its row exists to catch - the stage
+    stays BLOCKED/PASS on a second job, a foreign read, a lost end frame or a 202 sync."""
+    gateway.defects.add(defect)
+    code, verdict = run(files, gateway)
+    assert stage(verdict, FAILS[defect])["status"] == "FAIL" and code == 1, \
+        stage(verdict, FAILS[defect])["evidence"]["assertions"]
 
 
 def test_ap11_a_stage_that_asserted_nothing_is_never_a_pass():
