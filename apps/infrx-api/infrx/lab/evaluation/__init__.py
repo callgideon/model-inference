@@ -14,8 +14,7 @@ the E6L/LAB-E2E backends composed in their stead; it adds no table and no RPC.
 * `Subscriptions` - WR-B3-1: D8's `PgCheckpointLedger`, its 0043 listing flattened to the
   route's row (`{...subscription, decisions}`).
 * `Catalog` - WR-LAB2-2: the evaluator spec by ref is 0034's `lab_evaluator`; the launch
-  catalog needs harness, evaluator and serving listings no SQL function returns yet, so it is
-  the honest 503 naming that request (SR-AP10-1).
+  catalog is 0066's `infrx.lab_eval_catalog` (SR-AP10-1, carried since merge #100).
 """
 from __future__ import annotations
 
@@ -26,9 +25,6 @@ from ...contracts import errors
 from ...evaluation.reports import _digest
 from ...gateway.routes import lab_evaluations as le
 
-#: SR-AP10-1 (schema request): the launch catalog's listings.
-NO_CATALOG = ("the evaluation catalog needs the harness, evaluator and serving listings "
-              "(SR-AP10-1: infrx.lab_eval_catalog)")
 #: SR-AP10-1 (b): 0043's listing names a run only by its status, so no ref before `freeze`.
 NO_REFS = ("an experiment stored before its runs were created needs its run refs in "
            "infrx.lab_experiments' listing (SR-AP10-1)")
@@ -128,7 +124,7 @@ class Subscriptions:
 
 
 class Catalog:
-    """`lab_evaluations.Catalog`: the evaluator by ref (0034); the listing is SR-AP10-1's."""
+    """`lab_evaluations.Catalog`: the evaluator by ref (0034) and 0066's launch listing."""
 
     def __init__(self, store) -> None:
         self.store = store
