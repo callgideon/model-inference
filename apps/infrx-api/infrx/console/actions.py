@@ -176,18 +176,25 @@ class ConsoleActions:
         self._connect = connect
 
     @asynccontextmanager
-    async def _as(self, user_id: str, role: str | None = None):
-        """One transaction acting as `user_id` (and as `role`, transaction-local, when the
-        functions are granted to `authenticated` only); database errors typed, an outage a
-        503."""
+    async def _as(self, user_id: str, *, authenticated: bool = False):
+        """One transaction acting as `user_id` (and as the `authenticated` role, transaction-
+        local, for functions granted to it only); database errors typed, an outage a 503.
+        Explicit BEGIN/COMMIT on `execute` alone: the gateway pool's connection (`pilot.
+        _Pooled`) is execute + close, and a pooled connection never leaves mid-transaction."""
         from psycopg import Error, OperationalError
         try:
-            async with rpc.connection(self._connect) as conn, conn.transaction():
-                await conn.execute("select set_config('request.jwt.claims', %s, true)",
-                                   (json.dumps({"sub": user_id, "role": "authenticated"}),))
-                if role is not None:
-                    await conn.execute(f"set local role {role}")
-                yield conn
+            async with rpc.connection(self._connect) as conn:
+                await conn.execute("begin")
+                try:
+                    await conn.execute("select set_config('request.jwt.claims', %s, true)",
+                                       (json.dumps({"sub": user_id, "role": "authenticated"}),))
+                    if authenticated:
+                        await conn.execute("set local role authenticated")
+                    yield conn
+                except BaseException:
+                    await conn.execute("rollback")
+                    raise
+                await conn.execute("commit")
         except OperationalError:
             raise errors.DependencyUnavailable("the account database is unreachable",
                                                retry_after_s=5) from None
@@ -290,7 +297,7 @@ class ConsoleActions:
         key = bounded(idempotency_key, "Idempotency-Key", MAX_IDEMPOTENCY_KEY)
         # 0025 grants the three functions to `authenticated` only (is_operator() inside
         # decides), exactly as PostgREST calls them for a browser session.
-        async with self._as(user_id, "authenticated") as conn:
+        async with self._as(user_id, authenticated=True) as conn:
             doc, = await self._one(conn, sql, (*args, reason, key))
         return doc
 

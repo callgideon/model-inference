@@ -26,7 +26,6 @@ import pytest
 from infrx.auth.context import KEY_COLUMNS, AuthResolver
 from infrx.console.actions import ConsoleActions
 from infrx.contracts import api, errors
-from infrx.state.jobstore import connector
 
 from tests.d import pgharness
 
@@ -70,7 +69,9 @@ def person(w, *, confirmed=True, operator=False) -> api.Actor:
 
 
 def actions(w) -> ConsoleActions:
-    return ConsoleActions(connector(w.dsn))
+    """Over the gateway pool's connection shape (execute + close), as composed."""
+    from tests.ap03.racer import pooled
+    return ConsoleActions(pooled(w.dsn))
 
 
 def keys_of(w, org) -> list[tuple]:
@@ -327,3 +328,33 @@ def test_operator_pg__a_forged_operator_actor_is_refused_by_the_database(w):
     refused(errors.Forbidden, actions(w).set_suspension(forged, str(victim.org_id), True, REASON, "forged-1"))
     assert w.one("select suspended from public.organizations where id = %s",
                  (victim.org_id,)) is False
+
+
+def test_operator_pg__the_routes_compose_over_the_repository(w):
+    """The operator route over the real repository: 201 then a 200 replay, both no-store.
+    Oracle: the 0025 functions called as `service_role` (EXECUTE is `authenticated`'s only:
+    a 500), or the composition lost the replay."""
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+
+    from infrx.gateway import control
+    from infrx.gateway.routes import operator_actions
+    operator, consumer = person(w, operator=True), person(w)
+    run(actions(w).claim_grant(consumer))
+    app = FastAPI()
+    operator_actions.register(app, SimpleNamespace(actors=control.StaticActors(operator),
+                                                   console_actions=actions(w)))
+
+    async def post():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://api.test") as client:
+            return await client.post("/operator/v1/credit-adjustments",
+                                     json={"user_id": consumer.user_id, "amount": "-1",
+                                           "reason": REASON},
+                                     headers={"Idempotency-Key": "route-adj-1"})
+    first, again = run(post()), run(post())
+    assert (first.status_code, again.status_code) == (201, 200), first.text
+    assert first.json()["amount"] == {"amount": "-1.00000000", "unit": "CREDIT"}
+    assert again.json()["replayed"] is True
+    assert first.headers["cache-control"] == again.headers["cache-control"] == "no-store"

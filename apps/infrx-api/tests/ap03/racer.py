@@ -20,11 +20,37 @@ from infrx.gateway.routes import console_actions
 from infrx.state.jobstore import connector
 
 
+class ExecuteOnly:
+    """The gateway pool's connection shape (`pilot._Pooled`): execute and close only. A
+    pooled connection goes back to the pool, so it must come back outside any transaction:
+    `close` asserts it (a committed or rolled-back write), then closes the real one."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def execute(self, *args, **kw):
+        return self._conn.execute(*args, **kw)
+
+    async def close(self) -> None:
+        from psycopg.pq import TransactionStatus
+        status = self._conn.info.transaction_status
+        await self._conn.close()
+        assert status == TransactionStatus.IDLE, f"returned to the pool {status.name}"
+
+
+def pooled(dsn: str):
+    raw = connector(dsn)
+
+    async def connect():
+        return ExecuteOnly(await raw())
+    return connect
+
+
 async def main(dsn: str, kind: str, user: str, org: str, n: int) -> list[dict]:
     app = FastAPI()
     actor = api.Actor(audience="session", user_id=user, org_id=org)
     console_actions.register(app, SimpleNamespace(
-        actors=control.StaticActors(actor), console_actions=ConsoleActions(connector(dsn)),
+        actors=control.StaticActors(actor), console_actions=ConsoleActions(pooled(dsn)),
         feedback=None))
     path, body, headers = (("/console/v1/keys", {"name": "raced"}, {"Idempotency-Key": "race-1"})
                            if kind == "key" else ("/console/v1/signup-grant/claim", None, {}))
