@@ -1,0 +1,2518 @@
+{
+  "components": {
+    "schemas": {
+      "Deployment": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_revision_id": {
+            "title": "Deployment Revision Id",
+            "type": "string"
+          },
+          "environment": {
+            "enum": [
+              "dev",
+              "prod"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "rate_card_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Card Version"
+          },
+          "revision_label": {
+            "title": "Revision Label",
+            "type": "string"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "serving_version_id": {
+            "title": "Serving Version Id",
+            "type": "string"
+          },
+          "smoke": {
+            "enum": [
+              "none",
+              "passed",
+              "failed"
+            ],
+            "title": "Smoke",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment_revision_id",
+          "model_id",
+          "serving_version_id",
+          "revision_label",
+          "runtime",
+          "schema_version",
+          "rate_card_version",
+          "environment",
+          "visibility",
+          "state",
+          "smoke",
+          "created_at"
+        ],
+        "title": "Deployment",
+        "type": "object"
+      },
+      "DeploymentAggregate": {
+        "additionalProperties": false,
+        "description": "The default, redacted read: counts per own deployment and window. Closed, so a\nrow that carries any identity column (user, org, key, request) is refused rather\nthan passed through.",
+        "properties": {
+          "deployment_revision_id": {
+            "title": "Deployment Revision Id",
+            "type": "string"
+          },
+          "errors": {
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "p95_latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Latency Ms"
+          },
+          "requests": {
+            "minimum": 0.0,
+            "title": "Requests",
+            "type": "integer"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deployment_revision_id",
+          "window_start",
+          "window_end",
+          "requests",
+          "errors"
+        ],
+        "title": "DeploymentAggregate",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Model": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_digest": {
+            "title": "Artifact Digest",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "registered_at": {
+            "format": "date-time",
+            "title": "Registered At",
+            "type": "string"
+          },
+          "revision_label": {
+            "title": "Revision Label",
+            "type": "string"
+          },
+          "runtime": {
+            "title": "Runtime",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "revision_label",
+          "artifact_digest",
+          "schema_version",
+          "runtime",
+          "registered_at"
+        ],
+        "title": "Model",
+        "type": "object"
+      },
+      "Proposal": {
+        "additionalProperties": false,
+        "properties": {
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "deployment_revision_id": {
+            "title": "Deployment Revision Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "publish",
+              "rollback"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposed_at": {
+            "format": "date-time",
+            "title": "Proposed At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "proposed",
+              "approved",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "kind",
+          "deployment_revision_id",
+          "state",
+          "proposed_at",
+          "decided_at"
+        ],
+        "title": "Proposal",
+        "type": "object"
+      },
+      "ProposalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "deployment_revision_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Deployment Revision Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "publish",
+              "rollback"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "deployment_revision_id"
+        ],
+        "title": "ProposalRequest",
+        "type": "object"
+      },
+      "Refusal": {
+        "additionalProperties": false,
+        "description": "Every failure of a Lab route (`REFUSALS`' reasons, `unavailable` for the rest).",
+        "properties": {
+          "refusal": {
+            "enum": [
+              "unauthenticated",
+              "not_found",
+              "denied",
+              "invalid",
+              "conflict",
+              "gone",
+              "unavailable"
+            ],
+            "title": "Refusal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refusal"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
+      "Registration": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Artifact Digest",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "runtime": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Runtime",
+            "type": "string"
+          },
+          "schema_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "artifact_digest",
+          "schema_version",
+          "runtime"
+        ],
+        "title": "Registration",
+        "type": "object"
+      },
+      "Rejection": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "Rejection",
+        "type": "object"
+      },
+      "Rows_DeploymentAggregate_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentAggregate"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Rows[DeploymentAggregate]",
+        "type": "object"
+      },
+      "Rows_Deployment_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Deployment"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Rows[Deployment]",
+        "type": "object"
+      },
+      "Rows_Model_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Rows[Model]",
+        "type": "object"
+      },
+      "Rows_Proposal_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Proposal"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "Rows[Proposal]",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "bearerFormat": "sk-infrx",
+        "description": "A consumer or provider-dev API key (`/v1/*`).",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "CheckpointSignature": {
+        "description": "HMAC of the raw body by a LAB_CHECKPOINT_KEYS key.",
+        "in": "header",
+        "name": "X-Infrx-Signature",
+        "type": "apiKey"
+      },
+      "OperatorKey": {
+        "bearerFormat": "sk-infrx",
+        "description": "An operator-audience API key.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "SessionBearer": {
+        "bearerFormat": "JWT",
+        "description": "The signed-in user's Supabase session, forwarded by the web app's server; verified by the auth server.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "infrx lab-control",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/lab/v1/checkpoints": {
+      "post": {
+        "operationId": "postLabV1Checkpoints",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "CheckpointSignature": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/control/aggregates": {
+      "get": {
+        "operationId": "getLabV1ControlAggregates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rows_DeploymentAggregate_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Aggregates"
+      }
+    },
+    "/lab/v1/control/deployments": {
+      "get": {
+        "operationId": "getLabV1ControlDeployments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rows_Deployment_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Read"
+      }
+    },
+    "/lab/v1/control/deployments/{deployment_revision_id}/smoke": {
+      "post": {
+        "operationId": "postLabV1ControlDeploymentsByDeploymentRevisionIdSmoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_revision_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deployment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Smoke"
+      }
+    },
+    "/lab/v1/control/models": {
+      "get": {
+        "operationId": "getLabV1ControlModels",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rows_Model_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Read"
+      }
+    },
+    "/lab/v1/control/proposals": {
+      "get": {
+        "operationId": "getLabV1ControlProposals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rows_Proposal_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Read"
+      },
+      "post": {
+        "operationId": "postLabV1ControlProposals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Proposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Propose"
+      }
+    },
+    "/lab/v1/control/proposals/{proposal_id}/reject": {
+      "post": {
+        "operationId": "postLabV1ControlProposalsByProposalIdReject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rejection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Proposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Reject"
+      }
+    },
+    "/lab/v1/control/register": {
+      "post": {
+        "operationId": "postLabV1ControlRegister",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider_org_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Provider Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Registration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deployment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "invalid"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refusal"
+                }
+              }
+            },
+            "description": "unavailable"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Register Model"
+      }
+    },
+    "/lab/v1/evaluations/catalog": {
+      "get": {
+        "operationId": "getLabV1EvaluationsCatalog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/evaluations/experiments": {
+      "get": {
+        "operationId": "getLabV1EvaluationsExperiments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1EvaluationsExperiments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/evaluations/runs": {
+      "get": {
+        "operationId": "getLabV1EvaluationsRuns",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/evaluations/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "postLabV1EvaluationsRunsByRunIdCancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/evaluations/subscriptions": {
+      "get": {
+        "operationId": "getLabV1EvaluationsSubscriptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1EvaluationsSubscriptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/optimizations": {
+      "get": {
+        "operationId": "getLabV1Optimizations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/adjudications": {
+      "post": {
+        "operationId": "postLabV1PipelinesAdjudications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/assignments": {
+      "post": {
+        "operationId": "postLabV1PipelinesAssignments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/checkpoints": {
+      "get": {
+        "operationId": "getLabV1PipelinesCheckpoints",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1PipelinesCheckpoints",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/checkpoints/{checkpoint_id}/approve": {
+      "post": {
+        "operationId": "postLabV1PipelinesCheckpointsByCheckpointIdApprove",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/disagreements": {
+      "get": {
+        "operationId": "getLabV1PipelinesDisagreements",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/label-exports": {
+      "get": {
+        "operationId": "getLabV1PipelinesLabelExports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1PipelinesLabelExports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/label-imports": {
+      "get": {
+        "operationId": "getLabV1PipelinesLabelImports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1PipelinesLabelImports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/labels": {
+      "get": {
+        "operationId": "getLabV1PipelinesLabels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/reviews": {
+      "post": {
+        "operationId": "postLabV1PipelinesReviews",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/teacher-batches": {
+      "get": {
+        "operationId": "getLabV1PipelinesTeacherBatches",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1PipelinesTeacherBatches",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/teacher-batches/{batch_id}/approve": {
+      "post": {
+        "operationId": "postLabV1PipelinesTeacherBatchesByBatchIdApprove",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/training-runs": {
+      "get": {
+        "operationId": "getLabV1PipelinesTrainingRuns",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      },
+      "post": {
+        "operationId": "postLabV1PipelinesTrainingRuns",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/training-runs/{external_run_id}/bundle": {
+      "get": {
+        "operationId": "getLabV1PipelinesTrainingRunsByExternalRunIdBundle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/training-runs/{external_run_id}/cancel": {
+      "post": {
+        "operationId": "postLabV1PipelinesTrainingRunsByExternalRunIdCancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/training-runs/{external_run_id}/finish": {
+      "post": {
+        "operationId": "postLabV1PipelinesTrainingRunsByExternalRunIdFinish",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/pipelines/training-runs/{external_run_id}/submit": {
+      "post": {
+        "operationId": "postLabV1PipelinesTrainingRunsByExternalRunIdSubmit",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/exports": {
+      "post": {
+        "operationId": "postLabV1ProvidersByProviderDatasetsExports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Export"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/exports/{export_id}/parts/{part}": {
+      "get": {
+        "operationId": "getLabV1ProvidersByProviderDatasetsExportsByExportIdPartsByPart",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part",
+            "required": true,
+            "schema": {
+              "title": "Part",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Part"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/imports": {
+      "post": {
+        "operationId": "postLabV1ProvidersByProviderDatasetsImports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Start"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/imports/preview": {
+      "post": {
+        "operationId": "postLabV1ProvidersByProviderDatasetsImportsPreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Preview"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/imports/{import_id}": {
+      "get": {
+        "operationId": "getLabV1ProvidersByProviderDatasetsImportsByImportId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Job"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/imports/{import_id}/requeue": {
+      "post": {
+        "description": "WR-C6-REQUEUE (0055): a failed job again as a new job (R243: the failed id stays\nterminal). The job is read first (the provider's own, else 404): only a `failed` one\nhas its upload's rows copied to the new id - before 0055 queues it, because the pool\nreads a job's rows by its id - so a refused requeue copies nothing (0055 names the\nstate). The new id is derived from the provider and the failed id, so a retry is the\nsame job; one another import already holds is replaced by a random id, never a\nblocked requeue (a replay still answers the one successor).\nponytail: the copy re-reads the upload (<= MAX_BODY_BYTES) through the gateway; a\ntaken derived id leaves one unused copy of the rows under it.",
+        "operationId": "postLabV1ProvidersByProviderDatasetsImportsByImportIdRequeue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Requeue"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/versions": {
+      "get": {
+        "operationId": "getLabV1ProvidersByProviderDatasetsVersions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Listing"
+      },
+      "post": {
+        "operationId": "postLabV1ProvidersByProviderDatasetsVersions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Derive"
+      }
+    },
+    "/lab/v1/providers/{provider}/datasets/versions/{ref}": {
+      "get": {
+        "operationId": "getLabV1ProvidersByProviderDatasetsVersionsByRef",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Version"
+      }
+    },
+    "/lab/v1/releases": {
+      "get": {
+        "operationId": "getLabV1Releases",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/releases/proposals": {
+      "post": {
+        "operationId": "postLabV1ReleasesProposals",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/traces": {
+      "get": {
+        "operationId": "getLabV1Traces",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/lab/v1/traces/{request_id}": {
+      "get": {
+        "operationId": "getLabV1TracesByRequestId",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "SessionBearer": []
+          }
+        ],
+        "summary": "Wrapped"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "getReadyz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Readyz"
+      }
+    }
+  }
+}

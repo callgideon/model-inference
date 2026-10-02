@@ -10,7 +10,7 @@
 Records are the Lab's `apps/lab/lib/services/control/port.ts` in snake_case; lists are
 `{"data": [...]}`. Every call re-derives the actor - (provider, user, role) - from the forwarded
 session and the user's current `LabAccess` membership (`lab_auth`), checks the operation's
-capability, and only then reads a body or asks the operations; nothing in a body names an
+capability, and only then validates a body or asks the operations; nothing in a body names an
 actor. Aggregate health is L2's (`LabAccess.aggregates`: closed, no customer identity).
 
 `ControlOperations` is the port L3 (`infrx/lab/control`, lab-access-lw2) implements - an
@@ -27,9 +27,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Sequence
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...contracts import errors
@@ -45,9 +45,6 @@ DIGEST = r"^sha256:[0-9a-f]{64}$"
 
 class Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-R = TypeVar("R", bound=Record)
 
 
 class Registration(Record):
@@ -129,76 +126,82 @@ class LabControl:
     operations: ControlOperations | None = None  # None until L3 is wired: 503
 
 
+class Rows[T: BaseModel](Record):
+    """A control listing: `{"data": [...]}` (no cursor: the lists are a provider's own few)."""
+
+    data: tuple[T, ...]
+
+
 def _dump(records: Sequence[BaseModel]) -> list[dict[str, Any]]:
     return [record.model_dump(mode="json") for record in records]
 
 
 def register(app: FastAPI, rt: Any, control: LabControl | None = None) -> LabControl | None:
     """Mount the control routes over `control` (default `rt.lab_control`); without one
-    nothing is mounted and `None` is returned."""
+    nothing is mounted and `None` is returned. AP-00 (R270): the handlers are typed - bodies,
+    path parameters and `response_model`s are FastAPI parameters the OpenAPI export
+    documents - behind `lab_auth.refusal_route`, which keeps the `{refusal}` wire: the
+    identity is a dependency, so it answers before any body is validated."""
     control = control if control is not None else getattr(rt, "lab_control", None)
     if control is None:
         return None
+    from ...lab.access import DeploymentAggregate
 
-    async def actor(request: Request, capability: Cap) -> Actor:
-        return await lab_auth.lab_actor(request, control.sessions, control.access, capability)
+    def actor(capability: Cap) -> Any:
+        async def who(request: Request, provider_org_id: str = Query("")) -> Actor:
+            return await lab_auth.lab_actor(request, control.sessions, control.access, capability)
+        return Depends(who)
 
     def operations() -> ControlOperations:
         if control.operations is None:      # expected before L3 merges: a 503, not a bug
             raise errors.DependencyUnavailable("L3's control operations are not wired")
         return control.operations
 
-    async def body(request: Request, model: type[R]) -> R:
-        return await lab_auth.lab_body(request, rt, model)
+    async def operator(request: Request) -> Any:
+        return await operations().operator(
+            await lab_auth.authenticate(request, control.sessions))
+
+    refused = lab_auth.refusal_route(rt)
+
+    def route(method: str, path: str, endpoint: Any, response_model: Any,
+              status_code: int = 200) -> None:
+        """On the app's own table (not `include_router`), as every router here mounts."""
+        app.router.add_api_route(CONTROL_PREFIX + path, endpoint, methods=[method],
+                          response_model=response_model, status_code=status_code,
+                          responses=lab_auth.REFUSED, route_class_override=refused)
 
     def listing(name: str):
-        @lab_auth.guarded
-        async def read(request: Request):
-            who = await actor(request, Cap.read_aggregate_health)
+        async def read(who: Actor = actor(Cap.read_aggregate_health)):
             return lab_auth.ok({"data": _dump(await getattr(operations(), name)(who))})
         return read
 
-    for name in ("models", "deployments", "proposals"):
-        app.add_api_route(f"{CONTROL_PREFIX}/{name}", listing(name), methods=["GET"])
+    for name, record in (("models", Model), ("deployments", Deployment), ("proposals", Proposal)):
+        route("GET", f"/{name}", listing(name), Rows[record])
 
-    @app.get(f"{CONTROL_PREFIX}/aggregates")
-    @lab_auth.guarded
-    async def aggregates(request: Request):
-        who = await actor(request, Cap.read_aggregate_health)
+    async def aggregates(who: Actor = actor(Cap.read_aggregate_health)):
         rows = await control.access.aggregates(who.user_id, who.provider_org_id)
         return lab_auth.ok({"data": _dump(rows)})
 
-    @app.post(f"{CONTROL_PREFIX}/register")
-    @lab_auth.guarded
-    async def register_model(request: Request):
-        who = await actor(request, Cap.manage_dev_deployment)
-        registration = await body(request, Registration)
+    async def register_model(registration: Registration,
+                             who: Actor = actor(Cap.manage_dev_deployment)):
         created = await operations().register(who, registration)
         return lab_auth.ok(created.model_dump(mode="json"), 201)
 
-    @app.post(CONTROL_PREFIX + "/deployments/{deployment_revision_id}/smoke")
-    @lab_auth.guarded
-    async def smoke(request: Request):
-        who = await actor(request, Cap.manage_dev_deployment)
-        tested = await operations().smoke(who, request.path_params["deployment_revision_id"])
+    async def smoke(deployment_revision_id: str, who: Actor = actor(Cap.manage_dev_deployment)):
+        tested = await operations().smoke(who, deployment_revision_id)
         return lab_auth.ok(tested.model_dump(mode="json"))
 
-    @app.post(f"{CONTROL_PREFIX}/proposals")
-    @lab_auth.guarded
-    async def propose(request: Request):
-        who = await actor(request, Cap.propose_publication)
-        wanted = await body(request, ProposalRequest)
+    async def propose(wanted: ProposalRequest, who: Actor = actor(Cap.propose_publication)):
         proposal = await operations().propose(who, wanted.kind, wanted.deployment_revision_id)
         return lab_auth.ok(proposal.model_dump(mode="json"), 201)
 
-    @app.post(CONTROL_PREFIX + "/proposals/{proposal_id}/reject")
-    @lab_auth.guarded
-    async def reject(request: Request):
-        operator = await operations().operator(
-            await lab_auth.authenticate(request, control.sessions))
-        decision = await body(request, Rejection)
-        rejected = await operations().reject(operator, request.path_params["proposal_id"],
-                                             decision.reason)
+    async def reject(proposal_id: str, decision: Rejection, decider: Any = Depends(operator)):
+        rejected = await operations().reject(decider, proposal_id, decision.reason)
         return lab_auth.ok(rejected.model_dump(mode="json"))
 
+    route("GET", "/aggregates", aggregates, Rows[DeploymentAggregate])
+    route("POST", "/register", register_model, Deployment, 201)
+    route("POST", "/deployments/{deployment_revision_id}/smoke", smoke, Deployment)
+    route("POST", "/proposals", propose, Proposal, 201)
+    route("POST", "/proposals/{proposal_id}/reject", reject, Proposal)
     return control

@@ -162,6 +162,8 @@ def test_lab_control__every_route_needs_the_session_before_anything_else():
                 answer = call(c, None, method, path, w.A, sent, headers)
                 assert (answer.status_code, answer.json()) \
                     == (401, {"refusal": "unauthenticated"})
+            answer = call(c, None, method, path, w.A, headers=headers, raw="{")   # AP-00
+            assert (answer.status_code, answer.json()) == (401, {"refusal": "unauthenticated"})
     assert ops.calls == []
 
 
@@ -300,7 +302,7 @@ def test_lab_control__a_body_is_json_bounded_and_valid_before_the_operations():
         answer = call(c, ADMIN_A, "POST", path, w.A, body, headers)
         assert (answer.status_code, answer.json()) == (422, {"refusal": "invalid"}), path
     text = json.dumps(REGISTRATION)
-    for raw, content_type in ((text, "text/plain"),
+    for raw, content_type in ((text, "text/plain"), (text, "application/merge-patch+json"),
                               (text + " " * lc.lab_auth.MAX_BODY_BYTES, None)):
         answer = call(c, ADMIN_A, "POST", "register", w.A, raw=raw,
                       headers={"content-type": content_type} if content_type else None)
