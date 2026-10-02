@@ -181,6 +181,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("evidence_without_start", "every stage records its UTC start", R,
        'return {"started": utc_now(), "ended": None,', 'return {"started": "", "ended": None,',
        EVIDENCE),
+    _m("refusal_code_dropped", "a refused exchange records its R270 code", R,
+       '"error": error_code(response),', '"error": None,', EVIDENCE),
     _m("route_instead_of_template", "evidence records the route template, never an id", R,
        '"method": method, "route": route, "origin": origin,',
        '"method": method, "route": route.format(**(params or {})), "origin": origin,', EVIDENCE),

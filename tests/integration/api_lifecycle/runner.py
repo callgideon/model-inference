@@ -68,6 +68,21 @@ LIVE_MAX_REQUESTS = 6                 # verification.md: six accepted requests, 
 ISOLATED_MAX_REQUESTS = 20
 
 
+def error_code(response: httpx.Response) -> str | None:
+    """A refusal's R270 code (`error.code`) or legacy `refusal`, for the evidence; never the
+    message, which may echo input."""
+    if response.status_code < 400:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    return str(error.get("code")) if isinstance(error, dict) else body.get("refusal")
+
+
 def minted_file(state_path: Path) -> Path:
     """Keys this run minted through the key API (stage 08/12): 0600, beside the state file and
     never in it - the state holds only their ids."""
@@ -278,7 +293,7 @@ class Context:
             "method": method, "route": route, "origin": origin, "status": response.status_code,
             "request_id": response.headers.get("X-Request-Id") or sent["X-Request-Id"],
             "inference_id": response.headers.get("Inference-Id"),
-            "location": response.headers.get("Location"),
+            "location": response.headers.get("Location"), "error": error_code(response),
             "ms": round((time.monotonic() - began) * 1000, 1), "at": utc_now()})
         return response
 

@@ -324,6 +324,8 @@ def test_ap11_every_stage_records_utc_times_routes_statuses_ids_and_counters(fil
             assert exchange["route"].startswith("/") or exchange["route"] == "{part}"
             assert isinstance(exchange["status"], int)
             assert exchange["request_id"] and exchange["ms"] >= 0
+    refused = [x for x in stage(verdict, "01")["evidence"]["exchanges"] if x["status"] == 401]
+    assert refused and all(x["error"] in ("invalid_api_key", "unauthenticated") for x in refused)
     routes = {x["route"] for x in stage(verdict, "10")["evidence"]["exchanges"]}
     assert "/v1/jobs/{handle}" in routes                 # a template, never the handle itself
     assert verdict["pins"]["head"] and verdict["fixtures"]
