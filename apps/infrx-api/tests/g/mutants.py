@@ -2182,10 +2182,7 @@ J = "state/journal.py"
 PROBE_ASKS = "test_journal_probe__asks_the_bounded_ready_never_the_usage_aggregates"
 PROBE_FAULT = "test_probe__a_check_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread"
 READY_UNIT = "test_journal_ready__is_one_server_bounded_primary_key_lookup_on_one_connection"
-READY_PLAN = "test_journal_ready_pg__answers_on_the_migrated_schema_on_the_primary_key"
 READY_ORDER = "test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_bound"
-READY_STALL = ("test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_"
-               "within_its_bound")
 MUTANTS += (
     _m("journal_probe_asks_usage", "the journal probe asks ready(), never the aggregates",
        RD, "        await stream.ready()\n", "        await stream.usage()\n", PROBE_ASKS,
@@ -2196,17 +2193,16 @@ MUTANTS += (
        PROBE_ASKS, PROBE_FAULT),
     _m("ready_bound_dropped", "the probe's statement carries its own 2 s server bound",
        J, 'READY_SQL = (f"set local statement_timeout = {READY_TIMEOUT_MS}; "\n             ',
-       "READY_SQL = (", READY_UNIT, READY_STALL),
+       "READY_SQL = (", READY_UNIT),
     _m("ready_bound_widened", "the server cancels a stalled probe at 2 s",
-       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_STALL,
-       READY_ORDER),
+       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_ORDER),
     _m("probe_bound_below_pool_wait", "a probe fails typed before its own bound fires",
        RD, "PROBE_TIMEOUT_S = 10.0\n", "PROBE_TIMEOUT_S = 6.0\n", READY_ORDER),
     _m("ready_bound_session_wide", "the bound is SET LOCAL: no session state on the pooler",
        J, '"set local statement_timeout', '"set statement_timeout', READY_UNIT),
     _m("ready_scans_the_journal", "the lookup is a primary-key descent, never a scan",
        J, "\"where job_id = '00000000-0000-0000-0000-000000000000' limit 1\")",
-       '"limit 1")', READY_PLAN),
+       '"limit 1")', READY_UNIT),
     _m("ready_asks_usage", "ready() never runs journal_usage()",
        J, "            await conn.execute(READY_SQL)\n",
        '            await conn.execute("select infrx.journal_usage()")\n', READY_UNIT),
@@ -2256,15 +2252,40 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 
 #: F2R item 9: the shared runner, with G's per-mutant file selection and layout.
-#: api-probe: the copy inherits `INFRX_D_TASK`, so `test_readiness`'s PostgreSQL cases run on
-#: the caller's task-local harness (never d1's shared port by accident).
-RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout,
-                env=("INFRX_D_TASK",))
+#: The copy does NOT inherit `INFRX_D_TASK`: the outer run holds the key's harness lock, so a
+#: copy on the same key is refused (HarnessBusy → broken_runner, as tests/h and tests/l/access
+#: record). `test_readiness`'s PostgreSQL cases run in the outer suite only; the probe's mutants
+#: are killed by its in-memory statement checks.
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout)
 
 
 def run_mutant(mutant) -> Result:
     """Apply one mutant to a throwaway copy and run the cases it names."""
     return shared.run_mutant(mutant, RUNNER)
+
+
+READY_PLAN = "test_journal_ready_pg__answers_on_the_migrated_schema_on_the_primary_key"
+READY_STALL = ("test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_"
+               "within_its_bound")
+#: The PostgreSQL-backed probe mutants (tests/h's pattern): their cases need the caller's
+#: task-local harness, so this runner's copy inherits `INFRX_D_TASK`; test_mutants skips them
+#: visibly in a process that already holds the D harness lock (`make api-mutants` runs the list
+#: in its own process).
+PG_MUTANTS: tuple[Mutant, ...] = (
+    _m("ready_bound_widened_pg", "the server cancels a stalled probe at 2 s (on PostgreSQL)",
+       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_STALL),
+    _m("ready_scans_the_journal_pg",
+       "the lookup plans on stream_chunks_pkey, never a scan (on PostgreSQL)",
+       J, "\"where job_id = '00000000-0000-0000-0000-000000000000' limit 1\")", '"limit 1")',
+       READY_PLAN),
+)
+PG_RUNNER = Runner(name="g1pg", targets_for=lambda cases: sorted(files_for(cases)),
+                   layout=_layout, env=("INFRX_D_TASK",))
+
+
+def run_pg_mutant(mutant) -> Result:
+    """One PostgreSQL-backed mutant on the caller's task-local harness."""
+    return shared.pristine(tuple(mutant.cases), PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
 
 
 if __name__ == "__main__":

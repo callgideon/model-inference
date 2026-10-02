@@ -94,6 +94,8 @@ def test_journal_ready__is_one_server_bounded_primary_key_lookup_on_one_connecti
     assert conn.executed == [(journal.READY_SQL, None)] and conn.closed
     assert journal.READY_SQL.startswith("set local statement_timeout = 2000; select ")
     assert "journal_usage" not in journal.READY_SQL
+    # The lookup names the primary key: a bare `limit 1` is a seq scan over pruned pages.
+    assert "where job_id = '00000000-0000-0000-0000-000000000000' limit 1" in journal.READY_SQL
 
 
 def _as(database: str, role: str):

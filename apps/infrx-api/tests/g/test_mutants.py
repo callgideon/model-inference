@@ -10,11 +10,13 @@ import os
 
 import pytest
 
+from tests.d import pgharness
 from tests.i import support
 
 from . import mutants as mutation_list
 
-ALL = mutation_list.MUTANTS
+MEMORY, PG = mutation_list.MUTANTS, mutation_list.PG_MUTANTS
+ALL = MEMORY + PG
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One pytest process per mutant, so the default suite runs one mutant per mutated
@@ -39,7 +41,8 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           "w5_f5_late_recheck_restored",
           # W5-F5B (0-W5F5-R2): the same, from the attach after the marker
           "w5_f5b_post_marker_refusal_cancels", "w5_f5b_post_marker_refusal_uncounted")
-SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
+SELECTED = MEMORY if FULL_RUN else tuple(m for m in MEMORY if m.name in SUBSET)
+SELECTED_PG = PG if FULL_RUN else ()
 
 
 def test_the_list_is_well_formed():
@@ -65,6 +68,23 @@ def test_every_case_is_covered_by_a_mutant():
 def test_mutant_is_killed(mutant):
     result = mutation_list.run_mutant(mutant)
     support.blocked_off_linux(result)              # E2C (RV-12)
+    assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                           f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                           f"what they claim.")
+
+
+@pytest.mark.parametrize("mutant", SELECTED_PG, ids=[m.name for m in SELECTED_PG])
+def test_pg_mutant_is_killed(mutant):
+    """The probe's PostgreSQL cases on the caller's task-local harness (tests/h's pattern:
+    a visible skip without Docker, or in a process that already holds the D harness)."""
+    if pgharness._lock_fd is not None:
+        pytest.skip("this process already holds the D harness lock (an earlier PostgreSQL case "
+                    "started it), so the copy's harness would be refused: run this list in its "
+                    "own process (make api-mutants)")
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"PostgreSQL harness unavailable: {reason}")
+    result = mutation_list.run_pg_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "
                            f"what they claim.")
