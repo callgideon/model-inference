@@ -67,21 +67,23 @@ def register(app: FastAPI, rt: Any) -> None:
         return await guarded(request, rt, work)
 
     @router.post(base + "/{deployment_id}/smoke", status_code=202,
-                 response_model=api.OperationDoc, operation_id="smokeDeployment")
+                 response_model=api.OperationDoc, operation_id="smokeDeployment",
+                 openapi_extra={"x-infrx-no-body": True})   # the id + Idempotency-Key only
     async def smoke(request: Request, deployment_id: str, key: IdempotencyKey):
         async def work(actor):
             return accepted(await h.smoke(actor, deployment_id, key))
         return await guarded(request, rt, work)
 
     @router.post(base + "/{deployment_id}/retire", status_code=202,
-                 response_model=api.OperationDoc, operation_id="retireDeployment")
+                 response_model=api.OperationDoc, operation_id="retireDeployment",
+                 openapi_extra={"x-infrx-no-body": True})   # the id + Idempotency-Key only
     async def retire(request: Request, deployment_id: str, key: IdempotencyKey):
         async def work(actor):
             return accepted(await h.retire(actor, deployment_id, key))
         return await guarded(request, rt, work)
 
     @router.post("/lab/v1/operations/{operation_id}/cancel", response_model=api.OperationDoc,
-                 operation_id="cancelOperation")
+                 operation_id="cancelOperation", openapi_extra={"x-infrx-no-body": True})   # the id only
     async def cancel(request: Request, operation_id: str):
         async def work(actor):
             return control.ok(await h.cancel(actor, operation_id))

@@ -5903,7 +5903,8 @@
             "SessionBearer": []
           }
         ],
-        "summary": "Retire"
+        "summary": "Retire",
+        "x-infrx-no-body": true
       }
     },
     "/lab/v1/control/deployments/{deployment_id}/smoke": {
@@ -6028,7 +6029,8 @@
             "SessionBearer": []
           }
         ],
-        "summary": "Smoke"
+        "summary": "Smoke",
+        "x-infrx-no-body": true
       }
     },
     "/lab/v1/control/dev-wallet": {
@@ -8974,7 +8976,8 @@
             "SessionBearer": []
           }
         ],
-        "summary": "Cancel"
+        "summary": "Cancel",
+        "x-infrx-no-body": true
       }
     },
     "/lab/v1/optimizations": {
