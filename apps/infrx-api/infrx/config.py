@@ -447,6 +447,13 @@ class DeploymentSettings:
     # Lab objects (LAB_S3_BUCKET, required). Off by default: no such route exists. On, the
     # routes answer 503 until AP-01's session actors are composed on the unit.
     lab_artifacts: bool = False
+    # WR-AP05-2 (AP-05, api-hosting): the Lab control unit mounts the private-deployment family
+    # (/lab/v1/hosting-profiles, /lab/v1/control/deployments[/{id}[/readiness|smoke|retire]],
+    # /lab/v1/operations/{id}/cancel) over `infrx.lab.hosting.LabHosting` on its own login
+    # (0060-0062) and the configured slot (`HOSTING_*`; none: the profile reads `unavailable`).
+    # Off by default: no such route exists. On, the routes answer 503 until AP-01's session
+    # actors are composed on the unit.
+    lab_hosting: bool = False
     # AP-01 (WR-AP01-1): the web API's identity routes - `/console/v1/me|capabilities`,
     # `/lab/v1/workspaces|capabilities|members[/{user}]`, `/operator/v1/providers` - over
     # `console.session.SessionActors` (the verified Supabase session, or an operator key at

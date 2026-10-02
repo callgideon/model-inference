@@ -18,7 +18,8 @@ matters and nothing connects anywhere:
 - `lab-control`: the Lab control unit with its optional families (traces, checkpoints,
   `LAB_JUDGE_API`'s judge and trace reviews, `LAB_PUBLICATION`'s publication door over an
   inert session-actors stand-in - AP-01's are not composed on the unit yet - and
-  `LAB_ARTIFACTS`' model projects and artifacts over an inert surface) on.
+  `LAB_ARTIFACTS`' model projects and artifacts over an inert surface, `LAB_HOSTING`'s
+  private deployments over an unreachable DSN and no slot) on.
 
 `document` adds what FastAPI does not: an operationId derived from method + path (unique by
 construction), and a security declaration per operation from `FAMILIES` unless the route
@@ -201,6 +202,7 @@ def _lab_control(publication: bool = True) -> FastAPI:
            control.SUPABASE_URL: "http://127.0.0.1:1", control.SUPABASE_KEY: "export",
            "CLICKHOUSE_URL": "http://127.0.0.1:1", "LAB_CHECKPOINT_KEYS": "export",
            "LAB_JUDGE_API": "1", "LAB_ARTIFACTS": "1",                     # WR-1, WR-AP04-2
+           "LAB_HOSTING": "1",              # WR-AP05-2: no HOSTING_SLOT, so the slot is inert
            "IDENTITY_API": "1"}                                            # WR-AP01-4
     if publication:
         env["LAB_PUBLICATION"] = "1"                                       # WR-AP06-3

@@ -487,13 +487,59 @@
       "compositions": [
         "lab-control"
       ],
-      "consumers": [
-        "apps/lab/lib/services/control/http.ts smoke"
-      ],
+      "consumers": [],
       "envelope": "refusal",
       "method": "POST",
-      "path": "/lab/v1/control/deployments/{deployment_revision_id}/smoke",
-      "request_schema": "none",
+      "path": "/lab/v1/control/deployments",
+      "request_schema": "typed",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{deployment_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
+      "path": "/lab/v1/control/deployments/{deployment_id}/readiness",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/deployments/{deployment_id}/retire",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/control/deployments/{deployment_id}/smoke",
+      "request_schema": "raw",
       "response_schema": "typed"
     },
     {
@@ -770,6 +816,18 @@
       "consumers": [],
       "envelope": "refusal",
       "method": "GET",
+      "path": "/lab/v1/hosting-profiles",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "GET",
       "path": "/lab/v1/judge/budgets",
       "request_schema": "raw",
       "response_schema": "typed"
@@ -952,6 +1010,18 @@
       "envelope": "refusal",
       "method": "GET",
       "path": "/lab/v1/operations/{operation_id}",
+      "request_schema": "raw",
+      "response_schema": "typed"
+    },
+    {
+      "audience": "provider session",
+      "compositions": [
+        "lab-control"
+      ],
+      "consumers": [],
+      "envelope": "refusal",
+      "method": "POST",
+      "path": "/lab/v1/operations/{operation_id}/cancel",
       "request_schema": "raw",
       "response_schema": "typed"
     },
@@ -2220,19 +2290,19 @@
     {
       "method": "POST",
       "path": "/lab/v1/control/deployments",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {
       "method": "GET",
       "path": "/lab/v1/control/deployments/{id}",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {
       "method": "GET",
       "path": "/lab/v1/control/deployments/{id}/readiness",
-      "state": "target",
+      "state": "existing",
       "surface": "lab deployments"
     },
     {

@@ -115,10 +115,24 @@ def _compose(lab: dict[str, str], store):
         from ..artifacts.compose import surface
         from ..workers.__main__ import lab_objects
         artifacts = surface(connect, lab_objects(MODE, os.environ))
+    # WR-AP05-2 (AP-05): private deployments on the unit's login (0060-0062), only with
+    # LAB_HOSTING; without a configured slot (`HOSTING_*`) the profile reads `unavailable`.
+    hosting = None
+    if settings.deployment is not None and settings.deployment.lab_hosting:
+        from ...state.control_ops import PgControlOps
+        from ..artifacts.store import PgArtifactStore
+        from ..compose import lab_control
+        from ..hosting import LabHosting
+        from ..hosting.controller import target_from
+        from ..hosting.store import PgHostingStore
+        hosting = LabHosting(access, lab_control(connect, access), PgArtifactStore(connect),
+                             PgControlOps(connect), PgHostingStore(connect),
+                             target_from(os.environ))
     return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
                            identity=actors and actors.identity,
                            lab_access=access if actors else None,
                            lab_publication=publication, lab_artifacts=artifacts,
+                           lab_hosting=hosting,
                            **_families(settings, lab, connect)), control, traces
 
 
@@ -175,6 +189,9 @@ def create_app() -> FastAPI:
     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
                    lab_judge, lab_reviews, lab_workspaces, console_me, operator_publication):
         family.register(app, rt)
-    from ..artifacts.compose import mount          # WR-AP04-2: nothing while it is off
+    from ..artifacts.compose import WorkspaceActors, mount   # WR-AP04-2: nothing while off
     mount(app, rt)
+    from ...gateway.routes import lab_deployments  # WR-AP05-2: nothing while LAB_HOSTING is off
+    lab_deployments.register(app, SimpleNamespace(
+        actors=WorkspaceActors(getattr(rt, "actors", None)), lab_hosting=rt.lab_hosting))
     return app

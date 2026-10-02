@@ -291,12 +291,13 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     # api-schema-2 0065 (SR-AP01-1) and 0066 (the batch's grants and reads)
     "0060_control_operations.sql",
     "0061_model_projects_artifacts.sql",
+    "0062_deployments_hosting.sql",                 # api-hosting (AP-05, merge #96)
     "0064_judge_api.sql",
     "0065_identity_functions.sql",
     "0066_wave7_grants_and_reads.sql",
     ]
-    # 0062 (api-hosting) and 0067 (R271's late allocation) are optional until their merges
-    optional = ("0062", "0067")
+    # 0067 (R271's late allocation) is optional until its merge
+    optional = ("0067",)
     assert names == sorted(names)
     assert [n for n in names if n[:4] not in optional] == \
         [n for n in pinned if n[:4] not in optional]

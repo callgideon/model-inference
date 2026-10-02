@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """R271 whole-set re-proof / R151 rehearsal (api-schema 00d, api-schema-2's remainder): every
-LOCAL-ONLY wave-7 file (0060-0067 as merged: 0060, 0061, 0064, 0065, 0066, 0067; 0062 when
-it lands) applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase
-CLI history table) to a database at the hosted level 0059 that holds consumer history:
+LOCAL-ONLY wave-7 file (0060-0067 as merged: 0060, 0061, 0062, 0064, 0065, 0066, 0067)
+applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase CLI history
+table) to a database at the hosted level 0059 that holds consumer history:
 nothing that existed changes (row counts, money sums, the jobs' identity and money, every
 ACL of an existing relation or column) except the control login's EXECUTE on 0066's six
 route reads, 0043's per-request judge read (0067) and 0064's three judge/review doors; 0067 adds one table (`lab_judge_rubrics`) and
@@ -59,6 +59,11 @@ DROPPED = {*(f"infrx.identity_{n}" for n in ("account", "user_by_email", "member
 #: 0067's one table and its two public doors (EXECUTE: the control login only, R271)
 TABLE_0067 = "infrx.lab_judge_rubrics"
 DOORS_0067 = ("lab_judge_rubric_create(jsonb)", "lab_judge_rubric_list(uuid)")
+#: 0062's (api-hosting, AP-05) three tables and three doors (EXECUTE: the control login only);
+#: it grants nothing on an existing relation or function. Its own ROLLBACK lines are
+#: tests/d/test_upgrade_0062_mutants.py's; here it stays applied through the rollbacks above.
+TABLES_0062 = {f"infrx.hosting_{t}" for t in ("deployments", "allocations", "receipts")}
+DOORS_0062 = tuple(f"infrx.hosting_{n}(jsonb)" for n in ("request", "fence", "active"))
 
 _spec = importlib.util.spec_from_file_location(
     "infrx_migrate_0060", migrations.DIR.parents[3] / "apps" / "infrx-api" / "deploy" / "migrate.py")
@@ -103,9 +108,8 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     hosted = tuple(f for f in everything if "0027" <= number.get(f[0], "0000") <= "0059")
     wave7 = tuple(f for f in everything if number.get(f[0], "") > "0059")
     labels = [label for label, _ in wave7]
-    # 0062 (api-hosting) and 0067 (R271's late allocation) are admitted, never required
     assert all("0060" <= label[:4] <= "0067" for label in labels) and \
-        {"0060_control_operations.sql", *MINE} <= set(labels), \
+        {"0060_control_operations.sql", "0062_deployments_hosting.sql", *MINE} <= set(labels), \
         f"R271: past 0059 only the wave-7 range 0060-0067: {labels}"
     pgharness.ensure()
     pgharness.recreate(DB)
@@ -134,8 +138,9 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     after = d10.snapshot(conn)
 
     added = new_tables(wave7)
-    assert TABLE_0067 in added and set(after["counts"]) - set(before["counts"]) == added
-    for door in DOORS_0067:
+    assert TABLE_0067 in added and TABLES_0062 <= added and \
+        set(after["counts"]) - set(before["counts"]) == added
+    for door in (*DOORS_0067, *DOORS_0062):
         acl = after["fns"][door][0]
         assert "infrx_lab_control=X" in acl and not any(
             g in acl for g in ("authenticated=", "anon=", "{=X", ",=X")), (door, acl)

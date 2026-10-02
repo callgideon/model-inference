@@ -297,6 +297,11 @@ NOT_SETTABLE = {
                      "default, Lab-only): enabling it needs AP-01's session actors on the unit, "
                      "0064 applied hosted and the E4 regression rerun, a deploy change, not a "
                      "--set; live judging waits on P-10",
+    "LAB_HOSTING": "mounts the Lab unit's private-deployment routes and composes LabHosting "
+                   "(WR-AP05-2 AP-05, off by default, Lab-only): enabling it needs AP-01's "
+                   "session actors on the unit, 0060-0062 applied hosted, the hosting slot "
+                   "(HOSTING_*), the coordinator's box window and the E4 regression rerun, a "
+                   "deploy change, not a --set",
     "LAB_PUBLICATION": "mounts the Lab unit's publication door - operator proposals, "
                        "approval, rollback, dev keys and dev wallet (WR-AP06-1 AP-06, off by "
                        "default, Lab-only): enabling it needs AP-01's session actors on the "

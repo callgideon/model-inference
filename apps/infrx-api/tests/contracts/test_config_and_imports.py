@@ -337,7 +337,8 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
         ["health", "models", "ingress", "uploads", "jobs", "feedback", "console_actions",
          "operator_actions", "console_data_use", "trace_export", "lab_control", "lab_traces", "lab_evaluations",
          "lab_pipelines", "lab_releases", "lab_datasets", "lab_checkpoints", "auth", "console_me",
-         "lab_workspaces", "operator_providers", "lab_model_projects", "lab_artifacts", "console_reads",
+         "lab_workspaces", "operator_providers", "lab_model_projects", "lab_artifacts", "lab_deployments",
+         "console_reads",
          "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
@@ -592,6 +593,8 @@ DEPLOYMENT_EXPECTED = {
     "LAB_PUBLICATION": False,
     # WR-AP04-2 (AP-04, api-artifacts): the Lab unit's model-project/artifact routes, off
     "LAB_ARTIFACTS": False,
+    # WR-AP05-2 (AP-05, api-hosting): the Lab unit's private-deployment routes, off
+    "LAB_HOSTING": False,
     # WR-AP01-1 (AP-01): the identity routes and the auth facade switches, off; the web
     # origins and the facade's publishable key (unset)
     "IDENTITY_API": False,

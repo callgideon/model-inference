@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants api-lifecycle ux-matrix lab-hosting
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -90,6 +90,10 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/d/test_upgrade_0061_mutants.py
 	# AP-04's list: fake world, then its PostgreSQL + MinIO half in its own process (the copy starts the D harness); task-local key ap4
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap4 uv run --frozen pytest -q tests/ap04/test_mutants.py
+	# 0062's SQL list (api-hosting, AP-05, R271): needs Docker, skips visibly without it; task-local key ap5
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap5 uv run --frozen pytest -q tests/d/test_upgrade_0062_mutants.py
+	# AP-05's list: fake world (+ the box step), then its PostgreSQL + real-engine half in its own process; task-local key ap5
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap5 uv run --frozen pytest -q tests/ap05/test_mutants.py
 	# AP-06's list: fake world, then its PostgreSQL half (two-process race) in its own process; task-local key ap6
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap6 uv run --frozen pytest -q tests/ap06/test_mutants.py
 
@@ -301,3 +305,7 @@ lab-local:
 # Its 0700 state dir is under $TMPDIR; verdict.json lands in the evidence dir.
 api-lifecycle:
 	mkdir -p -m 700 $${TMPDIR:-/tmp}/infrx-ap11-state && $(API)/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --world ap11 --state $${TMPDIR:-/tmp}/infrx-ap11-state/state-$$$$.json --out $(CURDIR)/research/plan/evidence/w7/AP11-raw-$(shell git rev-parse --short HEAD)
+
+# AP-05: the LAB-HOSTING gate (tests/integration/lab_hosting, key ap5); not in check.
+lab-hosting:
+	$(API)/.venv/bin/python tests/integration/lab_hosting/runner.py --out $(CURDIR)/research/plan/evidence/w7/AP05-hosting-raw-$(shell git rev-parse --short HEAD)

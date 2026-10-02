@@ -57,6 +57,9 @@ never runs in a consumer process.
                may name, e.g. `ssm:/model-inference/hf_token`): AP-04's `ArtifactWorker` over
                0060's operations and 0061 (`lab.artifacts.compose.role`, WR-AP04-2) - upload
                verification, pinned imports and the expired-session sweep every 5 s.
+* `hosting`    HOSTING_SLOT, HOSTING_PORT (8100-8199), HOSTING_MODEL_ROOT, HOSTING_SOURCE_DIR,
+               HOSTING_SMOKE_VIDEO (+ HOSTING_ENV_DIR): AP-05's controller for its one
+               configured slot on the box launcher (`lab.hosting.controller.tasks`, WR-AP05-3).
 """
 from __future__ import annotations
 
@@ -86,12 +89,13 @@ from ...worker import __main__ as worker_main
 from ...worker.__main__ import every
 from ..compose import (  # noqa: F401 - A1: shared with the gateway, re-exported
     control_serving, plan_key, release_live, release_report, teacher_wiring)
+from ..hosting import controller as hosting_controller
 from ..time import iso_z
 
 log = logging.getLogger("infrx.lab.workers")
 
 ROLES = ("eval", "checkpoints", "judge", "annotation", "training", "rollout", "datasets",
-         "artifacts")
+         "artifacts", "hosting")
 REFUSED = 2
 DATABASE, PORT, BUCKET = "LAB_DATABASE_URL", "LAB_WORKER_HEALTH_PORT", "LAB_S3_BUCKET"
 TRACES = ("CLICKHOUSE_URL", "S3_TRACE_BUCKET")
@@ -99,7 +103,8 @@ NEEDS = {"eval": (BUCKET, "LAB_EVAL_ENDPOINT_URL", "LAB_EVAL_ENDPOINT_KEY"),
          "checkpoints": (BUCKET,), "judge": ("JUDGE_PROVIDER_URL", *TRACES),
          "annotation": (BUCKET, "LAB_TEACHER_URL"), "training": (BUCKET,),
          "rollout": (BUCKET, "LAB_OPERATOR_ID"),
-         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,)}
+         "datasets": (BUCKET, *TRACES), "artifacts": (BUCKET,),
+         "hosting": hosting_controller.NEEDS}
 #: The Lab objects: the media bucket's store under `lab/<provider>/` (R182), at the media
 #: store's prefix - `S3_MEDIA_PREFIX`'s default unless `LAB_S3_PREFIX` names the gateway's.
 LAB_PREFIX = "infrx/"
@@ -576,9 +581,14 @@ def _artifacts(mode, env, connect, objects, worker_id, **sources):
     return role(mode, env, connect, objects, worker_id, **sources)
 
 
+def _hosting(mode, env, connect, objects, worker_id, **_):
+    """WR-AP05-3: AP-05's controller over 0060-0062 on the Lab login, its one slot."""
+    return hosting_controller.tasks(env, connect, owner=worker_id), None
+
+
 BUILD = {"eval": _eval, "checkpoints": _checkpoints, "judge": _judge,
          "annotation": _annotation, "training": _training, "rollout": _rollout,
-         "datasets": _datasets, "artifacts": _artifacts}
+         "datasets": _datasets, "artifacts": _artifacts, "hosting": _hosting}
 
 
 def compose(role: str, env, *, objects=None, **sources) -> Worker:
