@@ -88,8 +88,11 @@ export type Variable = {
 
 /** Every variable the App reads, per environment. The runbook's matrix is this list. */
 export const VARIABLES: readonly Variable[] = Object.freeze([
-  { name: "NEXT_PUBLIC_SUPABASE_URL", exposure: "public", required: ENVIRONMENTS, check: httpsOrigin },
-  { name: "NEXT_PUBLIC_SUPABASE_ANON_KEY", exposure: "public", required: ENVIRONMENTS },
+  // AP-09: the App reaches the auth service only through infrx-api's facade, so nothing reads these
+  // and their absence must not stop the App; a value that is set must still be this environment's
+  // project (I2A-ENV-04/05) until the deploy matrix drops them.
+  { name: "NEXT_PUBLIC_SUPABASE_URL", exposure: "public", required: [], check: httpsOrigin },
+  { name: "NEXT_PUBLIC_SUPABASE_ANON_KEY", exposure: "public", required: [] },
   {
     name: "NEXT_PUBLIC_APP_URL",
     exposure: "public",
@@ -98,18 +101,11 @@ export const VARIABLES: readonly Variable[] = Object.freeze([
     required: [],
     check: (value, environment) => (originAllowed(environment, value) ? null : `is not an allowed ${environment} origin`),
   },
-  { name: "SUPABASE_SERVICE_ROLE_KEY", exposure: "server", required: ["production"] },
   {
     name: "INFRX_API_BASE_URL",
     exposure: "server",
     required: ["production"],
     check: (value, environment) => httpsOrigin(value, environment) ?? (apiBaseUrl({ INFRX_API_BASE_URL: value }) ? null : "is not a valid API origin"),
-  },
-  {
-    name: "CONSOLE_CURSOR_SECRET",
-    exposure: "server",
-    required: ["production"],
-    check: (value) => (value.length >= 16 ? null : "must be at least 16 characters"),
   },
 ]);
 

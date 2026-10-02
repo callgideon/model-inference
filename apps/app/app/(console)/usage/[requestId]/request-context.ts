@@ -1,19 +1,13 @@
-import { requestClient } from "@/lib/session";   // WR-AM2-1: the request's one client (getUser once per render)
-import type { CreditClient } from "../../billing/credit-reads";
-import { postgrestRequestReads, requestSource, type RequestSource } from "./request-reads";
+import { accessToken, apiSource } from "@/lib/request-api";
+import { apiRequestReads, type RequestSource } from "./request-reads";
 
 /**
- * The request detail's data source (U4): the signed-in user's own Supabase session — the cookie
- * client of `lib/supabase/server.ts` (anon key plus the user's JWT, RLS on, no service credential)
- * and the user id the auth server verified. `null` when nobody is signed in: the page sends the
- * reader to sign in, the result route answers 401. The fixture is chosen only by `requestSource`
- * (tested, U4-G01); this glue has no gate of its own.
+ * The request detail's data source (U4): infrx-api as the signed-in user (`lib/request-api.ts`;
+ * the client fake in the development preview). `null` when there is no session at all: the page
+ * sends the reader to sign in, the result route answers 401.
  */
-export function consumerRequestReads(): Promise<RequestSource | null> {
-  return requestSource(async () => {
-    const supabase = await requestClient();
-    const { data } = await supabase.auth.getUser();
-    if (data.user === null) return null;
-    return { reads: postgrestRequestReads(supabase as unknown as CreditClient, data.user.id), preview: false };
-  });
+export async function consumerRequestReads(): Promise<RequestSource | null> {
+  const { api, preview } = await apiSource();
+  if (!preview && (await accessToken()) === null) return null;
+  return { reads: apiRequestReads(api), preview };
 }

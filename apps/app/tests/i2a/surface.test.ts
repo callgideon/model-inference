@@ -67,13 +67,13 @@ function appRoutes(): { path: string; file: string }[] {
 }
 
 test("I2A-BUNDLE-01 no client module reaches a file that names a server-only variable (source walk)", () => {
-  // Catches: a "use client" component importing a module that reads SUPABASE_SERVICE_ROLE_KEY,
-  // INFRX_API_BASE_URL or CONSOLE_CURSOR_SECRET (the name, and any logic around it, ships to browsers).
+  // Catches: a "use client" component importing a module that reads INFRX_API_BASE_URL (the name,
+  // and any logic around it, ships to browsers). AP-09: the service key and cursor secret are gone.
   const clients = [...files(join(appRoot, "app")), ...files(join(appRoot, "components")), ...files(join(appRoot, "lib"))].filter(isClient);
   assert.ok(clients.length > 5, "the walk found no client modules; it would prove nothing");
-  assert.deepEqual(SERVER_ONLY.sort(), ["CONSOLE_CURSOR_SECRET", "INFRX_API_BASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]);
-  // The walker is not vacuous: the server-only edge does reach the cursor secret's name.
-  assert.ok(reachable(join(appRoot, "lib", "services", "server.ts")).some((f) => /CURSOR_SECRET/.test(read(f))));
+  assert.deepEqual(SERVER_ONLY.sort(), ["INFRX_API_BASE_URL"]);
+  // The walker is not vacuous: the server-only edge does reach the API origin's name.
+  assert.ok(reachable(join(appRoot, "lib", "request-api.ts")).some((f) => /INFRX_API_BASE_URL/.test(read(f))));
   const offenders: string[] = [];
   for (const client of clients) {
     for (const file of reachable(client)) {
@@ -115,7 +115,7 @@ test("I2A-ENV-08 every environment variable the App reads is in the matrix or na
   ]);
   const known = new Set(VARIABLES.map((v) => v.name));
   const read_ = envReads();
-  assert.ok(read_.includes("SUPABASE_SERVICE_ROLE_KEY") && read_.includes("INFRX_API_BASE_URL"), "the scan found nothing");
+  assert.ok(read_.includes("NODE_ENV") && read_.includes("INFRX_API_BASE_URL"), "the scan found nothing");
   assert.deepEqual([...new Set(read_.filter((n) => !known.has(n) && !EXEMPT.has(n)))], []);
 });
 

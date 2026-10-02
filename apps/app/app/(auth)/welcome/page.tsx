@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { KeyRound, BookOpen, Boxes } from "lucide-react";
 import { displayCredit } from "@/lib/contracts/v2/money-units";
-import { createClient } from "@/lib/supabase/server";
+import { accessToken, apiSource, sessionEmail } from "@/lib/request-api";
 import { welcomeWallet } from "../flow";
 import { RetryGrant } from "./retry";
 
@@ -17,19 +17,15 @@ const NEXT_STEPS = [
 
 /** After verification: the wallet's actual balance and the next step, or a recoverable state. */
 export default async function WelcomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/welcome");
-
-  const wallet = await welcomeWallet(() => supabase.rpc("console_wallet_summary", { p_user: user.id }));
+  if ((await accessToken()) === null) redirect("/login?next=/welcome");
+  const [{ api }, email] = await Promise.all([apiSource(), sessionEmail()]);
+  const wallet = await welcomeWallet(api);
 
   return (
     <>
       <div className="space-y-2 text-center">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Welcome to infrx</h1>
-        <p className="text-sm text-muted-foreground">Signed in as {user.email}</p>
+        <p className="text-sm text-muted-foreground">Signed in as {email}</p>
       </div>
 
       <section aria-labelledby="balance-heading" className="rounded-lg border p-4 text-center">

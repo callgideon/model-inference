@@ -18,9 +18,8 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
 
   const [wallet, jobs] = await Promise.all([reads.wallet(), reads.jobs(jobsPageRequest(filters, now))]);
   const found = wallet.ok ? wallet.value : null;
-  const [creditsIn, keys] =
-    found === null ? [null, null] : await Promise.all([reads.creditsIn(found.walletId), reads.keys(found.orgId)]);
-  const card = creditCardState(wallet, creditsIn);
+  const keys = found === null ? null : await reads.keys();
+  const card = creditCardState(wallet);
   const model = jobsPageModel({ filters, jobs });
 
   return (

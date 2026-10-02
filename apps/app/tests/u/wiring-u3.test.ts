@@ -5,9 +5,10 @@ import test from "node:test";
 
 const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 
-test("U3-W02 the shared operator action runs through the audited RPC port as the signed-in operator", () => {
+test("U3-W02 the shared operator action runs through the audited API port as the signed-in operator", () => {
   const actions = src("app/actions.ts");
-  assert.match(actions, /operator: operatorRpcPort\(async \(\) => \(await createClient\(\)\) as unknown as OperatorRpcClient\),/);
+  assert.match(actions, /const api = async \(\) => \(await apiSource\(\)\)\.api;/);
+  assert.match(actions, /operator: apiOperatorPort\(api\),/);
   assert.doesNotMatch(actions, /createAdminClient|SERVICE_ROLE/, "the operator port must use the operator's own session");
 });
 

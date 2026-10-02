@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const source = readFileSync(
-  join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "lib", "supabase", "middleware.ts"),
+  join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "lib", "session-middleware.ts"),
   "utf8",
 );
 const table = /const PUBLIC = \[([^\]]*)\]/.exec(source);

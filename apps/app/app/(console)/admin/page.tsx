@@ -7,9 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { Result } from "@/lib/contracts/types";
 import { amount, credits, dateTime } from "@/lib/format";
 import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { apiSource } from "@/lib/request-api";
 import { OperatorForms } from "./operator-forms";
-import { ACCOUNT_LIMIT, operatorReads, type ReadClient } from "./operator-reads";
+import { ACCOUNT_LIMIT, operatorReads } from "./operator-reads";
 
 export const metadata = { title: "Operator · infrx" };
 
@@ -46,7 +46,7 @@ export default async function AdminPage() {
   const session = await getSession();
   if (!session.isOperator) notFound();
 
-  const view = await operatorReads((await createClient()) as unknown as ReadClient);
+  const view = await operatorReads((await apiSource()).api);
 
   return (
     <>

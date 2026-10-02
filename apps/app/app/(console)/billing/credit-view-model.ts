@@ -19,7 +19,6 @@ import {
 } from "../../../lib/contracts/v2/money-units.ts";
 import type { Page, Result } from "../../../lib/contracts/types.ts";
 import {
-  spentCredit,
   type CreditLedgerEntry,
   type CreditWallet,
   type LegacyUsd,
@@ -168,18 +167,15 @@ export type CreditCardModel = {
 };
 
 /**
- * The card as a state. `creditsIn` is null when it was not read; its failure only makes "Spent"
- * unavailable, because available and reserved come from the wallet row itself.
+ * The card as a state. "Spent" is the API's own figure; when it cannot say (null), only "Spent" is
+ * unavailable, because available and reserved are stated on the wallet itself.
  */
-export function creditCardState(
-  wallet: Result<CreditWallet | null>,
-  creditsIn: Result<Credit | null> | null,
-): ViewState<CreditCardModel> {
+export function creditCardState(wallet: Result<CreditWallet | null>): ViewState<CreditCardModel> {
   return mapState(viewStateOf(wallet, () => false), (found) => {
     if (found === null) {
       return { figures: [], grant: "", state: creditAccountState(null), reconciles: true, notice: CREDITS_NOTICE };
     }
-    const spent = creditsIn !== null && creditsIn.ok ? spentCredit(found, creditsIn.value) : null;
+    const spent = found.spent;
     return {
       figures: creditFigures(found, spent),
       grant: grantLine(found),
@@ -271,7 +267,6 @@ export type CreditsPageModel = {
 export function creditsPageModel(input: {
   state: PageCursor;
   wallet: Result<CreditWallet | null>;
-  creditsIn: Result<Credit | null> | null;
   /** null when not read: there is no wallet to read it for. */
   ledger: Result<Page<CreditLedgerEntry>> | null;
   legacy: Result<LegacyUsd> | null;
@@ -281,7 +276,7 @@ export function creditsPageModel(input: {
   return {
     here: ledgerHref(state),
     firstHref,
-    card: creditCardState(input.wallet, input.creditsIn),
+    card: creditCardState(input.wallet),
     ledger:
       input.ledger === null
         ? // Not read. With no wallet that is "no entries"; after a failed wallet read it is that error.

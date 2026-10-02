@@ -10,7 +10,7 @@ export default function VerifyEmailPage() {
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Verify your email</h1>
         <p className="text-sm text-muted-foreground">
           Open the link in the email we sent you. Your 10,000 signup credits are issued once your address is
-          verified. Links expire; request a new one below if yours did.
+          verified. Links expire.
         </p>
       </div>
       <ResendForm />

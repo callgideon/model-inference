@@ -6,11 +6,12 @@ import type { NextConfig } from "next";
 
 const app = resolve(import.meta.dirname, "../../..");
 // Turbopack refuses files outside its root; a mutant runner's copy links node_modules to the real
-// install, so the root is the deepest directory holding both.
-const modules = realpathSync(resolve(app, "node_modules")).split(sep);
+// install, and the generated API client is a linked package (packages/api-client), so the root is
+// the deepest directory holding all three.
+const held = [realpathSync(resolve(app, "node_modules")), realpathSync(resolve(app, "node_modules/@infrx/api-client"))].map((p) => p.split(sep));
 const parts = app.split(sep);
 let depth = 0;
-while (depth < parts.length && parts[depth] === modules[depth]) depth += 1;
+while (depth < parts.length && held.every((other) => parts[depth] === other[depth])) depth += 1;
 const root = parts.slice(0, depth).join(sep) || sep;
 
 const config: NextConfig = {

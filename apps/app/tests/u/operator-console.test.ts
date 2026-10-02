@@ -6,12 +6,12 @@
 // - there is no arbitrary balance edit any more: the legacy `addCredit` (a free-form USD row
 //   written with the service key) is gone, and nothing in admin/ holds a service key;
 // - the page answers 404 to anyone without operator authority BEFORE it reads anything;
-// - the operator port sends exactly the audited operation (who acts is decided by the database
-//   from the operator's own JWT, never by a field), and maps every refusal to a typed code with
-//   fixed text - a DB message never reaches the page, and an answer it cannot read is "not
-//   confirmed", never a success;
-// - the reads are exact CREDIT decimal strings or an explicit unavailable state per section, never
-//   a zero, a number or a fixture;
+// - the operator port sends exactly the audited operation to infrx-api (`POST /operator/v1/*`, the
+//   reason in the body and the form's key as Idempotency-Key; who acts is decided by the API from
+//   the operator's own session, never by a field), and maps every refusal to a typed code with fixed
+//   text - an API message never reaches the page, and an answer it cannot read is "not confirmed";
+// - the reads (`GET /operator/v1/*`) are exact CREDIT decimal strings or an explicit unavailable
+//   state per section, never a zero, a number or a fixture;
 // - a form keeps its idempotency key across every failure (a retry cannot apply twice) and rotates
 //   it only after a committed change.
 import assert from "node:assert/strict";
@@ -21,15 +21,9 @@ import test from "node:test";
 
 import type { OperatorCommand } from "../../lib/services/actions.ts";
 import type { Credit } from "../../lib/contracts/v2/money-units.ts";
-import { OPERATOR_RPC, operatorRpcPort, type OperatorRpcClient } from "../../app/(console)/admin/operator-port.ts";
-import {
-  ACCOUNT_LIMIT,
-  AUDIT_LIMIT,
-  OPERATOR_RELATIONS,
-  UNKNOWN_LIMIT,
-  operatorReads,
-  type ReadClient,
-} from "../../app/(console)/admin/operator-reads.ts";
+import { answer, envelope, recordingApi, type Sent } from "../../lib/fake-api.ts";
+import { apiOperatorPort } from "../../app/(console)/admin/operator-port.ts";
+import { ACCOUNT_LIMIT, AUDIT_LIMIT, DRIFT_LIMIT, UNKNOWN_LIMIT, operatorReads } from "../../app/(console)/admin/operator-reads.ts";
 import { OPERATOR_FORMS, formInput, nextKey, outcomeOf } from "../../app/(console)/admin/operator-form.ts";
 
 const ADMIN = join(import.meta.dirname, "../../app/(console)/admin");
@@ -57,7 +51,7 @@ test("U3-S02 the page refuses a non-operator (404) before any read, and reads wi
   const read = page.indexOf("operatorReads(");
   assert.ok(gate > 0, "the operator gate is present");
   assert.ok(read > gate, "the reads run only after the gate");
-  assert.match(page, /operatorReads\(\(await createClient\(\)\)/, "the reads use the cookie client (the operator's own JWT)");
+  assert.match(page, /operatorReads\(\(await apiSource\(\)\)\.api\)/, "the reads use the request's API client (the operator's own session)");
   assert.ok(!/fixture/i.test(page), "no fixture reaches the operator page");
 });
 
@@ -108,92 +102,81 @@ test("U3-S05 every page section goes through Section, and a failed read renders 
 
 // --------------------------------------------------------------------------------------- port
 
-type Call = { fn: string; args: Record<string, unknown> };
-function rpcClient(answer: { data: unknown; error: { code?: string; message?: string } | null } | Error, calls: Call[] = []) {
-  const client: OperatorRpcClient = {
-    rpc(fn, args) {
-      calls.push({ fn, args });
-      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-    },
-  };
-  return { port: operatorRpcPort(async () => client), calls };
+function port(reply: (sent: Sent) => Response) {
+  const { api, sent } = recordingApi(reply);
+  return { port: apiOperatorPort(async () => api), sent };
 }
 
 const ADJUST: OperatorCommand = { action: "adjust_credit", user_id: USER, amount: "-2.50000000" as Credit, ...AUDITED };
 const SUSPEND: OperatorCommand = { action: "set_suspension", org_id: ORG, suspended: true, ...AUDITED };
 const REVOKE: OperatorCommand = { action: "revoke_key", key_id: KEY_ID, ...AUDITED };
 
-test("U3-P01 each command is exactly one audited RPC; the actor is never sent (the DB derives it)", async () => {
+test("U3-P01 each command is exactly one audited operator POST; the actor is never sent (the API derives it)", async () => {
   const cases: [OperatorCommand, string, Record<string, unknown>][] = [
-    [ADJUST, OPERATOR_RPC.adjust_credit, { p_user: USER, p_amount: "-2.50000000", p_reason: AUDITED.reason, p_idempotency_key: "k-1" }],
-    [SUSPEND, OPERATOR_RPC.set_suspension, { p_org: ORG, p_suspended: true, p_reason: AUDITED.reason, p_idempotency_key: "k-1" }],
-    [REVOKE, OPERATOR_RPC.revoke_key, { p_key: KEY_ID, p_reason: AUDITED.reason, p_idempotency_key: "k-1" }],
+    [ADJUST, "/operator/v1/credit-adjustments", { user_id: USER, amount: "-2.50000000", reason: AUDITED.reason }],
+    [SUSPEND, "/operator/v1/suspensions", { org_id: ORG, suspended: true, reason: AUDITED.reason }],
+    [REVOKE, "/operator/v1/key-revocations", { key_id: KEY_ID, reason: AUDITED.reason }],
   ];
-  for (const [command, fn, args] of cases) {
-    const { port, calls } = rpcClient({ data: { replayed: false }, error: null });
-    assert.deepEqual(await port.run(command), { ok: true, value: { replayed: false } });
-    assert.deepEqual(calls, [{ fn, args }]);
-    assert.ok(!JSON.stringify(calls).includes("operator:someone"), "the form-side actor never reaches the database");
+  for (const [command, path, body] of cases) {
+    const { port: p, sent } = port(() => answer(200, { replayed: false }));
+    assert.deepEqual(await p.run(command), { ok: true, value: { replayed: false } });
+    assert.deepEqual(sent.map((s) => [s.method, s.path, s.body, s.idempotencyKey]), [["POST", path, body, "k-1"]]);
+    assert.ok(!JSON.stringify(sent).includes("operator:someone"), "the form-side actor never reaches the API");
   }
-  assert.deepEqual(OPERATOR_RPC, {
-    adjust_credit: "operator_adjust_credit",
-    set_suspension: "operator_set_suspension",
-    revoke_key: "operator_revoke_key",
-  });
 });
 
 test("U3-P02 a replay is reported as a replay; an answer without a boolean is 'not confirmed', never success", async () => {
-  assert.deepEqual(await rpcClient({ data: { replayed: true, amount: "5.00000000" }, error: null }).port.run(ADJUST), {
+  assert.deepEqual(await port(() => answer(200, { replayed: true, amount: { amount: "5.00000000", unit: "CREDIT" } })).port.run(ADJUST), {
     ok: true,
     value: { replayed: true },
   });
   for (const data of [null, {}, { replayed: "false" }, [{ replayed: false }], "ok"]) {
-    const result = await rpcClient({ data, error: null }).port.run(ADJUST);
+    const result = await port(() => answer(200, data)).port.run(ADJUST);
     assert.equal(result.ok, false, `answer ${JSON.stringify(data)}`);
     if (!result.ok) assert.equal(result.error.code, "dependency_unavailable");
   }
 });
 
 test("U3-P03 the one-time signup grant is not an operator console operation: nothing is sent", async () => {
-  const { port, calls } = rpcClient({ data: { replayed: false }, error: null });
-  const result = await port.run({ action: "grant_initial", user_id: USER, ...AUDITED });
-  assert.equal(calls.length, 0);
+  const { port: p, sent } = port(() => answer(200, { replayed: false }));
+  const result = await p.run({ action: "grant_initial", user_id: USER, ...AUDITED });
+  assert.equal(sent.length, 0);
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "unsupported_parameter");
 });
 
-test("U3-P04 refusals map to typed codes with fixed text; DB detail never reaches the page", async () => {
+test("U3-P04 refusals map to typed codes with fixed text; API detail never reaches the page", async () => {
   const secret = "relation infrx.credit_wallets wallet a1000000 row 7";
-  const cases: [{ code?: string; message?: string }, string][] = [
-    [{ code: "42501", message: `forbidden: ${secret}` }, "forbidden"],
-    [{ code: "P0001", message: `idempotency_conflict: ${secret}` }, "idempotency_conflict"],
-    [{ code: "P0001", message: `invalid_request: ${secret}` }, "invalid_request"],
-    [{ code: "P0001", message: `not_found: ${secret}` }, "not_found"],
-    [{ code: "P0001", message: `state_conflict: ${secret}` }, "state_conflict"],
-    [{ code: "P0002", message: `not_found: ${secret}` }, "not_found"],
-    [{ code: "P0001", message: `internal_error: ${secret}` }, "dependency_unavailable"],
-    [{ code: "P0001", message: `made_up_code: ${secret}` }, "dependency_unavailable"],
-    [{ code: "PGRST202", message: secret }, "dependency_unavailable"],
-    [{ code: "23505", message: secret }, "dependency_unavailable"],
-    [{ message: secret }, "dependency_unavailable"],
+  const cases: [number, string, string][] = [
+    [403, "forbidden", "forbidden"],
+    [401, "invalid_api_key", "forbidden"],
+    [409, "idempotency_conflict", "idempotency_conflict"],
+    [422, "invalid_request", "invalid_request"],
+    [404, "not_found", "not_found"],
+    [409, "state_conflict", "state_conflict"],
+    [500, "internal_error", "dependency_unavailable"],
+    [400, "made_up_code", "dependency_unavailable"],
+    [503, "dependency_unavailable", "dependency_unavailable"],
   ];
-  for (const [error, code] of cases) {
-    const result = await rpcClient({ data: null, error }).port.run(ADJUST);
+  for (const [status, code, expected] of cases) {
+    const result = await port(() => answer(status, envelope(code, secret))).port.run(ADJUST);
     assert.equal(result.ok, false);
     if (result.ok) continue;
-    assert.equal(result.error.code, code, JSON.stringify(error));
+    assert.equal(result.error.code, expected, `${status} ${code}`);
     assert.ok(!result.error.message.includes("a1000000") && !result.error.message.includes("infrx"), result.error.message);
   }
 });
 
 test("U3-P05 a transport failure or a client that cannot be built is 'not confirmed, retry with the same key'", async () => {
-  for (const port of [
-    rpcClient(new Error("fetch failed: 10.0.0.1")).port,
-    operatorRpcPort(async () => {
+  for (const p of [
+    port(() => {
+      throw new Error("fetch failed: 10.0.0.1");
+    }).port,
+    apiOperatorPort(async () => {
       throw new Error("no cookie");
     }),
   ]) {
-    const result = await port.run(SUSPEND);
+    const result = await p.run(SUSPEND);
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.error.code, "dependency_unavailable");
@@ -204,82 +187,58 @@ test("U3-P05 a transport failure or a client that cannot be built is 'not confir
 
 // -------------------------------------------------------------------------------------- reads
 
-type Answer = { data: unknown; error: { code?: string; message?: string } | null };
-type Recorded = { relation: string; select: string; ops: [string, ...unknown[]][] };
-
-function readClient(answers: Record<string, Answer>, recorded: Recorded[] = []): ReadClient {
-  return {
-    from(relation) {
-      return {
-        select(columns) {
-          const entry: Recorded = { relation, select: columns, ops: [] };
-          recorded.push(entry);
-          const chain = {
-            eq: (...a: unknown[]) => (entry.ops.push(["eq", ...a]), chain),
-            in: (...a: unknown[]) => (entry.ops.push(["in", ...a]), chain),
-            order: (...a: unknown[]) => (entry.ops.push(["order", ...a]), chain),
-            limit: (...a: unknown[]) => (entry.ops.push(["limit", ...a]), chain),
-            then<A, B>(ok?: ((v: Answer) => A | PromiseLike<A>) | null, bad?: ((e: unknown) => B | PromiseLike<B>) | null) {
-              const answer = answers[relation];
-              return (answer === undefined ? Promise.reject(new Error("no such relation")) : Promise.resolve(answer)).then(ok, bad);
-            },
-          };
-          return chain;
-        },
-      };
-    },
-  };
-}
-
-const walletRow = (over: Record<string, unknown> = {}) => ({
+const C = (amount: string) => ({ amount, unit: "CREDIT" });
+const accountDoc = (over: Record<string, unknown> = {}) => ({
   wallet_id: WALLET,
-  kind: "consumer",
-  owner_user_id: USER,
+  user_id: USER,
   org_id: ORG,
-  ledger_total: "10000.00000000",
-  reserved_total: "14.74560000",
-  available: "9985.25440000",
+  email: "person@example.com",
+  suspended: false,
+  suspension_reason: null,
+  ledger_total: C("10000.00000000"),
+  reserved_total: C("14.74560000"),
+  available: C("9985.25440000"),
   signup_granted_at: "2026-09-25T10:00:00+00:00",
   ...over,
 });
-const orgRow = (over: Record<string, unknown> = {}) => ({
-  org_id: ORG,
-  name: "Personal",
-  owner_email: "person@example.com",
-  suspended: false,
-  suspension_reason: null,
-  ...over,
-});
-const auditRow = (over: Record<string, unknown> = {}) => ({
+const auditDoc = (over: Record<string, unknown> = {}) => ({
   id: "e1000000-0000-4000-8000-00000000000e",
   at: "2026-09-25T11:00:00+00:00",
-  actor_principal: "operator:33333333-3333-4333-8333-333333333333",
+  actor: "operator:33333333-3333-4333-8333-333333333333",
   action: "admin_adjust",
   target_org_id: ORG,
   reason: "support ticket 42",
   idempotency_key: "grant_credit:0f",
   ...over,
 });
-const heldRow = (over: Record<string, unknown> = {}) => ({
+const heldDoc = (over: Record<string, unknown> = {}) => ({
   request_id: "f1000000-0000-4000-8000-00000000000f",
   org_id: ORG,
   created_at: "2026-09-24T09:00:00+00:00",
   reconcile_after: "2026-09-25T09:00:00+00:00",
-  unit: "CREDIT",
-  hold: "14.74560000",
+  hold: C("14.74560000"),
   ...over,
 });
-const WORLD = (): Record<string, Answer> => ({
-  console_credit_wallets: { data: [walletRow()], error: null },
-  console_admin_orgs: { data: [orgRow()], error: null },
-  operator_unknown_usage: { data: [heldRow(), heldRow({ request_id: "f2000000-0000-4000-8000-00000000000f", unit: "USD", hold: "0.25000000" })], error: null },
-  operator_audit: { data: [auditRow()], error: null },
-  operator_wallet_drift: { data: [], error: null },
+type World = Record<string, unknown>;
+const WORLD = (): World => ({
+  "/operator/v1/accounts": [accountDoc()],
+  "/operator/v1/unknown-usage": [heldDoc(), heldDoc({ request_id: "f2000000-0000-4000-8000-00000000000f", hold: { amount: "0.25000000", unit: "USD" } })],
+  "/operator/v1/audit": [auditDoc()],
+  "/operator/v1/wallet-drift": [],
 });
+/** The four projections from `world` (a list is a page; a Response is answered as is). */
+function reads(world: World) {
+  const { api, sent } = recordingApi((s) => {
+    const doc = world[s.path.split("?")[0]];
+    if (doc === undefined) throw new Error("unreachable");
+    return doc instanceof Response ? doc : answer(200, { data: doc, next_cursor: null });
+  });
+  return { view: operatorReads(api), sent };
+}
 
-test("U3-R01 accounts are exact CREDIT strings joined to their organization's suspension state", async () => {
-  const reads = await operatorReads(readClient(WORLD()));
-  assert.deepEqual(reads.accounts, {
+test("U3-R01 accounts are exact CREDIT strings with their organization's suspension state", async () => {
+  const { view } = reads(WORLD());
+  assert.deepEqual((await view).accounts, {
     ok: true,
     value: [
       {
@@ -292,110 +251,85 @@ test("U3-R01 accounts are exact CREDIT strings joined to their organization's su
         ledgerTotal: "10000.00000000",
         reservedTotal: "14.74560000",
         available: "9985.25440000",
-        signupGrantedAt: "2026-09-25T10:00:00+00:00",
+        signupGrantedAt: "2026-09-25T10:00:00.000000Z",
       },
     ],
   });
-  const world = WORLD();
-  world.console_admin_orgs = { data: [orgRow({ suspended: true, suspension_reason: "other" })], error: null };
-  const suspended = await operatorReads(readClient(world));
-  assert.ok(suspended.accounts.ok);
+  const suspended = await reads({ ...WORLD(), "/operator/v1/accounts": [accountDoc({ suspended: true, suspension_reason: "other" })] }).view;
+  assert.ok(suspended.accounts.ok, "the suspended account");
   assert.deepEqual([suspended.accounts.value[0].suspended, suspended.accounts.value[0].suspensionReason], [true, "other"]);
 });
 
-test("U3-R02 a figure that is not an exact decimal string, or does not reconcile, makes the section unavailable - never a zero", async () => {
+test("U3-R02 a figure that is not an exact CREDIT decimal makes the section unavailable - never a zero", async () => {
   for (const bad of [
-    walletRow({ ledger_total: 10000 }),
-    walletRow({ available: "1e4" }),
-    walletRow({ ledger_total: null }),
-    walletRow({ available: "9985.25440001" }),
-    walletRow({ owner_user_id: null }),
+    accountDoc({ ledger_total: { amount: "1e4", unit: "CREDIT" } }),
+    accountDoc({ available: C("9985.254400001") }),
+    accountDoc({ available: { amount: "9985.25440000", unit: "USD" } }),
+    accountDoc({ signup_granted_at: "yesterday" }),
   ]) {
-    const world = WORLD();
-    world.console_credit_wallets = { data: [bad], error: null };
-    const reads = await operatorReads(readClient(world));
-    assert.equal(reads.accounts.ok, false, JSON.stringify(bad));
-    if (!reads.accounts.ok) assert.equal(reads.accounts.error.code, "dependency_unavailable");
-    assert.equal(reads.audit.ok, true, "one broken section does not take the others down");
+    const view = await reads({ ...WORLD(), "/operator/v1/accounts": [bad] }).view;
+    assert.equal(view.accounts.ok, false, JSON.stringify(bad));
+    if (!view.accounts.ok) assert.equal(view.accounts.error.code, "dependency_unavailable");
+    assert.equal(view.audit.ok, true, "one broken section does not take the others down");
   }
-  const orphan = WORLD();
-  orphan.console_admin_orgs = { data: [], error: null };
-  assert.equal((await operatorReads(readClient(orphan))).accounts.ok, false, "a wallet whose organization is not readable");
 });
 
-test("U3-R03 each section fails on its own: an error, a rejected read or a missing relation is unavailable", async () => {
-  const world = WORLD();
-  world.operator_unknown_usage = { data: null, error: { code: "42501", message: "permission denied" } };
-  world.operator_wallet_drift = { data: null, error: { code: "PGRST205", message: "relation not found" } };
-  delete (world as Partial<typeof world>).operator_audit;
-  const reads = await operatorReads(readClient(world));
-  assert.equal(reads.accounts.ok, true);
-  for (const section of [reads.unknownUsage, reads.drift, reads.audit]) {
+test("U3-R03 each section fails on its own: a refusal, an outage or an unreadable answer is unavailable", async () => {
+  const view = await reads({
+    ...WORLD(),
+    "/operator/v1/unknown-usage": answer(403, envelope("forbidden", "permission denied for relation")),
+    "/operator/v1/wallet-drift": answer(503, envelope("dependency_unavailable", "relation not found")),
+    "/operator/v1/audit": new Response("<html>", { status: 502 }),
+  }).view.catch(() => assert.fail("one failed section took the whole page down"));
+  assert.equal(view.accounts.ok, true);
+  for (const section of [view.unknownUsage, view.drift, view.audit]) {
     assert.equal(section.ok, false);
     if (!section.ok) {
       assert.equal(section.error.code, "dependency_unavailable");
-      assert.ok(!/permission|relation/.test(section.error.message), "no DB text");
+      assert.ok(!/permission|relation/.test(section.error.message), "no API text");
     }
   }
 });
 
-test("U3-R04 the reads touch only the operator read surface, bounded, with the documented filters", async () => {
-  const recorded: Recorded[] = [];
-  await operatorReads(readClient(WORLD(), recorded));
-  assert.deepEqual([...new Set(recorded.map((r) => r.relation))].sort(), [...OPERATOR_RELATIONS].sort());
-  const of = (relation: string) => recorded.find((r) => r.relation === relation) as Recorded;
-  assert.deepEqual(of("console_credit_wallets").ops, [
-    ["eq", "kind", "consumer"],
-    ["order", "updated_at", { ascending: false }],
-    ["limit", ACCOUNT_LIMIT],
+test("U3-R04 the reads touch only the four operator projections, each bounded", async () => {
+  const { view, sent } = reads(WORLD());
+  await view;
+  assert.deepEqual(sent.map((s) => `${s.method} ${s.path}`).sort(), [
+    `GET /operator/v1/accounts?limit=${ACCOUNT_LIMIT}`,
+    `GET /operator/v1/audit?limit=${AUDIT_LIMIT}`,
+    `GET /operator/v1/unknown-usage?limit=${UNKNOWN_LIMIT}`,
+    `GET /operator/v1/wallet-drift?limit=${DRIFT_LIMIT}`,
   ]);
-  assert.deepEqual(of("console_admin_orgs").ops, [["in", "org_id", [ORG]]]);
-  assert.deepEqual(of("operator_unknown_usage").ops, [
-    ["order", "created_at", { ascending: true }],
-    ["limit", UNKNOWN_LIMIT],
-  ]);
-  assert.ok(of("operator_audit").ops.some(([op, n]) => op === "limit" && n === AUDIT_LIMIT), "the audit read is bounded");
-  assert.deepEqual(of("operator_audit").ops, [
-    ["order", "at", { ascending: false }],
-    ["limit", AUDIT_LIMIT],
-  ]);
-  const empty = WORLD();
-  empty.console_credit_wallets = { data: [], error: null };
-  const none: Recorded[] = [];
-  const reads = await operatorReads(readClient(empty, none));
-  assert.deepEqual(reads.accounts, { ok: true, value: [] });
-  assert.ok(!none.some((r) => r.relation === "console_admin_orgs"), "no organization read for no wallets");
+  const empty = await reads({ ...WORLD(), "/operator/v1/accounts": [] }).view;
+  assert.deepEqual(empty.accounts, { ok: true, value: [] });
 });
 
 test("U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, USD for a legacy one", async () => {
-  const reads = await operatorReads(readClient(WORLD()));
-  const at = { orgId: ORG, createdAt: "2026-09-24T09:00:00+00:00", reconcileAfter: "2026-09-25T09:00:00+00:00" };
-  assert.ok(reads.unknownUsage.ok && reads.unknownUsage.value[1].hold?.unit === "USD", "a legacy hold stays USD");
-  assert.deepEqual(reads.unknownUsage, {
+  const view = await reads(WORLD()).view;
+  const at = { orgId: ORG, createdAt: "2026-09-24T09:00:00.000000Z", reconcileAfter: "2026-09-25T09:00:00.000000Z" };
+  assert.ok(view.unknownUsage.ok && view.unknownUsage.value[1].hold?.unit === "USD", "a legacy hold stays USD");
+  assert.deepEqual(view.unknownUsage, {
     ok: true,
     value: [
       { requestId: "f1000000-0000-4000-8000-00000000000f", ...at, hold: { amount: "14.74560000", unit: "CREDIT" } },
       { requestId: "f2000000-0000-4000-8000-00000000000f", ...at, hold: { amount: "0.25000000", unit: "USD" } },
     ],
   });
-  const world = WORLD();
-  world.operator_unknown_usage = { data: [heldRow({ hold: null })], error: null };
-  const released = (await operatorReads(readClient(world))).unknownUsage;
+  const released = (await reads({ ...WORLD(), "/operator/v1/unknown-usage": [heldDoc({ hold: null })] }).view).unknownUsage;
   assert.ok(released.ok && released.value[0].hold === null, "a released hold is null, not a zero");
-  for (const bad of [heldRow({ hold: 14.7456 }), heldRow({ unit: "barter" }), heldRow({ reconcile_after: null })]) {
-    world.operator_unknown_usage = { data: [bad], error: null };
-    assert.equal((await operatorReads(readClient(world))).unknownUsage.ok, false, JSON.stringify(bad));
+  for (const bad of [heldDoc({ hold: { amount: "1e1", unit: "CREDIT" } }), heldDoc({ hold: { amount: "1.00000000", unit: "barter" } }), heldDoc({ created_at: null })]) {
+    assert.equal((await reads({ ...WORLD(), "/operator/v1/unknown-usage": [bad] }).view).unknownUsage.ok, false, JSON.stringify(bad));
   }
 });
 
 test("U3-R06 the audit trail is the closed action vocabulary; drift rows are exact CREDIT", async () => {
-  const reads = await operatorReads(readClient(WORLD()));
-  assert.deepEqual(reads.audit, {
+  const view = await reads(WORLD()).view;
+  assert.deepEqual(view.audit, {
     ok: true,
     value: [
       {
         id: "e1000000-0000-4000-8000-00000000000e",
-        at: "2026-09-25T11:00:00+00:00",
+        at: "2026-09-25T11:00:00.000000Z",
         actor: "operator:33333333-3333-4333-8333-333333333333",
         action: "admin_adjust",
         targetOrgId: ORG,
@@ -404,14 +338,12 @@ test("U3-R06 the audit trail is the closed action vocabulary; drift rows are exa
       },
     ],
   });
-  const world = WORLD();
-  world.operator_audit = { data: [auditRow({ action: "set_balance" })], error: null };
-  world.operator_wallet_drift = { data: [{ wallet_id: WALLET, kind: "consumer", ledger_drift: "0.00000001", reserved_drift: "0.00000000" }], error: null };
-  const again = await operatorReads(readClient(world));
+  const drift = [{ wallet_id: WALLET, kind: "consumer", ledger_drift: C("0.00000001"), reserved_drift: C("0.00000000") }];
+  const again = await reads({ ...WORLD(), "/operator/v1/audit": [auditDoc({ action: "set_balance" })], "/operator/v1/wallet-drift": drift }).view;
   assert.equal(again.audit.ok, false);
   assert.deepEqual(again.drift, { ok: true, value: [{ walletId: WALLET, kind: "consumer", ledgerDrift: "0.00000001", reservedDrift: "0.00000000" }] });
-  world.operator_wallet_drift = { data: [{ wallet_id: WALLET, kind: "consumer", ledger_drift: 0, reserved_drift: "0.00000000" }], error: null };
-  assert.equal((await operatorReads(readClient(world))).drift.ok, false);
+  const usd = [{ ...drift[0], ledger_drift: { amount: "0.00000001", unit: "USD" } }];
+  assert.equal((await reads({ ...WORLD(), "/operator/v1/wallet-drift": usd }).view).drift.ok, false);
 });
 
 // -------------------------------------------------------------------------------------- forms

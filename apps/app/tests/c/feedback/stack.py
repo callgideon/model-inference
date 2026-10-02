@@ -12,22 +12,18 @@ C1 -> OTHER (OTHER's own model only). JOB_1 already carries an API signal and an
     cd apps/infrx-api && INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase \\
         uv run --frozen python ../app/tests/c/feedback/stack.py [--mutants]
 
-Order: the `check_*` below as the browser roles (psycopg, `checks._jwt`), then the App adapter
-through PostgREST v13.0.4 + supabase-js (`apps/app/tests/c/feedback/feedback-postgrest.test.ts`;
-the Lab no longer reaches PostgREST, AP-09 09c), then the committed revocation. `--mutants`
+Order: the `check_*` below as the browser roles (psycopg, `checks._jwt`), then the committed
+revocation. Neither the App (AP-09 09b: POST /console/v1/requests/{id}/feedback) nor the Lab
+(AP-09 09c) reaches PostgREST any more, so no adapter runs here. `--mutants`
 applies each SQL mutant of the doors to a fresh world and requires a named check to fail.
 Everything is labelled with this checkout and removed at exit; nothing hosted is touched.
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import re
-import subprocess
 import sys
-import tempfile
-import time
 import uuid
 from pathlib import Path
 
@@ -37,7 +33,6 @@ APP = Path(__file__).resolve().parents[3]
 API = APP.parent / "infrx-api"
 sys.path.insert(0, str(API))
 
-import httpx  # noqa: E402
 import psycopg  # noqa: E402
 from infrx.contracts import errors  # noqa: E402
 from infrx.contracts.conformance import builders as b  # noqa: E402
@@ -54,12 +49,6 @@ from tests.d import test_l2sql_access as t  # noqa: E402
 assert pgharness.SERVICE.host_port == 57509 and pgharness.ON_SUPABASE, \
     "run with INFRX_D_TASK=app-c3f INFRX_D1_IMAGE=supabase (this lane's port, the real image)"
 
-POSTGREST = ("postgrest/postgrest@sha256:"
-             "a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732")  # v13.0.4
-NAME, NETWORK, DB_ALIAS = "infrx-app-c3f-postgrest", "infrx-app-c3f-net", "infrx-app-c3f-db"
-LABEL = "ai.infrx.app-c3f.checkout"
-JWT_SECRET = "infrx-app-c3f-local-jwt-secret-not-a-real-one"
-AUTHN_PASSWORD = "infrx-app-c3f-authenticator-local"
 DB = f"{pgharness.DATABASE}_c3f"
 # WR-LSQ-7: once a 0038_* migration exists the doors are the migration's (body byte-identical to
 # proposed_doors.sql), so build() applies nothing and --mutants mutates the real migration.
@@ -200,7 +189,10 @@ def check_only_signed_in_sessions_reach_the_doors(conn, w) -> str:
         acl = conn.execute("select coalesce(proacl::text, '') from pg_proc where oid = "
                            "%s::regprocedure", (f"public.{door}(jsonb)",)).fetchone()[0]
         grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
-        assert grantees == {"postgres", "authenticated", "service_role"}, f"{door}: {acl}"
+        # 0064 (AP-08 judge API) grants the review door to the Lab control service's own login
+        # (infrx_lab_control, not a browser role); `authenticated` stays the only browser grantee.
+        lab = {"infrx_lab_control"} if door == "lab_review_feedback" else set()
+        assert grantees == {"postgres", "authenticated", "service_role"} | lab, f"{door}: {acl}"
         assert as_user(conn, "service", door, args)[1] == "not_found", door
     return "anon 42501 on both; authenticated only; platform role not_found"
 
@@ -388,73 +380,6 @@ def run_checks(conn, world, checks_=CHECKS) -> list[str]:
     return failed
 
 
-# ----------------------------------------------------------------------------- PostgREST
-def _docker(*args, check=True):
-    return subprocess.run(("docker", *args), capture_output=True, text=True, check=check)
-
-
-def _ours(name: str, kind: str) -> bool | None:
-    probe = _docker(kind, "inspect", "-f", "{{json .Config.Labels}}" if kind == "container"
-                    else "{{json .Labels}}", name, check=False)
-    if probe.returncode != 0:
-        return None
-    return (json.loads(probe.stdout.strip() or "null") or {}).get(LABEL) == pgharness.checkout()
-
-
-def up() -> str:
-    for name, kind in ((NAME, "container"), (NETWORK, "network")):
-        if _ours(name, kind) is False:
-            raise SystemExit(f"refusing to touch {kind} {name}: not created by this checkout")
-    _docker("rm", "-f", NAME, check=False)
-    if _ours(NETWORK, "network") is None:
-        _docker("network", "create", "--label", f"{LABEL}={pgharness.checkout()}", NETWORK)
-    _docker("network", "connect", "--alias", DB_ALIAS, NETWORK, pgharness.CONTAINER, check=False)
-    pgharness._sb("postgres", f"alter role authenticator with login password '{AUTHN_PASSWORD}'")
-    # As in C3A's stack: the hosted `auth.uid()` reads `request.jwt.claims`.
-    pgharness._sb(DB, "create or replace function auth.uid() returns uuid language sql stable "
-                      "as $f$ select coalesce(nullif(current_setting('request.jwt.claim.sub', "
-                      "true), ''), nullif(nullif(current_setting('request.jwt.claims', true), "
-                      "'')::jsonb ->> 'sub', ''))::uuid $f$")
-    _docker("run", "-d", "--name", NAME, "--network", NETWORK,
-            "--label", f"{LABEL}={pgharness.checkout()}",
-            "-e", f"PGRST_DB_URI=postgres://authenticator:{AUTHN_PASSWORD}@{DB_ALIAS}:5432/{DB}",
-            "-e", "PGRST_DB_SCHEMAS=public", "-e", "PGRST_DB_ANON_ROLE=anon",
-            "-e", f"PGRST_JWT_SECRET={JWT_SECRET}", POSTGREST)
-    address = _docker("inspect", "-f", "{{(index .NetworkSettings.Networks \"" + NETWORK
-                      + "\").IPAddress}}", NAME).stdout.strip()
-    base = f"http://{address}:3000"
-    for _ in range(60):
-        try:
-            if httpx.get(base + "/", timeout=2).status_code < 500:
-                return base
-        except httpx.HTTPError:
-            pass
-        time.sleep(0.5)
-    raise SystemExit(f"{NAME} never answered")
-
-
-def down() -> None:
-    if _ours(NAME, "container"):
-        _docker("rm", "-f", NAME, check=False)
-    _docker("network", "disconnect", NETWORK, pgharness.CONTAINER, check=False)
-    if _ours(NETWORK, "network"):
-        _docker("network", "rm", NETWORK, check=False)
-
-
-def adapters(world: dict) -> int:
-    base = up()
-    try:
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-            json.dump({**world, "url": base, "jwt_secret": JWT_SECRET}, handle)
-        env = {**os.environ, "INFRX_C3F_STACK": handle.name}
-        codes = [subprocess.run(("node", "--test", test), cwd=root, env=env).returncode
-                 for root, test in ((APP, "tests/c/feedback/feedback-postgrest.test.ts"),)]
-        os.unlink(handle.name)
-        return max(codes)
-    finally:
-        down()
-
-
 # ---------------------------------------------------------------------------------- main
 def mutants() -> int:
     pristine, survivors = doors_sql(), 0
@@ -485,11 +410,10 @@ def main() -> int:
     world = build()
     with pgharness.connect(DB) as conn:
         failed = run_checks(conn, world)
-    code = adapters(world)
     with pgharness.connect(DB) as conn:
         failed += run_checks(conn, world, (LAST,))
-    print(f"\n{len(CHECKS) + 1} checks, {len(failed)} failed; adapters exit {code}")
-    return 1 if failed or code else 0
+    print(f"\n{len(CHECKS) + 1} checks, {len(failed)} failed")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

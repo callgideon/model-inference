@@ -1,38 +1,34 @@
 "use server";
 
 /**
- * The console's shared server actions (C3A). Pages call these; none of them writes on its own.
+ * The console's shared server actions (C3A over infrx-api, AP-09 09b). Pages call these; none of
+ * them writes on its own: every change is one API call as the signed-in user.
  *
- * Every rule (Origin check before anyone is resolved, the server-side context or operator flag,
- * refresh only after the database acknowledged the change) lives in `consoleActions`
- * (`lib/services/actions.ts`, tested there). This file only supplies Next's request APIs and the
- * clients; each export is one delegation. The signup grant is A2's `app/(auth)/grant.ts`.
+ * Every rule (Origin check before anything runs, refresh only after the API acknowledged the
+ * change) lives in `consoleActions` (`lib/services/actions.ts`, tested there). This file only
+ * supplies Next's request APIs and the request's client; each export is one delegation. The signup
+ * grant is A2's `app/(auth)/grant.ts`; sign-out is the auth facade's (`app/(auth)/session.ts`).
  */
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, FeedbackEntry, FeedbackInput, Result } from "@/lib/contracts/types";
-import type { FeedbackRpc } from "@/lib/services/feedback";
-import { consoleActions, supabaseKeyStore, type KeyClient } from "@/lib/services/actions";
-import { operatorRpcPort, type OperatorRpcClient } from "@/app/(console)/admin/operator-port";
-import { consumerSession } from "@/lib/services/server";
+import type { ApiKeyCreated, ApiKeyCreateInput, ApiKeySummary, FeedbackInput, Result } from "@/lib/contracts/types";
+import { consoleActions, type FeedbackAck } from "@/lib/services/actions";
+import { apiOperatorPort } from "@/app/(console)/admin/operator-port";
+import { endSession } from "@/app/(auth)/session";
+import { apiSource } from "@/lib/request-api";
 import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+
+const api = async () => (await apiSource()).api;
 
 const actions = consoleActions({
   headers,
-  context: async () => (await consumerSession()).context,
-  keys: async () => supabaseKeyStore((await createClient()) as unknown as KeyClient),
+  api,
   session: getSession,
-  endSession: async () => {
-    await (await createClient()).auth.signOut();
-  },
+  endSession,
   revalidate: (path) => revalidatePath(path),
-  // U3 / WR-U3-2: the operator's own client; the database checks operator authority (WR-U3-1).
-  // C3F / WR-C3F-2: the individual's own client; the database derives org, author and channel.
-  feedback: async () => (await createClient()) as unknown as FeedbackRpc,
-  operator: operatorRpcPort(async () => (await createClient()) as unknown as OperatorRpcClient),
+  operator: apiOperatorPort(api),
 });
 
 export async function signOut() {
@@ -50,12 +46,12 @@ export async function revokeConsumerKey(keyId: string): Promise<Result<ApiKeySum
   return actions.revokeKey(keyId);
 }
 
-/** A reasoned, idempotent operator change (U3): one audited `public.operator_*` RPC as the signed-in operator. */
+/** A reasoned, idempotent operator change (U3): one audited `/operator/v1/*` action as the signed-in operator. */
 export async function operatorAction(input: unknown): Promise<Result<{ replayed: boolean }>> {
   return actions.operator(input);
 }
 
 /** C3F: one feedback signal on one of the caller's own requests (idempotent per key). */
-export async function submitFeedback(input: FeedbackInput): Promise<Result<FeedbackEntry>> {
+export async function submitFeedback(input: FeedbackInput): Promise<Result<FeedbackAck>> {
   return actions.submitFeedback(input);
 }

@@ -1,0 +1,28 @@
+{
+  "task": "AP-09",
+  "lane": "api-frontends-app",
+  "slice": "09a App reads, 09b App actions + auth forms, 09e App (session expiry, unavailable, documented-operation check) + LR-02 form half",
+  "activity": "review",
+  "at": "2026-10-02T05:01:54Z",
+  "head": "164d67fc",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-frontends-app",
+  "branch": "codex/w7-api-frontends-app",
+  "owned_paths": ["apps/app/lib/services/", "apps/app/lib/session.ts", "apps/app/lib/api/ (additions)", "apps/app/lib/{request-api,session-middleware,fake-api}.ts", "apps/app/app/(auth)/", "apps/app/app/auth/", "apps/app/app/actions.ts", "apps/app/app/(console)/billing/credit-reads.ts", "apps/app/app/(console)/usage/[requestId]/request-reads.ts", "apps/app/app/(console)/admin/operator-{reads,port}.ts", "apps/app/app/(console)/teams/page.tsx", "apps/app/lib/deploy/env.ts", "apps/app/tests/"],
+  "commands": [
+    {"cmd": "node --test tests/boundary/api-boundary.test.ts (base b05eb6f4)", "exit": 1, "summary": "red: 80 findings, 2/5 cases fail"},
+    {"cmd": "node --test tests/boundary/api-boundary.test.ts (head)", "exit": 0, "summary": "6/6, 0 findings"},
+    {"cmd": "make console-test", "exit": 0, "summary": "564/564/0/0 (base 692/633/0/59)"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings (lib/contracts)"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-built", "exit": 0, "summary": "build ok, I2A built 22/22"},
+    {"cmd": "make console-mutants (322df8b)", "exit": 0, "summary": "contracts 212/212, U 218/218, C 66/66, A 60/60, catalog 46/46, C3F 17/17, UX 26/26, first-call 36/36; after the port move C/A/C3F/U-moved re-run all killed"},
+    {"cmd": "make api-client-test", "exit": 0, "summary": "6/0 (regenerated client, WR-AP09A-1)"},
+    {"cmd": "make console-c3f-real (app-c3f)", "exit": 0, "summary": "6 checks 0 failed, Lab adapters pass, 22/22 SQL mutants (door-grant check re-anchored for 0064)"},
+    {"cmd": "INFRX_D_TASK=app-u1r pytest -q tests/ap02/test_parity_pg.py (WR-AP09-PARITY applied transiently)", "exit": 0, "summary": "1 passed; negative control (spent dropped) 1 failed"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium", "basis": "code and local gates done; remaining = merge with ux-app-2 billing/usage edits, resend + me.email follow-ups after api-identity-2, CAPTCHA widget after P-05, hosted cutover check (batch 3)", "at": "2026-10-02T05:01:54Z"},
+  "blockers": ["hosted journey needs IDENTITY_API/AUTH_FACADE/CONSOLE_READS/CONSOLE_ACTIONS_API on in production + WEB_ORIGINS (coordinator, batch 3)", "CAPTCHA widget: provider + site key (P-05)"],
+  "wiring_requests": ["WR-AP09A-1 packages/api-client regenerated (commit 70d85028)", "WR-AP09-PARITY tests/ap02 parity re-pointed at the shipped App adapters (patch in evidence)", "WR-AP09-MAKE Makefile: retire console-c0-real/c3a-real/u3-real, console-pg -> parity (patch in evidence)", "WR-AP09-LINKS research/plan/handoffs links to deleted lib/credits.ts (validate_plan 1 -> 0 with patch)", "WR-AP09-LOCK drop @supabase/ssr + @supabase/supabase-js from apps/app/package.json + lockfile", "WR-AP09-RESEND POST /auth/v1/resend in the facade (api-identity-2)", "WR-AP09-ME-EMAIL Me.email (api-identity-2)", "WR-AP09-CAPTCHA widget dependency + NEXT_PUBLIC_CAPTCHA_SITE_KEY + P-05 checklist", "WR-AP09-DEPLOY production switches before the App ships"],
+  "evidence": ["research/plan/evidence/w7/api-frontends-app-164d67f.md", "research/plan/evidence/w7/api-frontends-app-164d67f-WR-AP09-PARITY.patch", "research/plan/evidence/w7/api-frontends-app-164d67f-WR-AP09-MAKE.patch", "research/plan/evidence/w7/api-frontends-app-164d67f-WR-AP09-LINKS.patch"]
+}

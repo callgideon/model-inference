@@ -2,18 +2,19 @@
 //
 // A2, the static half: what ships in which bundle, and what the auth pages are allowed to say.
 // These read source, because the properties are about the bundle and the copy, not about a run.
+// AP-09 09b: the forms reach the auth facade only through server actions; no SDK, no token in a
+// browser bundle (the server-side session module is never reachable from a client component).
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { CLAIM_RPC, claimArgs } from "../../app/(auth)/flow.ts";
-
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUTH = join(appRoot, "app", "(auth)");
 const CALLBACK = join(appRoot, "app", "auth", "callback", "route.ts");
-const ADMIN = join(appRoot, "lib", "supabase", "admin.ts");
+/** The server-side session: the cookie holding the tokens and the client that forwards them. */
+const SERVER_ONLY = new Set([join(appRoot, "app", "(auth)", "session.ts"), join(appRoot, "lib", "request-api.ts")]);
 const SOURCE = [".ts", ".tsx"];
 
 function files(directory: string): string[] {
@@ -61,17 +62,17 @@ function resolveImport(from: string, specifier: string): string | null {
 }
 
 /**
- * The import trail from `entry` to the service-role client, or null. A `"use server"` module is an
- * action boundary: a client component that imports it gets an RPC stub, not the module's body, so
- * the walk stops there — that is exactly how the onboarding retry reaches the grant.
+ * The import trail from `entry` to a server-only session module, or null. A `"use server"` module
+ * is an action boundary: a client component that imports it gets an RPC stub, not the module's
+ * body, so the walk stops there — that is exactly how the forms reach the facade.
  */
-function trailToAdmin(entry: string): string[] | null {
+function trailToServer(entry: string): string[] | null {
   const seen = new Set<string>();
   const queue = [[entry]];
   while (queue.length > 0) {
     const trail = queue.shift()!;
     const file = trail[trail.length - 1];
-    if (file === ADMIN) return trail;
+    if (SERVER_ONLY.has(file)) return trail;
     if (seen.has(file)) continue;
     seen.add(file);
     if (file !== entry && /^\s*["']use server["']/.test(read(file))) continue;
@@ -83,32 +84,36 @@ function trailToAdmin(entry: string): string[] | null {
   return null;
 }
 
-test("A2-BUNDLE-01 no client component reaches the service-role client, however indirectly", () => {
+test("A2-BUNDLE-01 no client component reaches the server-side session (tokens, cookie), however indirectly", () => {
   const all = files(appRoot);
   const clients = all.filter(isClient);
   assert.ok(clients.some((file) => file.startsWith(AUTH)), "the auth pages have client components; a walk over none proves nothing");
-  // The walker is not vacuous: the server-side grant port does reach the admin client.
-  assert.ok(trailToAdmin(join(AUTH, "grant.ts")), "the grant port must use the service-role client (server side)");
+  // The walker is not vacuous: the callback route does reach the session module (server side).
+  assert.ok(trailToServer(CALLBACK), "the callback must keep the session through app/(auth)/session.ts");
   const offenders = clients
-    .map((file) => trailToAdmin(file))
+    .map((file) => trailToServer(file))
     .filter((trail): trail is string[] => trail !== null)
     .map((trail) => trail.map((step) => relative(appRoot, step)).join(" → "));
-  assert.deepEqual(offenders, [], `a browser bundle would carry the service-role client:\n${offenders.join("\n")}`);
+  assert.deepEqual(offenders, [], `a browser bundle would carry the session module:\n${offenders.join("\n")}`);
 });
 
-test("A2-BUNDLE-02 the grant port refuses to run in a browser and the retry is a server action", () => {
-  const grant = read(join(AUTH, "grant.ts"));
-  assert.match(grant, /typeof window !== "undefined"/);
-  assert.ok(!isClient(join(AUTH, "grant.ts")));
-  assert.match(read(join(AUTH, "welcome", "actions.ts")), /^\s*["']use server["']/);
-  // The action takes no arguments: the user is the session's, never one a caller names.
+test("A2-BUNDLE-02 the session module refuses to run in a browser; the forms' entry points are server actions", () => {
+  const session = read(join(AUTH, "session.ts"));
+  assert.match(session, /typeof window !== "undefined"/);
+  assert.ok(!isClient(join(AUTH, "session.ts")));
+  for (const actions of [join(AUTH, "auth-actions.ts"), join(AUTH, "welcome", "actions.ts")]) {
+    assert.match(read(actions), /^\s*["']use server["']/, relative(appRoot, actions));
+  }
+  // The retry takes no arguments: the individual is the session's, never one a caller names.
   assert.match(read(join(AUTH, "welcome", "actions.ts")), /export async function claimOnboarding\(\)/);
 });
 
-test("A2-CB-09 the callback route delegates to the tested flow and claims through the grant port", () => {
+test("A2-CB-09 the callback route delegates to the tested flow, lands through the facade and claims as the new session", () => {
   const route = read(CALLBACK);
   assert.match(route, /completeCallback\(/, "the route must run the tested callback decision");
-  assert.match(route, /claim:\s*claimSignupGrant\b/, "a verified callback must claim the grant (RV-06: the callback never did)");
+  has(route, /facadeApi\(null, verifier\)\.call\("get", "\/auth\/v1\/callback"/);
+  has(route, /claim: \(session\) => claimGrant\(sessionApi\(session\)\)/, "a verified callback must claim the grant (RV-06)");
+  has(route, /response\.cookies\.delete\(VERIFIER_COOKIE\)/, "the PKCE verifier is single-use");
   assert.ok(!/error_description/.test(route), "the route must not read the provider's free text");
 });
 
@@ -153,64 +158,49 @@ test("A2-A11Y-01 every auth input has a label, and every error region is announc
 /** assert.match without the whole file in the diagnostic (the mutant runner reads 40 lines of it). */
 const has = (source: string, pattern: RegExp, message = `missing ${pattern}`) => assert.ok(pattern.test(source), message);
 
-const MIGRATIONS = join(appRoot, "supabase", "migrations");
-const migration = (prefix: string) => read(join(MIGRATIONS, readdirSync(MIGRATIONS).find((name) => name.startsWith(prefix))!));
-
-test("A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error", () => {
-  const signature = new RegExp(`create or replace function public\\.${CLAIM_RPC}\\(([^)]*)\\)`).exec(migration("0015_"));
-  assert.ok(signature, `0015 defines no public.${CLAIM_RPC}`);
-  const params = signature[1].split(",").map((param) => param.trim());
-  const sent = Object.keys(claimArgs("u"));
-  for (const key of sent) assert.ok(params.some((param) => param.startsWith(`${key} `)), `0015 has no parameter ${key}`);
-  for (const param of params.filter((p) => !/\bdefault\b/.test(p))) {
-    assert.ok(sent.includes(param.split(" ")[0]), `required parameter ${param} is not sent`);
-  }
-  const grant = read(join(AUTH, "grant.ts"));
-  has(grant, /createAdminClient\(\)\.rpc\(CLAIM_RPC, claimArgs\(userId\)\)/);
-  has(grant, /claimOutcome\(data, error\)/, "a claim error must reach the mapper");
+test("A2-WIRE-01 sign-in is one server action: facade sign-in, the cookie, then the grant through afterSignIn", () => {
+  const actions = read(join(AUTH, "auth-actions.ts"));
+  has(actions, /facadeApi\(\)\.call\("post", "\/auth\/v1\/sign-in", \{ body: \{ email, password \} \}\)/);
+  has(actions, /await storeSession\(answer\.data\);\s*\/\/[^\n]*\n[^\n]*\n\s*return \{ to: await afterSignIn\(\(\) => claimGrant\(sessionApi\(answer\.data\)\), safeNext\(next\)\) \};/);
+  has(read(join(AUTH, "login", "login-form.tsx")), /router\.push\(outcome\.to\);/);
 });
 
-test("A2-WIRE-01 sign-in claims the grant through afterSignIn and goes where it says", () => {
-  has(read(join(AUTH, "login", "login-form.tsx")), /router\.push\(await afterSignIn\(claimOnboarding, next\)\);/);
-});
-
-test("A2-WIRE-02 signup, resend and reset go through the tested requests with the live auth client, and nothing bypasses them", () => {
-  has(
-    read(join(AUTH, "signup", "signup-form.tsx")),
-    /const settled = await requestSignup\(createClient\(\)\.auth, email, String\(form\.get\("password"\)\), window\.location\.origin\);\s*setPending\(false\);\s*if \(settled === "sent"\) setSentTo\(email\);\s*else setError\(FAILURE_COPY\[settled\]\);/,
-  );
-  has(
-    read(join(AUTH, "verify-email", "resend-form.tsx")),
-    /const settled = await requestResend\(createClient\(\)\.auth, address, window\.location\.origin\);/,
-  );
-  has(
-    read(join(AUTH, "forgot-password", "page.tsx")),
-    /const settled = await requestReset\(createClient\(\)\.auth, email, window\.location\.origin\);\s*setPending\(false\);[\s\S]*?if \(settled === "sent"\) setSent\(true\);\s*else setError\(FAILURE_COPY\[settled\]\);/,
-  );
+test("A2-WIRE-02 signup and reset go through the tested requests with a PKCE challenge, and nothing bypasses the facade", () => {
+  const actions = read(join(AUTH, "auth-actions.ts"));
+  has(actions, /return requestSignup\(facadeApi\(\), email, String\(form\.get\("password"\) \?\? ""\), await origin\(\), \{\s*codeChallenge: await newChallenge\(\),\s*captchaToken: captchaOf\(form\),/);
+  has(actions, /return requestReset\(facadeApi\(\), [^\n]*await origin\(\), \{\s*codeChallenge: await newChallenge\(\),\s*captchaToken: captchaOf\(form\),/);
+  has(read(join(AUTH, "signup", "signup-form.tsx")), /const settled = await signUp\(form\)/);
+  has(read(join(AUTH, "forgot-password", "page.tsx")), /const settled = await recover\(form\)/);
   for (const file of files(AUTH).filter((f) => !f.endsWith("flow.ts"))) {
-    assert.ok(!/\.(signUp|resend|resetPasswordForEmail)\(/.test(read(file)), `${relative(appRoot, file)} calls the auth service directly`);
+    assert.ok(!/\.(signUp|resend|resetPasswordForEmail|signInWithPassword|updateUser)\(/.test(read(file)), `${relative(appRoot, file)} calls an auth SDK directly`);
   }
 });
 
-test("A2-WIRE-03 resend cools down for 60 s, and an expired reset session offers a new link", () => {
-  const resend = read(join(AUTH, "verify-email", "resend-form.tsx"));
-  has(resend, /const COOLDOWN_MS = 60_000;/);
-  has(resend, /setCoolingDown\(true\);\s*setTimeout\(\(\) => setCoolingDown\(false\), COOLDOWN_MS\);/);
-  has(resend, /disabled=\{pending \|\| coolingDown\}/);
+test("A2-WIRE-03 an expired reset session offers a new link; the resend form claims no send", () => {
   const update = read(join(AUTH, "update-password", "page.tsx"));
-  has(update, /setExpired\(failure === "link_expired"\);/);
+  has(update, /setExpired\(outcome === "link_expired"\);/);
   has(update, /\{expired \? \(\s*<Link href="\/forgot-password"/);
+  has(read(join(AUTH, "auth-actions.ts")), /if \(token === null\) return "link_expired";/, "no session is the expired-link state");
+  const resend = read(join(AUTH, "verify-email", "resend-form.tsx"));
+  has(resend, /\{RESEND_UNAVAILABLE\}/);
+  assert.ok(!/<form|onSubmit|<Button/.test(resend), "no control that sends nothing");
 });
 
 test("A2-WIRE-04 /welcome shows the balance only from welcomeWallet's `available` answer, through displayCredit, never a float", () => {
-  has(migration("0008_"), /function public\.console_wallet_summary\(p_user uuid\)/);
   const page = read(join(AUTH, "welcome", "page.tsx"));
-  has(page, /const wallet = await welcomeWallet\(\(\) => supabase\.rpc\("console_wallet_summary", \{ p_user: user\.id \}\)\);/);
+  has(page, /const wallet = await welcomeWallet\(api\);/);
   assert.equal(page.split("displayCredit(").length - 1, 1, "one place renders the amount");
   has(page, /\{wallet\.kind === "available" \? \(\s*<>\s*<p[^>]*>\s*\{displayCredit\(wallet\.available\)\}/);
   for (const banned of [/\bNumber\(/, /parseFloat\(/, /parseInt\(/, /toFixed\(/, /toLocaleString\(/, /"0(?:\.0+)?"/]) {
     assert.ok(!banned.test(page), `page.tsx: ${banned}`);
   }
+});
+
+test("LR02-FORM-02 the signup page asks the facade's availability and closes the form honestly when a challenge cannot be shown", () => {
+  has(read(join(AUTH, "signup", "page.tsx")), /const gate = captchaGate\(await facade\.call\("get", "\/auth\/v1\/availability"\)/);
+  has(read(join(AUTH, "signup", "signup-form.tsx")), /if \(gate === "unconfigured"\) \{\s*return \(\s*<p role="status"[^>]*>\s*\{CAPTCHA_UNAVAILABLE\}/);
+  const actions = read(join(AUTH, "auth-actions.ts"));
+  assert.equal(actions.split('if (captchaOf(form) === null && (await emailFormGate()) === "unconfigured") return "captcha_unconfigured";').length - 1, 2, "both email forms re-check on the server");
 });
 
 test("A2-A11Y-02 after signup, focus moves to the 'Check your email' heading", () => {
