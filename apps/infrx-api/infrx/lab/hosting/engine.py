@@ -52,9 +52,11 @@ class Launcher(Protocol):
     async def start(self, allocation: Allocation, model_dir: Path) -> None: ...
     async def inspect(self, allocation: Allocation) -> Runtime | None:
         """The engine running under this allocation's tag, or None."""
+        ...
 
     async def stop(self, allocation: Allocation) -> bool:
         """Stop the engine under this tag only; False when there was none."""
+        ...
 
 
 # ===================================================================== install ===

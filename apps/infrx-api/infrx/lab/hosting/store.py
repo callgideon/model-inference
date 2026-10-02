@@ -84,23 +84,29 @@ class HostingStore(Protocol):
                       input_hash: str) -> Started:
         """The draft revision, its hosting row and its `deployment.create` operation in one
         transaction; a replayed key answers the first operation (and writes nothing)."""
+        ...
 
     async def hosting(self, deployment_revision_id: str) -> Hosting | None: ...
     async def live(self) -> list[Hosting]:
         """Every hosting deployment not retired, or still holding an allocation."""
+        ...
 
     async def allocation(self, deployment_revision_id: str) -> Allocation | None:
         """Its newest allocation."""
+        ...
 
     async def receipts(self, deployment_revision_id: str) -> list[Receipt]:
         """Its receipts, newest first."""
+        ...
 
     async def active(self, deployment_revision_id: str) -> tuple[str, ...]:
         """Its unfinished operations, oldest first."""
+        ...
 
     async def allocate(self, hold: Hold, allocation: Allocation) -> Allocation:
         """Reserve the slot; `CapacityUnavailable` while an unreleased allocation holds it.
         (The controller allocates only when the deployment holds none.)"""
+        ...
 
     async def move(self, hold: Hold, allocation_id: str,
                    state: Literal["launched", "released"]) -> Allocation: ...
@@ -110,6 +116,7 @@ class HostingStore(Protocol):
     async def transition(self, hold: Hold, deployment_revision_id: str, provider_org_id: str,
                          expected: str, to: str, reason: str) -> DeploymentRevision:
         """0032's audited CAS on the dev revision's state, under the hold."""
+        ...
 
 
 # ======================================================================= the fake ===

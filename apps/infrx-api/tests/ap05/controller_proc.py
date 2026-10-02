@@ -5,8 +5,10 @@ on the way out - that is the point: its lease, its engine process and its half-d
 for the next holder to find.
 
     python tests/ap05/controller_proc.py <service dsn> <login dsn> <world tmp> <owner> <boundary>
+        [<declared image>]
 
-Exit 0: the boundary was never reached within the passes (the case fails on that).
+`-` as the boundary never dies: the long-running controller of the lab_hosting gate (its
+passes bounded by INFRX_AP5_PASSES, default 300 x 0.2 s). Exit 0: the passes ran out.
 """
 from __future__ import annotations
 
@@ -22,7 +24,8 @@ if str(API) not in sys.path:
     sys.path.insert(0, str(API))
 
 
-def main(service_dsn: str, login_dsn: str, tmp: str, owner: str, boundary: str) -> int:
+def main(service_dsn: str, login_dsn: str, tmp: str, owner: str, boundary: str,
+         image: str | None = None) -> int:
     import psycopg
 
     from infrx.lab.artifacts.store import PgArtifactStore
@@ -45,13 +48,13 @@ def main(service_dsn: str, login_dsn: str, tmp: str, owner: str, boundary: str) 
         target = target_in(root)
         hosting = LabHosting(w.access, w.control, PgArtifactStore(login), PgControlOps(login),
                              PgHostingStore(login), target)
-        controller = Controller(hosting, local_launcher(root / "engines"), target, owner=owner,
-                                boundary=die)
-        for _ in range(300):
+        launcher = local_launcher(root / "engines", **({"image": image} if image else {}))
+        controller = Controller(hosting, launcher, target, owner=owner, boundary=die)
+        for _ in range(int(os.environ.get("INFRX_AP5_PASSES", "300"))):
             asyncio.run(controller.run_once())
             time.sleep(0.2)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(*sys.argv[1:6]))
+    raise SystemExit(main(*sys.argv[1:7]))

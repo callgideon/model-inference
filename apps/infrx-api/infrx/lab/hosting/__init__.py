@@ -280,7 +280,8 @@ class LabHosting:
         if reasons:
             raise Unsupported(reasons)
         endpoint_id = await self.control.store.endpoint(provider, body.endpoint_name,
-                                                        Environment.dev, actor=actor.user_id)
+                                                        Environment.dev,
+                                                        actor=actor.user_id or "")
         draft = DeploymentRevision(
             deployment_revision_id=str(uuid.uuid4()), endpoint_id=endpoint_id,
             provider_org_id=provider, serving_version_id=serving.serving_version_id,
