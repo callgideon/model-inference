@@ -3,7 +3,8 @@
  * is transpiled with the App's TypeScript, `@/` resolves to the App root, and the two Next seams these
  * components reach are stubbed (`next/link` -> <a>, `next/navigation` -> a no-op router), so nothing
  * here can reach a network, a database or a server action. Client components render their first state
- * (no effects run).
+ * (no effects run). A server page's session (`@/lib/services/server`) answers `globalThis.__ux07Session`
+ * and its server actions (`@/app/actions`) refuse, as UX-04's fixture does.
  *
  * ponytail: the module hooks are UX-04's (tests/ux/first-call/render.ts, not exported there); fold the
  * two into one shared helper when the UX lanes merge.
@@ -30,7 +31,12 @@ const ts = require("typescript") as typeof import("typescript");
 const STUBS: Record<string, string> = {
   "next/link": `import { createElement } from "react";
 export default function Link({ href, prefetch, ...props }) { return createElement("a", { href: String(href), ...props }); }`,
-  "next/navigation": `export const useRouter = () => ({ refresh() {}, push() {}, replace() {} });`,
+  "next/navigation": `export const useRouter = () => ({ refresh() {}, push() {}, replace() {} });
+export function redirect(to) { throw new Error("fixture redirect to " + to); }`,
+  "@/lib/services/server": `export async function consumerSession() { return globalThis.__ux07Session; }`,
+  "@/app/actions": `const refused = { ok: false, error: { code: "dependency_unavailable", message: "fixture" } };
+export async function createConsumerKey() { return refused; }
+export async function revokeConsumerKey() { return refused; }`,
 };
 
 function probe(base: string): string | null {
@@ -71,14 +77,18 @@ function register(): void {
   });
 }
 
-/** `exported` of the App module at `file` (App-relative), rendered with `props`, as static HTML. */
+/**
+ * `exported` of the App module at `file` (App-relative), rendered with `props`, as static HTML. An async
+ * server page is awaited first (it is the only async component in the tree).
+ */
 export async function render(file: string, exported: string, props: Record<string, unknown>): Promise<string> {
   register();
   const { createElement } = await import(require.resolve("react"));
   const { renderToStaticMarkup } = await import(require.resolve("react-dom/server"));
   const component = (await import(join(APP, file)))[exported];
   if (typeof component !== "function") throw new Error(`${file} exports no component ${exported}`);
-  return renderToStaticMarkup(createElement(component, props)) as string;
+  const tree = component.constructor.name === "AsyncFunction" ? await component(props) : createElement(component, props);
+  return renderToStaticMarkup(tree) as string;
 }
 
 /** The visible text of rendered HTML, whitespace collapsed (entities decoded for the few React emits). */

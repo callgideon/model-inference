@@ -361,6 +361,56 @@
       "cases": [
         "UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event"
       ]
+    },
+    {
+      "id": "UXU-X37",
+      "what": "an empty list also puts Create key in the header",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "model.create.allowed && model.list.kind !== \"empty\" ?",
+      "replace": "model.create.allowed ?",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X38",
+      "what": "the empty card has no Create key",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "              {model.create.allowed ? <CreateKeyDialog /> : null}\n",
+      "replace": "",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X39",
+      "what": "a suspended account is invited to create a key",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "{model.create.allowed ? \" Create a key to call Marlin from your code.\" : \"\"}",
+      "replace": "{\" Create a key to call Marlin from your code.\"}",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X40",
+      "what": "an active key carries no status label",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "<Badge variant=\"outline\">Active</Badge>",
+      "replace": "null",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
+    },
+    {
+      "id": "UXU-X41",
+      "what": "a revoked key is labelled active",
+      "file": "app/(console)/api-keys/page.tsx",
+      "find": "{k.revoked === null ? (",
+      "replace": "{true ? (",
+      "cases": [
+        "UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked"
+      ]
     }
   ]
 }

@@ -313,3 +313,34 @@ test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart,
   assert.deepEqual([novel.kind, novel.code], ["Other", "novel_kind"], "an unknown event is neutral, with its raw code");
   assert.match(source("app/(console)/billing/page.tsx"), /<span className="block font-mono text-xs text-muted-foreground">\{row\.code\}<\/span>/);
 });
+
+// ---------------------------------------------------------------------------------------------------
+// API keys (C-03 empty state and status labels)
+// ---------------------------------------------------------------------------------------------------
+
+const KEY = { id: "c7000000-0000-4000-8000-0000000000f1", name: "Robotics evaluation", prefix: "sk-infrx-abcd", created_at: "2026-09-20T09:00:00.000000Z", last_used_at: null, revoked_at: null };
+const keysPage = async (suspended: boolean, keys: unknown[]) => {
+  (globalThis as { __ux07Session?: unknown }).__ux07Session = {
+    context: { state: "ready", account: { suspended } },
+    reads: { keys: async () => ({ ok: true, value: keys }) },
+  };
+  return render("app/(console)/api-keys/page.tsx", "default", {});
+};
+const header = (html: string) => html.slice(0, html.indexOf('data-slot="card"'));
+const card = (html: string) => html.slice(html.indexOf('data-slot="card"'), html.indexOf("Keeping keys safe"));
+
+test("UXU-10 API keys: an empty list invites the first key inside the card, a populated one keeps it in the header, and every row says Active or Revoked", async () => {
+  const empty = await keysPage(false, []);
+  assert.match(text(card(empty)), /No keys yet\. Create a key to call Marlin from your code\. Create key/);
+  assert.doesNotMatch(header(empty), /Create key/, "one Create key, in the card");
+
+  const suspended = await keysPage(true, []);
+  assert.doesNotMatch(text(suspended).replace(/before creating a key|cannot create keys/g, ""), /Create key|Create a key/, "a suspended account is not invited to create one");
+
+  const listed = await keysPage(false, [KEY, { ...KEY, id: "c7000000-0000-4000-8000-0000000000f2", name: "old", revoked_at: "2026-09-21T10:00:00.000000Z" }]);
+  assert.match(text(header(listed)), /Create key/);
+  assert.match(listed, /<th[^>]*>Status<\/th>/);
+  const rows = cells(listed);
+  assert.deepEqual(rows.map((row) => [row[0], row[4]]), [["Robotics evaluation", "Active"], ["old", "Revoked"]]);
+  assert.match(listed, /title="Revoked 2026-09-21 10:00 UTC"/);
+});
