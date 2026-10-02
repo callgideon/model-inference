@@ -30,13 +30,15 @@ from fastapi.responses import JSONResponse
 from ..contracts import api, errors
 
 #: reason -> (HTTP status, retryable). The App's `AuthFailure` set plus the callback's
-#: `link_invalid` and a dead session's `unauthenticated`.
+#: `link_invalid`, a dead session's `unauthenticated` and a failed challenge's
+#: `captcha_failed` (LR-02: the App's forms gain it with the widget, AP-09).
 FAILURES: dict[str, tuple[int, bool]] = {
     "invalid_credentials": (401, False), "email_not_confirmed": (403, False),
     "rate_limited": (429, True), "weak_password": (422, False), "same_password": (422, False),
     "invalid_email": (422, False), "signup_closed": (403, False),
     "email_unavailable": (422, False), "link_expired": (410, False),
     "link_invalid": (422, False), "unauthenticated": (401, False), "unavailable": (503, True),
+    "captcha_failed": (422, False),
 }
 #: flow.ts FAILURE_COPY (and its link notice), word for word.
 MESSAGES: dict[str, str] = {
@@ -54,6 +56,7 @@ MESSAGES: dict[str, str] = {
     "link_invalid": "This link is not valid. Sign in, or request a new link.",
     "unauthenticated": "Your session has ended. Sign in again.",
     "unavailable": "Something went wrong on our side. Try again in a moment.",
+    "captcha_failed": "Complete the verification challenge, then try again.",
 }
 #: flow.ts BY_CODE: the IdP `error_code` -> the App's failure.
 BY_CODE: dict[str, str] = {
@@ -66,7 +69,10 @@ BY_CODE: dict[str, str] = {
     "email_address_not_authorized": "email_unavailable", "otp_expired": "link_expired",
     "flow_state_expired": "link_expired", "flow_state_not_found": "link_expired",
     "session_not_found": "link_expired", "session_expired": "link_expired",
+    "captcha_failed": "captcha_failed",
 }
+#: The hosted auth server's CAPTCHA providers (its bot-protection setting).
+CAPTCHA_PROVIDERS = ("hcaptcha", "turnstile")
 EXISTING = ("user_already_exists", "email_exists")
 EMAIL_LINK_TYPES = ("signup", "email", "magiclink", "recovery", "invite", "email_change")
 AFTER_VERIFY = "/welcome"
@@ -151,13 +157,21 @@ def _link(answer: httpx.Response) -> AuthRefused:
 class AuthFacade:
     """The IdP's REST calls. `apikey` is the project's publishable (anon) key: the facade acts
     for an end user, so the service-role key - which the IdP treats as an administrator and
-    lets past its CAPTCHA - is never sent here."""
+    lets past its CAPTCHA - is never sent here.
+
+    `captcha_required` is the hosted bot-protection policy (on, the auth server checks a token
+    at password sign-in, sign-up and recovery); `captcha_provider` + `captcha_site_key` are
+    its public half, the widget a form renders. Neither is readable from the auth server's
+    public settings, so the deployment states them (LR-02)."""
 
     def __init__(self, client: httpx.AsyncClient, apikey: str, *, origins: tuple[str, ...] = (),
-                 captcha_required: bool = False) -> None:
+                 captcha_required: bool = False, captcha_provider: str = "",
+                 captcha_site_key: str = "") -> None:
         self.client, self.apikey = client, apikey
         self.origins = tuple(origin.rstrip("/") for origin in origins)
         self.captcha_required = captcha_required
+        ready = captcha_provider in CAPTCHA_PROVIDERS and bool(captcha_site_key.strip())
+        self.captcha_widget = (captcha_provider, captcha_site_key.strip()) if ready else None
 
     async def _send(self, method: str, path: str, *, token: str | None = None,
                     params: dict[str, str] | None = None,
@@ -199,9 +213,10 @@ class AuthFacade:
         return extras
 
     # --- operations ---------------------------------------------------------------------------
-    async def sign_in(self, email: str, password: str) -> Session:
-        answer = await self._send("POST", TOKEN, params={"grant_type": "password"},
-                                  body={"email": email, "password": password})
+    async def sign_in(self, email: str, password: str, *,
+                      captcha_token: str | None = None) -> Session:
+        answer = await self._send("POST", TOKEN, params={"grant_type": "password"}, body={
+            "email": email, "password": password, **self._extras(captcha_token, None)})
         if answer.status_code != 200:
             raise AuthRefused(failure(_code(answer), answer.status_code))
         return _session(answer)

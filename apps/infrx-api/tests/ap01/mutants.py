@@ -38,6 +38,7 @@ OUTAGE = "test_auth__an_unreachable_or_failing_idp_is_503_never_bad_credentials"
 CODES = "test_auth__unconfirmed_and_rate_limited_keep_their_fixed_codes"
 SIGNUP_EXISTING = "test_auth__sign_up_of_an_existing_email_reads_sent"
 FORWARD = "test_auth__sign_up_forwards_captcha_challenge_and_allowlisted_redirect"
+CAPTCHA = "test_auth__a_required_challenge_guards_every_password_door_and_reveals_no_account"
 SIGNUP_FAILURES = "test_auth__sign_up_failures_map_like_the_app"
 RECOVERY = "test_auth__recovery_of_an_unknown_email_reads_sent"
 REDIRECT = "test_auth__a_redirect_outside_the_allowlist_never_reaches_the_idp"
@@ -93,6 +94,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("captcha_not_forwarded", "LR-02: the CAPTCHA token reaches the IdP's own field",
        F, 'extras["gotrue_meta_security"] = {"captcha_token": captcha_token}',
        'extras["captcha_token"] = captcha_token', FORWARD),
+    _m("failed_challenge_is_unavailable", "LR-02: a failed challenge is captcha_failed, not 503",
+       F, '    "captcha_failed": "captcha_failed",\n}', "}", FORWARD, CAPTCHA, MIRROR),
+    _m("sign_in_drops_the_challenge", "the hosted policy checks sign-in: its token is forwarded",
+       F, '"password": password, **self._extras(captcha_token, None)})',
+       '"password": password})', CAPTCHA),
+    _m("sign_in_route_drops_the_challenge", "the sign-in body's token reaches the facade",
+       R, "captcha_token=body.captcha_token))", "captcha_token=None))", CAPTCHA),
+    _m("widget_without_site_key", "a widget needs its public site key",
+       F, "ready = captcha_provider in CAPTCHA_PROVIDERS and bool(captcha_site_key.strip())",
+       "ready = captcha_provider in CAPTCHA_PROVIDERS", AVAILABILITY),
     _m("signup_closed_is_unavailable", "flow.ts: signup_disabled is signup_closed",
        F, '"signup_disabled": "signup_closed"', '"signup_disabled": "unavailable"',
        SIGNUP_FAILURES, MIRROR),
@@ -131,6 +142,11 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- 01a: the routes ------------------------------------------------------------------------
     _m("unknown_availability_is_disabled", "a failed read is unknown, never disabled",
        R, "        if on is None:\n", "        if False:\n", AVAILABILITY),
+    _m("unpassable_challenge_reads_configured", "a required challenge with no widget closes "
+       "every password door", R, "        if on and required and widget is None:\n",
+       "        if False:\n", AVAILABILITY),
+    _m("missing_site_key_reads_not_required", "required without a site key is unavailable",
+       R, "    elif required:\n", "    elif False:\n", AVAILABILITY),
     _m("closed_signup_ignored", "the IdP's closed signup closes sign-up",
        R, 'email and idp.get("disable_signup") is False', "email", AVAILABILITY),
     _m("flag_failure_is_off", "the grant flag's failed read is unknown",

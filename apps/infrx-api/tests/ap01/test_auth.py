@@ -23,6 +23,7 @@ from infrx.gateway.routes import auth as auth_routes
 APP = "https://app.example"
 PASSWORD = "correct horse 1"
 SAFE = {"x-request-id": "req-1"}
+DOORS = ("sign_in", "sign_up", "recovery", "signup_grant")
 
 
 def run(coro):
@@ -42,10 +43,12 @@ class Flag:
 
 
 def api(stub: GoTrueStub, *, idp: str = "http://gotrue.test", captcha: bool = False,
-        identity=None, transport=None) -> httpx.AsyncClient:
+        identity=None, transport=None, site_key: str = "") -> httpx.AsyncClient:
     gotrue = httpx.AsyncClient(base_url=idp, transport=transport or httpx.ASGITransport(stub.app))
     rt = SimpleNamespace(auth_facade=AuthFacade(gotrue, stub.apikey, origins=(APP,),
-                                                captcha_required=captcha),
+                                                captcha_required=captcha,
+                                                captcha_provider="turnstile",
+                                                captcha_site_key=site_key),
                          identity=identity if identity is not None else Flag())
     app = FastAPI()
     auth_routes.register(app, rt)
@@ -187,12 +190,44 @@ def test_auth__sign_up_forwards_captcha_challenge_and_allowlisted_redirect():
                 "redirect_to": link, "code_challenge": s256("v" * 43)})
             return missing, ok
     missing, ok = run(go())
-    refused(missing, "unavailable")          # flow.ts: an unknown code is `unavailable`
+    refused(missing, "captcha_failed")       # LR-02: a failed challenge is its own code
     assert ok.status_code == 200, ok.text
     _, _, query, body = idp_calls(stub, "/auth/v1/signup")[-1]
     assert query == {"redirect_to": link}
     assert body["gotrue_meta_security"] == {"captcha_token": "captcha-ok"}
     assert (body["code_challenge"], body["code_challenge_method"]) == (s256("v" * 43), "s256")
+
+
+def test_auth__a_required_challenge_guards_every_password_door_and_reveals_no_account():
+    """Oracle: LR-02 - with the hosted CAPTCHA on, sign-in, sign-up and recovery forward the
+    token (the IdP checks it at all three, so a sign-in without it would lock everyone out);
+    a missing or failed challenge is 422 `captcha_failed`, identical for a registered and an
+    unknown address (no enumeration through the challenge), and a solved one proceeds."""
+    stub = GoTrueStub()
+    stub.captcha = True
+    stub.user("a@example.com")
+    ok = {"captcha_token": "captcha-ok"}
+
+    async def go():
+        async with api(stub, captcha=True) as c:
+            doors = {}
+            for email in ("a@example.com", "z@example.com"):
+                creds = {"email": email, "password": PASSWORD}
+                doors[email] = [await c.post("/auth/v1/sign-in", json=creds),
+                                await c.post("/auth/v1/sign-up", json=creds),
+                                await c.post("/auth/v1/recovery", json={"email": email})]
+            solved = [await c.post("/auth/v1/sign-in", json={"email": "a@example.com",
+                                                             "password": PASSWORD, **ok}),
+                      await c.post("/auth/v1/recovery", json={"email": "z@example.com", **ok})]
+            return doors, solved
+    doors, (signed_in, recovered) = run(go())
+    for known, unknown in zip(doors["a@example.com"], doors["z@example.com"], strict=True):
+        refused(known, "captcha_failed")
+        assert known.content == unknown.content
+    assert signed_in.status_code == 200, signed_in.text
+    assert recovered.json() == {"status": "sent"}
+    sign_in = idp_calls(stub, "/auth/v1/token")[-1][3]
+    assert sign_in["gotrue_meta_security"] == {"captcha_token": "captcha-ok"}
 
 
 def test_auth__sign_up_failures_map_like_the_app():
@@ -411,26 +446,42 @@ def test_auth__availability_comes_from_the_idp_the_flag_and_the_captcha_setting(
     stub = GoTrueStub()
 
     async def go():
-        async with api(stub, captcha=True) as c:
+        async with api(stub, captcha=True, site_key="0x4AAA-site") as c:
             open_ = (await c.get("/auth/v1/availability")).json()
+        async with api(stub, captcha=True) as c:
+            unset = (await c.get("/auth/v1/availability")).json()
         stub.disable_signup = True
         async with api(stub, identity=Flag(enabled=False)) as c:
             closed = (await c.get("/auth/v1/availability")).json()
         stub.down = True
         async with api(stub, identity=Flag(broken=True)) as c:
             down = await c.get("/auth/v1/availability")
-        return open_, closed, down
-    open_, closed, down = run(go())
-    states = {k: v["state"] for k, v in open_.items() if isinstance(v, dict)}
-    assert states == {"sign_in": "configured", "sign_up": "configured",
-                      "recovery": "configured", "signup_grant": "configured"}
-    assert open_["captcha_required"] is True and open_["sign_in"]["verified_at"]
+        return open_, unset, closed, down
+    open_, unset, closed, down = run(go())
+
+    def states(doc):
+        return {k: (doc[k]["state"], doc[k]["reason"]) for k in DOORS}
+    assert states(open_) == {k: ("configured", None) for k in DOORS}
+    assert open_["sign_in"]["verified_at"]
+    assert {k: v for k, v in open_["captcha"].items() if k != "state"} == {
+        "required": True, "provider": "turnstile", "site_key": "0x4AAA-site"}
+    assert open_["captcha"]["state"]["state"] == "configured"
+    # required by the hosted policy but no site key to render: every password door is
+    # honestly unavailable (a form could never pass the challenge), the grant flag is not
+    assert states(unset) == {**{k: ("unavailable", "captcha_unconfigured")
+                                for k in ("sign_in", "sign_up", "recovery")},
+                             "signup_grant": ("configured", None)}
+    assert (unset["captcha"]["required"], unset["captcha"]["site_key"]) == (True, None)
+    assert (unset["captcha"]["state"]["state"], unset["captcha"]["state"]["reason"]) == (
+        "unavailable", "site_key_missing")
     assert closed["sign_up"] == {**closed["sign_up"], "state": "disabled",
                                  "reason": "signup_closed"}
-    assert closed["signup_grant"]["state"] == "disabled" and closed["captcha_required"] is False
+    assert closed["signup_grant"]["state"] == "disabled"
+    assert (closed["captcha"]["required"], closed["captcha"]["state"]["state"],
+            closed["captcha"]["state"]["reason"]) == (False, "disabled", "not_required")
     assert closed["sign_in"]["state"] == "configured"
     assert down.status_code == 200 and down.headers["cache-control"] == "no-store"
-    assert {v["state"] for v in down.json().values() if isinstance(v, dict)} == {"unknown"}
+    assert {down.json()[k]["state"] for k in DOORS} == {"unknown"}
 
 
 # --- secrets ------------------------------------------------------------------------------------
@@ -506,5 +557,6 @@ def test_auth__failure_codes_mirror_the_app_flow():
     for code, reason in expected.items():
         assert failure(code, 400) == reason, code
     assert failure(None, 429) == "rate_limited"
-    assert failure("captcha_failed", 400) == failure(None, 400) == "unavailable"
+    assert failure(None, 400) == "unavailable"
+    assert failure("captcha_failed", 400) == "captcha_failed"      # LR-02, the facade's own
     assert failure("toString", 400) == "unavailable"
