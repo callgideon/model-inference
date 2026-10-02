@@ -86,6 +86,7 @@ class Rig:
     def __init__(self) -> None:
         self.w = World()
         self.a = Artifacts()
+        self.ckpt_key = ""
         store = self.w.store
 
         async def receipt(checkpoint_id, *, provider_org_id):       # D7 0053's read

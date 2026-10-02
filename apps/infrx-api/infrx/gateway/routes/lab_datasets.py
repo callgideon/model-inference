@@ -45,6 +45,7 @@ from .lab_artifacts import ERRORS, IdempotencyKey
 
 if TYPE_CHECKING:
     from ...lab.access import LabAccess
+    from ...state.control_ops import ControlOps
 
 PREFIX = "/lab/v1/providers/{provider}/datasets"
 #: One import is one bounded request. ponytail: a streamed bundle upload when datasets
@@ -62,7 +63,7 @@ class LabDatasets:
     store: object                           # D7: PgLabDataStore
     objects: object                         # the Lab objects (the media store, lab/<p>/)
     jobs: object = None                     # 0051's import-job queue: PgLabImportJobs
-    ops: object = None                      # 0060's ControlOps: the trace-dataset operations
+    ops: ControlOps | None = None           # 0060's: the trace-dataset operations
 
 
 def refusal(error: Exception) -> JSONResponse:

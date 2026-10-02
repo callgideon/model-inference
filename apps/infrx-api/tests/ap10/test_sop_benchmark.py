@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import pathlib
+from typing import Literal
 
 import httpx
 import pytest
@@ -53,7 +54,7 @@ def endpoint(answers: dict[str, object], *, fake: bool = False, model: str = MOD
     return client, seen
 
 
-def bench(client, path, *, target="candidate", **kw) -> dict:
+def bench(client, path, *, target: Literal["fake", "candidate"] = "candidate", **kw) -> dict:
     return asyncio.run(sop.benchmark(client, path, dataset_version="ds-1", model=MODEL,
                                      serving_revision="rev-1", seed=7, target=target, **kw))
 
@@ -104,8 +105,10 @@ def test_ap10_sop_the_report_pins_identity_and_lists_every_failure_and_abstentio
     assert rows["item-1"]["events"] == [(0.0, 2.0), (2.5, 4.0)]
     assert rows["item-6"]["events"] == [(1.0, 2.5)]
     again = bench(endpoint(answers)[0], path)
-    strip = lambda r: {**r, "items": [{k: v for k, v in i.items() if k != "latency_s"}
-                                      for i in r["items"]], "performance": None}
+
+    def strip(r: dict) -> dict:
+        return {**r, "items": [{k: v for k, v in i.items() if k != "latency_s"}
+                               for i in r["items"]], "performance": None}
     assert strip(again) == strip(got)
 
 

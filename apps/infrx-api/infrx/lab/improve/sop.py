@@ -282,7 +282,7 @@ async def benchmark(client: httpx.AsyncClient, manifest: pathlib.Path, *, datase
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description="AP-10 10d: the SOP benchmark of a private candidate")
     ap.add_argument("--manifest", type=pathlib.Path, required=True)
     ap.add_argument("--dataset-version", required=True)
     ap.add_argument("--base-url", required=True, help="the candidate's OpenAI base, …/v1")
