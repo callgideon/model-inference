@@ -112,6 +112,9 @@ class GoTrueStub:
         async def token(request: Request):
             grant, body = request.query_params.get("grant_type"), await request.json()
             if grant == "password":
+                if stub.captcha and (body.get("gotrue_meta_security") or {}).get(
+                        "captcha_token") != "captcha-ok":
+                    return refuse(400, "captcha_failed")
                 user = stub.users.get(body.get("email", ""))
                 if user is None:            # an older auth server's answer: the App maps it
                     return refuse(400, "user_not_found")      # like a wrong password

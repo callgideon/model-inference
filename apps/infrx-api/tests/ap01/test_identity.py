@@ -21,11 +21,13 @@ from fastapi import FastAPI
 
 from infrx.auth.context import auth_context
 from infrx.config import DEPLOYMENT_DEFAULTS, Settings
-from infrx.console.session import SessionActors
+from infrx.console.session import Claim, SessionActors
 from infrx.contracts import errors
+from infrx.contracts.api import Actor
 from infrx.contracts.v2.records import ROLE_CAPABILITIES, ProviderRole
 from infrx.gateway.lab_auth import GoTrueSessions
 from infrx.gateway.routes import console_me, lab_workspaces, operator_providers
+from infrx.state.control_ops import input_hash
 
 from tests.ap01.worlds import (A, ADMIN_A, B, CONSUMER, DEV_A, DEV_B, EMAIL, FRESH, GRANT,
                                NAME, NEMO, OPERATOR, SLUG, SUSPENDED, UNVERIFIED, VIEWER_A)
@@ -52,7 +54,7 @@ class Keys:
                             key_id="c3c3c3c3-0000-4000-8000-000000000001", user_id=self.user_id)
 
 
-def api(world, *, keys=None, idp=None, **switches) -> httpx.AsyncClient:
+def api(world, *, keys=None, idp=None, mounted=(), **switches) -> httpx.AsyncClient:
     gotrue = httpx.AsyncClient(base_url="http://gotrue.test",
                                transport=idp or httpx.ASGITransport(world.stub.app))
     rt = SimpleNamespace(
@@ -61,6 +63,8 @@ def api(world, *, keys=None, idp=None, **switches) -> httpx.AsyncClient:
         identity=world.identity, lab_access=world.access,
         settings=Settings(deployment=dataclasses.replace(DEPLOYMENT_DEFAULTS, **switches)))
     app = FastAPI()
+    for path in mounted:                   # another Lab family's route, as its module mounts it
+        app.add_api_route(path, lambda: None)
     for module in (console_me, lab_workspaces, operator_providers):
         module.register(app, rt)
     return httpx.AsyncClient(base_url="http://api.test", transport=httpx.ASGITransport(app))
@@ -201,9 +205,10 @@ def test_identity__workspaces_are_current_memberships_with_their_capabilities(wo
 def test_identity__lab_capabilities_are_the_members_own(world):
     """Oracle: forged provider - capabilities for the member's own workspace only; another
     provider, a consumer, or a made-up id is the same 404 (nothing confirmed); each Lab
-    feature's availability is its switch's."""
+    feature is `configured` when this process serves its routes - the gateway's switches and
+    the Lab unit's forced families alike - never by a switch alone."""
     async def go():
-        async with api(world, lab_control=True) as c:
+        async with api(world, mounted=("/lab/v1/control/models",), lab_traces=True) as c:
             own = await c.get("/lab/v1/capabilities", params={"provider_org_id": A},
                               headers=as_(world, DEV_A))
             refused = [code(await c.get("/lab/v1/capabilities",
@@ -217,7 +222,8 @@ def test_identity__lab_capabilities_are_the_members_own(world):
     assert (body["provider_org_id"], body["role"], body["capabilities"]) == (
         A, "developer", caps("developer"))
     assert body["features"]["control"]["state"] == "configured"
-    assert body["features"]["traces"] == {**body["features"]["traces"], "state": "disabled"}
+    assert (body["features"]["traces"]["state"], body["features"]["traces"]["reason"]) == (
+        "disabled", "not_mounted")                   # its switch on, its routes absent
     assert refused == [(404, "not_found")] * 4
 
 
@@ -238,8 +244,8 @@ def test_identity__members_are_read_by_members_only(world):
 
 
 def test_identity__an_administrator_adds_a_member_once(world):
-    """Oracle: an administrator's grant is one membership: a retry answers the same row
-    (200), another role for a current member is 409, an unknown address 404; the new member
+    """Oracle: an administrator's grant is one membership: a retry (its key replayed, or a
+    new key for the same member) answers the same row (200), another role for a current member is 409, an unknown address 404; the new member
     then sees the workspace."""
     path = f"/lab/v1/workspaces/{A}/members"
     grant = {"email": EMAIL[CONSUMER].upper(), "role": "viewer"}      # addresses fold case
@@ -248,16 +254,18 @@ def test_identity__an_administrator_adds_a_member_once(world):
         async with api(world) as c:
             first = await c.post(path, json=grant, headers=mutation(world, ADMIN_A))
             again = await c.post(path, json=grant, headers=mutation(world, ADMIN_A))
+            repeat = await c.post(path, json=grant, headers=mutation(world, ADMIN_A, "idem-9"))
             other_role = await c.post(path, json={**grant, "role": "developer"},
                                       headers=mutation(world, ADMIN_A, "idem-2"))
             unknown = await c.post(path, json={"email": "nobody@example.com", "role": "viewer"},
                                    headers=mutation(world, ADMIN_A, "idem-3"))
             seen = (await c.get("/lab/v1/workspaces", headers=as_(world, CONSUMER))).json()
-            return first, again, other_role, unknown, seen
-    first, again, other_role, unknown, seen = run(go())
+            return first, again, repeat, other_role, unknown, seen
+    first, again, repeat, other_role, unknown, seen = run(go())
     assert first.status_code == 201, first.text
     assert (first.json()["user_id"], first.json()["role"]) == (CONSUMER, "viewer")
     assert again.status_code == 200 and again.json() == first.json()
+    assert repeat.status_code == 200 and repeat.json() == first.json()   # a new key: same row
     assert code(other_role) == (409, "state_conflict")
     assert code(unknown) == (404, "not_found")
     assert [(w["provider_org_id"], w["role"]) for w in seen["data"]] == [(A, "viewer")]
@@ -301,17 +309,19 @@ def test_identity__a_revoked_member_is_refused_at_once(world):
         async with api(world) as c:
             revoked = await c.delete(f"{path}/{DEV_A}", headers=mutation(world, ADMIN_A))
             again = await c.delete(f"{path}/{DEV_A}", headers=mutation(world, ADMIN_A))
+            repeat = await c.delete(f"{path}/{DEV_A}", headers=mutation(world, ADMIN_A, "idem-9"))
             stranger = code(await c.delete(f"{path}/{CONSUMER}",
                                            headers=mutation(world, ADMIN_A, "idem-2")))
             after = [code(await c.get(door, headers=as_(world, DEV_A))) for door in (
                 f"/lab/v1/capabilities?provider_org_id={A}", f"{path}")]
             listed = (await c.get("/lab/v1/workspaces", headers=as_(world, DEV_A))).json()
             current = await members(world, c, A, ADMIN_A)
-            return revoked, again, stranger, after, listed, current
-    revoked, again, stranger, after, listed, current = run(go())
+            return revoked, again, repeat, stranger, after, listed, current
+    revoked, again, repeat, stranger, after, listed, current = run(go())
     assert revoked.status_code == 200, revoked.text
     assert revoked.json()["user_id"] == DEV_A and revoked.json()["revoked_at"] is not None
     assert again.status_code == 200 and again.json() == revoked.json()
+    assert repeat.status_code == 200 and repeat.json() == revoked.json()  # a new key: same row
     assert stranger == (404, "not_found")
     assert after == [(404, "not_found")] * 2
     assert listed["data"] == []
@@ -338,6 +348,94 @@ def test_identity__member_mutations_need_an_idempotency_key_and_the_origin(fake_
     assert own.status_code == 201
 
 
+# --- the Idempotency-Key, bound to 0060's control_idempotency (API-KEYGRANT) -------------------
+def test_identity__a_reused_key_with_another_request_is_409_and_writes_nothing(world):
+    """Oracle: R270 - the same `Idempotency-Key` with a different body (another member, another
+    revocation target, another provider) is 409 `idempotency_conflict`, and the second request
+    writes nothing; the key's scope is the workspace + action, so another action under it is
+    its own request."""
+    path = f"/lab/v1/workspaces/{A}/members"
+
+    async def go():
+        async with api(world) as c:
+            first = await c.post(path, json={"email": EMAIL[CONSUMER], "role": "viewer"},
+                                 headers=mutation(world, ADMIN_A, "k-grant"))
+            grant = code(await c.post(path, json={"email": EMAIL[FRESH], "role": "viewer"},
+                                      headers=mutation(world, ADMIN_A, "k-grant")))
+            await c.delete(f"{path}/{DEV_A}", headers=mutation(world, ADMIN_A, "k-revoke"))
+            revoke = code(await c.delete(f"{path}/{VIEWER_A}",
+                                         headers=mutation(world, ADMIN_A, "k-revoke")))
+            made = await c.post("/operator/v1/providers", json={
+                "slug": "one", "display_name": "One"}, headers=mutation(world, OPERATOR, "k-op"))
+            onboard = code(await c.post("/operator/v1/providers", json={
+                "slug": "two", "display_name": "Two"}, headers=mutation(world, OPERATOR, "k-op")))
+            listed = await members(world, c, A, ADMIN_A)
+            fresh = (await c.get("/lab/v1/workspaces", headers=as_(world, FRESH))).json()
+            other_action = await c.delete(f"{path}/{CONSUMER}",
+                                          headers=mutation(world, ADMIN_A, "k-grant"))
+            return first, grant, revoke, made, onboard, listed, fresh, other_action
+    first, grant, revoke, made, onboard, listed, fresh, other_action = run(go())
+    assert (first.status_code, made.status_code) == (201, 201), (first.text, made.text)
+    assert grant == revoke == onboard == (409, "idempotency_conflict")
+    assert sorted(m["email"] for m in listed["data"]) == sorted(
+        [EMAIL[ADMIN_A], EMAIL[VIEWER_A], EMAIL[CONSUMER]])
+    assert fresh["data"] == []
+    # the key is scoped to the action: a revocation under the grant's key is its own request
+    assert other_action.status_code == 200 and other_action.json()["revoked_at"] is not None
+
+
+def test_identity__a_replay_answers_the_first_outcome_and_never_redoes_it(world):
+    """Oracle: a replayed grant after the member was revoked answers the first grant (200, the
+    same body) and does NOT grant again; a replayed revocation after a new grant answers the
+    first revocation and does NOT revoke the new membership."""
+    path = f"/lab/v1/workspaces/{A}/members"
+    grant = {"email": EMAIL[CONSUMER], "role": "viewer"}
+
+    async def go():
+        async with api(world) as c:
+            granted = await c.post(path, json=grant, headers=mutation(world, ADMIN_A, "g1"))
+            revoked = await c.delete(f"{path}/{CONSUMER}", headers=mutation(world, ADMIN_A, "r1"))
+            regrant = await c.post(path, json=grant, headers=mutation(world, ADMIN_A, "g1"))
+            after_regrant = (await c.get("/lab/v1/workspaces", headers=as_(world, CONSUMER))
+                             ).json()
+            await c.post(path, json=grant, headers=mutation(world, ADMIN_A, "g2"))
+            rerevoke = await c.delete(f"{path}/{CONSUMER}",
+                                      headers=mutation(world, ADMIN_A, "r1"))
+            after_rerevoke = (await c.get("/lab/v1/workspaces", headers=as_(world, CONSUMER))
+                              ).json()
+            return granted, revoked, regrant, after_regrant, rerevoke, after_rerevoke
+    granted, revoked, regrant, after_regrant, rerevoke, after_rerevoke = run(go())
+    assert (granted.status_code, revoked.status_code) == (201, 200), revoked.text
+    assert regrant.status_code == 200 and regrant.json() == granted.json()
+    assert after_regrant["data"] == []
+    assert rerevoke.status_code == 200 and rerevoke.json() == revoked.json()
+    assert [(w["provider_org_id"], w["role"]) for w in after_rerevoke["data"]] == [(A, "viewer")]
+
+
+def test_identity__a_refused_mutation_claims_no_key(world):
+    """Oracle: a refusal (409 another current role, 404 never a member) stores no outcome
+    under its key: once the cause is gone the same key and body succeed."""
+    path = f"/lab/v1/workspaces/{A}/members"
+    grant = {"email": EMAIL[DEV_A], "role": "viewer"}
+
+    async def go():
+        async with api(world) as c:
+            other_role = code(await c.post(path, json=grant,
+                                           headers=mutation(world, ADMIN_A, "k1")))
+            never = code(await c.delete(f"{path}/{CONSUMER}",
+                                        headers=mutation(world, ADMIN_A, "k2")))
+            await c.delete(f"{path}/{DEV_A}", headers=mutation(world, ADMIN_A, "k3"))
+            regrant = await c.post(path, json=grant, headers=mutation(world, ADMIN_A, "k1"))
+            await c.post(path, json={"email": EMAIL[CONSUMER], "role": "viewer"},
+                         headers=mutation(world, ADMIN_A, "k4"))
+            revoke = await c.delete(f"{path}/{CONSUMER}", headers=mutation(world, ADMIN_A, "k2"))
+            return other_role, never, regrant, revoke
+    other_role, never, regrant, revoke = run(go())
+    assert (other_role, never) == ((409, "state_conflict"), (404, "not_found"))
+    assert regrant.status_code == 201 and regrant.json()["role"] == "viewer", regrant.text
+    assert revoke.status_code == 200 and revoke.json()["revoked_at"] is not None
+
+
 # --- 01d: operator provider onboarding ---------------------------------------------------------
 def test_identity__an_operator_creates_a_provider_once(world):
     """Oracle: the operator creates a new provider and its first administrator once; the
@@ -352,17 +450,20 @@ def test_identity__an_operator_creates_a_provider_once(world):
                                  headers=mutation(world, OPERATOR))
             again = await c.post("/operator/v1/providers", json=body,
                                  headers=mutation(world, OPERATOR))
+            repeat = await c.post("/operator/v1/providers", json=body,
+                                  headers=mutation(world, OPERATOR, "idem-9"))
             renamed = await c.post("/operator/v1/providers",
                                    json={**body, "display_name": "Other"},
                                    headers=mutation(world, OPERATOR, "idem-2"))
             seen = (await c.get("/lab/v1/workspaces", headers=as_(world, FRESH))).json()
-            return first, again, renamed, seen
-    first, again, renamed, seen = run(go())
+            return first, again, repeat, renamed, seen
+    first, again, repeat, renamed, seen = run(go())
     assert first.status_code == 201, first.text
     provider = first.json()["provider"]
     assert (provider["slug"], provider["display_name"]) == ("internal-test", "Internal test")
     assert first.json()["administrator"]["role"] == "administrator"
     assert again.status_code == 200 and again.json() == first.json()
+    assert repeat.status_code == 200 and repeat.json() == first.json()   # a new key: no new row
     assert code(renamed) == (409, "state_conflict")
     assert [(w["provider_org_id"], w["role"]) for w in seen["data"]] == [
         (provider["provider_org_id"], "administrator")]
@@ -413,3 +514,98 @@ def test_identity_pg__an_existing_provider_is_never_reassigned(pg_world):
     assert same.status_code == 200 and same.json()["provider"]["provider_org_id"] == NEMO
     assert world.model_owner() == NEMO
     assert world.conn.execute("select count(*) from infrx.provider_orgs").fetchone()[0] == 3
+
+
+@pytest.mark.pg
+def test_identity_pg__a_first_mutation_is_one_finished_operation_under_its_key(pg_world):
+    """Oracle: the claim is 0060's - a grant and its replay leave exactly one
+    `control_idempotency` row (scoped to the workspace and the action, with the request's hash)
+    and one `succeeded` operation whose actor names the workspace; a refusal leaves none."""
+    world, path = pg_world, f"/lab/v1/workspaces/{A}/members"
+
+    async def go():
+        async with api(world) as c:
+            for key in ("g", "g"):
+                await c.post(path, json={"email": EMAIL[CONSUMER], "role": "viewer"},
+                             headers=mutation(world, ADMIN_A, key))
+            await c.post(path, json={"email": EMAIL[DEV_A], "role": "viewer"},
+                         headers=mutation(world, ADMIN_A, "refused"))
+    run(go())
+    keys = world.conn.execute("select scope, key, input_hash, outcome is not null "
+                              "from infrx.control_idempotency").fetchall()
+    ops = world.conn.execute("select kind, state, actor->>'provider_org_id', "
+                             "actor->>'user_id', lease_owner from infrx.control_operations"
+                             ).fetchall()
+    assert [(s, k, done) for s, k, _, done in keys] == [(f"provider:{A}/lab.member_grant", "g",
+                                                         True)]
+    assert keys[0][2] == input_hash({"provider_org_id": A, "email": EMAIL[CONSUMER],
+                                     "role": "viewer"})
+    assert ops == [("lab.member_grant", "succeeded", A, ADMIN_A, None)]
+
+
+@pytest.mark.pg
+def test_identity_pg__the_lab_login_runs_the_identity_doors_and_reads_no_table(pg_world):
+    """Oracle: SR-AP01-1 - on the Lab control unit's own login (`infrx_lab_control`, no role
+    set) the store reads accounts and members, grants, revokes and onboards through 0065's
+    functions and 0060's doors alone; the login itself reads no identity table."""
+    from psycopg import errors as pg_errors
+    from psycopg.conninfo import make_conninfo
+
+    from infrx.state.identity import PgIdentity
+    from infrx.state.jobstore import connector
+    from tests.ap01.conftest import LAB_PASSWORD
+    from tests.d import pgharness
+
+    lab = make_conninfo(pgharness.dsn(world_db(pg_world)), user="infrx_lab_control",
+                        password=LAB_PASSWORD)
+    store = PgIdentity(connector(lab, set_role=False))
+    admin = Actor(audience="session", user_id=ADMIN_A, provider_org_id=A)
+
+    def claim(kind, key):
+        return Claim(kind, admin, key, input_hash({"k": key}))
+
+    async def go():
+        account = await store.account(CONSUMER)
+        user = await store.user_by_email(EMAIL[FRESH].upper())
+        added, created = await store.add_member(A, FRESH, "viewer", "t", claim("lab.g", "1"))
+        revoked = await store.revoke_member(A, FRESH, claim("lab.r", "2"))
+        made = await store.create_provider("unit", "Unit", "t", FRESH, claim("op.c", "3"))
+        return account, user, (added, created), revoked, made, await store.members(A)
+    account, user, (added, created), revoked, made, current = run(go())
+    assert (account.verified, account.wallet, user) == (True, True, FRESH)
+    assert (added.role, created, revoked.revoked_at is not None) == ("viewer", True, True)
+    assert (made[0].slug, made[1].role, made[2]) == ("unit", "administrator", True)
+    assert FRESH not in {m.user_id for m in current}
+    import psycopg
+    with psycopg.connect(lab, autocommit=True) as conn:
+        for table in ("public.profiles", "infrx.provider_memberships", "infrx.provider_orgs",
+                      "infrx.control_idempotency"):
+            with pytest.raises(pg_errors.InsufficientPrivilege):
+                conn.execute(f"select 1 from {table} limit 1")
+
+
+def world_db(world) -> str:
+    return world.conn.info.dbname
+
+
+def test_identity__a_failing_store_is_a_typed_503_never_a_500(fake_world, caplog):
+    """Oracle: LDP-F3 on the identity routes - a store failure that is no domain refusal (the
+    Lab login missing a grant: `permission denied`) is 503 `dependency_unavailable`, never a
+    500 and never the database's message; the log names its type only."""
+    import psycopg
+
+    from infrx.state.identity import PgIdentity
+
+    async def refused():
+        raise psycopg.errors.InsufficientPrivilege("permission denied for function x")
+    world = fake_world
+    world.identity = PgIdentity(refused)
+
+    async def go():
+        async with api(world) as c:
+            return [await c.get(door, headers=as_(world, DEV_A)) for door in (
+                "/console/v1/me", "/lab/v1/workspaces")]
+    for answer in run(go()):
+        assert code(answer) == (503, "dependency_unavailable"), answer.text
+        assert "permission" not in answer.text
+    assert all("permission" not in r.getMessage() for r in caplog.records)

@@ -1,0 +1,15 @@
+{"task": "AP-01", "slice": "remainder (api-identity-2): LR-02 CAPTCHA backend half, PgIdentity over 0065 + Idempotency-Key bound to 0060, Lab-unit mount wiring, route-table Lab features, LDP-F3 503",
+ "activity": "review", "head": "b2c1d813", "worktree": ".claude/worktrees/codex-w7-api-identity-2", "branch": "codex/w7-api-identity-2",
+ "owned_paths": ["apps/infrx-api/infrx/console/session.py", "apps/infrx-api/infrx/auth_facade/", "apps/infrx-api/infrx/gateway/routes/auth.py", "apps/infrx-api/infrx/gateway/routes/console_me.py", "apps/infrx-api/infrx/gateway/routes/lab_workspaces.py", "apps/infrx-api/infrx/gateway/routes/operator_providers.py", "apps/infrx-api/infrx/state/identity.py", "apps/infrx-api/tests/ap01/"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01", "exit": 0, "summary": "78 passed, 1 skipped (fake + pg functions + pg-direct fallback)"},
+  {"cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_identity.py -m pg", "exit": 0, "summary": "29 passed on the Supabase image"},
+  {"cmd": "INFRX_MUTANTS=all INFRX_D_TASK=ap1 uv run --frozen pytest -q tests/ap01/test_mutants.py", "exit": 0, "summary": "87 passed: 59 memory + 22 PG mutants killed, 0 survivors"},
+  {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+  {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 458 (baseline 458)"},
+  {"cmd": "pytest tests/g tests/contracts tests/i/lab_control tests/ap08 tests/ap03 -m 'not pg' --ignore-glob='*_pg.py' -k 'not mutant'", "exit": 1, "summary": "2262 passed, 1 failed: test_ap00_export_artifacts_are_current (WR-AP01-4 regeneration)"},
+  {"cmd": "scratch worktree with WR-AP01-2/3 applied: pytest tests/ap01/test_composed_lab_unit.py tests/ap01/test_composed.py", "exit": 0, "summary": "12 passed"}],
+ "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "lane took ~1.3 h wall clock; remaining = coordinator applying WR-AP01-2..4, then WR-AP01-5 at the 0065 merge with one tests/ap01 + mutant re-run on both images; 0065 diverging from the corrected DDL is the risk", "at": "2026-10-02T04:26Z"},
+ "blockers": ["WR-AP01-2 needs 0065 on the base (api-schema-2), with SR-AP01-1 rev 2's #variable_conflict fix"],
+ "wiring_requests": ["WR-AP01-2 lab/control/app.py identity mount", "WR-AP01-3 AUTH_CAPTCHA_PROVIDER/SITE_KEY", "WR-AP01-4 OpenAPI + api-client regeneration", "WR-AP01-5 at the 0065 merge: pilot imports state.identity.PgIdentity; delete the fallback"],
+ "evidence": ["research/plan/evidence/w7/api-identity-2-b2c1d81.md", "research/plan/evidence/w7/api-identity-2-b2c1d81-WR-AP01-2-3.patch"]}
