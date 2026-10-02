@@ -3,6 +3,7 @@
 
     uv run --frozen pytest -q tests/ap07/test_mutants.py                    # subset, fake half
     INFRX_D_TASK=ap7 INFRX_AP7_PG=1 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap07/test_mutants.py
+    # + INFRX_AP7_STACK=1 (the ap7 ClickHouse and MinIO up): the eligible read's mutants too
 """
 from __future__ import annotations
 
@@ -20,7 +21,8 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("any_member_decides", "head_is_the_key_mode", "every_purpose_granted",
           "lapse_reads_metadata", "cursor_crosses_filters")
 SELECTED = tuple(m for m in (ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET))
-                 if mutation_list.PG or m.name not in mutation_list.PG_ONLY)
+                 if (mutation_list.PG or m.name not in mutation_list.PG_ONLY)
+                 and (mutation_list.STACK or m.name not in mutation_list.STACK_ONLY))
 
 
 def test_the_list_is_well_formed():

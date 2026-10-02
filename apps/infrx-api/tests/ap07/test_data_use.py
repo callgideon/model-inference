@@ -218,6 +218,23 @@ def test_data_use__evaluation_consent_needs_full_capture(pg_world):
     assert consent_rows(w, w.C1) == []
 
 
+
+def test_data_use__a_failure_is_an_envelope_never_a_trace():
+    """Oracle (R270, `control.R270Route`): a service that breaks answers 500 in the envelope,
+    no-store, with the request id echoed and no exception text; a refused actor is 401."""
+    class Broken:
+        async def read(self, actor):
+            raise RuntimeError("secret-internal-detail")
+    app = FastAPI()
+    routes.register(app, SimpleNamespace(data_use=Broken(),
+                                         actors=control.StaticActors(session("u", "o"))))
+    answer = TestClient(app, raise_server_exceptions=False).get(
+        routes.DATA_USE_PATH, headers={"X-Request-Id": "rid-ap7"})
+    assert answer.status_code == 500 and answer.headers.get("cache-control") == "no-store"
+    assert answer.json()["error"]["request_id"] == "rid-ap7"
+    assert "secret-internal-detail" not in answer.text
+    assert client(None).get(routes.DATA_USE_PATH).status_code == 401
+
 # --- who decides -----------------------------------------------------------------------------
 def test_data_use__only_the_grantors_owner_decides(pg_world):
     """Oracle: no session 401; a key session (any audience but a verified web session) 403;
@@ -258,6 +275,22 @@ def test_data_use__a_suspended_organization_decides_nothing(pg_world):
     assert c.post(routes.GRANTS_PATH, json=grant_body(w)).status_code == 403
     assert consent_rows(w, w.C1) == []
 
+
+
+def test_data_use__a_suspended_organization_still_withdraws_its_grant(pg_world):
+    """Oracle (0066's revoke-only door, `lab_withdraw_access_grant`): the owner of a suspended
+    organization revokes its sharing grant - the very next content check is refused - and
+    still grants nothing (R33 holds for every write but the withdrawal)."""
+    w = pg_world
+    c = owner(w)
+    [grant] = c.get(routes.GRANTS_PATH).json()["data"]
+    w.conn.execute("update public.organizations set suspended = true, suspended_at = infrx.now(), "
+                   "suspension_reason = 'abuse' where id = %s", (w.C1,))
+    answer = c.delete(f"{routes.GRANTS_PATH}/{grant['grant_id']}")
+    assert answer.status_code == 200, answer.text
+    assert (answer.json()["version"], answer.json()["state"]) == (2, "revoked")
+    assert not may_read(w, v2.DataPurpose.provider_sharing)
+    assert c.post(routes.GRANTS_PATH, json=grant_body(w, grant_version=2)).status_code == 403
 
 # --- purpose grants --------------------------------------------------------------------------
 def test_data_use__grants_are_purpose_specific_versions(pg_world):
