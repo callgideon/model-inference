@@ -1,5 +1,6 @@
 // L4: rows and copy derived only from control records. Nothing here remembers what a button did.
 import { fixedCopy } from "../common.ts";
+import { DIGEST_RE } from "../shapes.ts";
 import type { Role } from "../../auth/access.ts";
 import { holds, REFUSALS, type Aggregate, type Deployment, type Model, type Proposal, type Refusal, type Result } from "./port.ts";
 
@@ -109,4 +110,50 @@ export function trafficRows(aggregates: Aggregate[]): TrafficRow[] {
 /** The evidence time: the latest window end measured (not when this page loaded). */
 export function observedThrough(aggregates: Aggregate[]): string | null {
   return aggregates.reduce<string | null>((latest, a) => (latest === null || a.windowEnd > latest ? a.windowEnd : latest), null);
+}
+
+// ---- UX-03 L-03 Models: the list and "New revision of an imported model" (the legacy registration).
+
+export type ModelRow = { name: string; modelId: string; revision: string; runtime: string; registered: string; artifactDigest: string; schemaVersion: string };
+/** A model's display name is its registered name's last segment; no new editable title (L-03). */
+const nameOf = (modelId: string) => modelId.split("/").at(-1) ?? modelId;
+export const modelRows = (models: Model[]): ModelRow[] =>
+  models.map((m) => ({
+    name: nameOf(m.modelId), modelId: m.modelId, revision: m.revisionLabel, runtime: m.runtime, registered: m.registeredAt,
+    artifactDigest: m.artifactDigest, schemaVersion: m.schemaVersion,
+  }));
+/** The names a new revision may target: models already imported into this workspace. */
+export const importedNames = (models: Model[]): string[] => [...new Set(models.map((m) => nameOf(m.modelId)))].sort();
+
+export const REGISTRATION_FIELDS = ["name", "artifactDigest", "schemaVersion", "runtime"] as const;
+export type RegistrationField = (typeof REGISTRATION_FIELDS)[number];
+export type RegistrationValues = Record<RegistrationField, string>;
+// The control actions' rules (actions.ts NAME/IDENT, shapes.ts DIGEST_RE), restated per field so a
+// refusal names its field; ponytail: the IDENT copy goes when actions.ts exports its shapes.
+const RULES: Record<RegistrationField, [RegExp, string]> = {
+  name: [/^[a-z0-9][a-z0-9-]{0,62}$/, "Use lowercase letters, digits and hyphens, starting with a letter or digit, up to 63 characters."],
+  artifactDigest: [DIGEST_RE, "Enter the artifact digest as sha256: followed by 64 lowercase hex characters."],
+  schemaVersion: [/^[A-Za-z0-9._:@/+-]{1,200}$/, "Enter a schema identifier: letters, digits and . _ : @ / + -, no spaces."],
+  runtime: [/^[A-Za-z0-9._:@/+-]{1,200}$/, "Enter a runtime identifier: letters, digits and . _ : @ / + -, no spaces."],
+};
+export function registrationErrors(values: RegistrationValues): Partial<Record<RegistrationField, string>> {
+  return Object.fromEntries(REGISTRATION_FIELDS.filter((f) => !RULES[f][0].test(values[f])).map((f) => [f, RULES[f][1]]));
+}
+
+export type RegistrationOutcome =
+  | { kind: "registered"; deployment: Deployment }
+  | { kind: "refused"; message: string }
+  | { kind: "uncertain"; message: string };
+export type RegistrationState = {
+  values: RegistrationValues;
+  errors: Partial<Record<RegistrationField, string>>;
+  outcome: RegistrationOutcome | null;
+} | null;
+/** The control service's answer as the form shows it. No answer is "not confirmed": registration has no
+ *  replay receipt today (L-03), so the person checks the records before trying again. */
+export function registrationOutcome(result: Result<Deployment>): RegistrationOutcome {
+  if (result.ok) return { kind: "registered", deployment: result.value };
+  if (result.reason === "unavailable")
+    return { kind: "uncertain", message: "Outcome not confirmed: the control service did not answer. Check Models before trying again; the revision may have been registered." };
+  return { kind: "refused", message: REFUSAL_COPY[result.reason] };
 }

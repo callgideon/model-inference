@@ -89,3 +89,36 @@ test("OP-P02 overview: control records and measured traffic load and fail apart;
     restore();
   }
 });
+
+test("OP-P03 models: a developer gets Add model and the revision form for imported models only; a viewer gets neither; an empty workspace is pointed at Add model", async () => {
+  const dev = await at("models/page.tsx", "/models", "developer");
+  assert.match(dev, /href="\/models\/new"[^>]*>Add model</);
+  assert.match(dev, /New revision of an imported model/);
+  assert.match(dev, /<legend>Identify<\/legend>[\s\S]*<legend>Revision<\/legend>/);
+  assert.match(dev, /<option value="alpha-2b"[^>]*>alpha-2b<\/option>/, "the imported model is the name");
+  assert.doesNotMatch(dev, /upload weights|Live|Healthy/i);
+  const p = await open(dev);
+  const shown = await text(p);
+  assert.match(shown, /alpha-2b r1/);
+  await p.close();
+  const viewer = await at("models/page.tsx", "/models", "viewer");
+  assert.doesNotMatch(viewer, /href="\/models\/new"|<legend>Identify/);
+  assert.match(viewer, /needs a developer or administrator/);
+  const empty = await at("models/page.tsx", "/models", "developer", EMPTY);
+  assert.doesNotMatch(empty, /<legend>Identify/, "the legacy form cannot succeed without an imported model");
+  assert.match(empty, /No models are registered in this workspace yet/);
+  assert.match(empty, /Add model/);
+  await laidOut(dev);
+});
+
+test("OP-P04 the revision fields keep the user's values and tie each error to its field", async () => {
+  type Fields = { RevisionFields: (p: Record<string, unknown>) => import("react").ReactElement };
+  const { RevisionFields } = await load<Fields>("app/(provider)/models/revision-form.tsx");
+  const { html } = await import("./render.ts");
+  const values = { name: "alpha-2b", artifactDigest: "sha256:short", schemaVersion: "chat.v1", runtime: "vllm@sha256:bb" };
+  const markup = await html(RevisionFields({ names: ["alpha-2b"], values, errors: { artifactDigest: "Enter the artifact digest as sha256: followed by 64 lowercase hex characters." } }));
+  assert.match(markup, /value="sha256:short"/);
+  assert.match(markup, /aria-invalid="true"/);
+  assert.match(markup, /sha256: followed by 64/);
+  assert.equal(markup.split('aria-invalid="true"').length - 1, 1, "only the bad field is marked");
+});

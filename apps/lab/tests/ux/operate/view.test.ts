@@ -51,3 +51,23 @@ test("OP-V03 measured traffic: no samples says so, a missing p95 is not availabl
   assert.equal(v.observedThrough([agg(), agg({ windowEnd: "2026-09-30T12:00:00Z" })]), "2026-09-30T12:00:00Z");
   assert.equal(v.observedThrough([]), null);
 });
+
+test("OP-V04 a revision registration is checked field by field with the existing rules, and every outcome keeps the record or says it is unconfirmed", () => {
+  const good = { name: "alpha-2b", artifactDigest: `sha256:${"a".repeat(64)}`, schemaVersion: "chat.v1", runtime: "vllm@sha256:bb" };
+  assert.deepEqual(v.registrationErrors(good), {});
+  const bad = v.registrationErrors({ name: "Alpha 2B", artifactDigest: "sha256:abc", schemaVersion: "", runtime: "has space" });
+  assert.deepEqual(Object.keys(bad).sort(), ["artifactDigest", "name", "runtime", "schemaVersion"]);
+  assert.match(bad.artifactDigest!, /sha256:/);
+  assert.deepEqual(Object.keys(v.registrationErrors({ ...good, name: "a".repeat(64) })), ["name"], "63 characters at most");
+  assert.deepEqual(v.registrationErrors({ ...good, name: "a".repeat(63) }), {});
+  const record = dep();
+  assert.deepEqual(v.registrationOutcome(ok(record)), { kind: "registered", deployment: record });
+  const unsure = v.registrationOutcome(down);
+  assert.equal(unsure.kind, "uncertain");
+  assert.match(unsure.kind === "uncertain" ? unsure.message : "", /Check Models before trying again/);
+  const refused = v.registrationOutcome({ ok: false, reason: "not_found" });
+  assert.deepEqual(refused, { kind: "refused", message: v.REFUSAL_COPY.not_found });
+  assert.deepEqual(v.importedNames([model, { ...model, revisionLabel: "r2" }, { ...model, modelId: "synthetic/beta-1b" }]), ["alpha-2b", "beta-1b"]);
+  const [row] = v.modelRows([model]);
+  assert.deepEqual([row.name, row.modelId, row.revision], ["alpha-2b", "synthetic/alpha-2b", "r1"]);
+});
