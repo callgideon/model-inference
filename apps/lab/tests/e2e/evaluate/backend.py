@@ -4,13 +4,16 @@ as the Lab's control unit composes it (R186's factory, WR-LDP-2: `pilot._lab`, D
 `PgLabDataStore`, B1's freeze, the REAL L2; WR-LR6-E2E-SHADOW: the unit's own route, served
 through `stack.unit_app`), on the task-local PostgreSQL (l4), D7's seeded world.
 
-That composition carries the experiments and B3 ledger ports since WR-AP10-1 and a catalog
-whose listing is SR-AP10-1's honest 503 (`carried` asks it, so the catalog is not carried):
-`/_test/composition {"as": "gateway"}` serves exactly it; `{"as": "journey"}` fills those three
-with the route suite's own fakes (`tests/g/lab_evaluations`, as `tests/b/backend.py`) over the
-same real D7/B1/L2. `world.composed` says which ports the unit's own composition carries, so
-the gate reports NOT RUN until it carries them. Test-only doors: `/_test/state` (B1's worker
-moving a run on, under D7's own state trigger) and `/_test/settle` (B2's stored report).
+That composition carries the experiments and B3 ledger ports since WR-AP10-1 and 0066's
+catalog since WR-UXVF-1 (`carried` asks it: a listing answering 503 is not carried). The
+world adds one READY PRIVATE DEV serving beside l2's, so the catalog offers a baseline and a
+candidate. `/_test/composition {"as": "gateway"}` serves exactly the unit's composition;
+`{"as": "journey"}` swaps the route suite's own fakes (`tests/g/lab_evaluations`) in for the
+ports the unit does NOT carry, and only those (WR-UXVF-2: none, once all four are carried),
+over the same real D7/B1/L2. `world.composed` and `stand_ins` say which, so the gate reports
+NOT RUN rather than a pass over a fake. Test-only doors: `/_test/state` (B1's worker moving a
+run on, under D7's own state trigger) and `/_test/settle` (B2's worker storing its report
+through `PgLabDataStore.put_eval_report` on the experiment's two runs).
 
     INFRX_D_TASK=l4 uv run --frozen --project apps/infrx-api python apps/lab/tests/e2e/evaluate/backend.py
 """
@@ -30,8 +33,8 @@ PORTS = ("store", "experiments", "catalog", "ledger")
 
 async def carried(composition, provider_org_id: str) -> dict[str, bool]:
     """Which ports the unit's own composition answers through: present, and for the catalog
-    a listing that answers (AP-10: SR-AP10-1's honest 503, `DependencyUnavailable`, is not
-    carried - j10 stays NOT RUN rather than binding over the route suite's fake catalog)."""
+    a listing that answers (a 503, `DependencyUnavailable`, is not carried - j10 stays NOT RUN
+    rather than binding over the route suite's fake catalog)."""
     from infrx.contracts import errors
     got = {name: getattr(composition, name) is not None for name in PORTS}
     if got["catalog"]:
@@ -45,16 +48,33 @@ async def carried(composition, provider_org_id: str) -> dict[str, bool]:
 def main() -> None:
     from infrx.gateway.routes import lab_evaluations as le
     from infrx.state.jobstore import connector
-    from infrx.state.lab_data import PgLabDataStore
+    from infrx.state.lab_data import PgLabDataStore, PgLabReads
     from tests.b.runner.world import EVALUATOR_ID, SPEC, harness, manifest, uid
     from tests.d import test_d7_lab_data as d7
     from tests.d import test_l2sql_access as l2
-    from tests.g.lab_evaluations.test_lab_evaluations import (CANDIDATE, EVALUATOR, SERVING,
-                                                               Experiments, Ledger)
+    from tests.d import test_l3sql_control as l3
+    from tests.g.lab_evaluations.test_lab_evaluations import EVALUATOR, Experiments, Ledger
 
     conn, dsn = stack.database("evaluate")
     d7.seed(conn)
-    store = PgLabDataStore(connector(dsn))
+    # l3's second serving version (S2) with its dev revision D2 READY PRIVATE: beside l2's
+    # ready dev revision, the pair 0066's catalog offers as baseline and candidate.
+    conn.execute(f"""
+    insert into infrx.serving_versions (serving_version_id, model_version_id, model_id,
+      provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version,
+      runtime_image_ref, engine_options_digest, precision, capability, created_by)
+    select '{l3.S2}', model_version_id, model_id, provider_org_id, '2026-10-01',
+           prompt_harness_ref, preprocessor_profile_version, runtime_image_ref,
+           engine_options_digest, precision, capability, 'ops'
+      from infrx.serving_versions where serving_version_id = '{l3.S1}';
+    insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id,
+      provider_org_id, environment, serving_version_id, visibility, state, max_input_tokens,
+      max_output_tokens, created_by)
+    values ('{l3.D2}', '{l3.cc.DEV_ENDPOINT}', '{l3.NEMO}', 'dev', '{l3.S2}', 'private',
+            'ready_private', 30720, 2048, 'dev@nemo');
+    """)
+    connect = connector(dsn)
+    store, reads = PgLabDataStore(connect), PgLabReads(connect)
     NEMO, DEV = l2.NEMO, l2.DEV
 
     async def publish():
@@ -67,6 +87,8 @@ def main() -> None:
         return dataset, harness_ref
 
     dataset, harness_ref = asyncio.run(publish())
+    servings = [o["ref"] for o in asyncio.run(store.eval_catalog(provider_org_id=NEMO))["servings"]]
+    assert len(servings) == 2, servings
 
     class Catalog:
         """WR-LAB2-2's listing (the route suite's fake): NEMO's own records only."""
@@ -77,8 +99,7 @@ def main() -> None:
             return {"datasets": [{"ref": dataset, "label": "support-v1"}],
                     "harnesses": [{"ref": harness_ref, "harness_id": uid(7, 0xa7), "version": 1,
                                    "adapter": "text"}],
-                    "servings": [{"ref": SERVING, "label": "base"},
-                                 {"ref": CANDIDATE, "label": "tuned"}],
+                    "servings": [{"ref": ref, "label": ref} for ref in servings],
                     "evaluators": [{"ref": EVALUATOR, "label": "exact match"}]}
 
         async def evaluator(self, provider_org_id, evaluator_ref):
@@ -92,9 +113,9 @@ def main() -> None:
     stack.door(app, dsn, users)
     gateway = switch.own
     composed = asyncio.run(carried(gateway, NEMO))
-    experiments = Experiments()
-    journey = dataclasses.replace(gateway, experiments=experiments, ledger=Ledger(),
-                                  catalog=Catalog())
+    fakes = {"experiments": Experiments(), "ledger": Ledger(), "catalog": Catalog()}
+    swapped = {port: fake for port, fake in fakes.items() if not composed[port]}
+    journey = dataclasses.replace(gateway, **swapped)
 
     @app.post("/_test/composition")
     async def composition(body: dict):
@@ -110,15 +131,22 @@ def main() -> None:
 
     @app.post("/_test/settle")
     async def settle(body: dict):
-        """B2's worker storing its report on the experiment (WR-B-5)."""
-        experiments.rows[(NEMO, body["experiment_id"])]["report"] = body["report"]
-        return {"settled": True}
+        """B2's worker storing its report on the experiment's two runs and protocol (WR-B-5):
+        through D7's write-once store, read back by 0066's experiment listing."""
+        e = next(e for e in await reads.experiments(provider_org_id=NEMO)
+                 if e["experiment_id"] == body["experiment_id"])
+        report = {**body["report"], "baseline_run": e["baseline_run_ref"],
+                  "candidate_run": e["candidate_run_ref"],
+                  "protocol_digest": e["protocol_digest"]}
+        report.pop("report_digest", None)
+        return {"report_digest": await store.put_eval_report(report, provider_org_id=NEMO,
+                                                             actor=DEV)}
 
-    world = {"A": NEMO, "B": l2.OTHER, "dataset": dataset, "servings": [SERVING, CANDIDATE],
+    world = {"A": NEMO, "B": l2.OTHER, "dataset": dataset, "servings": servings,
              "users": users, "composed": composed,
              "stand_ins": ["session verifier and PostgREST RPC door (stack.door)",
-                           "experiments/catalog/B3 ledger: the route suite's fakes "
-                           "(WR-B4-2, WR-LAB2-2, WR-B3-1 to compose)",
+                           *([f"{'/'.join(swapped)}: the route suite's fakes (not carried)"]
+                             if swapped else []),
                            "B1's worker and B2's report (test doors)"]}
     stack.serve(app, sock, world, conn.close)
 

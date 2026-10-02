@@ -30,7 +30,7 @@ CONFLICT = "test_ap10_another_launch_under_the_id_is_a_conflict_even_when_it_won
 HONEST = "test_ap10_a_launch_without_its_user_or_its_run_refs_is_an_honest_503"
 REPORT = "test_ap10_the_listed_report_is_b2s_stored_body_with_its_digest"
 FLAT = "test_ap10_the_subscription_listing_is_flattened_and_the_rest_is_d8s"
-CATALOG = "test_ap10_the_catalog_listing_is_503_naming_its_request_and_the_evaluator_is_d7s"
+CATALOG = "test_ap10_the_catalog_listing_is_0066s_under_the_asking_provider_and_the_evaluator_is_d7s"
 POOL = "test_ap10_the_ports_share_one_pool"
 ROUTES = "test_ap10_authorized_empty_reads_are_200_empty_and_a_failed_read_is_503"
 INFLIGHT = "test_ap10_row27_a_kill_with_both_attempts_in_flight_is_two_cases_each_charged_once"
@@ -101,9 +101,16 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- 10a: the ledger listing and the catalog
     m("ap10_listing_nested", "the subscription listing is the route's flat row",
       '[{**row["subscription"], "decisions": row["decisions"]}', "[row", FLAT),
-    m("ap10_catalog_guessed_empty", "an unlisted catalog is a 503, never an empty catalog",
-      "        raise errors.DependencyUnavailable(NO_CATALOG)",
+    m("ap10_catalog_guessed_empty", "the catalog is 0066's listing, never a guessed empty one",
+      "        return await self.store.eval_catalog(provider_org_id=provider_org_id)",
       '        return {"datasets": [], "harnesses": [], "servings": [], "evaluators": []}',
+      CATALOG, ROUTES),
+    m("ap10_catalog_failure_as_empty", "a catalog the database does not answer is a 503",
+      "        return await self.store.eval_catalog(provider_org_id=provider_org_id)",
+      "        try:\n"
+      "            return await self.store.eval_catalog(provider_org_id=provider_org_id)\n"
+      "        except Exception:\n"
+      '            return {"datasets": [], "harnesses": [], "servings": [], "evaluators": []}',
       CATALOG, ROUTES),
     m("ap10_evaluator_unscoped", "the evaluator is read under the asking provider",
       "evaluator_ref, provider_org_id=provider_org_id)",

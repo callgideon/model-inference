@@ -144,6 +144,10 @@ class PgLabDataStore:
                                                  "ref": ref})
         return json.loads(row["body"])
 
+    async def eval_catalog(self, *, provider_org_id: str) -> dict[str, Any]:
+        """0066's `infrx.lab_eval_catalog`: what `/lab/v1/evaluations` checks a launch against."""
+        return await self._call("lab_eval_catalog", {"provider_org_id": provider_org_id})
+
     async def put_eval_report(self, report: dict[str, Any], *, provider_org_id: str,
                               actor: str) -> str:
         """Store a B2 report write-once; its `report_digest` must be its content's."""
