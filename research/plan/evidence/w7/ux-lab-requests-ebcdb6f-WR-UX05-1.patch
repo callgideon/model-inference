@@ -1,0 +1,156 @@
+diff --git a/apps/lab/lib/services/traces/port.ts b/apps/lab/lib/services/traces/port.ts
+index 6491dac9..b08bd797 100644
+--- a/apps/lab/lib/services/traces/port.ts
++++ b/apps/lab/lib/services/traces/port.ts
+@@ -1,16 +1,17 @@
+ // WR-LAB-API-5: the Lab's adapter over lab-api's provider trace read (R176, gateway/routes/lab_traces.py):
+-//   GET /lab/v1/traces?provider_org_id=&limit=&cursor=   -> { data: [item], next_cursor }
+-//   GET /lab/v1/traces/{request_id}?provider_org_id=      -> item
++//   GET /lab/v1/traces?provider_org_id=&limit=&cursor=[&model_id=][&serving_version_id=] -> { data: [item], next_cursor }
++//   GET /lab/v1/traces/{request_id}?provider_org_id=      -> item (+ content, inline, when granted)
++// WR-UX05-1 (AP-07c): every item's access_state, elapsed_ms and pins; the list's server-side filters.
+ // The credential is the signed-in user's own session token (lab_auth.py) and the provider is always the
+ // session workspace; the route decides every tenancy question. Only the route's named fields are kept.
+-import type { Actor, Result, TraceDetail, TraceReadPort, TraceRefusal } from "../../../components/traces/detail/port.ts";
++import type { Actor, Result, TraceDetail, TraceFilter, TraceReadPort, TraceRefusal } from "../../../components/traces/detail/port.ts";
+ 
+ /** The route's default page (1..200); the list asks for exactly this many. */
+ export const LIST_LIMIT = 50;
+ /** One page of the route's list: `next_cursor` is null on the last page. */
+ export type TracePage = { items: TraceDetail[]; next_cursor: string | null };
+ export interface TraceService extends TraceReadPort {
+-  list(actor: Actor, cursor: string | null): Promise<Result<TracePage, TraceRefusal>>;
++  list(actor: Actor, cursor: string | null, filter?: TraceFilter): Promise<Result<TracePage, TraceRefusal>>;
+ }
+ 
+ const STATUS: Record<number, TraceRefusal> = { 401: "denied", 403: "denied", 404: "not_found" };
+@@ -19,12 +20,15 @@ const UNAVAILABLE = refuse("unavailable");
+ 
+ /** Field -> the JSON types it may hold (`typeof`, or "null"). Anything unnamed is dropped. */
+ type Spec = Record<string, readonly string[]>;
+-const S = ["string"], SN = ["string", "null"];
++const S = ["string"], SN = ["string", "null"], N = ["number"], NN = ["number", "null"];
+ const METADATA: Spec = {
+   request_id: S, started_at: S, completed_at: SN, mode: S, loss_reason: S, serving_version_id: S,
+   model_revision: S, rate_card_version: SN, policy_version: SN, model_id: S,
++  price_version: S, request_schema_version: N, access_state: S, elapsed_ms: NN,
+ };
+ const GRANTED: Spec = { grantor_org_id: S, grant_ref: S, content_complete: ["boolean"], content_bytes: ["number"], content_available: ["boolean"] };
++/** A granted detail carries its content inline (text, null when unreadable); a list row never does. */
++const GRANTED_DETAIL: Spec = { ...GRANTED, content: SN };
+ 
+ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+ 
+@@ -45,7 +49,7 @@ function item(raw: unknown, listRow: boolean): TraceDetail | null {
+   if (meta === null) return null;
+   if (raw.access === "metadata") return { ...meta, access: "metadata" } as TraceDetail;
+   if (raw.access !== "content") return null;
+-  const granted = pick(listRow && raw.grant_ref === undefined ? { ...raw, grant_ref: "" } : raw, GRANTED);
++  const granted = pick(listRow && raw.grant_ref === undefined ? { ...raw, grant_ref: "" } : raw, listRow ? GRANTED : GRANTED_DETAIL);
+   return granted === null ? null : ({ ...meta, ...granted, access: "content" } as TraceDetail);
+ }
+ 
+@@ -70,8 +74,9 @@ export function httpTraces({ baseUrl, token, fetch: send = fetch }: HttpOptions)
+     }
+   }
+   return {
+-    async list(actor, cursor) {
+-      const answer = await get("", { provider_org_id: actor.providerId, limit: String(LIST_LIMIT), ...(cursor === null ? {} : { cursor }) });
++    async list(actor, cursor, filter) {
++      const narrowed = Object.fromEntries(Object.entries(filter ?? {}).filter(([, value]) => value !== null)) as Record<string, string>;
++      const answer = await get("", { provider_org_id: actor.providerId, limit: String(LIST_LIMIT), ...narrowed, ...(cursor === null ? {} : { cursor }) });
+       if (!answer.ok) return answer;
+       const body = answer.value;
+       if (!isObj(body) || !Array.isArray(body.data) || !(body.next_cursor === null || typeof body.next_cursor === "string")) return UNAVAILABLE;
+diff --git a/apps/lab/tests/v/list/adapter.test.ts b/apps/lab/tests/v/list/adapter.test.ts
+index bbbac559..a36d0b28 100644
+--- a/apps/lab/tests/v/list/adapter.test.ts
++++ b/apps/lab/tests/v/list/adapter.test.ts
+@@ -14,8 +14,9 @@ const actor: Actor = { providerId: A, role: "developer" };
+ const meta = {
+   request_id: REQ, started_at: "2026-09-27T10:00:00+00:00", completed_at: null, mode: "full", loss_reason: "none",
+   serving_version_id: "sv-1", model_revision: "acme-7b@r2", rate_card_version: "rc-3", policy_version: null, model_id: "acme-7b", access: "metadata",
++  price_version: "pv-1", request_schema_version: 2, access_state: "metadata", elapsed_ms: null,
+ };
+-const granted = { ...meta, access: "content", grantor_org_id: ORG, grant_ref: "grant-1", content_complete: true, content_bytes: 812, content_available: true };
++const granted = { ...meta, access: "content", access_state: "content", grantor_org_id: ORG, grant_ref: "grant-1", content_complete: true, content_bytes: 812, content_available: true };
+ 
+ type Call = { url: string; init: RequestInit };
+ function server(status: number, body: unknown, token: string | null = "eyJ0.tok.sig") {
+@@ -69,7 +70,11 @@ test("V1M-A03 only the route's named fields are kept: a metadata row never carri
+   assert.ok(page.ok);
+   assert.deepEqual(page.value.items, [meta, granted]);
+   const one = server(200, { ...granted, content: "text", extra: 1 });
+-  assert.deepEqual(await one.port.detail(actor, REQ), { ok: true, value: granted });
++  assert.deepEqual(await one.port.detail(actor, REQ), { ok: true, value: { ...granted, content: "text" } }, "a granted detail carries its content inline");
++  const unread = server(200, { ...granted, content: null });
++  assert.deepEqual(await unread.port.detail(actor, REQ), { ok: true, value: { ...granted, content: null } });
++  const ungranted = server(200, { ...meta, content: "secret prompt" });
++  assert.deepEqual(await ungranted.port.detail(actor, REQ), { ok: true, value: meta }, "a metadata detail never carries content");
+ });
+ 
+ test("V1M-A04 an answer that is not the route's shape is unavailable, never a partial record", async () => {
+@@ -78,17 +83,34 @@ test("V1M-A04 an answer that is not the route's shape is unavailable, never a pa
+     { data: [{ ...meta, model_id: null }], next_cursor: null },
+     { data: [{ ...meta, started_at: 1 }], next_cursor: null }, { data: [{ ...meta, completed_at: undefined }], next_cursor: null },
+     { data: [{ ...granted, content_bytes: "812" }], next_cursor: null }, { data: [{ ...meta, rate_card_version: 3 }], next_cursor: null },
++    { data: [{ ...meta, access_state: 1 }], next_cursor: null }, { data: [{ ...meta, elapsed_ms: "12" }], next_cursor: null },
++    { data: [{ ...meta, request_schema_version: "2" }], next_cursor: null }, { data: [{ ...meta, price_version: null }], next_cursor: null },
+   ];
+   for (const body of bad) {
+     const answer = await server(200, body).port.list(actor, null).catch(() => "threw");
+     assert.deepEqual(answer, { ok: false, reason: "unavailable" }, JSON.stringify(body));
+   }
+   // A granted detail must name the grant it was read under (WR-LAB-API-6): C2 binds its content ref to it.
+-  const unnamed: Record<string, unknown> = { ...granted };
++  const unnamed: Record<string, unknown> = { ...granted, content: "text" }; // with its content: only the missing ref fails it
+   delete unnamed.grant_ref;
+   assert.deepEqual(await server(200, unnamed).port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
+   assert.deepEqual(await server(200, "not json").port.detail(actor, REQ).catch(() => "threw"), { ok: false, reason: "unavailable" });
++  // A granted detail without its inline content (or with a non-text one) is not the route's shape.
++  assert.deepEqual(await server(200, granted).port.detail(actor, REQ), { ok: false, reason: "unavailable" });
++  assert.deepEqual(await server(200, { ...granted, content: { prompt: "x" } }).port.detail(actor, REQ), { ok: false, reason: "unavailable" });
+   // The list reads no content, so a granted row without the ref still lists (the ref is never used there).
+   const listed = await server(200, { data: [unnamed], next_cursor: null }).port.list(actor, null);
+   assert.ok(listed.ok && listed.value.items[0].access === "content" && (listed.value.items[0] as { grant_ref: string }).grant_ref === "");
+ });
++
++test("V1M-A05 the list's filters are the route's: each one set is sent by name, an unset one is not sent, and the cursor rides along", async () => {
++  const s = server(200, { data: [], next_cursor: null });
++  await s.port.list(actor, null, { model_id: "m 1", serving_version_id: null });
++  await s.port.list(actor, "WyJ4Il0.0f1e", { model_id: null, serving_version_id: "sv-1" });
++  await s.port.list(actor, null, { model_id: null, serving_version_id: null });
++  assert.deepEqual(s.calls.map((c) => c.url), [
++    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}&model_id=m+1`,
++    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}&serving_version_id=sv-1&cursor=WyJ4Il0.0f1e`,
++    `https://api.example/lab/v1/traces?provider_org_id=${A}&limit=${LIST_LIMIT}`,
++  ]);
++});
+diff --git a/apps/lab/tests/v/list/run-mutants.mjs b/apps/lab/tests/v/list/run-mutants.mjs
+index 8656f183..74f51709 100644
+--- a/apps/lab/tests/v/list/run-mutants.mjs
++++ b/apps/lab/tests/v/list/run-mutants.mjs
+@@ -17,6 +17,7 @@ const C = {
+   a02: "V1M-A02 refusals map to denied, not_found or unavailable, and no token sends nothing",
+   a03: "V1M-A03 only the route's named fields are kept: a metadata row never carries an organization, key, size or content",
+   a04: "V1M-A04 an answer that is not the route's shape is unavailable, never a partial record",
++  a05: "V1M-A05 the list's filters are the route's: each one set is sent by name, an unset one is not sent, and the cursor rides along",
+   w01: "V1M-W01 the detail page's trace port is the Lab adapter, reading with the session's access token",
+   w02: "V1M-W02 unset LAB_TRACES_API_URL or Supabase config is off: every read unavailable, nothing sent",
+   q01: "V1M-Q01 the route's cursor passes through exactly; every other name is ignored and reported, sorted",
+@@ -55,6 +56,15 @@ const MUTANTS = [
+   m("V1M-X27", "a malformed next cursor is accepted", PORT, '!(body.next_cursor === null || typeof body.next_cursor === "string")', "false", [C.a04]),
+   m("V1M-X28", "a malformed row is dropped silently", PORT, "      if (items.some((x) => x === null)) return UNAVAILABLE;\n", "", [C.a04]),
+   m("V1M-X29", "an unconfigured service answers empty", PORT, "return { list: async () => UNAVAILABLE,", "return { list: async () => ({ ok: true, value: { items: [], next_cursor: null } }) as const,", [C.a02]),
++  // WR-UX05-1 (AP-07c): filters on the wire, inline content on a granted detail only, the new fields typed
++  m("V1M-X74", "the filter is not sent", PORT, "...narrowed, ", "", [C.a05]),
++  m("V1M-X75", "an unset filter is sent as null", PORT, ".filter(([, value]) => value !== null)", ".filter(() => true)", [C.a05]),
++  m("V1M-X76", "a granted detail drops its inline content", PORT, "listRow ? GRANTED : GRANTED_DETAIL", "GRANTED", [C.a03]),
++  m("V1M-X77", "a list row must carry content", PORT, "listRow ? GRANTED : GRANTED_DETAIL", "GRANTED_DETAIL", [C.a01, C.a03]),
++  m("V1M-X78", "the access state is dropped", PORT, "access_state: S, ", "", [C.a01, C.a03]),
++  m("V1M-X79", "elapsed_ms may be text", PORT, "elapsed_ms: NN,", 'elapsed_ms: ["number", "null", "string"],', [C.a04]),
++  m("V1M-X80", "the request schema version may be text", PORT, "request_schema_version: N,", 'request_schema_version: ["number", "string"],', [C.a04]),
++  m("V1M-X81", "a granted detail may carry non-text content", PORT, "{ ...GRANTED, content: SN }", '{ ...GRANTED, content: ["string", "null", "object"] }', [C.a04]),
+   // the server composition and the WR-V2-1 wiring
+   m("V1M-X30", "an unset base URL still reads", SERVER, "if (!baseUrl || config === null) return offlineTraces();\n  return httpTraces({ baseUrl,", "if (config === null) return offlineTraces();\n  return httpTraces({ baseUrl: baseUrl ?? \"\",", [C.w02]),
+   m("V1M-X31", "a session without a token still sends", SESSION, "access_token ?? null", "access_token ?? \"eyJ0.x.y\"", [C.w01]),
