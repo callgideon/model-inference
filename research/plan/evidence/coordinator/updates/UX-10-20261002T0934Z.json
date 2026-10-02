@@ -1,0 +1,38 @@
+{
+  "task": "UX-10",
+  "lane": "ux-lab-releases",
+  "slice": "L-11 release and optimization evidence: Releases page (summary + evidence detail, serving proof from the latest observation only, loaded-fence proposal summary, stale-fence review copy, role note), publication requests beside AP-05 readiness via the generated Lab client, loading state, optimization comparison list (Not recorded, not comparable on other hardware, separate serving version, report digest)",
+  "activity": "review",
+  "at": "2026-10-02T09:34:00Z",
+  "head": "4a7530c5",
+  "base": "49114933",
+  "worktree": ".claude/worktrees/codex-w7-ux-lab-releases",
+  "branch": "codex/w7-ux-lab-releases",
+  "owned_paths": [
+    "apps/lab/app/(provider)/releases/",
+    "apps/lab/lib/services/releases/",
+    "apps/lab/tests/ux/releases/",
+    "research/plan/evidence/w7/ux-lab-releases-4a7530c.md",
+    "research/plan/evidence/w7/ux-lab-releases-4a7530c-WR-UX10.patch",
+    "research/plan/evidence/coordinator/updates/UX-10-20261002T0934Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/releases/*.test.ts", "exit": 0, "summary": "20 UX10 cases pass"},
+    {"cmd": "node tests/ux/releases/run-mutants.mjs", "exit": 0, "summary": "20 cases named; 66/66 killed"},
+    {"cmd": "make lab-test", "exit": 2, "summary": "385: 374 pass, 1 fail (R4-P01 pins replaced markup; WR-UX10-2), 10 skipped"},
+    {"cmd": "make lab-test (WR-UX10-1/2/3 applied, reverted)", "exit": 0, "summary": "385: 375 pass, 0 fail, 10 skipped"},
+    {"cmd": "node tests/r/run-mutants.mjs (WR applied)", "exit": 0, "summary": "128/128 killed"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py (WR applied)", "exit": 0, "summary": "7 passed"},
+    {"cmd": "make lab-lint / lab-typecheck / lab-build", "exit": 0, "summary": "clean / clean / built"},
+    {"cmd": "node tests/l/shell/run-mutants.mjs", "exit": 0, "summary": "134/134 killed (boundary L1-T01/T02 incl.)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "code and mutants green; remaining = WR-UX10-1/2/3 at merge, review round, ux-verify-final's lab-e2e E2E-R rerun on l4", "at": "2026-10-02T09:34:00Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "WR-UX10-1 apps/lab/app/(provider)/optimizations/page.tsx renders releases/variants.tsx Variants (patch in ux-lab-releases-4a7530c-WR-UX10.patch)",
+    "WR-UX10-2 apps/lab/tests/r/pages.test.ts R4-P01 failure-state assertion + tests/r/run-mutants.mjs R4-X74/X75/X76 finds",
+    "WR-UX10-3 Makefile lab-mutants: cd apps/lab && node tests/ux/releases/run-mutants.mjs"
+  ],
+  "evidence": ["research/plan/evidence/w7/ux-lab-releases-4a7530c.md", "research/plan/evidence/w7/ux-lab-releases-4a7530c-WR-UX10.patch"]
+}
