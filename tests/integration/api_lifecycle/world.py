@@ -13,10 +13,12 @@
   own processes (backend/pilotbox.py's PilotBox) with the wave-7 switches on - IDENTITY_API,
   AUTH_FACADE, CONSOLE_READS, CONSOLE_ACTIONS_API, CONSOLE_DATA_USE, and TRACE_PUMPS with the
   trace storage - and the Lab control unit (`infrx.lab.control.app`, the box's
-  infrx-lab-control) as a third process with LAB_JUDGE_API (and LAB_ARTIFACTS, composed once
-  api-artifacts-2's composition is on the base: the world probes the unit and lists AP-04 in
-  `composed` only when it answers). A loopback edge stands in for the Supabase origin: GoTrue's
-  `GET /auth/v1/user` over HS256 sessions this world signs and `GET /auth/v1/settings`, and
+  infrx-lab-control) as a third process with IDENTITY_API (AP-01's own SessionActors on the
+  unit), LAB_JUDGE_API, LAB_HOSTING (AP-05 mounted without a hosting slot: no candidate
+  engine can start here, so stage 04 is BLOCKED[CANDIDATE-ENGINE]) and LAB_ARTIFACTS (the
+  world probes the unit and lists AP-04 in `composed` only when it answers). A loopback edge
+  stands in for the Supabase origin: GoTrue's `GET /auth/v1/user` over HS256 sessions this
+  world signs and `GET /auth/v1/settings`, and
   PostgREST's `/api_keys?key_hash=eq.` read/touch over the database (no PostgREST port is on
   ap11's key). Host processes bind loopback ports the kernel assigns, never another lane's.
 
@@ -24,9 +26,7 @@ FIXTURES, declared in the config and named in the verdict - each stands in for s
 API on the base provides, never for an API that is: the individuals' verified sign-up and the
 identity-provider sessions (GoTrue's own flow; the auth facade forwards to it), the operator's
 two feature flags (no flag API), the NemoStation administrator membership (operator
-onboarding), the seeded Marlin listing (stage 07's publication is AP-06), and - while
-`lab/control/app.py` composes `actors=None` - AP-01's SessionActors on the Lab unit (the
-judge/review family answers 503 without it; api-identity-2 composes it, WR-AP11C-2). Keys,
+onboarding) and the seeded Marlin listing (stage 07's publication is AP-06). Keys,
 grants, data use, judge and reviews go through their APIs. Nothing here is real-GPU,
 real-judge or hosted evidence.
 """
@@ -68,7 +68,6 @@ S3_USER, S3_PASSWORD, BUCKET = "infrxap11minio", "infrx-ap11-local-secret", "inf
 TRACE_BUCKET, CH_USER, CH_PASSWORD, CH_DATABASE = ("infrx-ap11-traces", "infrx_ap11",
                                                   "infrx-ap11-local", "infrx_ap11")
 MODEL_UUID = "d0000001-0000-4000-8000-000000000001"         # the seed's Marlin model
-STAND_IN_ENV = "INFRX_AP11_STAND_IN"                        # where lab_unit marks a stand-in
 NO_CLICKHOUSE = ("WR-AP11C-1: tasklocal key ap11 names no ClickHouse port, so the world "
                  "composes no trace storage")
 MODEL = "nemostation/marlin-2b"
@@ -308,8 +307,8 @@ def _box_class():
         def command(self, role: str) -> tuple[list[str], str]:
             if role != "lab":
                 return super().command(role)
-            return ([sys.executable, "-m", "uvicorn", "--factory", "api_lifecycle.world:lab_unit",
-                     "--host", "127.0.0.1", "--port", str(self.lab_port), "--log-level",
+            return ([sys.executable, "-m", "uvicorn", "--factory",
+                     "infrx.lab.control.app:create_app", "--host", "127.0.0.1", "--port", str(self.lab_port), "--log-level",
                      "warning"], f"http://127.0.0.1:{self.lab_port}/readyz")
 
         def start(self, role: str, timeout: float = 60.0) -> None:
@@ -326,33 +325,6 @@ def _box_class():
             for role in list(self.processes):
                 self.stop(role)
     return pilotbox, Box
-
-
-def lab_unit():
-    """`uvicorn --factory` target for the world's Lab unit: `infrx.lab.control.app` as the
-    box runs it, except that while its composition leaves `actors=None` (this base) AP-01's
-    SessionActors - the gateway's own composition, on the unit's login - is stood in, and the
-    stand-in is marked for the config (a declared fixture, WR-AP11C-2)."""
-    import httpx
-
-    from infrx.console.session import PgIdentity, SessionActors
-    from infrx.gateway.lab_auth import GoTrueSessions
-    from infrx.lab.control import app as unit
-    from infrx.state.jobstore import connector
-    composed = unit._compose
-
-    def with_actors(lab, store):
-        rt, control, traces = composed(lab, store)
-        if getattr(rt, "actors", None) is None:
-            sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[unit.SUPABASE_URL],
-                                                        timeout=httpx.Timeout(5, connect=2)),
-                                      lab[unit.SUPABASE_KEY])
-            rt.actors = SessionActors(sessions, PgIdentity(connector(lab[unit.DATABASE_URL],
-                                                                     set_role=False)))
-            Path(os.environ[STAND_IN_ENV]).write_text("SessionActors stood in")
-        return rt, control, traces
-    unit._compose = with_actors
-    return unit.create_app()
 
 
 def trace_storage(stack: contextlib.ExitStack) -> str | None:
@@ -463,13 +435,12 @@ def compose(out: Path):
                                                  "TRACE_SPOOL_DIR": str(work / "spool")})}
         box = Box(env, engine.base_url, work, free_port())
         stack.callback(box.close)
-        box.lab_port, stand_in = free_port(), work / "lab-stand-in"
+        box.lab_port = free_port()
         box.lab_env = {**{k: v for k, v in box.env.items() if k in os.environ}, **s3, **traces,
-                       "PYTHONUNBUFFERED": "1",     # `api_lifecycle.world:lab_unit` importable
-                       "PYTHONPATH": os.pathsep.join((box.env["PYTHONPATH"], str(INTEGRATION))),
+                       "PYTHONUNBUFFERED": "1", "PYTHONPATH": box.env["PYTHONPATH"],
                        "INFRX_LAB_DATABASE_URL": dsn, "INFRX_LAB_SUPABASE_URL": edge_url,
                        "INFRX_LAB_SUPABASE_ANON_KEY": anon, "LAB_JUDGE_API": "1",
-                       "LAB_ARTIFACTS": "1", STAND_IN_ENV: str(stand_in)}
+                       "LAB_ARTIFACTS": "1", "IDENTITY_API": "1", "LAB_HOSTING": "1"}
         box.start("worker")
         box.start("gateway")
         box.start("lab")
@@ -498,10 +469,6 @@ def compose(out: Path):
             "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)",
             "judge": "dry_run: JUDGE_MODE's default on the Lab unit; no judge worker or START "
                      "job is composed, nothing is sent (live judging is P-10)"}
-        if stand_in.exists():
-            fixtures["lab_unit_actors"] = (
-                "world.py lab_unit: AP-01's SessionActors stood in on the Lab unit, whose "
-                "composition leaves actors=None on this base (WR-AP11C-2, api-identity-2)")
         config = {
             "target": f"ap11-isolated-{release[:12]}", "model": MODEL, "model_uuid": MODEL_UUID,
             "origins": {"gateway": box.url, "lab": lab_url}, "composed": composed,
@@ -525,7 +492,8 @@ def compose(out: Path):
                      "migration_count": len(applied), "postgres": pg.IMAGE,
                      "valkey": VALKEY_IMAGE, "s3": MINIO_IMAGE, "engine": "fake_vllm.py",
                      "clickhouse": CLICKHOUSE_IMAGE if clickhouse else None,
-                     "lab_unit": "infrx.lab.control.app (LAB_JUDGE_API, LAB_ARTIFACTS)",
+                     "lab_unit": "infrx.lab.control.app (IDENTITY_API, LAB_JUDGE_API, LAB_ARTIFACTS, "
+                                 "LAB_HOSTING without a hosting slot)",
                      "ports": {s: v.host_port for s, v in services().items()}}}
         config_path, secrets_path = work / "config.json", work / "secrets.json"
         config_path.write_text(json.dumps(config, indent=1))

@@ -20,7 +20,7 @@ MODEL = "nemostation/marlin-2b"
 SECRET_VALUES = ("sk-infrx-alphaSECRET0001", "sk-infrx-betaSECRET00002",
                  "eyJhbGci.eyJzdWIi.adminSIG", "eyJhbGci.eyJzdWIi.outsideSIG",
                  "eyJhbGci.eyJzdWIi.alphaWEB", "eyJhbGci.eyJzdWIi.betaWEB")
-SERVED = ("01", "02", "03", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17")
+SERVED = ("01", "02", "03", "04", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17")
 
 
 def run(files, gateway, *extra: str, mode: str = "isolated"):
@@ -419,16 +419,15 @@ def test_ap11_an_operation_is_accepted_only_as_r270_states_it():
 
 
 def test_ap11_every_served_stage_passes_and_only_ap05_ap06_stay_blocked(files, gateway):
-    """Broken: a stage whose packages are composed left BLOCKED, or one that waits on AP-05/06
-    reported anything but BLOCKED naming them."""
+    """Broken: a stage whose packages are composed (AP-05 is mounted on the base) left
+    BLOCKED, or one that waits on AP-06 reported anything but BLOCKED naming it."""
     code, verdict = run(files, gateway)
     assert {sid: stage(verdict, sid)["status"] for sid in SERVED} == dict.fromkeys(SERVED, "PASS"), \
         {sid: stage(verdict, sid)["reasons"] for sid in SERVED}
-    for sid in ("04", "05", "06", "07", "18"):         # 06's own route is mounted: it waits
-        reasons = " ".join(stage(verdict, sid)["reasons"])   # on 04/05, which name AP-05/06
-        assert stage(verdict, sid)["status"] == "BLOCKED" and ("AP-05" in reasons
-                                                               or "AP-06" in reasons
-                                                               or "needs stage 04" in reasons), sid
+    for sid in ("05", "06", "07", "18"):               # 06's own route is mounted: it waits
+        reasons = " ".join(stage(verdict, sid)["reasons"])   # on 05, which names AP-06
+        assert stage(verdict, sid)["status"] == "BLOCKED" and ("AP-06" in reasons
+                                                               or "needs stage 05" in reasons), sid
     assert (code, verdict["verdict"]) == (3, "BLOCKED")
 
 
@@ -548,7 +547,7 @@ HOSTING = {"readiness_from_record": "04", "consumer_key_private": "08", "dev_key
 
 
 def hosted(files) -> None:
-    edit(files[0], composed=json.loads(files[0].read_text())["composed"] + ["AP-05", "AP-06"])
+    edit(files[0], composed=json.loads(files[0].read_text())["composed"] + ["AP-06"])
 
 
 def test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol(files, gateway):
@@ -582,3 +581,13 @@ def test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail(files, ga
     _, verdict = run(files, gateway)
     four = stage(verdict, "04")
     assert four["status"] == "BLOCKED" and "GPU-TARGET" in " ".join(four["reasons"])
+
+
+def test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite(files, gateway):
+    """Broken: a target whose profile has no hosting slot (no candidate engine can start)
+    asked to deploy anyway, or reported as a FAIL of the API under test."""
+    gateway.defects.add("no_target")
+    _, verdict = run(files, gateway)
+    four = stage(verdict, "04")
+    assert four["status"] == "BLOCKED" and "CANDIDATE-ENGINE" in " ".join(four["reasons"])
+    assert gateway.posts("/lab/v1/control/deployments") == []

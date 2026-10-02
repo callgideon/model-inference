@@ -129,6 +129,8 @@ TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "t3": {"clickhouse": (57546, (57547,)), "s3": (57548, ())},
     # LW7: ap7 (AP-07 consent/traces) composes ClickHouse like the T lanes.
     "ap7": {"clickhouse": (57560, (57561,))},
+    # AP-11c: the lifecycle runner's isolated world captures and reads traces (stages 12-17).
+    "ap11": {"clickhouse": (57570, (57571,))},
 }
 
 # track -> {service: (host port, extra ports)}

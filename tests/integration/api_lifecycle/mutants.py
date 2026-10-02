@@ -78,6 +78,7 @@ PINNED = "test_ap11_a_cas_write_resumes_with_the_version_it_first_read"
 HOSTED = "test_ap11_stages_04_to_07_hold_ap05_ap06_to_their_protocol"
 HOSTING_DEFECT = "test_ap11_a_hosting_defect_fails_its_stage"
 NO_CAPACITY = "test_ap11_no_capacity_is_the_gpu_prerequisite_never_a_product_fail"
+NO_TARGET = "test_ap11_no_hosting_target_is_the_candidate_engine_prerequisite"
 
 MUTANTS: tuple[Mutant, ...] = (
     # ---- 11a: the two private files
@@ -431,10 +432,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "payer_id = uuid.uuid5(uuid.NAMESPACE_URL, seed.hexdigest())", SERVED),
     # ---- 11c by protocol: stages 04-07 (AP-05/06) on the fake
     _m("readiness_from_record", "04: readiness is the engine's report for this revision", H,
-       '              ready.get("state") == "ready" and ready.get("serving_version_id") == revision\n'
-       '              and (ready.get("engine") or {}).get("serving_version_id") == revision,',
-       '              ready.get("state") == "ready" and ready.get("serving_version_id") == revision,',
+       '              ready.get("serving_version_id") == revision\n'
+       '              and (ready.get("identity") or {}).get("passed") is True,',
+       '              ready.get("serving_version_id") == revision,',
        HOSTING_DEFECT),
+    _m("no_target_is_a_fail", "04: no hosting target is the candidate-engine prerequisite", H,
+       '    if availability.get("state") != "configured":', "    if False:", NO_TARGET),
     _m("no_capacity_is_a_fail", "04: capacity_unavailable is the GPU prerequisite", H,
        '    if (final.get("error") or {}).get("code") == "capacity_unavailable":', "    if False:",
        NO_CAPACITY),

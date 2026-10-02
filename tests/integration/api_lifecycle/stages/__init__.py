@@ -129,10 +129,10 @@ STAGES: tuple[Stage, ...] = (
     Stage("04", "POST private deployment; poll its operation and detail",
           "Isolated resource allocated; real engine reports matching identity; state is not "
           "inferred from record presence",
-          (_r("GET", "/lab/v1/hosting-profiles", "AP-05"),
-           _r("POST", "/lab/v1/control/deployments", "AP-05"),
-           _r("GET", "/lab/v1/control/deployments/{id}", "AP-05"),
-           _r("GET", "/lab/v1/control/deployments/{id}/readiness", "AP-05")),
+          # AP-05 is mounted on the base (lab_deployments, behind LAB_HOSTING)
+          (_r("GET", "/lab/v1/hosting-profiles"), _r("POST", "/lab/v1/control/deployments"),
+           _r("GET", "/lab/v1/control/deployments/{id}"),
+           _r("GET", "/lab/v1/control/deployments/{id}/readiness")),
           run=hosting.s04, needs=("03",), prerequisites=(GPU,)),
     Stage("05", "Operator private rate/funding API; bounded smoke; issue provider-dev key",
           "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope "
@@ -140,8 +140,7 @@ STAGES: tuple[Stage, ...] = (
           (_r("POST", "/operator/v1/deployments/{id}/dev-rate", "AP-06"),
            _r("POST", "/operator/v1/dev-wallet-grants", "AP-06"),
            _r("GET", "/lab/v1/control/dev-wallet", "AP-06"),
-           # mounted, but a synchronous stand-in over NoEngine (503) until AP-05 05d
-           _r("POST", "/lab/v1/control/deployments/{id}/smoke", "AP-05"),
+           _r("POST", "/lab/v1/control/deployments/{id}/smoke"),     # AP-05 05d's operation
            _r("POST", "/lab/v1/control/endpoints/{id}/keys", "AP-06")),
           run=hosting.s05, needs=("04",), prerequisites=(GPU,)),
     Stage("06", "Call private endpoint with finite-video fixture",
@@ -227,7 +226,7 @@ STAGES: tuple[Stage, ...] = (
           "Prior jobs keep original pins; new admissions use correct listing or refuse; "
           "task-owned resources drained and cleaned",
           (_r("POST", "/operator/v1/listings/{model_id}/rollback", "AP-06"),
-           _r("POST", "/lab/v1/control/deployments/{id}/retire", "AP-05"),
-           _r("POST", "/lab/v1/operations/{id}/cancel", "AP-05")),
+           _r("POST", "/lab/v1/control/deployments/{id}/retire"),
+           _r("POST", "/lab/v1/operations/{id}/cancel")),
           needs=("07",)),
 )

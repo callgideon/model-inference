@@ -1,10 +1,9 @@
-"""AP-11c: stages 04-07 by contracts.md §5/§6 - a private deployment and its readiness
-(AP-05), the operator's private rate and dev funding, the bounded smoke and an endpoint-scoped
-provider-dev key (AP-05/AP-06), one private finite-video call (AP-06), and the publication
-proposal and its approval (AP-06). Their packages are not composed on this base, so in every
-world today they are BLOCKED naming AP-05/AP-06 and never called; the code is the protocol the
-runner will hold them to once mounted (proved on the layer-1 fake), and api-lifecycle-3 aligns
-the bodies with the merged schemas.
+"""AP-11c: stages 04-07 - a private deployment and its readiness (AP-05, mounted on the base
+behind LAB_HOSTING; 04 and 05's smoke follow api-hosting's merged shapes), the operator's
+private rate and dev funding and an endpoint-scoped provider-dev key (AP-06), one private
+finite-video call (AP-06), and the publication proposal and its approval (AP-06), by
+contracts.md §5/§6. A target without a hosting slot is BLOCKED[CANDIDATE-ENGINE] at 04;
+api-lifecycle-3 aligns the AP-06 bodies with the merged schemas.
 
 Identities: `operator` is the operator's bootstrap credential (an operator-audience key from
 the secrets file); `provider_dev` is the key minted in stage 05 for the private endpoint.
@@ -19,6 +18,9 @@ from . import Blocked, accepted_operation
 from .consumer import _json, upload, video
 from .lab import ADMIN, _poll, _workspace
 
+ENGINE = ("BLOCKED[CANDIDATE-ENGINE] the target composes no hosting target, so no candidate "
+          "engine can start (AP-05's HOSTING_* slot and the `hosting` worker role; its launcher "
+          "is the box's BoxLauncher on a candidate port 8100-8199)")
 GPU = ("BLOCKED[GPU-TARGET] the deployment found no capacity (capacity_unavailable): an "
        "isolated GPU target and resource budget (verification.md prerequisite 3)")
 
@@ -34,34 +36,46 @@ def _finished(ctx, operation_id: str) -> dict:
 
 
 def s04(ctx) -> None:
+    """AP-05 as merged (api-hosting's evidence sketch): the approved profile must have a hosting
+    target, the create is a 202 operation, and the deployment is `validating` with the engine's
+    own identity receipt for exactly this serving revision once no operation is unfinished."""
     revision = ctx.outputs("03")["serving_version_id"]
-    profiles = _json(ctx.call("GET", "/lab/v1/hosting-profiles", origin="lab", actor=ADMIN,
-                              query=_workspace(ctx))).get("data") or []
-    profile = next((p for p in profiles if p.get("eligible")), None)
-    ctx.require("an eligible hosting profile is offered", profile is not None, len(profiles))
+    answer = ctx.call("GET", "/lab/v1/hosting-profiles", origin="lab", actor=ADMIN,
+                      query=_workspace(ctx))
+    ctx.served(answer, "GET /lab/v1/hosting-profiles", "AP-05")
+    profiles = _json(answer).get("data") or []
+    ctx.require("the approved hosting profile is offered", len(profiles) == 1, len(profiles))
+    profile, availability = profiles[0], profiles[0].get("availability") or {}
+    if availability.get("state") != "configured":
+        raise Blocked(f"{ENGINE}: the profile reads {availability.get('state')} "
+                      f"({availability.get('reason')})")
     made = ctx.mutate("04.deployment", "POST", "/lab/v1/control/deployments", origin="lab",
                       actor=ADMIN, query=_workspace(ctx), json={
-                          "serving_version_id": revision, "hosting_profile_id":
-                          profile["hosting_profile_id"], "environment": "dev",
-                          "max_replicas": 1}, extract=_operation)
+                          "serving_version_id": revision,
+                          "hosting_profile": profile["profile_id"],
+                          "endpoint_name": "ap11-private", "max_input_tokens": 16384,
+                          "max_output_tokens": 1024, "expire_after_s": 3600},
+                      extract=_operation)
+    ctx.own("deployment", made["resource_id"], {
+        "method": "POST", "origin": "lab", "actor": ADMIN,
+        "route": "/lab/v1/control/deployments/{id}/retire"})
     final = _finished(ctx, made["operation_id"])
     if (final.get("error") or {}).get("code") == "capacity_unavailable":
         raise Blocked(GPU)
     ctx.require("the deployment operation succeeds", final.get("state") == "succeeded",
                 {k: final.get(k) for k in ("state", "phase", "error")})
     ids = {"id": made["resource_id"]}
-    detail = _json(ctx.call("GET", "/lab/v1/control/deployments/{id}", origin="lab", actor=ADMIN,
-                            params=ids, query=_workspace(ctx)))
+    detail = _json(_poll(ctx, "/lab/v1/control/deployments/{id}", ids,
+                         lambda d: not d.get("operations")))
     ready = _json(ctx.call("GET", "/lab/v1/control/deployments/{id}/readiness", origin="lab",
                            actor=ADMIN, params=ids, query=_workspace(ctx)))
-    ctx.check("readiness is the engine's report for exactly this serving revision",
-              ready.get("state") == "ready" and ready.get("serving_version_id") == revision
-              and (ready.get("engine") or {}).get("serving_version_id") == revision,
-              {k: ready.get(k) for k in ("state", "serving_version_id")})
-    ctx.check("the deployment observes the desired revision, never inferred from a record",
-              detail.get("observed_serving_version_id") == revision
-              and detail.get("desired_serving_version_id") == revision,
-              {k: detail.get(k) for k in ("state", "observed_serving_version_id")})
+    ctx.check("the deployment is validating with no unfinished operation",
+              detail.get("state") == "validating" and not detail.get("operations"),
+              {k: detail.get(k) for k in ("state", "operations")})
+    ctx.check("identity is the engine's own receipt for exactly this serving revision",
+              ready.get("serving_version_id") == revision
+              and (ready.get("identity") or {}).get("passed") is True,
+              {k: ready.get(k) for k in ("state", "serving_version_id", "reasons")})
     ctx.publish(deployment_id=made["resource_id"], endpoint_id=detail.get("endpoint_id"),
                 private_model=detail.get("model"))
 
@@ -69,6 +83,20 @@ def s04(ctx) -> None:
 def s05(ctx) -> None:
     out = ctx.outputs("04")
     ids = {"id": out["deployment_id"]}
+    smoke = ctx.mutate("05.smoke", "POST", "/lab/v1/control/deployments/{id}/smoke",
+                       origin="lab", actor=ADMIN, params=ids, query=_workspace(ctx),
+                       extract=_operation)
+    receipt = _finished(ctx, smoke["operation_id"])
+    ctx.require("the bounded smoke succeeds", receipt.get("state") == "succeeded",
+                {k: receipt.get(k) for k in ("state", "error")})
+    ready = _json(ctx.call("GET", "/lab/v1/control/deployments/{id}/readiness", origin="lab",
+                           actor=ADMIN, params=ids, query=_workspace(ctx)))
+    ctx.require("the smoke's passed receipt promotes the deployment to ready_private",
+                ready.get("state") == "ready_private" and ready.get("ready") is True
+                and (ready.get("smoke") or {}).get("passed") is True,
+                {k: ready.get(k) for k in ("state", "ready", "reasons")})
+    if not ctx.composed("AP-06"):         # the runner reports BLOCKED naming AP-06's routes
+        return
     rate = ctx.mutate("05.rate", "POST", "/operator/v1/deployments/{id}/dev-rate",
                       actor="operator", params=ids, json={"reason": "AP-11 private meter"},
                       extract=lambda r: {"status": r.status_code,
@@ -85,12 +113,6 @@ def s05(ctx) -> None:
                             query=_workspace(ctx)))
     ctx.check("the dev wallet is private CREDIT, apart from PROVIDER_USD judge spend",
               (wallet.get("balance") or {}).get("unit") == "CREDIT", wallet.get("balance"))
-    smoke = ctx.mutate("05.smoke", "POST", "/lab/v1/control/deployments/{id}/smoke",
-                       origin="lab", actor=ADMIN, params=ids, query=_workspace(ctx),
-                       extract=_operation)
-    receipt = _finished(ctx, smoke["operation_id"])
-    ctx.require("the bounded smoke succeeds with a receipt", receipt.get("state") == "succeeded",
-                {k: receipt.get(k) for k in ("state", "error")})
 
     def extract(r) -> dict:
         body = _json(r)
@@ -109,6 +131,7 @@ def s05(ctx) -> None:
 
 
 def s06(ctx) -> None:
+    ctx.outputs("05")                     # its predecessor: the smoke and the dev key
     out = ctx.outputs("04")
     model = out.get("private_model")
     ctx.require("the private endpoint names its model", model, None)
@@ -131,6 +154,7 @@ def s06(ctx) -> None:
 
 
 def s07(ctx) -> None:
+    ctx.outputs("05")                     # its predecessor: the smoke and the dev key
     out = ctx.outputs("04")
     proposed = ctx.mutate("07.propose", "POST", "/lab/v1/control/proposals", origin="lab",
                           actor=ADMIN, query=_workspace(ctx), json={

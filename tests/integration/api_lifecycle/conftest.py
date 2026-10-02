@@ -56,7 +56,7 @@ DEFECTS = ("replay_new_job", "conflict_accepted", "artifact_upload", "foreign_re
            "revision_mutable", "revision_unpinned", "zero_elapsed", "no_inference_id",
            # 11c by protocol: AP-05/06 (composed only by the hosting cases)
            "readiness_from_record", "consumer_key_private", "dev_key_public", "stale_approval",
-           "private_listed", "no_capacity")
+           "private_listed", "no_capacity", "no_target")
 
 
 class FakeGateway:
@@ -229,8 +229,9 @@ def _money(amount, unit: str = "CREDIT") -> dict:
 
 
 def hosting(fake: FakeGateway, request, method: str, path: str) -> httpx.Response | None:
-    """AP-05/06 by contracts.md §5/§6 (no lane has merged them): deployments, readiness, the
-    operator's dev rate/funding/approval, dev keys and the private route."""
+    """AP-05 as merged (api-hosting: profiles, deployments, readiness receipts, the smoke) and
+    AP-06 by contracts.md §5/§6: the operator's dev rate/funding/approval, dev keys and the
+    private route."""
     d, o, token = fake.defects, fake.objects, request.headers.get("authorization", "")[7:]
     query, web = request.url.params, fake._web(request)
     dev = o.setdefault("dev_keys", {})
@@ -275,7 +276,9 @@ def hosting(fake: FakeGateway, request, method: str, path: str) -> httpx.Respons
                            "created_at": "2026-10-02T00:00:00Z",
                            "updated_at": "2026-10-02T00:00:00Z"}
     if path == "/lab/v1/hosting-profiles":
-        return _ok(body={"data": [{"hosting_profile_id": "marlin-l40s", "eligible": True}]})
+        state = "unavailable" if "no_target" in d else "configured"
+        return _ok(body={"data": [{"profile_id": "marlin-l40s",
+                                   "availability": {"state": state}}]})
     if path == "/lab/v1/control/deployments":
         o["deployment"] = deployment = str(uuid.uuid4())
         o["serving"] = _body(request)["serving_version_id"]
@@ -284,17 +287,19 @@ def hosting(fake: FakeGateway, request, method: str, path: str) -> httpx.Respons
         o.setdefault("hosting_ops", []).append(doc["operation_id"])
         return _ok(202, doc, Location=f"/lab/v1/operations/{doc['operation_id']}")
     if path.endswith("/smoke"):
+        o["smoked"] = True
         doc = op(o["deployment"])
         o[doc["operation_id"]] = o["deployment"]
         return _ok(202, doc, Location=f"/lab/v1/operations/{doc['operation_id']}")
+    state = "ready_private" if o.get("smoked") else "validating"
     if path.endswith("/readiness"):
-        served = "other" if "readiness_from_record" in d else o["serving"]
-        return _ok(body={"state": "ready", "serving_version_id": o["serving"],
-                         "engine": {"serving_version_id": served}})
+        return _ok(body={"state": state, "ready": bool(o.get("smoked")),
+                         "serving_version_id": o["serving"],
+                         "identity": {"passed": "readiness_from_record" not in d},
+                         "smoke": {"passed": True} if o.get("smoked") else None})
     if path.startswith("/lab/v1/control/deployments/"):
-        return _ok(body={"state": "ready", "endpoint_id": "ep-1", "model": PRIVATE,
-                         "observed_serving_version_id": o["serving"],
-                         "desired_serving_version_id": o["serving"]})
+        return _ok(body={"state": state, "operations": [], "endpoint_id": "ep-1",
+                         "model": PRIVATE, "serving_version_id": o["serving"]})
     if path == "/lab/v1/control/dev-wallet":
         return _ok(body={"balance": _money("100")})
     if path.endswith("/keys"):
