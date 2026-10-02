@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyPanel, ErrorPanel } from "../states";
 import { CopyButton } from "./copy-button";
-import { PHASE_LABELS, RETRY_GUIDANCE, type RequestDetail, type RequestDetailModel } from "./request-view-model";
+import { PHASE_LABELS, RETRY_GUIDANCE, type RequestDetailModel } from "./request-view-model";
 import { ResultPanel } from "./result-panel";
 
 /**

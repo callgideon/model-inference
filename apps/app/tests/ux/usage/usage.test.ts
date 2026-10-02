@@ -23,6 +23,7 @@ import {
   type Shown,
 } from "../../../app/(console)/usage/[requestId]/request-view-model.ts";
 import { jobRowView, jobsPageModel, parseJobFilters } from "../../../app/(console)/usage/credit-view-model.ts";
+import type { Credit } from "../../../lib/contracts/v2/money-units.ts";
 import { CREDITS_NOTICE, creditAccountState, creditCardState, ledgerEntryView } from "../../../app/(console)/billing/credit-view-model.ts";
 import { settingsModel } from "../../../app/(console)/settings/view-model.ts";
 
@@ -287,7 +288,7 @@ test("UXU-08 a request row keeps execution and money apart: status is the reques
 
 test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event", () => {
   const wallet = fixture.wallet!;
-  const card = creditCardState({ ok: true, value: wallet }, { ok: true, value: "9995.00000000" });
+  const card = creditCardState({ ok: true, value: wallet }, { ok: true, value: "9995.00000000" as Credit });
   assert.ok(card.kind === "ready");
   assert.deepEqual(
     card.value.figures.map((f) => [f.label, f.value, f.emphasis]),
@@ -307,7 +308,7 @@ test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart,
 
   const grant = ledgerEntryView({ ...fixture.ledger[0], kind: "signup_grant" });
   assert.deepEqual([grant.kind, grant.code, grant.amount], ["Promotional credit grant", "signup_grant", "+10,000.00 credits"]);
-  const debit = ledgerEntryView({ ...fixture.ledger[0], kind: "inference_debit", amount: "-0.00000001" });
+  const debit = ledgerEntryView({ ...fixture.ledger[0], kind: "inference_debit", amount: "-0.00000001" as Credit });
   assert.deepEqual([debit.kind, debit.amount], ["Request charge", "-0.00000001 credits"]);
   const novel = ledgerEntryView({ ...fixture.ledger[0], kind: "novel_kind" });
   assert.deepEqual([novel.kind, novel.code], ["Other", "novel_kind"], "an unknown event is neutral, with its raw code");
