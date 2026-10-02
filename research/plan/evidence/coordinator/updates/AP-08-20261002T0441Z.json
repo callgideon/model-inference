@@ -1,0 +1,30 @@
+{
+  "task": "AP-08",
+  "lane": "api-judge-2",
+  "slice": "AP-08 remainder: versioned rubrics (POST /lab/v1/judge/rubrics, SOP v2 definition_pending), SR-AP08-1 store proven on ap8 (both images), per-run rubric grading, gold-set calibration, the judge role (start job + allowlisted provider + gold set) and the end-to-end proof through python -m infrx.lab.workers judge; live external judging BLOCKED on P-10",
+  "activity": "review",
+  "at": "2026-10-02T04:41:00Z",
+  "head": "e354988c",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-api-judge-2",
+  "branch": "codex/w7-api-judge-2",
+  "owned_paths": ["apps/infrx-api/infrx/judge/start.py", "apps/infrx-api/infrx/judge/rubric.py", "apps/infrx-api/infrx/judge/calibration/", "apps/infrx-api/infrx/lab/workers/__main__.py (judge role)", "apps/infrx-api/tests/ap08/", "apps/infrx-api/infrx/gateway/routes/lab_judge.py (deviation: AP-08 batch-1 module)", "apps/infrx-api/infrx/lab/judge_api/ (deviation)", "apps/infrx-api/infrx/judge/submit.py (deviation)", "generated: apps/infrx-api/openapi/lab-control.json, research/plan/api-lifecycle/evidence/route-inventory.{json,md}, packages/api-client/src/lab.ts", "research/plan/evidence/w7/api-judge-2-e354988.md", "research/plan/evidence/coordinator/updates/AP-08-20261002T0441Z.json"],
+  "commands": [
+    {"cmd": "pytest tests/ap08/test_rubric_versions.py | test_goldset.py | (ap8) test_rubric_store_pg.py | (ap8, base __main__) test_judge_cli_pg.py — before implementation", "exit": 1, "summary": "red: 12 failed (API absent); collection error; pg_rubric_of absent; 'the start pass sending the run never happened'"},
+    {"cmd": "INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08 --ignore=tests/ap08/test_mutants.py", "exit": 0, "summary": "62 passed (plain postgres)"},
+    {"cmd": "INFRX_D1_IMAGE=supabase INFRX_D_TASK=ap8 uv run --frozen pytest -q tests/ap08 --ignore=tests/ap08/test_mutants.py", "exit": 0, "summary": "62 passed (supabase image)"},
+    {"cmd": "INFRX_D_TASK=ap8 INFRX_MUTANTS=all uv run --frozen pytest -q tests/ap08/test_mutants.py", "exit": 0, "summary": "88 passed: 62/62 Python, 13/13 0064 SQL, 11/11 SR-AP08-1 SQL mutants killed; well-formed + every-case green"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_lab_workers_mutants.py -k 'lw_judge or lw_report'", "exit": 0, "summary": "26 passed (tests/w anchors kept)"},
+    {"cmd": "uv run --frozen pytest -q tests/w tests/j tests/contracts tests/g/test_startup.py tests/i -m 'not pg' --ignore-glob='*test_mutants*.py'", "exit": 1, "summary": "2436 passed, 11 failed: tests/w judge anchors (fixed, green after); 10 d1-default *_pg cases refused by HarnessBusy (another lane's d1 lock; nothing touched)"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 458 (baseline 458)"},
+    {"cmd": "cd packages/api-client && pnpm typecheck && pnpm test", "exit": 1, "summary": "typecheck 0; 5 pass, 1 fail: consumer.ts stale at the base (WR-AP08-3); lab.ts regenerated and current"},
+    {"cmd": "uv run --frozen pytest -q tests/integration/test_makefile_mutant_lists.py", "exit": 0, "summary": "7 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium", "basis": "this lane ~6 h within the 4/6/10 band; remaining = SR-AP08-1 allocation + both-image re-proof, WR-AP08-2b after api-traces-2, generated-artifact merge conflicts, review fixes; live pass excluded (P-10/P-07)", "at": "2026-10-02T04:41:00Z"},
+  "blockers": ["P-10: live external judging (approved provider/model/rate, rubric-carrying adapter, credential by SSM name, JUDGE_MODE=live + budget + allowlist, 50-lab-role admitting live)", "P-07: SOP definition for rubric v2 and >= 30 reviewed gold pairs", "SR-AP08-1 must be allocated a migration before/with this merge", "api-traces-2: infrx.traces.eligible for the start job (WR-AP08-2b)"],
+  "schema_requests": ["SR-AP08-1: apps/infrx-api/tests/ap08/sr_ap08_1.sql unchanged into the allocated LOCAL-ONLY migration (0066 or amended 0064)"],
+  "wiring_requests": ["WR-AP08-2a judge role in infrx/lab/workers/__main__.py (applied in-branch; patch = git diff b05eb6f4..e354988c -- that file)", "WR-AP08-2b infrx/judge/start.py eligible_read -> api-traces-2's read", "WR-AP08-3 regenerate packages/api-client/src/consumer.ts", "WR-AP08-4 AP-09 Lab adapter: RubricDoc fields + operator-only POST /rubrics"],
+  "evidence": ["research/plan/evidence/w7/api-judge-2-e354988.md"]
+}
