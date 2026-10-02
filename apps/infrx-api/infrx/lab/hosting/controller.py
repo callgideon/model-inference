@@ -26,7 +26,7 @@ from ...contracts import api, errors
 from ...contracts.api import FieldError
 from ...contracts.v2.records import DeploymentState, ServingRevision
 from ...state.control_ops import Operation, input_hash
-from . import KINDS, PROFILE, LabHosting, Target
+from . import KINDS, PROFILE, LabHosting, Target, gaps, latest
 from .engine import Engine, InstallRefused, Launcher, Runtime, install, measure, mismatches, \
     options_digest
 from .store import Allocation, Hold, Receipt, tag
@@ -40,6 +40,7 @@ DEADLINE_S = 7200                 # a create or smoke operation ends within this
 VALIDATION_WINDOW_S = 3600        # a draft/validating deployment not ready by then is retired
 IDENTITY_TTL_S = SMOKE_TTL_S = 86400
 HEALTH_EVERY_S, HEALTH_TTL_S = 60, 180
+SMOKE_TIMEOUT_S = 120.0           # one finite clip <= 72 s answers in ~2-14 s measured (c=1..16)
 
 
 HARNESS = (PROFILE.prompt_harness_ref, PROFILE.preprocessor_profile_version)
@@ -62,13 +63,15 @@ class Controller:
     def __init__(self, hosting: LabHosting, launcher: Launcher, target: Target, *,
                  owner: str | None = None, boundary: Callable[[str], None] | None = None,
                  transport=None, lease_s: int = LEASE_S,
-                 launch_timeout_s: int = LAUNCH_TIMEOUT_S) -> None:
+                 launch_timeout_s: int = LAUNCH_TIMEOUT_S,
+                 smoke_timeout_s: float = SMOKE_TIMEOUT_S) -> None:
         self.h, self.launcher, self.target = hosting, launcher, target
         self.store, self.ops, self.control = hosting.store, hosting.ops, hosting.control
         self.owner = owner or f"hosting-{uuid.uuid4()}"
         self.boundary = boundary or (lambda name: None)
         self.engine = Engine(transport)
         self.lease_s, self.launch_timeout_s = lease_s, launch_timeout_s
+        self.smoke_timeout_s = smoke_timeout_s
         self.holding: set[str] = set()
 
     async def run_once(self) -> int:
@@ -251,7 +254,56 @@ class Controller:
 
     # --- smoke -------------------------------------------------------------------------
     async def _smoke(self, op: Operation, hold: Hold) -> bool:
-        raise errors.InvalidRequest("smoke arrives in 05d")
+        """Re-observe the identity, send one bounded finite-video request, and promote to
+        ready_private only when THIS operation's identity and smoke receipts are the newest
+        of the current allocation, passed and unexpired. A failure keeps the deployment
+        validating (smoke again or retire; the validation window bounds it)."""
+        deployment_id = hold.deployment_revision_id
+        d = await self._deployment(deployment_id)
+        smoke = await self._mine(op, "smoke")
+        if d.state is S.ready_private and smoke is not None and smoke.passed:
+            await self.ops.finish(op.operation_id, hold.fence, "succeeded")   # promoted, then
+            return True                                                      # stopped
+        if op.state == "cancel_requested":
+            await self.ops.finish(op.operation_id, hold.fence, "cancelled")
+            return True
+        allocation = await self.store.allocation(deployment_id)
+        if d.state is not S.validating or allocation is None or allocation.state != "launched":
+            return await self._fail(op, hold, "state_conflict", "the deployment is "
+                                    f"{d.state.value}, not a launched validating one", keep=True)
+        serving = await self._serving(deployment_id)
+        identity = await self._mine(op, "identity")
+        if identity is None:
+            await self.ops.advance(op.operation_id, hold.fence, "identity")
+            identity = await self._identity(hold, allocation, serving,
+                                            await self.engine.models(allocation))
+            self.boundary("identity")
+        if not identity.passed:
+            return await self._fail(op, hold, "identity_mismatch",
+                                    "the engine does not serve the requested revision", keep=True)
+        if smoke is None:
+            await self.ops.advance(op.operation_id, hold.fence, "smoke")
+            video = await asyncio.to_thread(self.target.smoke_video.read_bytes)
+            observed, reasons = await self.engine.smoke(
+                allocation, model=PROFILE.served_model_name, video=video,
+                timeout_s=self.smoke_timeout_s)
+            smoke = await self._receipt(hold, allocation, "smoke", observed, reasons,
+                                        SMOKE_TTL_S)
+            self.boundary("smoke")
+        if not smoke.passed:
+            return await self._fail(op, hold, "smoke_failed",
+                                    "the smoke did not get a served video answer", keep=True)
+        current = latest(await self.store.receipts(deployment_id), allocation)
+        if gaps(allocation, current, await self.store.db_now(), ("identity", "smoke")) or any(
+                current[kind].operation_id != op.operation_id for kind in ("identity", "smoke")):
+            return await self._fail(op, hold, "stale_receipt",
+                                    "a newer or expired check supersedes this smoke", keep=True)
+        await self.ops.advance(op.operation_id, hold.fence, "promote")
+        await self.store.transition(hold, deployment_id, d.provider_org_id, "validating",
+                                    "ready_private", "hosting: identity and smoke passed")
+        self.boundary("promoted")
+        await self.ops.finish(op.operation_id, hold.fence, "succeeded")
+        return True
 
     # --- retire ------------------------------------------------------------------------
     async def _retire(self, op: Operation, hold: Hold) -> bool:

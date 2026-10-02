@@ -8,6 +8,7 @@ implementation.md AP-05 05a-05e). Every case runs on the fake world; the `pg`-ma
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import signal
@@ -23,7 +24,7 @@ from infrx.lab.hosting import PROFILE
 from infrx.lab.hosting.engine import Runtime, options_digest
 from infrx.lab.hosting.store import Hold
 
-from .conftest import ENGINE_PORT, REPO_ROOT, entries, run
+from .conftest import ENGINE_PORT, REPO_ROOT, clip, entries, run
 
 PROC = pathlib.Path(__file__).with_name("controller_proc.py")
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -441,3 +442,135 @@ def test_ap05__the_profile_is_the_measured_marlin_serving_version():
         PROFILE.engine_options_digest
     assert PROFILE.runtime_image_ref == record["runtime_image"]["ref"]
     assert PROFILE.served_model_name == flags[flags.index("--served-model-name") + 1]
+
+
+# ================================================== 05d: the smoke and promotion ===
+def created(world) -> tuple[str, str]:
+    """A deployment its create operation brought to `validating` (engine up, identity)."""
+    operation, deployment = world.deployed()
+    world.drive()
+    assert world.op(operation).state == "succeeded" and world.state(deployment) == "validating"
+    return operation, deployment
+
+
+def smoked(world, deployment: str, key: str | None = None) -> str:
+    answer = world.call("POST", f"{DEPLOYMENTS}/{deployment}/smoke", key=key or world.key())
+    assert answer.status_code == 202, answer.text
+    assert answer.json()["kind"] == "deployment.smoke"
+    return answer.json()["operation_id"]
+
+
+def engine_requests(world) -> list[dict]:
+    """The chat requests the candidate engine received."""
+    if world.real:
+        import httpx
+        state = httpx.get(f"http://127.0.0.1:{ENGINE_PORT}/_control", timeout=5).json()
+        return [{}] * state["requests"]
+    return world.engine.seen
+
+
+def test_ap05__a_passing_smoke_promotes_the_exact_deployment(world):
+    _, deployment = created(world)
+    operation = smoked(world, deployment)
+    world.drive()
+    assert world.op(operation).state == "succeeded"
+    assert world.state(deployment) == "ready_private"
+    ready = world.readiness(deployment)
+    smoke, identity = ready["smoke"], ready["identity"]
+    assert smoke["passed"] and smoke["operation_id"] == operation
+    assert identity["passed"] and identity["operation_id"] == operation     # re-observed
+    seen = smoke["observed"]
+    assert seen["status"] == 200 and seen["served_model"] == PROFILE.served_model_name
+    assert seen["prompt_tokens"] >= 256 and seen["completion_tokens"] >= 1
+    assert seen["finish_reason"] in ("stop", "length") and 0 <= seen["elapsed_ms"]
+    assert seen["video_sha256"] == "sha256:" + hashlib.sha256(clip()).hexdigest()
+    assert len(engine_requests(world)) == 1                  # one bounded request
+    if not world.real:
+        part = world.engine.seen[0]["messages"][0]["content"][0]
+        assert part["type"] == "video_url"
+        assert part["video_url"]["url"].startswith("data:video/mp4;base64,")
+    detail = world.detail(deployment)
+    assert detail["actions"] == ["retire"] and detail["state"] == "ready_private"
+
+
+SMOKE_FAILURES = {
+    "smoke.status": {"status": 500},
+    "smoke.content": {"content": "  "},
+    "smoke.video": {"prompt_tokens": 20},                 # a text-only answer: no video tokens
+    "smoke.finish_reason": {"finish_reason": "abort"},
+    "smoke.usage": {"completion_tokens": 0},
+}
+
+
+@pytest.mark.parametrize("field", SMOKE_FAILURES)
+def test_ap05__a_failing_smoke_never_promotes(fake_world, field):
+    w = fake_world
+    _, deployment = created(w)
+    good = dict(w.engine.answer)
+    w.engine.answer.update(SMOKE_FAILURES[field])
+    operation = smoked(w, deployment)
+    w.drive()
+    doc = w.op(operation)
+    assert (doc.state, doc.error.code) == ("failed", "smoke_failed")
+    assert w.state(deployment) == "validating"            # actionable: smoke again or retire
+    ready = w.readiness(deployment)
+    assert not ready["ready"] and "smoke_failed" in ready["reasons"]
+    assert [r["field"] for r in ready["smoke"]["reasons"]] == [field]
+    w.engine.answer = good
+    again = smoked(w, deployment)
+    w.drive()
+    assert w.op(again).state == "succeeded" and w.state(deployment) == "ready_private"
+
+
+def test_ap05__an_unreachable_or_swapped_engine_never_promotes(fake_world):
+    w = fake_world
+    _, deployment = created(w)
+    w.engine.up = False
+    operation = smoked(w, deployment)
+    w.drive()
+    doc = w.op(operation)
+    assert (doc.state, doc.error.code) == ("failed", "identity_mismatch")   # not even asked
+    assert w.engine.seen == [] and w.state(deployment) == "validating"
+    w.engine.up = True
+    running = w.launcher.running[f"infrx-hosting-{deployment}"]   # swapped since the create
+    w.launcher.running[f"infrx-hosting-{deployment}"] = running.model_copy(
+        update={"image": "sha256:" + "9" * 64})
+    operation = smoked(w, deployment)
+    w.drive()
+    assert w.op(operation).error.code == "identity_mismatch" and w.engine.seen == []
+    assert w.readiness(deployment)["identity"]["reasons"][0]["field"] == "runtime_image"
+
+
+def test_ap05__a_smoke_needs_a_validating_deployment_with_nothing_running(world):
+    _, deployment = world.deployed()
+    early = world.call("POST", f"{DEPLOYMENTS}/{deployment}/smoke", key=world.key())
+    assert early.status_code == 409 and early.json()["error"]["code"] == "state_conflict"
+    world.drive()
+    key = world.key()
+    first = smoked(world, deployment, key)
+    assert smoked(world, deployment, key) == first          # the same key while it runs
+    world.drive()
+    late = world.call("POST", f"{DEPLOYMENTS}/{deployment}/smoke", key=world.key())
+    assert late.status_code == 409
+
+
+SMOKE_BOUNDARIES = ("identity", "smoke", "promoted")
+
+
+@pytest.mark.parametrize("boundary", SMOKE_BOUNDARIES)
+def test_ap05__a_controller_stopped_mid_smoke_never_smokes_twice(fake_world, boundary):
+    w = fake_world
+    _, deployment = created(w)
+    operation = smoked(w, deployment)
+
+    def stop(name):
+        if name == boundary:
+            raise KeyboardInterrupt(name)
+    with pytest.raises(KeyboardInterrupt):
+        w.drive(w.controller(owner="first", boundary=stop))
+    w.advance(120)
+    w.drive(w.controller(owner="second"))
+    assert w.op(operation).state == "succeeded" and w.state(deployment) == "ready_private"
+    assert len(w.engine.seen) == 1
+    mine = [r for r in run(w.store.receipts(deployment)) if r.operation_id == operation]
+    assert sorted(r.kind for r in mine) == ["identity", "smoke"]

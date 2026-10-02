@@ -12,12 +12,14 @@ a candidate's.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
 import shutil
 import signal
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
@@ -26,6 +28,7 @@ import httpx
 
 from ...contracts.api import FieldError, Wire
 from ...contracts.v2.records import ServingRevision
+from ...worker.engine import MODEL_EOS_TOKEN_IDS
 from ..artifacts.manifest import FileEntry
 from .store import Allocation
 
@@ -278,6 +281,25 @@ class BoxLauncher:
 
 
 # ================================================================= the engine ===
+SMOKE_PROMPT = "Describe what happens in this video."
+SMOKE_MAX_TOKENS = 64
+# est.: a text-only prompt of the harness is < 100 tokens; the shortest corpus clip expands
+# to ~1,960 video tokens under the profile (marlin2b/results/notes.md), so 256 separates them
+MIN_VIDEO_PROMPT_TOKENS = 256
+
+
+def _smoke(name: str, message: str) -> FieldError:
+    return FieldError(field=f"smoke.{name}", code="smoke_failed", message=message)
+
+
+def _ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
+
+
+def _int(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else -1
+
+
 class Engine:
     """The candidate engine's HTTP surface on its allocated loopback port."""
 
@@ -288,6 +310,52 @@ class Engine:
     def client(self, allocation: Allocation, timeout_s: float) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=f"http://{self.host}:{allocation.port}",
                                  transport=self.transport, timeout=timeout_s)
+
+    async def smoke(self, allocation: Allocation, *, model: str, video: bytes,
+                    timeout_s: float) -> tuple[dict, list[FieldError]]:
+        """One bounded finite-video chat request, as the worker sends one (data: URL video,
+        the model's EOS ids, greedy, short). What it observed, and every way it is not a
+        served video answer: a refusal, another model, an empty answer, a prompt with no
+        video tokens (a text-only answer is not a modality smoke), no usage, an abnormal end."""
+        body = {"model": model, "max_tokens": SMOKE_MAX_TOKENS, "temperature": 0,
+                "stream": False, "stop_token_ids": list(MODEL_EOS_TOKEN_IDS),
+                "messages": [{"role": "user", "content": [
+                    {"type": "video_url", "video_url": {
+                        "url": "data:video/mp4;base64," + base64.b64encode(video).decode()}},
+                    {"type": "text", "text": SMOKE_PROMPT}]}]}
+        observed: dict = {"video_sha256": "sha256:" + hashlib.sha256(video).hexdigest(),
+                          "video_bytes": len(video), "timeout_s": timeout_s}
+        started = time.monotonic()
+        try:
+            async with self.client(allocation, timeout_s) as c:
+                answer = await c.post("/v1/chat/completions", json=body)
+        except httpx.TimeoutException:
+            return observed | {"elapsed_ms": _ms(started)}, [_smoke("timeout", "no answer in time")]
+        except httpx.HTTPError:
+            return observed | {"elapsed_ms": _ms(started)}, [_smoke("unreachable", "no engine")]
+        try:
+            doc = answer.json()
+        except ValueError:
+            doc = {}
+        choice = (doc.get("choices") or [{}])[0] if isinstance(doc, dict) else {}
+        text = str((choice.get("message") or {}).get("content") or "")
+        usage = doc.get("usage") or {} if isinstance(doc, dict) else {}
+        observed |= {"elapsed_ms": _ms(started), "status": answer.status_code,
+                     "served_model": doc.get("model") if isinstance(doc, dict) else None,
+                     "finish_reason": choice.get("finish_reason"),
+                     "prompt_tokens": usage.get("prompt_tokens"),
+                     "completion_tokens": usage.get("completion_tokens"),
+                     "text_sha256": "sha256:" + hashlib.sha256(text.encode()).hexdigest()}
+        if answer.status_code != 200:
+            return observed, [_smoke("status", f"the engine answered {answer.status_code}")]
+        checks = (("served_model", observed["served_model"] == model, "another model answered"),
+                  ("content", bool(text.strip()), "an empty answer"),
+                  ("video", _int(usage.get("prompt_tokens")) >= MIN_VIDEO_PROMPT_TOKENS,
+                   "the prompt carried no video tokens"),
+                  ("usage", _int(usage.get("completion_tokens")) >= 1, "no completion usage"),
+                  ("finish_reason", choice.get("finish_reason") in ("stop", "length"),
+                   "the generation did not end normally"))
+        return observed, [_smoke(name, why) for name, ok, why in checks if not ok]
 
     async def models(self, allocation: Allocation) -> list[str] | None:
         """The model ids it serves, or None while it does not answer."""

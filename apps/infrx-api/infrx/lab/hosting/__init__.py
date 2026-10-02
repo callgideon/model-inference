@@ -324,9 +324,9 @@ class LabHosting:
         retry after the deployment moved on is a 409 naming it, not a replay; read the
         deployment's readiness for that smoke's receipt."""
         _, deployment = await self._mine(actor, deployment_id, C.manage_dev_deployment)
-        if deployment.state is not S.validating or await self.store.active(deployment_id):
-            raise errors.StateConflict(f"a smoke needs a validating deployment with no running "
-                                       f"operation; it is {deployment.state.value}")
+        if deployment.state is not S.validating:
+            raise errors.StateConflict(f"a smoke needs a validating deployment; it is "
+                                       f"{deployment.state.value}")
         return await self._start("deployment.smoke", actor, deployment_id, key)
 
     async def retire(self, actor: api.Actor, deployment_id: str, key: str) -> api.OperationDoc:

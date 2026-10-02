@@ -108,6 +108,7 @@ create table if not exists infrx.hosting_receipts (
   operation_id uuid,
   checked_at timestamptz not null,
   expires_at timestamptz not null,
+  recorded bigint generated always as identity,      -- insertion order: newest first
   constraint hosting_receipts_allocation_fk foreign key (allocation_id, deployment_revision_id)
     references infrx.hosting_allocations (allocation_id, deployment_revision_id) on delete restrict,
   constraint hosting_receipts_pass_iff_no_reason check (passed = (jsonb_array_length(reasons) = 0)),
@@ -116,7 +117,7 @@ create table if not exists infrx.hosting_receipts (
   constraint hosting_receipts_expire_later check (expires_at > checked_at)
 );
 create index if not exists hosting_receipts_latest
-  on infrx.hosting_receipts (deployment_revision_id, kind, checked_at desc);
+  on infrx.hosting_receipts (deployment_revision_id, recorded desc);
 create or replace trigger hosting_receipts_immutable before update or delete
   on infrx.hosting_receipts for each row execute function infrx.forbid_update_delete();
 

@@ -318,7 +318,7 @@ class PgHostingStore:
     async def receipts(self, deployment_revision_id):
         return [_load(Receipt, row) for row in await self._rows(
             self._select(Receipt, "hosting_receipts")
-            + " where deployment_revision_id = %s order by checked_at desc, receipt_id",
+            + " where deployment_revision_id = %s order by recorded desc",
             (deployment_revision_id,))]
 
     async def active(self, deployment_revision_id):
