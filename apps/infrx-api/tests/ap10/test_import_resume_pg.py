@@ -67,7 +67,7 @@ def test_ap10_import_resumes_by_lease_and_a_refused_one_by_requeue(world, monkey
                                                   "LAB_WORKER_HEALTH_PORT": "9",
                                                   "LAB_S3_BUCKET": "unused", **TRACES},
                                      objects=store)
-        worker.tasks["import_jobs"]().close()
+        getattr(worker.tasks["import_jobs"](), "close")()      # registers the step, runs nothing
         return steps["import jobs"]
 
     def enqueue(payload, data):
