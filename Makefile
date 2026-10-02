@@ -126,6 +126,7 @@ console-mutants:
 	cd apps/app && node tests/ux/run-mutants.mjs
 	cd apps/app && node tests/ux/first-call/run-mutants.mjs
 	cd apps/app && node tests/ux/usage/run-mutants.mjs
+	cd apps/app && node tests/ux/settings/run-mutants.mjs
 
 # C3F FEEDBACK-ACK / LAB-ACCESS: App own-feedback + Lab review doors as the browser roles on real Supabase PostgreSQL
 # (no PostgREST stage: neither app calls the doors through it since AP-09),
