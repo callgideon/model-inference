@@ -258,8 +258,10 @@ def check_browser_roles_reach_no_write(conn) -> str:
         acl = conn.execute("select coalesce(proacl::text, '') from pg_proc where oid = "
                            "%s::regprocedure", (f"infrx.{name}(jsonb)",)).fetchone()[0]
         grantees = {item.split("=", 1)[0] for item in acl.strip("{}").split(",") if item}
+        # (0068 SR-AP10C-1: the datasets worker reads a selected request's feedback)
+        reader = {"infrx_lab_datasets"} if name == "request_feedback" else set()
         assert "service_role" in grantees and grantees <= {
-            "postgres", "service_role", "infrx_runtime"}, f"infrx.{name}: {acl}"
+            "postgres", "service_role", "infrx_runtime", *reader}, f"infrx.{name}: {acl}"
     return f"{len(checks.BROWSER_SESSIONS)} browser sessions x {len(probes)} probes refused"
 
 

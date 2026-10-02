@@ -1,7 +1,7 @@
 // V3: the judge runs of one request, as J2 records them (codex/w5-judge 16660999: dry run or live, the
 // external_run state, the PROVIDER_USD hold) with J3's calibration of that judge configuration.
-// AP-09 09c: the Lab's judge-runs port (lib/services/judge/runs.ts); unavailable until the API serves a
-// request's runs (WR-AP09L-3). Tests drive fake.ts.
+// AP-09 09c: the Lab's judge-runs port over GET /lab/v1/traces/{request_id}/judge-runs
+// (lib/services/judge/runs.ts). Tests drive fake.ts.
 import type { Actor, Result } from "../detail/port.ts";
 import { judgeRunsPort } from "../../../lib/services/judge/runs.ts";
 

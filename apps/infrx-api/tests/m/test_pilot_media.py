@@ -152,10 +152,10 @@ def test_mpilot__an_upload_whose_object_changed_is_refused_at_admission(change):
 
 # --- gap 1 over the mounted gateway --------------------------------------------------
 class Journal(FakeStreamStore):
-    """The contract journal plus D4's `usage()` (the pilot's journal readiness probe)."""
+    """The contract journal plus D4's `ready()` (the pilot's journal readiness probe)."""
 
-    async def usage(self):
-        return {"reserved_bytes": 0, "stored_bytes": 0, "charged_bytes": 0, "chunks": 0}
+    async def ready(self):
+        return True
 
 
 OTHER_TOKEN = "sk-infrx-mpilot-other"

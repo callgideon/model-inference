@@ -7,10 +7,15 @@
 //   - no case run (none matched, or every one skipped) is BLOCKED, never PASS;
 //   - a failed case or a non-zero exit is FAIL;
 //   - a dirty tree is INVALID (the run would not be the SHA's); a fixture reference that no longer
-//     resolves is FAIL.
-// It runs only the apps' own fixture suites: no Docker, no network service, no screenshots, and it never
-// invokes the real E3A suite (tests/e2e), whose capture policy stays off.
-// Usage (from anywhere): node apps/app/tests/ux/matrix/run-matrix.mjs [--out verdict.json] [--only T01,T02]
+//     resolves is FAIL;
+//   - a case its suite reports NOT RUN (TODO/SKIP) keeps its reason in the cell; a TODO "FAIL[<WR>]" (a
+//     reported product defect kept off the app's default test exit) is a failure.
+// By default it runs only the apps' own fixture suites: no Docker, no network service, no screenshots.
+// A `real` part (the Lab's real-route stack suites: lab-e2e on l4, the V1M stack on lab-v1m + t2i's
+// ClickHouse) runs only with --real, after its `prepare` (once per app), with its env and one test file
+// at a time; without --real, or with a declared port not listening, it is BLOCKED naming what it needs.
+// It never invokes the App's real E3A suite (apps/app/tests/e2e), whose capture policy stays off.
+// Usage (from anywhere): node apps/app/tests/ux/matrix/run-matrix.mjs [--real] [--out verdict.json] [--only T01,T02]
 // Exit: 0 PASS, 1 FAIL, 3 BLOCKED, 4 INVALID.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -34,17 +39,29 @@ export function parseTap(out) {
   }));
 }
 
-/** One part's verdict from its run: { cases, code, missing } (missing = declared paths not on the tree). */
+/** Each SKIP/TODO case's reason by name (parseTap keeps only that it was skipped). */
+export function directives(out) {
+  return new Map([...out.matchAll(/^ *(?:not )?ok \d+ - (.*?) # (?:SKIP|TODO)\b ?(.*)$/gm)].map(([, name, why]) => [name, why.trim()]));
+}
+
+/** One part's verdict from its run: { cases, code, missing, reasons?, blocked? } (missing = declared
+ * paths not on the tree; blocked = a real part not requested or its prerequisite absent). */
 export function judgePart(part, run) {
   if (part.blocked) return { status: "BLOCKED", cause: `${part.blocked} (unblocks: ${part.lane})` };
+  if (run.blocked) return { status: "BLOCKED", cause: `${run.blocked} (owner: ${part.lane})` };
   if (run.missing.length > 0) return { status: "BLOCKED", cause: `${part.lane} has not merged ${run.missing.join(", ")}` };
   const match = part.match ? new RegExp(part.match) : null;
   const cases = run.cases.filter((c) => match === null || match.test(c.name));
-  const skipped = cases.filter((c) => c.skipped).length;
-  const failed = cases.filter((c) => !c.ok && !c.skipped).length;
+  // A TODO "FAIL[<WR>]" is a reported product defect kept off the default suite's exit: it fails here
+  // while it fails, and counts as passed once its fix lands (node reports it "ok # TODO").
+  const flagged = (c) => c.skipped && /^FAIL\[/.test(run.reasons?.get(c.name) ?? "");
+  const known = cases.filter((c) => flagged(c) && !c.ok);
+  const skipped = cases.filter((c) => c.skipped && !flagged(c)).length;
+  const failed = cases.filter((c) => !c.ok && !c.skipped).length + known.length;
   const counts = { passed: cases.length - skipped - failed, failed, skipped };
-  if (failed > 0 || run.code !== 0) return { status: "FAIL", cause: `${failed} failed, exit ${run.code}`, ...counts };
-  if (counts.passed === 0) return { status: "BLOCKED", cause: `no case ran (${skipped} skipped; owner ${part.lane})`, ...counts };
+  if (failed > 0 || run.code !== 0) return { status: "FAIL", cause: `${failed} failed, exit ${run.code}${known.map((c) => `; ${run.reasons.get(c.name)}`).join("")}`, ...counts };
+  const why = [...new Set(cases.filter((c) => c.skipped).map((c) => run.reasons?.get(c.name)).filter(Boolean))];
+  if (counts.passed === 0) return { status: "BLOCKED", cause: `no case ran (${skipped} skipped${why.length ? `: ${why.join("; ")}` : ""}; owner ${part.lane})`, ...counts };
   return { status: "PASS", ...counts };
 }
 
@@ -65,16 +82,31 @@ export function overall(journeys, fixtures, dirty) {
 
 const git = (...args) => spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" }).stdout.trim();
 
-function execute(part, cache) {
+const listening = (port) =>
+  spawnSync(process.execPath, ["-e", `require("net").connect(${port}, "127.0.0.1").on("connect", () => process.exit(0)).on("error", () => process.exit(1))`]).status === 0;
+
+export function execute(part, cache, wantReal) {
   if (part.blocked) return { cases: [], code: 0, missing: [] };
   const cwd = join(repo, "apps", part.app);
   const missing = part.paths.filter((p) => !existsSync(join(cwd, p)));
   if (missing.length > 0) return { cases: [], code: 0, missing };
+  const real = part.real;
+  if (real && !wantReal) return { cases: [], code: 0, missing, blocked: `real gate not requested: rerun with --real (needs ${real.needs})` };
+  const closed = (real?.ports ?? []).filter((p) => !listening(p));
+  if (closed.length > 0) return { cases: [], code: 0, missing, blocked: `needs ${real.needs}: nothing listens on ${closed.map((p) => `127.0.0.1:${p}`).join(", ")}` };
+  if (real?.prepare && !cache.has(`prepare:${part.app}:${real.prepare.join(" ")}`)) {
+    const r = spawnSync(real.prepare[0], real.prepare.slice(1), { cwd, encoding: "utf8", maxBuffer: 1 << 28 });
+    cache.set(`prepare:${part.app}:${real.prepare.join(" ")}`, r.status);
+  }
+  if (real?.prepare && cache.get(`prepare:${part.app}:${real.prepare.join(" ")}`) !== 0) return { cases: [], code: 1, missing };
   const files = part.paths.map((p) => (statSync(join(cwd, p)).isDirectory() ? `${p}/**/*.test.ts` : p));
-  const key = `${part.app}:${files.join(" ")}`;
+  const key = `${part.app}:${JSON.stringify(real?.env ?? {})}:${files.join(" ")}`;
   if (!cache.has(key)) {
-    const r = spawnSync(process.execPath, ["--test", "--test-reporter=tap", ...files], { cwd, encoding: "utf8", maxBuffer: 1 << 28 });
-    cache.set(key, { cases: parseTap(`${r.stdout}\n${r.stderr}`), code: r.status ?? 1 });
+    const args = real ? ["--test-concurrency=1"] : [];
+    const env = { ...process.env, ...(real?.env ?? {}) };
+    const r = spawnSync(process.execPath, ["--test", "--test-reporter=tap", ...args, ...files], { cwd, env, encoding: "utf8", maxBuffer: 1 << 28 });
+    const out = `${r.stdout}\n${r.stderr}`;
+    cache.set(key, { cases: parseTap(out), code: r.status ?? 1, reasons: directives(out) });
   }
   return { ...cache.get(key), missing };
 }
@@ -89,12 +121,12 @@ function main(argv) {
   const journeys = matrix.journeys
     .filter((j) => only === null || only.includes(j.id))
     .map((j) => {
-      const parts = j.parts.map((p) => ({ ...p, ...judgePart(p, execute(p, cache)) }));
+      const parts = j.parts.map((p) => ({ ...p, ...judgePart(p, execute(p, cache, argv.includes("--real"))) }));
       return { id: j.id, title: j.title, status: worst(parts.map((p) => p.status)), parts };
     });
   const fixtures = matrix.fixtures.map((f) => ({ ...f, status: checkFixture(f) }));
   const verdict = overall(journeys, fixtures, dirty);
-  const report = { verdict, sha, dirty, node: process.version, at: new Date().toISOString(), journeys, fixtures };
+  const report = { verdict, sha, dirty, real: argv.includes("--real"), node: process.version, at: new Date().toISOString(), journeys, fixtures };
   const out = flag("--out");
   if (out) writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`UX matrix at ${sha}${dirty ? " (DIRTY TREE)" : ""}: ${verdict}\n`);

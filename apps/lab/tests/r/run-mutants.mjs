@@ -135,9 +135,9 @@ const MUTANTS = [
   m("R4-X71", "a page reads records as a fixed provider", RELEASES, "releasesPort().releases(workspace)", 'releasesPort().releases({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
   m("R4-X72", "a page shows ?refused= raw", RELEASES, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
   m("R4-X73", "a proposal does not name the revision the page showed", RELEASES, '                <input type="hidden" name="fence" value={r.fence} />\n', "", [C.p01]),
-  m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, 'if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;', "if (!variants.ok) return null;", [C.p01]),
-  m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
-  m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
+  m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, "<Variants result={variants} />", "<Variants result={{ ok: true, value: variants.ok ? variants.value : [] }} />", [C.p01]),
+  m("R4-X75", "a page claims success on its own", RELEASES, '{refused && <p role="alert">{refused}</p>}', '{refused && <p role="alert">{refused}</p>}\n      <p>Rollback succeeded.</p>', [C.p02]),
+  m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={p.kind} />', '<input type="hidden" name="kind" value={p.kind} />\n                          <input name="weightBp" />', [C.p02]),
   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p02]),
   // the HTTP adapter (WR-R4-1, lane lab-api-2)
   m("R4-X78", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),

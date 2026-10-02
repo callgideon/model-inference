@@ -19,7 +19,8 @@ Every composition here, its switch and its callers (A15):
 * `build_ingress_deps` - `create_app`: the `Relay` (admission on `ACCOUNTING_REGIME`, CREDIT
   pinned to `ACTIVE_RATE_CARD_VERSION`; `admission_readiness`), `MediaUploads` as
   `rt.media_store` with `LargeBodies`, the Q3 `Reconciler` over `valkey_index`, the two
-  readiness `Probe`s (`price_check`, `journal_check`), `TRACE_EXPORT_API` -> `_trace_export`,
+  readiness `Probe`s (`price_check`; `journal_check` on the journal's bounded `ready()`,
+  `gateway/readiness.py`), `TRACE_EXPORT_API` -> `_trace_export`,
   and every Lab surface on `rt` only when its switch is on.
 * `build_info` - `create_app` and the worker: `infrx_build_info{revision, image}`.
 * `lifespan` - the app's: opens the pool, runs the reconciler, the probes and the capture
@@ -39,7 +40,6 @@ import asyncio
 import contextlib
 import logging
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -70,6 +70,7 @@ from ..state.jobstore import (  # noqa: F401 - A9: re-exported, `jobstore` owns 
     DEDICATED_LOGINS, PgJobStore, dedicated_login, login_user, session_state_allowed)
 from ..state.journal import PgStreamStore
 from . import capture as trace_capture
+from .readiness import PROBE_TIMEOUT_S, Probe, journal_check  # noqa: F401 - WR-PROBE-1
 from .routes import intake, models
 from .routes.ingress import IngressDeps
 from .routes.relay import Relay
@@ -78,8 +79,6 @@ log = logging.getLogger("infrx.gateway")
 
 #: How often the lifetime task re-asks each readiness probe.
 PROBE_EVERY_S = 5.0
-#: One probe answer may take this long; past it the component reads unavailable.
-PROBE_TIMEOUT_S = 10.0
 #: How long shutdown waits for the relay's durable cancels still in flight (review S1). The
 #: unit's graceful window (110 s) is spent before the lifespan's shutdown; docker stops at 120.
 DRAIN_S = 5.0
@@ -87,55 +86,6 @@ DRAIN_S = 5.0
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-class Probe:
-    """One readiness answer that `ingress.component_state` can read: sync, and after its
-    first answer never blocking - `/readyz` is async and must not nest an event loop.
-
-    The lifetime task refreshes it (`refresh`). The first call comes from `assert_startup`
-    inside `create_app`, where a sync caller may be inside a running loop (`uvicorn
-    --factory`), so that one answer is asked on a thread of its own: `check` must therefore
-    not depend on a loop-bound resource (the stores' probe paths use per-call connections).
-    """
-
-    def __init__(self, check, timeout_s: float = PROBE_TIMEOUT_S) -> None:
-        self.check = check
-        self.timeout_s = timeout_s
-        self.value: bool | None = None
-
-    def __call__(self) -> bool:
-        if self.value is None:
-            # `_answer` is bounded and never raises, so the thread always ends: a refusal
-            # to start can finish (review C3) and no worker is left behind. The bound is
-            # `wait_for`'s, so it holds for a check that awaits and lets its cancellation
-            # through: one that blocks its thread, or suppresses or delays CancelledError
-            # (3.12's wait_for waits for the cancelled check), holds this call with it
-            # (review r2 COMP-N1; today's checks are cooperative).
-            with ThreadPoolExecutor(1) as pool:
-                self.value = pool.submit(asyncio.run, self._answer()).result()
-        return self.value
-
-    async def refresh(self) -> None:
-        self.value = await self._answer()
-
-    async def _answer(self) -> bool:
-        """The check's answer within `timeout_s`; a check that hangs or fails reads False
-        (review C2: a hung dependency never keeps a cached True)."""
-        try:
-            return bool(await asyncio.wait_for(self.check(), self.timeout_s))
-        except Exception:
-            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,
-                        exc_info=True)
-            return False
-
-
-def journal_check(stream):
-    """D4 integration request 2: the journal is ready when `usage()` answers."""
-    async def check() -> bool:
-        await stream.usage()
-        return True
-    return check
 
 
 def configure_connection(statement_timeout_ms: int, *, session_state: bool = True,

@@ -1,0 +1,83 @@
+{
+ "approved": {
+  "artifact_digest": "sha256:ca1e324c535b21bd96ee6c660cd82d7e4f4a0e28a23db6b3d6ed39b4f66a8744",
+  "checkpoint_id": "00000c78-0000-4000-8000-000000000001",
+  "eligible": true,
+  "evaluation": {
+   "holdout_sha256": "43e64df37fee5794a5f8bb79bb811d7f4a7e2e63cc1ee24d9ee41be5292a3145",
+   "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:349f8ca3-6d64-44d1-8d5e-254240d1d927@sha256:d9e7944c86f8aab8bb5aac78811a1dc3328f26db504859a0e647467af541ca67",
+   "split": "holdout",
+   "state": "succeeded"
+  },
+  "external_run_id": "00000e78-0000-4000-8000-000000000008",
+  "reason": null,
+  "state": "validated"
+ },
+ "checkpoint": {
+  "artifact_digest": "sha256:ca1e324c535b21bd96ee6c660cd82d7e4f4a0e28a23db6b3d6ed39b4f66a8744",
+  "checkpoint_id": "00000c78-0000-4000-8000-000000000001",
+  "eligible": false,
+  "evaluation": {
+   "holdout_sha256": "43e64df37fee5794a5f8bb79bb811d7f4a7e2e63cc1ee24d9ee41be5292a3145",
+   "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:349f8ca3-6d64-44d1-8d5e-254240d1d927@sha256:d9e7944c86f8aab8bb5aac78811a1dc3328f26db504859a0e647467af541ca67",
+   "split": "holdout",
+   "state": "queued"
+  },
+  "external_run_id": "00000e78-0000-4000-8000-000000000008",
+  "reason": null,
+  "state": "validated"
+ },
+ "prepared": {
+  "config": {
+   "adaptation": "lora",
+   "base_model": "marlin-2b",
+   "objective": "sft"
+  },
+  "connector": "manual-bundle",
+  "cost_usd": null,
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da7-0000-4000-8000-000000000003@sha256:bdc736a2ace8e80429118f5767c660b690459dc6d2818fee2ae786f5b498ce9e",
+  "dev": 2,
+  "export": {
+   "export_id": "00000e88-0000-4000-8000-000000000008",
+   "format": "infrx.label_export.1",
+   "sha256": "528843cbed61b69e71bfd78fc06b981147252bb4e55bba64f5019a8aca4b28e9"
+  },
+  "external_run_id": "00000e78-0000-4000-8000-000000000008",
+  "holdout": {
+   "sha256": "43e64df37fee5794a5f8bb79bb811d7f4a7e2e63cc1ee24d9ee41be5292a3145",
+   "size": 12
+  },
+  "limit_usd": "25.00000000",
+  "omitted": 0,
+  "payer_ref": "lab:payer:b0000001-0000-4000-8000-000000000001:000009a7-0000-4000-8000-000000000001@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reason": null,
+  "reserved_usd": "0.00000000",
+  "run_ref": "lab:external_run:b0000001-0000-4000-8000-000000000001:00000e78-0000-4000-8000-000000000008@sha256:805940de3e0b3cfa7eb63d7be113abf8fae035c9c455e7a5f2dc909f930ca0cb",
+  "settled": false,
+  "state": "prepared",
+  "train": 10
+ },
+ "report": {
+  "abandoned": [],
+  "attempts": {
+   "succeeded": 24
+  },
+  "cases": {
+   "done": 24
+  },
+  "costs": {
+   "CREDIT": "63.24000000"
+  },
+  "created_at": "2026-09-20T12:00:00+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da7-0000-4000-8000-000000000003@sha256:bdc736a2ace8e80429118f5767c660b690459dc6d2818fee2ae786f5b498ce9e",
+  "failures": {},
+  "run_id": "349f8ca3-6d64-44d1-8d5e-254240d1d927",
+  "run_ref": "lab:run:b0000001-0000-4000-8000-000000000001:349f8ca3-6d64-44d1-8d5e-254240d1d927@sha256:d9e7944c86f8aab8bb5aac78811a1dc3328f26db504859a0e647467af541ca67",
+  "state": "succeeded",
+  "stopped": null,
+  "unrecorded": {
+   "CREDIT": "0.00000000"
+  },
+  "updated_at": "2026-09-20T12:00:00+00:00"
+ }
+}

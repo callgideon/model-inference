@@ -2183,10 +2183,8 @@ D4_MUTANTS: tuple[Mutant, ...] = (
     _m("d4_job_ceiling_is_the_whole_reservation_plus_one", JOURNAL, _J_CEILING,
        "       > j.journal_reserved_bytes + 1 then",
        "admission", "global_charge", "an append raises the global journal charge (DUR-CAP)"),
-    _m("d4_stored_counted_beside_the_reservation", ADMISSION,
-       "greatest(coalesce(r.amount, 0), j.journal_stored_bytes)",
-       "coalesce(r.amount, 0) + j.journal_stored_bytes",
-       "admission", "global_charge", "reserved and stored bytes are counted twice (02)"),
+    # (d4_stored_counted_beside_the_reservation moved with journal_bytes_charged() to 0068's
+    # list: tests/d/test_upgrade_0068_mutants.py ap0068_charged_reserved_and_stored)
     # --- item 3: the terminal event -------------------------------------------------------
     _m("d4_terminal_trigger_on_any_update", JOURNAL,
        "after update of settled_at on infrx.jobs\n"

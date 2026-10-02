@@ -15,8 +15,11 @@
   trace storage - and the Lab control unit (`infrx.lab.control.app`, the box's
   infrx-lab-control) as a third process with IDENTITY_API (AP-01's own SessionActors on the
   unit), LAB_JUDGE_API, LAB_HOSTING (AP-05 mounted without a hosting slot: no candidate
-  engine can start here, so stage 04 is BLOCKED[CANDIDATE-ENGINE]) and LAB_ARTIFACTS (the
-  world probes the unit and lists AP-04 in `composed` only when it answers). A loopback edge
+  engine can start here, so stage 04 is BLOCKED[CANDIDATE-ENGINE]) and LAB_ARTIFACTS, with
+  AP-04's worker (`python -m infrx.lab.workers artifacts`, the box's infrx-lab-artifacts) as a
+  fourth process: AP-04 is in `composed` only when the unit mounts it AND the worker is ready,
+  else config `uncomposed` names why (the routes alone leave every upload `queued`). The
+  `hosting` and `judge` roles are not started (no HOSTING_* slot without a GPU; P-10). A loopback edge
   stands in for the Supabase origin: GoTrue's `GET /auth/v1/user` over HS256 sessions this
   world signs and `GET /auth/v1/settings`, and
   PostgREST's `/api_keys?key_hash=eq.` read/touch over the database (no PostgREST port is on
@@ -298,24 +301,22 @@ def _box_class():
     pilotbox = _load("ap11_pilotbox", INTEGRATION / "backend" / "pilotbox.py")
 
     class Box(pilotbox.PilotBox):
-        """PilotBox's gateway and worker, plus the Lab control unit as role `lab` on its own
-        environment (the box's infrx-lab-control: never the runtime's settings)."""
+        """PilotBox's gateway and worker, plus the Lab's processes - the control unit (`lab`,
+        the box's infrx-lab-control) and its worker roles (the infrx-lab-<role> units) - each
+        on its own environment, never the runtime's settings: role -> (argv, readiness, env)."""
 
-        lab_env: dict[str, str] = {}
-        lab_port = 0
+        lab: dict[str, tuple[list[str], str, dict[str, str]]]
 
         def command(self, role: str) -> tuple[list[str], str]:
-            if role != "lab":
+            if role not in self.lab:
                 return super().command(role)
-            return ([sys.executable, "-m", "uvicorn", "--factory",
-                     "infrx.lab.control.app:create_app", "--host", "127.0.0.1", "--port", str(self.lab_port), "--log-level",
-                     "warning"], f"http://127.0.0.1:{self.lab_port}/readyz")
+            return self.lab[role][0], self.lab[role][1]
 
         def start(self, role: str, timeout: float = 60.0) -> None:
-            if role != "lab":
+            if role not in self.lab:
                 return super().start(role, timeout)
-            self.starts.setdefault("lab", 0)
-            saved, self.env = self.env, self.lab_env
+            self.starts.setdefault(role, 0)
+            saved, self.env = self.env, self.lab[role][2]
             try:
                 super().start(role, timeout)
             finally:
@@ -435,25 +436,47 @@ def compose(out: Path):
                                                  "TRACE_SPOOL_DIR": str(work / "spool")})}
         box = Box(env, engine.base_url, work, free_port())
         stack.callback(box.close)
-        box.lab_port = free_port()
-        box.lab_env = {**{k: v for k, v in box.env.items() if k in os.environ}, **s3, **traces,
-                       "PYTHONUNBUFFERED": "1", "PYTHONPATH": box.env["PYTHONPATH"],
-                       "INFRX_LAB_DATABASE_URL": dsn, "INFRX_LAB_SUPABASE_URL": edge_url,
-                       "INFRX_LAB_SUPABASE_ANON_KEY": anon, "LAB_JUDGE_API": "1",
-                       "LAB_ARTIFACTS": "1", "IDENTITY_API": "1", "LAB_HOSTING": "1",
-                       # AP-04's composition answers HeadBucket on the Lab objects at startup
-                       "LAB_S3_BUCKET": BUCKET, "LAB_S3_ENDPOINT": s3["S3_ENDPOINT_URL"],
-                       "LAB_S3_PREFIX": f"lab/{TASK}/{release[:12]}/"}
+        lab_port, artifacts_port = free_port(), free_port()
+        common = {**{k: v for k, v in box.env.items() if k in os.environ}, **s3,
+                  "PYTHONUNBUFFERED": "1", "PYTHONPATH": box.env["PYTHONPATH"],
+                  # the Lab objects (AP-04 answers HeadBucket on them at startup)
+                  "LAB_S3_BUCKET": BUCKET, "LAB_S3_ENDPOINT": s3["S3_ENDPOINT_URL"],
+                  "LAB_S3_PREFIX": f"lab/{TASK}/{release[:12]}/"}
+        box.lab = {
+            "lab": ([sys.executable, "-m", "uvicorn", "--factory",
+                     "infrx.lab.control.app:create_app", "--host", "127.0.0.1", "--port",
+                     str(lab_port), "--log-level", "warning"],
+                    f"http://127.0.0.1:{lab_port}/readyz",
+                    {**common, **traces, "INFRX_LAB_DATABASE_URL": dsn,
+                     "INFRX_LAB_SUPABASE_URL": edge_url, "INFRX_LAB_SUPABASE_ANON_KEY": anon,
+                     "LAB_JUDGE_API": "1", "LAB_ARTIFACTS": "1", "IDENTITY_API": "1",
+                     "LAB_HOSTING": "1"}),
+            # AP-04's worker (the infrx-lab-artifacts unit): upload verification and imports
+            "artifacts": ([sys.executable, "-m", "infrx.lab.workers", "artifacts"],
+                          f"http://127.0.0.1:{artifacts_port}/readyz",
+                          {**common, "LAB_DATABASE_URL": dsn,
+                           "LAB_WORKER_HEALTH_PORT": str(artifacts_port)})}
         box.start("worker")
         box.start("gateway")
         box.start("lab")
-        lab_url = f"http://127.0.0.1:{box.lab_port}"
+        lab_url = f"http://127.0.0.1:{lab_port}"
         composed = ["AP-01", "AP-02", "AP-03", "AP-07", "AP-08"]
+        uncomposed = {"AP-06": "the world does not compose LAB_PUBLICATION (WR-AP06-1, the Lab "
+                               "unit): stages 05-07 need stage 04's candidate engine first "
+                               "(GPU-TARGET), and their bodies follow AP-06's schemas in 11d"}
         import httpx
         from api_lifecycle.stages import unmounted
         probe = httpx.get(f"{lab_url}/lab/v1/operations/{uuid.uuid4()}", timeout=5)
-        if not unmounted(probe):                # api-artifacts-2's LAB_ARTIFACTS is composed
-            composed.insert(3, "AP-04")
+        if unmounted(probe):
+            uncomposed["AP-04"] = "the Lab unit does not mount LAB_ARTIFACTS"
+        else:                                   # the routes alone leave every upload queued
+            try:
+                box.start("artifacts")
+            except RuntimeError as down:
+                uncomposed["AP-04"] = f"the Lab `artifacts` worker role did not start: " \
+                                      f"{str(down)[:300]}"
+            else:
+                composed.insert(3, "AP-04")
         clip, artifact = work / "clip.mp4", toy_artifact(work / "artifact")
         clip.write_bytes(pilotbox.clip())
         sessions = {"admin_session": session(users["admin"], jwt_secret),
@@ -475,6 +498,7 @@ def compose(out: Path):
         config = {
             "target": f"ap11-isolated-{release[:12]}", "model": MODEL, "model_uuid": MODEL_UUID,
             "origins": {"gateway": box.url, "lab": lab_url}, "composed": composed,
+            "uncomposed": uncomposed,
             "traces": clickhouse is not None,
             "traces_missing": None if clickhouse is not None else NO_CLICKHOUSE,
             "judge": "dry_run",
@@ -497,6 +521,10 @@ def compose(out: Path):
                      "clickhouse": CLICKHOUSE_IMAGE if clickhouse else None,
                      "lab_unit": "infrx.lab.control.app (IDENTITY_API, LAB_JUDGE_API, LAB_ARTIFACTS, "
                                  "LAB_HOSTING without a hosting slot)",
+                     "lab_workers": "infrx.lab.workers artifacts only: `hosting` needs a "
+                                    "HOSTING_* slot on a GPU box (stage 04 BLOCKED"
+                                    "[CANDIDATE-ENGINE]); `judge` is P-10's (the dry run sends "
+                                    "nothing, so no worker pass is needed)",
                      "ports": {s: v.host_port for s, v in services().items()}}}
         config_path, secrets_path = work / "config.json", work / "secrets.json"
         config_path.write_text(json.dumps(config, indent=1))
@@ -506,7 +534,7 @@ def compose(out: Path):
         out.mkdir(parents=True, exist_ok=True)
         (out / "world-config.json").write_text(json.dumps(config, indent=1))
         yield config_path, secrets_path
-        for role in ("gateway", "worker", "lab"):
+        for role in ("gateway", "worker", "lab", "artifacts"):
             if (work / f"{role}-1.log").exists():
                 shutil.copy2(work / f"{role}-1.log", out / f"{role}.log")
 

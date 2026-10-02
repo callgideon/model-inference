@@ -137,3 +137,15 @@
 @theme inline {
   --font-mono: var(--font-mono);
 }
+
+/* WR-UXVF-3 (UX-11): respect reduced motion (02-foundations) - popups appear without zoom/slide; a
+   pending spinner stands still, as the Lab's .lab-spin does. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

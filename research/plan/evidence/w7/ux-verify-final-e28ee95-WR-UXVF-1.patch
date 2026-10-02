@@ -1,0 +1,30 @@
+diff --git a/apps/infrx-api/infrx/lab/evaluation/__init__.py b/apps/infrx-api/infrx/lab/evaluation/__init__.py
+index b869364e..4cab5056 100644
+--- a/apps/infrx-api/infrx/lab/evaluation/__init__.py
++++ b/apps/infrx-api/infrx/lab/evaluation/__init__.py
+@@ -134,7 +134,9 @@ class Catalog:
+         self.store = store
+ 
+     async def catalog(self, provider_org_id: str) -> dict[str, Any]:
+-        raise errors.DependencyUnavailable(NO_CATALOG)
++        """SR-AP10-1 (0066): the provider's datasets, harnesses, evaluators and ready private
++        dev servings; a database failure is the route's 503."""
++        return await self.store.eval_catalog(provider_org_id=provider_org_id)
+ 
+     async def evaluator(self, provider_org_id: str, evaluator_ref: str) -> dict[str, Any]:
+         return await self.store.evaluator(evaluator_ref, provider_org_id=provider_org_id)
+diff --git a/apps/infrx-api/infrx/state/lab_data.py b/apps/infrx-api/infrx/state/lab_data.py
+index 39f38878..81bf06f9 100644
+--- a/apps/infrx-api/infrx/state/lab_data.py
++++ b/apps/infrx-api/infrx/state/lab_data.py
+@@ -144,6 +144,10 @@ class PgLabDataStore:
+                                                  "ref": ref})
+         return json.loads(row["body"])
+ 
++    async def eval_catalog(self, *, provider_org_id: str) -> dict[str, Any]:
++        """0066's `infrx.lab_eval_catalog`: what `/lab/v1/evaluations` checks a launch against."""
++        return await self._call("lab_eval_catalog", {"provider_org_id": provider_org_id})
++
+     async def put_eval_report(self, report: dict[str, Any], *, provider_org_id: str,
+                               actor: str) -> str:
+         """Store a B2 report write-once; its `report_digest` must be its content's."""

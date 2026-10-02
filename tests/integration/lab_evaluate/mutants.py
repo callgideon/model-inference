@@ -118,7 +118,8 @@ MUTANTS: tuple[Mutant, ...] = (
        R, 'return set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
        'return bool(entry["cases"]) and', R222),
     _m("r222_out_of_scope_widened", "only R234's ruled classes are out of scope for E6L", R,
-       '"L3": "product WR: WR-E6L-J11"}', '"L3": "product WR: WR-E6L-J11", "B1": "GPU"}', R222),
+       '"L3": "product WR: WR-E6L-J11", "SR-AP10-1": "product WR: SR-AP10-1"}',
+       '"L3": "product WR: WR-E6L-J11", "SR-AP10-1": "product WR: SR-AP10-1", "B1": "GPU"}', R222),
     _m("r222_never_run_excused", "a scenario with no case run is open", R,
        'set(lanes) <= set(OUT_OF_SCOPE) and bool(entry["cases"]) and',
        "set(lanes) <= set(OUT_OF_SCOPE) and", R222),
@@ -134,7 +135,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "message says (WR-E6L-RV-1)", R, '        if entry["status"] != NOT_RUN:',
        "        if False:", R222),
     _m("r222_product_wr_dropped", "R234 (ii): j11 waiting on WR-E6L-J11 is out of local scope "
-       "(WR-E6L-SCOPE)", R, '"L3": "product WR: WR-E6L-J11"}', "}", R222),
+       "(WR-E6L-SCOPE)", R, '"L3": "product WR: WR-E6L-J11", "SR-AP10-1": "product WR: SR-AP10-1"}',
+       '"SR-AP10-1": "product WR: SR-AP10-1"}', R222),
 )
 
 # ------------------------------------------------------------------ the stack list

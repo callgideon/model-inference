@@ -30,14 +30,14 @@ from . import relay_support as rs, support
 
 
 class Journal(FakeStreamStore):
-    """The contract journal plus D4's `usage()` (the readiness probe's body)."""
+    """The contract journal plus D4's `ready()` (the readiness probe's body)."""
 
     down = False
 
-    async def usage(self):
+    async def ready(self):
         if self.down:
             raise ConnectionError("postgresql://infrx:secret@db/infrx is unreachable")
-        return {"reserved_bytes": 0, "stored_bytes": 0, "charged_bytes": 0, "chunks": 0}
+        return True
 
 
 class Outbox:

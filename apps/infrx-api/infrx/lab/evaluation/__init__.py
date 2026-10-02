@@ -134,7 +134,9 @@ class Catalog:
         self.store = store
 
     async def catalog(self, provider_org_id: str) -> dict[str, Any]:
-        raise errors.DependencyUnavailable(NO_CATALOG)
+        """SR-AP10-1 (0066): the provider's datasets, harnesses, evaluators and ready private
+        dev servings; a database failure is the route's 503."""
+        return await self.store.eval_catalog(provider_org_id=provider_org_id)
 
     async def evaluator(self, provider_org_id: str, evaluator_ref: str) -> dict[str, Any]:
         return await self.store.evaluator(evaluator_ref, provider_org_id=provider_org_id)

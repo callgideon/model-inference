@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""R271 whole-set re-proof / R151 rehearsal (api-schema 00d, api-schema-2's remainder): every
-LOCAL-ONLY wave-7 file (0060-0067 as merged: 0060, 0061, 0062, 0064, 0065, 0066, 0067)
+"""R271 whole-set re-proof / R151 rehearsal (api-schema 00d, api-schema-2's remainder,
+api-schema-3's 0068): every LOCAL-ONLY wave-7 file (0060-0068 as merged: 0060, 0061, 0062, 0064,
+0065, 0066, 0067, 0068)
 applied by the hosted tool (`deploy/migrate.py` plan -> apply --expect, the Supabase CLI history
 table) to a database at the hosted level 0059 that holds consumer history:
 nothing that existed changes (row counts, money sums, the jobs' identity and money, every
 ACL of an existing relation or column) except the control login's EXECUTE on 0066's six
 route reads, 0043's per-request judge read (0067) and 0064's three judge/review doors; 0067 adds one table (`lab_judge_rubrics`) and
-its two public doors EXECUTE to the control login only; the set re-runs as a no-op; 0067's, 0066's
-then 0065's own ROLLBACK lines restore the state before them exactly (their functions and 0067's
-table gone, those six grants revoked, the two bodies 0066 re-creates back to 0043's and 0060's); rolling forward again is the same set, and an
-operation starts. 0061/0064 carry prose rollbacks; their lanes' upgrade proofs stand.
+its two public doors EXECUTE to the control login only; 0068 (SR-AP10C-1) gives the datasets
+worker's role `infrx_lab_datasets` EXECUTE on its passes' existing functions and SELECT on two
+serving_versions columns, and (row 94) re-creates journal_bytes_charged() without the OR-join;
+the set re-runs as a no-op; 0068's, 0067's, 0066's then 0065's own ROLLBACK lines restore the
+state before them exactly (their functions and 0067's table gone, those grants revoked, the
+bodies 0066/0068 re-create back to 0043's, 0060's and 0011's); rolling forward again is the same
+set, and an operation starts. 0061/0064 carry prose rollbacks; their lanes' upgrade proofs stand.
 
     INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_upgrade.py
     INFRX_D_TASK=ap0 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/d/test_control_ops_upgrade.py
@@ -34,7 +38,7 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 DB = f"{pgharness.DATABASE}_control_ops_upgrade"
-MINE = ("0067_judge_rubrics.sql", "0066_wave7_grants_and_reads.sql",
+MINE = ("0068_wave7_followups.sql", "0067_judge_rubrics.sql", "0066_wave7_grants_and_reads.sql",
         "0065_identity_functions.sql")                                     # rollback order
 #: The only existing functions whose grants the set changes, each + infrx_lab_control:
 #: 0066's SR-AP10-3 and 0067's per-request judge read (their rollbacks revoke them) and
@@ -45,9 +49,20 @@ REGRANTED = {*(f"infrx.{n}(jsonb)" for n in (
     "lab_judge_runs(uuid,uuid)"}           # 0067 (WR-AP09L-3); its rollback revokes it
 REGRANTED_0064 = {"lab_judge_calibration(uuid,uuid,integer)",
                   "lab_judge_request_run(uuid,uuid,uuid,text)", "lab_review_feedback(jsonb)"}
-#: (function, the earlier file whose body 0066's rollback restores)
+#: 0068 (SR-AP10C-1): the datasets worker's own role on the existing functions its passes call
+#: (0060's four worker doors are wave-7 functions, not existing ones); its rollback revokes them
+REGRANTED_0068 = {"infrx.now()", *(f"infrx.{n}(jsonb)" for n in (
+    "lab_provider_memberships", "lab_access_grants", "lab_register_source", "lab_publish",
+    "lab_resolve", "lab_accessible_samples", "lab_import_job_claim", "lab_import_job_heartbeat",
+    "lab_import_job_finish", "lab_import_job", "lab_tombstone_samples", "lab_bound_samples",
+    "lab_blocked_samples", "lab_permitted_samples", "lab_content_ref_issue",
+    "lab_content_ref_redeem", "request_feedback"))}
+#: ... and SELECT on two existing columns (WR-N3-4's serving -> model read)
+COLUMNS_0068 = {f"infrx.serving_versions.{c}" for c in ("serving_version_id", "model_id")}
+#: (function, the earlier file whose body 0066's / 0068's rollback restores)
 REDEFINED = (("infrx.lab_experiments(jsonb)", "0043_lab_reads_and_proposals.sql"),
-             ("infrx.control_op_cancel(jsonb)", "0060_control_operations.sql"))
+             ("infrx.control_op_cancel(jsonb)", "0060_control_operations.sql"),
+             ("infrx.journal_bytes_charged()", "0011_admission.sql"))
 DROPPED = {*(f"infrx.identity_{n}" for n in ("account", "user_by_email", "members",
                                              "grant_member", "revoke_member", "create_provider")),
            *(f"infrx.{n}" for n in ("lab_eval_catalog", "lab_external_runs_of",
@@ -55,7 +70,9 @@ DROPPED = {*(f"infrx.identity_{n}" for n in ("account", "user_by_email", "member
            # 0067 (SR-AP08-1): public doors print unqualified (public is on the search path)
            "lab_judge_rubric_create", "lab_judge_rubric_list",
            *(f"infrx.{n}" for n in ("lab_judge_rubric_json", "lab_judge_rubric_of",
-                                    "lab_judge_results_of"))}
+                                    "lab_judge_results_of")),
+           # 0068 (SR-AP06-1)
+           *(f"infrx.lab_control_{n}" for n in ("dev_keys", "revoke_dev_key", "dev_wallet"))}
 #: 0067's one table and its two public doors (EXECUTE: the control login only, R271)
 TABLE_0067 = "infrx.lab_judge_rubrics"
 DOORS_0067 = ("lab_judge_rubric_create(jsonb)", "lab_judge_rubric_list(uuid)")
@@ -108,9 +125,9 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     hosted = tuple(f for f in everything if "0027" <= number.get(f[0], "0000") <= "0059")
     wave7 = tuple(f for f in everything if number.get(f[0], "") > "0059")
     labels = [label for label, _ in wave7]
-    assert all("0060" <= label[:4] <= "0067" for label in labels) and \
+    assert all("0060" <= label[:4] <= "0068" for label in labels) and \
         {"0060_control_operations.sql", "0062_deployments_hosting.sql", *MINE} <= set(labels), \
-        f"R271: past 0059 only the wave-7 range 0060-0067: {labels}"
+        f"R271: past 0059 only the wave-7 range 0060-0068: {labels}"
     pgharness.ensure()
     pgharness.recreate(DB)
     pgharness.apply(DB, early)
@@ -151,12 +168,19 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
         "the wave-7 set changed money or a job"
     assert {k: v for k, v in after["acl"].items() if k in before["acl"]} == before["acl"], \
         "the wave-7 set changed an existing relation's grants"
-    # a new table's own column grants (0062's allocation UPDATE columns) are not "existing"
-    assert {c: v for c, v in after["cols"].items() if c.rsplit(".", 1)[0] not in added} == \
-        before["cols"]
+    # a new table's own column grants (0062's allocation UPDATE columns) are not "existing";
+    # 0068's two serving_versions columns are the datasets role's read
+    def existing_cols(snap):
+        return {c: v for c, v in snap["cols"].items()
+                if c.rsplit(".", 1)[0] not in added and c not in COLUMNS_0068}
+    assert existing_cols(after) == before["cols"] and all(
+        "infrx_lab_datasets=r" in after["cols"][c] for c in COLUMNS_0068), after["cols"]
     moved = {k for k, v in after["fns"].items() if k in before["fns"] and v != before["fns"][k]}
-    assert moved == REGRANTED | REGRANTED_0064, f"existing function grants moved: {sorted(moved)}"
-    assert all("infrx_lab_control=X" in after["fns"][k][0] for k in moved)
+    assert moved == REGRANTED | REGRANTED_0064 | REGRANTED_0068, \
+        f"existing function grants moved: {sorted(moved)}"
+    assert all("infrx_lab_control=X" in after["fns"][k][0] for k in moved - REGRANTED_0068)
+    assert all(after["fns"][k][0] == before["fns"][k][0][:-1] + ",infrx_lab_datasets=X/postgres}"
+               for k in REGRANTED_0068), {k: after["fns"][k] for k in REGRANTED_0068}
 
     pgharness.apply(DB, wave7)
     assert d10.snapshot(conn) == after, "the wave-7 set is not re-runnable"
@@ -165,6 +189,7 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     back, back_bodies = d10.snapshot(conn), bodies(conn)
     assert back["counts"] == {t: n for t, n in after["counts"].items() if t != TABLE_0067}
     assert back["acl"] == {t: v for t, v in after["acl"].items() if t != TABLE_0067}
+    assert existing_cols(back) == before["cols"] and not COLUMNS_0068 & set(back["cols"])
     assert {k: v for k, v in back["fns"].items() if k in before["fns"]} == \
         {k: after["fns"][k] if k in REGRANTED_0064 else v for k, v in before["fns"].items()}, \
         "the ROLLBACK lines do not restore the existing functions' grants"
@@ -172,7 +197,8 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     assert {f.split("(")[0] for f in gone} == DROPPED and set(back["fns"]) < set(after["fns"])
     for fn, name in REDEFINED:
         assert back_bodies[fn] == source_body(name, fn), f"{fn}: not {name}'s body"
-    assert back_bodies["infrx.lab_experiments(jsonb)"] == at_0059["infrx.lab_experiments(jsonb)"]
+    for fn in ("infrx.lab_experiments(jsonb)", "infrx.journal_bytes_charged()"):
+        assert back_bodies[fn] == at_0059[fn], f"{fn}: not the 0059 body"
 
     pgharness.apply(DB, tuple(f for f in wave7 if f[0] in MINE))
     assert d10.snapshot(conn) == after, "rolling forward again is not the same set"
@@ -183,4 +209,4 @@ def test_wave7_rehearses_over_hosted_history_reruns_rolls_back_and_forward(monke
     conn.close()
     print(f"{labels} over {len(made)} seeded job states at 0059: {len(before['counts'])} "
           f"tables unchanged, +{len(added)} tables, {len(REGRANTED)} regrants; migrate.py "
-          f"plan/apply; re-run; 0067+0066+0065 rollback; forward")
+          f"plan/apply; re-run; 0068+0067+0066+0065 rollback; forward")

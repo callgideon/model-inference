@@ -1,0 +1,31 @@
+{
+  "task": "AP-11",
+  "lane": "api-lifecycle-3",
+  "slice": "11c close-out (row 97: stages 02 and 14) + 11d live prerequisites + 11e hosted dry plan",
+  "activity": "review",
+  "at": "2026-10-02T09:38:00Z",
+  "head": "c28f8a2c",
+  "base": "49114933",
+  "worktree": ".claude/worktrees/codex-w7-api-lifecycle-3",
+  "branch": "codex/w7-api-lifecycle-3",
+  "owned_paths": ["tests/integration/api_lifecycle/**", "research/plan/api-lifecycle/verification.md (stage table; unchanged)", "research/plan/evidence/w7/api-lifecycle-3-c28f8a2.md", "research/plan/evidence/w7/AP11-*-c28f8a2-verdict.json", "research/plan/evidence/w7/AP11-isolated-4911493-base-verdict.json"],
+  "commands": [
+    {"cmd": "runner.py --mode isolated --world ap11 at base 49114933", "exit": 1, "summary": "RED: 02 FAIL (verify op queued, no artifacts worker), 14 FAIL (pending rubric v2 picked)"},
+    {"cmd": "pytest tests/integration/api_lifecycle/test_runner.py (fake lists base rubrics, before fix)", "exit": 1, "summary": "RED: 12 failed, 87 passed"},
+    {"cmd": "pytest tests/integration/api_lifecycle/test_runner.py", "exit": 0, "summary": "102 passed (42 cases)"},
+    {"cmd": "runner.py --mode isolated --world ap11 at c28f8a2c", "exit": 3, "summary": "BLOCKED, no FAIL: 01, 02, 08-17 PASS (14-15 dry-run labelled); 03 BLOCKED[artifact]; 04-07 BLOCKED on predecessors/AP-06 named; 18 BLOCKED[AP-06]+no runner"},
+    {"cmd": "make api-lifecycle", "exit": 2, "summary": "recipe exit 3 (make reports 2): same BLOCKED verdict, no FAIL"},
+    {"cmd": "runner.py --mode hosted", "exit": 3, "summary": "NOT RUN; 7-step plan printed; nothing sent or written"},
+    {"cmd": "runner.py --mode live (no operator inputs)", "exit": 3, "summary": "BLOCKED[P-10], BLOCKED[GPU-TARGET], BLOCKED[WINDOW]; no request"},
+    {"cmd": "INFRX_MUTANTS=all pytest tests/integration/api_lifecycle/test_mutants.py", "exit": 0, "summary": "152 passed: 148/148 mutants killed, every-case guard green, self-tests green"},
+    {"cmd": "make api-lint", "exit": 0, "summary": "All checks passed"},
+    {"cmd": "make api-typecheck", "exit": 0, "summary": "pyright 457 errors (baseline 458)"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py tests/integration/test_lab_package_isolation.py", "exit": 0, "summary": "9 passed"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "medium", "basis": "11c close-out done and evidenced; review fixes only. 11d/11e execution separately 8/14/26 h, confidence low: AP-06 body alignment for 05-07, a stage-18 runner, P-10, a GPU window, the R151 window and the hosted smoke", "at": "2026-10-02T09:38:00Z"},
+  "blockers": ["stage 03: a supported serving revision needs the measured Marlin bytes (live target)", "stages 04-07, 18: a candidate engine (GPU window) and AP-06 composed (LAB_PUBLICATION)", "live judging: P-10", "11d live: P-10 by SSM name, live_target, operator window record", "11e: the coordinator's R151 window and deploy"],
+  "wiring_requests": [],
+  "schema_requests": [],
+  "evidence": ["research/plan/evidence/w7/api-lifecycle-3-c28f8a2.md", "research/plan/evidence/w7/AP11-isolated-4911493-base-verdict.json", "research/plan/evidence/w7/AP11-isolated-c28f8a2-verdict.json", "research/plan/evidence/w7/AP11-hosted-plan-c28f8a2-verdict.json", "research/plan/evidence/w7/AP11-live-unconfigured-c28f8a2-verdict.json", "research/plan/evidence/coordinator/updates/AP-11-20261002T0938Z.json"]
+}

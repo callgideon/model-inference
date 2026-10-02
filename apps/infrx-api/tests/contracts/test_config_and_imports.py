@@ -197,7 +197,7 @@ def _adapters():
     catalog.move_alias(config.from_env({}).model_id,
                        catalog.aliases["nemostation/marlin-2b@2026-09-01"])
     stream = harness.extra["stream"]
-    stream.usage = lambda: asyncio.sleep(0, {})       # D4's journal readiness answer
+    stream.ready = lambda: asyncio.sleep(0, True)       # D4's journal readiness answer
     return {"catalog": catalog, "stream": stream, "objects": InMemoryObjectStore(),
             "jobs": harness.port, "index": MemoryScheduler(harness.clock.now)}
 

@@ -1,0 +1,23 @@
+diff --git a/apps/lab/tests/e2e/run-mutants.mjs b/apps/lab/tests/e2e/run-mutants.mjs
+index 45480fb8..4a2b99e1 100644
+--- a/apps/lab/tests/e2e/run-mutants.mjs
++++ b/apps/lab/tests/e2e/run-mutants.mjs
+@@ -51,7 +51,7 @@ const S = {
+   r03: "E2E-R03 an expand verdict → the administrator proposes at the shown fence → the operator approves → approved, with its evidence",
+   r04: "E2E-R04 an emergency rollback: the administrator proposes it, the operator approves it, the release rolls back once",
+   r05: "E2E-R05 unsafe proposals are refused with fixed copy: a viewer, another provider, a stale fence, a double click; a rejection changes nothing",
+-  e01: "E2E-E01 as the gateway composes LAB_EVALS today, the records are listed and the launch is unavailable while its catalog answers 503",
++  e01: "E2E-E01 as the gateway composes LAB_EVALS, the records are listed and the launch offers the provider's own catalog",
+   e02: "E2E-E02 a launch through the page's form lands on the experiment: its declared protocol and two queued runs",
+   e03: "E2E-E03 progress and a cancel come from the records: a running run is cancelled once, a finished run offers none",
+   e04: "E2E-E04 the comparison is B2's stored report as the view reads it: outcome, reasons, every estimate with its interval",
+@@ -81,7 +81,8 @@ const STACK_MUTANTS = [
+   stackMutant("rollout", "E2E-S10", "an inconclusive verdict offers an expansion", "lib/services/rollouts/view.ts", 'r.state === "running" && v?.action === "expand"', 'r.state === "running"', [S.r04]),
+   stackMutant("rollout", "E2E-S11", "a viewer is offered the proposal forms", "lib/services/rollouts/view.ts", 'if (!pending && holds(role, "propose_publication")) {', "if (!pending) {", [S.r05]),
+   stackMutant("rollout", "E2E-S12", "the form proposes at another fence than the page showed", "lib/services/rollouts/actions.ts", "policyRef as string, Number(fence))", "policyRef as string, Number(fence) + 1)", [S.r03, S.r04, S.r05]),
+-  stackMutant("evaluate", "E2E-S13", "an unavailable evaluation service reads as empty lists", "lib/services/http.ts", 'if (!response.ok) return { ok: false, reason: reasons[response.status] ?? "unavailable" };', `if (!response.ok) return ${EMPTY};`, [S.e01]),
++  stackMutant("evaluate", "E2E-S13", "an unavailable evaluation service reads as empty lists", "lib/services/http.ts", 'if (!response.ok) return { ok: false, reason: reasons[response.status] ?? "unavailable" };', `if (!response.ok) return ${EMPTY};`, [S.e05]),
++  stackMutant("evaluate", "E2E-S25", "an answered catalog reads as offering nothing", "app/(provider)/evaluations/view.ts", "needs.filter((k) => catalog.value[k].length === 0)", "needs.filter(() => true)", [S.e01, S.e02]),
+   stackMutant("evaluate", "E2E-S14", "a launch does not land on its experiment", "lib/services/evaluation/actions.ts", "(e) => `/experiments/${e.experiment_id}`", '() => "/evaluations"', [S.e02]),
+   stackMutant("evaluate", "E2E-S15", "a finished run offers a cancel", "lib/services/evaluation/view.ts", '(run.state === "queued" || run.state === "running") && holds(role, "run_evaluation")', 'holds(role, "run_evaluation")', [S.e03]),
+   stackMutant("evaluate", "E2E-S16", "a stored report is shown as pending", "app/(provider)/experiments/[id]/page.tsx", "const c = e.report === null ? null : comparison(e.report);", "const c = null as ReturnType<typeof comparison> | null;", [S.e04]),

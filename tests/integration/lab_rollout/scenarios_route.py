@@ -80,7 +80,7 @@ def test_k01_routing_off_serves_todays_request_over_a_live_release(lab, workdir)
 
     def composed(on: bool, r):
         world = relay_support.World()
-        world.stream.usage = lambda: asyncio.sleep(0, {})
+        world.stream.ready = lambda: asyncio.sleep(0, True)
         world.during.append(lambda: world.clock.advance(3_600))   # a wait ends, never hangs
         config = support.settings(deployment=dataclasses.replace(support.BUILD,
                                                                  rollout_routing=on))

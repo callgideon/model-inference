@@ -76,8 +76,8 @@ api-mutants:
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap3 uv run --frozen pytest -q tests/ap03/test_mutants.py
 	# 0060's SQL list + control_ops.py's Python list (api-schema, AP-00 00d, R271): the SQL needs Docker, skips visibly without it; task-local key ap0
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_control_ops_mutants.py
-	# 0065's and 0066's SQL lists (api-schema-2, AP-00 00d remainder, R271): need Docker, skip visibly without it; task-local key ap0
-	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py
+	# 0065's, 0066's and 0068's SQL lists (api-schema-2 / api-schema-3, AP-00, R271): need Docker, skip visibly without it; task-local key ap0
+	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap0 uv run --frozen pytest -q tests/d/test_upgrade_0065_mutants.py tests/d/test_upgrade_0066_mutants.py tests/d/test_upgrade_0068_mutants.py
 	# AP-02's console reads (wave 7): PostgreSQL half needs Docker, skips visibly without it; task-local key ap2
 	cd $(API) && INFRX_MUTANTS=all INFRX_D_TASK=ap2 uv run --frozen pytest -q tests/ap02/test_mutants.py
 	# AP-07's list (api-traces, LW7): its PostgreSQL half needs Docker, skips visibly without it; task-local key ap7
@@ -121,6 +121,7 @@ console-mutants:
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
+	cd apps/app && node tests/ux/matrix/run-mutants.mjs
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
 	cd apps/app && node tests/ux/run-mutants.mjs
 	cd apps/app && node tests/ux/first-call/run-mutants.mjs
@@ -204,6 +205,8 @@ lab-mutants:
 	cd apps/lab && node tests/ux/operate/run-mutants.mjs
 	cd apps/lab && node tests/ux/requests/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
+	cd apps/lab && node tests/ux/releases/run-mutants.mjs
+	cd apps/lab && node tests/ux/matrix/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
 api-client-test:

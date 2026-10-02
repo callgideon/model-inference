@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { budgetRow, calibration, configRow, RUN_STATE, runRow, type Config, type JudgeRun } from "../../../app/(provider)/judge/view.ts";
+import { budgetRow, calibration, configRow, retryKeepsKey, RUN_STATE, runRow, type Config, type JudgeRun } from "../../../app/(provider)/judge/view.ts";
+import type { LabApi } from "../../../lib/api/index.ts";
+import type { Membership } from "../../../lib/auth/access.ts";
+import { calibration as calibrate, configure, requestRun, setBudget, type Outcome } from "../../../lib/services/judge/core.ts";
 
 const lab = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(join(lab, path), "utf8");
@@ -62,4 +65,48 @@ test("UX08-J05 judge setup sits under Evaluations and says unreadable records ar
   const records = read("app/(provider)/judge/records.tsx");
   assert.match(records, /if \(records === null\)\s+return <ServiceState state="unavailable"/);
   assert.match(page, /not ground truth/);
+});
+
+// Register row 98: the forms send what their actions read. A page's JudgeForm block, by its action.
+const form = (page: string, action: string) => {
+  const at = page.indexOf(`action={${action}}`);
+  return page.slice(at, page.indexOf("/>", at));
+};
+const names = (block: string) => [...block.matchAll(/name: "([a-z_]+)"|hidden=\{\{ ([a-z_]+):/g)].map((m) => m[1] ?? m[2]).sort();
+
+test("UX08-J06 configure and budget send a key minted at render; only an unknown outcome keeps it for the retry, a definite answer frees it", () => {
+  assert.equal(retryKeepsKey({ ok: false, reason: "unavailable" }), true);
+  for (const o of [{ ok: true, data: {} }, { ok: false, reason: "denied" }, { ok: false, reason: "invalid" }, { ok: false, reason: "conflict" }] as Outcome[])
+    assert.equal(retryKeepsKey(o), false, JSON.stringify(o));
+  const page = read(PAGE);
+  for (const action of ["configureJudge", "setJudgeBudget"])
+    assert.match(form(page, action), /hidden=\{\{ idempotency_key: mint\(\) \}\}\s+keyed="idempotency_key"\s*$/, action);
+  assert.equal(/keyed=/.test(form(page, "requestJudgeRun") + form(page, "judgeCalibrationPage")), false, "the run keeps C3L's per-render run id; a read has no key");
+  const f = read("app/(provider)/judge/form.tsx");
+  assert.match(f, /if \(keyed && !retryKeepsKey\(outcome\)\) setValues\(\(v\) => \(\{ \.\.\.v, \[keyed\]: crypto\.randomUUID\(\) \}\)\);/);
+  assert.match(f, /Object\.entries\(values\)\.map\(/);
+});
+
+test("UX08-J07 each judge form carries every field its action reads, so a filled form is sent, never refused as invalid", async () => {
+  const page = read(PAGE);
+  assert.deepEqual(names(form(page, "configureJudge")), ["grantor_org_id", "idempotency_key", "judge_model", "model_id", "rubric_version", "sample_size"]);
+  assert.deepEqual(names(form(page, "setJudgeBudget")), ["idempotency_key", "limit_usd", "payer_ref"]);
+  assert.deepEqual(names(form(page, "requestJudgeRun")), ["config_id", "payer_ref", "run_id"]);
+  assert.deepEqual(names(form(page, "judgeCalibrationPage")), ["config_id"]);
+  // The filled forms through the actions' core, on a port that answers every call.
+  const P = "a0000000-0000-4000-8000-00000000000a";
+  const U = "b0000000-0000-4000-8000-00000000000b";
+  const filled: Record<string, string> = {
+    grantor_org_id: U, model_id: U, judge_model: "claude-opus-5", rubric_version: "1", sample_size: "50", idempotency_key: U,
+    payer_ref: `lab:payer:${P}:${U}@sha256:${"c".repeat(64)}`, limit_usd: "10.00000000", config_id: U, run_id: U,
+  };
+  const sent: unknown[] = [];
+  const api = { call: async (...args: unknown[]) => (sent.push(args), { ok: true, status: 200, data: {}, requestId: "q", location: null }) } as unknown as LabApi;
+  const admin: Membership = { providerId: P, providerName: "P", role: "administrator", capabilities: ["run_evaluation", "manage_members"] };
+  const input = (action: string) => Object.fromEntries(names(form(page, action)).map((n) => [n, filled[n]]));
+  assert.equal((await configure(api, admin, input("configureJudge"))).ok, true);
+  assert.equal((await setBudget(api, admin, input("setJudgeBudget"))).ok, true);
+  assert.equal((await requestRun(api, admin, input("requestJudgeRun"))).ok, true);
+  assert.equal((await calibrate(api, admin, input("judgeCalibrationPage"))).ok, true);
+  assert.equal(sent.length, 4);
 });

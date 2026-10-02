@@ -1,0 +1,30 @@
+{
+ "export": {
+  "adapter": "sft.1",
+  "created_at": "2026-09-20T12:00:00+00:00",
+  "dataset_ref": "lab:dataset:b0000001-0000-4000-8000-000000000001:00000da8-0000-4000-8000-000000000004@sha256:e3f5f956e8464eb098927995f76e7a030612285f20891aa835a772dd09bfb7e1",
+  "examples_key": "lab/b0000001-0000-4000-8000-000000000001/label-exports/000000e8-0000-4000-8000-000000000005/examples.jsonl",
+  "expires_at": "2026-09-20T13:00:00+00:00",
+  "export_id": "000000e8-0000-4000-8000-000000000005",
+  "format": "infrx.label_export.1",
+  "items": 0,
+  "lineage": [],
+  "omitted": [
+   {
+    "reason": "grant_not_current",
+    "sample_id": "4c6b51ca-28ae-4188-8034-ac208a824e87"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "55d70a4a-7085-4740-8cd8-b6882ab01639"
+   },
+   {
+    "reason": "grant_not_current",
+    "sample_id": "c956421c-f6af-4a9a-8c33-2e7e7b901be1"
+   }
+  ],
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "split": "train"
+ },
+ "leaks": []
+}

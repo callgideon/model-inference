@@ -1,0 +1,96 @@
+diff --git a/Makefile b/Makefile
+index 35582d49..343e4f9d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -204,6 +204,7 @@ lab-mutants:
+ 	cd apps/lab && node tests/ux/operate/run-mutants.mjs
+ 	cd apps/lab && node tests/ux/requests/run-mutants.mjs
+ 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
++	cd apps/lab && node tests/ux/releases/run-mutants.mjs
+ 
+ # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
+ api-client-test:
+diff --git a/apps/lab/app/(provider)/optimizations/page.tsx b/apps/lab/app/(provider)/optimizations/page.tsx
+index d2d0b647..722e28a8 100644
+--- a/apps/lab/app/(provider)/optimizations/page.tsx
++++ b/apps/lab/app/(provider)/optimizations/page.tsx
+@@ -1,37 +1,26 @@
+ import { requireProviderWorkspace } from "@/lib/auth/guard";
+ import { isPreview, releasesPort } from "@/lib/services/rollouts/port";
+-import { REFUSAL_COPY, variantRows } from "@/lib/services/rollouts/view";
++import { PageHeader } from "@/components/ui/page-header";
+ import { PreviewNote } from "@/components/preview-note";
++import { Variants } from "../releases/variants";
+ 
+ export const metadata = { title: "Optimizations · infrx Lab" };
+ 
+-// R4: R3's registered variants and their comparisons, each scoped to the hardware and runtime it ran on.
+-// A performance figure is a measurement only when it comes from an experiment's results at a commit.
++// UX-10 (L-11): R3's registered variants as the Releases page's subordinate comparison view
++// (releases/variants.tsx, tests/ux/releases UX10-P07). Each is a separate serving version scoped to the
++// hardware and runtime it ran on; a performance figure is a measurement only from an experiment's results at a commit.
+ export default async function Optimizations() {
+   const workspace = await requireProviderWorkspace();
+   const variants = await releasesPort().variants(workspace);
+-  if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;
+-  const rows = variantRows(variants.value);
+   return (
+     <>
+-      <h1>Optimizations</h1>
++      <PageHeader
++        title="Optimizations"
++        purpose="Optimized variants, each a separate serving version compared with its base on the same scope. A variant replaces nothing until a release does."
++        breadcrumb={[{ href: "/releases", label: "Releases" }]}
++      />
+       {isPreview() && <PreviewNote records="variant" service="rollout" />}
+-      {rows.length === 0 ? (
+-        <p>No optimized variants registered yet.</p>
+-      ) : (
+-        <table>
+-          <thead>
+-            <tr><th>Variant</th><th>Base scope</th><th>Variant scope</th><th>Changes</th><th>Comparison</th><th>Performance</th><th>Claim</th><th>Release</th></tr>
+-          </thead>
+-          <tbody>
+-            {rows.map((r) => (
+-              <tr key={r.id}>
+-                <td>{r.id}</td><td>{r.base}</td><td>{r.variant}</td><td>{r.changes}</td><td>{r.outcome}</td><td>{r.performance}</td><td>{r.claim}</td><td>{r.eligible}</td>
+-              </tr>
+-            ))}
+-          </tbody>
+-        </table>
+-      )}
++      <Variants result={variants} />
+     </>
+   );
+ }
+diff --git a/apps/lab/tests/r/pages.test.ts b/apps/lab/tests/r/pages.test.ts
+index 52d534c1..b432fe25 100644
+--- a/apps/lab/tests/r/pages.test.ts
++++ b/apps/lab/tests/r/pages.test.ts
+@@ -17,7 +17,8 @@ test("R4-P01 each page reads the records as the session's workspace and shows ?r
+     assert.match(page, /\.\w+\(workspace\b/, path); // LAB-08: the workspace itself is the actor
+     assert.doesNotMatch(page, /providerId:/, path);
+     assert.doesNotMatch(page, /searchParams\)\)\.(?!refused\))|\.providerId\s*=|formData/, path);
+-    assert.match(page, /if \(!\w+\.ok\) return <p role="alert">\{REFUSAL_COPY\.unavailable\}<\/p>;/, path);
++    // UX-10: a failed read is the section's own unavailable/denied state, never an empty page (tests/ux/releases UX10-P04, UX10-P07)
++    assert.match(page, /\{!records\.ok \? \(|<Variants result=\{variants\} \/>/, path);
+   }
+   const releases = read(PAGES[0]);
+   assert.match(releases, /const refused = refusalCopy\(\(await searchParams\)\.refused\);/);
+diff --git a/apps/lab/tests/r/run-mutants.mjs b/apps/lab/tests/r/run-mutants.mjs
+index 62fdc8c5..64c2415f 100644
+--- a/apps/lab/tests/r/run-mutants.mjs
++++ b/apps/lab/tests/r/run-mutants.mjs
+@@ -135,9 +135,9 @@ const MUTANTS = [
+   m("R4-X71", "a page reads records as a fixed provider", RELEASES, "releasesPort().releases(workspace)", 'releasesPort().releases({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
+   m("R4-X72", "a page shows ?refused= raw", RELEASES, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
+   m("R4-X73", "a proposal does not name the revision the page showed", RELEASES, '                <input type="hidden" name="fence" value={r.fence} />\n', "", [C.p01]),
+-  m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, 'if (!variants.ok) return <p role="alert">{REFUSAL_COPY.unavailable}</p>;', "if (!variants.ok) return null;", [C.p01]),
+-  m("R4-X75", "a page claims success on its own", RELEASES, "<h1>Releases</h1>", "<h1>Releases</h1>\n      <p>Rollback succeeded.</p>", [C.p02]),
+-  m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={a} />', '<input type="hidden" name="kind" value={a} />\n                <input name="weightBp" />', [C.p02]),
++  m("R4-X74", "unreadable variants render as an empty page", OPTIMIZATIONS, "<Variants result={variants} />", "<Variants result={{ ok: true, value: variants.ok ? variants.value : [] }} />", [C.p01]),
++  m("R4-X75", "a page claims success on its own", RELEASES, '{refused && <p role="alert">{refused}</p>}', '{refused && <p role="alert">{refused}</p>}\n      <p>Rollback succeeded.</p>', [C.p02]),
++  m("R4-X76", "a canary allocation control appears", RELEASES, '<input type="hidden" name="kind" value={p.kind} />', '<input type="hidden" name="kind" value={p.kind} />\n                          <input name="weightBp" />', [C.p02]),
+   m("R4-X77", "the preview label shows when the stand-in is off", OPTIMIZATIONS, "{isPreview() && <PreviewNote", "{<PreviewNote", [C.p02]),
+   // the HTTP adapter (WR-R4-1, lane lab-api-2)
+   m("R4-X78", "the session token is not sent", TRANSPORT, "authorization: `Bearer ${bearer}`", "authorization: \"Bearer\"", [C.h01]),

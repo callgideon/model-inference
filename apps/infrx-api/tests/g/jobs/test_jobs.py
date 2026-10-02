@@ -1309,10 +1309,10 @@ def test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers():
 
 
 class Journal(FakeStreamStore):
-    """The contract journal plus D4's `usage()`, the pilot's journal readiness probe."""
+    """The contract journal plus D4's `ready()`, the pilot's journal readiness probe."""
 
-    async def usage(self):
-        return {"reserved_bytes": 0, "stored_bytes": 0, "charged_bytes": 0, "chunks": 0}
+    async def ready(self):
+        return True
 
 
 def test_f_base__the_pilot_composition_carries_the_relay_the_jobs_router_needs():

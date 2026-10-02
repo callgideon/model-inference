@@ -1,0 +1,67 @@
+{
+  "task": "AP-11",
+  "gate": "API-LIFECYCLE",
+  "mode": "hosted",
+  "verdict": "NOT RUN",
+  "exit": 3,
+  "reasons": [],
+  "complete_lifecycle": false,
+  "verdicts": {
+    "lifecycle": "NOT RUN",
+    "api_boundary": "NOT RUN",
+    "quality": "NOT RUN",
+    "operations": "NOT RUN"
+  },
+  "label": "hosted: a dry plan - nothing deployed, sent or written; the coordinator runs each step",
+  "fixtures": {},
+  "pins": {
+    "base": "49114933",
+    "head": "c28f8a2c4f7732533f985ad489f6b22900fb0cb8",
+    "dirty": false,
+    "target": {}
+  },
+  "target": null,
+  "state_file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/l3/hosted-state.json",
+  "counters": {},
+  "started": "2026-10-02T09:24:04+00:00",
+  "seconds": 0.0,
+  "stages": [],
+  "plan": [
+    {
+      "what": "record the release identity: the merged SHA, a clean tree, the image digests",
+      "command": "git rev-parse HEAD && git status --porcelain",
+      "by": "coordinator"
+    },
+    {
+      "what": "verify the OpenAPI export and the generated clients at that SHA",
+      "command": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/test_openapi_export.py && cd ../.. && make api-client-test",
+      "by": "coordinator"
+    },
+    {
+      "what": "deploy the verified API (consumer gateway and worker, then the Lab unit)",
+      "command": "infra/rollout/README.md section 1 through infra/rollout/ssm.sh; infra/lab/rollout/lab-release.sh",
+      "by": "coordinator, in its window"
+    },
+    {
+      "what": "hosted smoke: the read-only stages against the hosted origins",
+      "command": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode inspect --config <hosted> --secrets <0600 secrets> --state <0600 state>",
+      "by": "coordinator"
+    },
+    {
+      "what": "UI thin-boundary check (R271): no product database or RPC in the App or the Lab",
+      "command": "cd apps/app && node --test tests/boundary/api-boundary.test.ts && cd ../lab && node --test tests/boundary/api.test.ts",
+      "by": "coordinator"
+    },
+    {
+      "what": "existing consumer regression on the release",
+      "command": "make consumer-local backend-certify",
+      "by": "coordinator"
+    },
+    {
+      "what": "rollback plan usable: the previous release restored on a failed smoke",
+      "command": "infra/rollout/steps/90-revert.sh (RELEASE, BACKUP) through infra/rollout/ssm.sh",
+      "by": "coordinator"
+    }
+  ],
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode hosted --state <state> --config <c> --secrets <s>"
+}

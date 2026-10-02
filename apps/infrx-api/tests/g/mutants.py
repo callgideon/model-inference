@@ -899,33 +899,33 @@ MUTANTS: tuple[Mutant, ...] = (
     # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "import types as _types\n"
        "_chat = _types.SimpleNamespace(register=lambda app, rt: app.post('/v1/chat/completions')(lambda: {}))\n"
-       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
     _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, jobs, ingress, uploads, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
     _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints)", BUILD_CASE,
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads)", BUILD_CASE,
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # G4F (WR-G4F-1): the feedback route is mounted only when FEEDBACK_API turns it on
     _m("composition_root_drops_feedback", "the composition root mounts G4F's feedback route",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
     _m("feedback_switch_ignored", "FEEDBACK_API off mounts no feedback route, even with a service",
        P, "    rt.feedback = feedback if deployment.feedback_api else None\n",
@@ -933,8 +933,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_feedback_ack__the_feedback_route_is_mounted_only_when_the_deployment_enables_it"),
     # G4T (WR-G4T-1): the trace export is mounted only when TRACE_EXPORT_API turns it on
     _m("composition_root_drops_trace_export", "the composition root mounts G4T's export route",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_trace_tenant__the_trace_export_is_mounted_only_when_the_deployment_enables_it"),
     _m("trace_export_switch_ignored", "TRACE_EXPORT_API off mounts no export, even with one",
        P, "if deployment.trace_export_api else None\n", "if True else None\n",
@@ -970,12 +970,12 @@ MUTANTS: tuple[Mutant, ...] = (
           "wired\")", "        return None", ROLLOUT_LOGIN),
     # LAB-API (WR-LAB-API-1): each Lab surface is mounted only when its switch turns it on
     _m("composition_root_drops_lab_control", "the composition root mounts WR-L4-1's control",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
     _m("composition_root_drops_lab_traces", "the composition root mounts WR-V1M-2's traces",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_access__the_lab_routes_are_mounted_only_when_the_deployment_enables_them"),
     _m("lab_control_switch_ignored", "LAB_CONTROL off mounts no control route, even composed",
        P, "    rt.lab_control = lab_control if deployment.lab_control else None\n",
@@ -1003,16 +1003,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # LAB-API-2 (WR-LAB2-1): each of its surfaces is mounted only when its switch is on
     _m("composition_root_drops_lab_evaluations", "the composition root mounts lab_evaluations",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enables_them"),
     _m("composition_root_drops_lab_pipelines", "the composition root mounts lab_pipelines",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_releases, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enables_them"),
     _m("composition_root_drops_lab_releases", "the composition root mounts lab_releases",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_datasets, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_api_2__the_lab_surfaces_are_mounted_only_when_the_deployment_enables_them"),
     _m("lab_evaluations_switch_ignored", "LAB_EVALS off mounts no lab_evaluations route, even composed",
        P, "    rt.lab_evaluations = lab_evaluations if deployment.lab_evals else None\n",
@@ -1121,11 +1121,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "LabPipelines(sessions, access, objects=objects,", "test_lab_api_2__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # WR-C5-N4-ROUTE (composition-6): the datasets surface's imports are 0051's queue
     _m("lab_datasets_jobs_absent", "LAB_DATASETS enqueues imports on 0051's queue (no 503)",
-       LC, "                                          PgLabImportJobs(connect))",
-       "                                          None)", DATASETS_C6),
+       LC, "                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE",
+       "                                          None,    # WR-C5-N4-ROUTE", DATASETS_C6),
     _m("lab_datasets_jobs_off_the_pool", "the import queue is on the gateway's pool",
-       LC, "                                          PgLabImportJobs(connect))",
-       "                                          PgLabImportJobs(None))", DATASETS_C6),
+       LC, "                                          PgLabImportJobs(connect),    # WR-C5-N4-ROUTE",
+       "                                          PgLabImportJobs(None),    # WR-C5-N4-ROUTE", DATASETS_C6),
     # WR-R4-2 (composition-6): the release surface's ports over D9, D7, the Lab objects, 0043
     _m("lab_releases_records_absent", "LAB_RELEASES reads the release models (no 503)",
        LC, "                       records=ReleaseRecords(d9, PgLabDataStore(connect), objects,\n"
@@ -1210,12 +1210,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_lab_access__the_lab_surfaces_are_composed_from_settings_only_when_enabled"),
     # Composition batch 2 (WR-N4-1, WR-B3-2): the datasets and checkpoint receiver switches
     _m("composition_root_drops_lab_datasets", "the composition root mounts lab_datasets",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_data__the_datasets_and_checkpoint_routes_are_mounted_only_when_enabled"),
     _m("composition_root_drops_lab_checkpoints", "the composition root mounts lab_checkpoints",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, metrics)",
-       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, metrics)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, lab_checkpoints, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs, feedback, console_actions, operator_actions, console_data_use, trace_export, lab_control, lab_traces, lab_evaluations, lab_pipelines, lab_releases, lab_datasets, auth, console_me, lab_workspaces, operator_providers, lab_model_projects, lab_artifacts, lab_deployments, console_reads, metrics)",
        "test_lab_data__the_datasets_and_checkpoint_routes_are_mounted_only_when_enabled"),
     _m("lab_datasets_switch_ignored", "LAB_DATASETS off mounts no datasets route, even composed",
        P, "    rt.lab_datasets = lab_datasets if deployment.lab_datasets else None\n",
@@ -1327,9 +1327,9 @@ MUTANTS: tuple[Mutant, ...] = (
        dies_by=("RuntimeMisconfigured",)),        # the given store refused: the defect
     _m("given_stores_replaced", "injected stores are used as given, with no pool of ours",
        # the G4F feedback entry (f4bceeba) sits between the pool and the given adapters
-       P, "                       if settings.deployment.feedback_api else {}),\n"
+       P, "                    **_identity(settings, connect),\n"
           "                    **adapters}",
-       "                       if settings.deployment.feedback_api else {})}",
+       "                    **_identity(settings, connect)}",
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store dropped, then refused
     _m("stores_on_an_unnamed_database", "a store is built only on a named DATABASE_URL",
@@ -1773,10 +1773,10 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "    relay.media = rt.media_store = MediaUploads(", "    relay.media = MediaUploads(",
        "test_f_base__one_large_body_bound_and_one_media_store_per_process"),
     _m("probe_never_refreshed", "the lifetime task refreshes the readiness answers",
-       P, "        self.value = await self._answer()", "        self.value = self.value",
+       "gateway/readiness.py", "        self.value = await self._answer()", "        self.value = self.value",
        "test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes"),
     _m("probe_asked_on_every_read", "a readiness read is a cached answer, not a blocking call",
-       P, "        if self.value is None:", "        if True:",
+       "gateway/readiness.py", "        if self.value is None:", "        if True:",
        "test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes"),
     _m("service_role_not_set", "every pooled connection runs set role service_role (D2 7)",
        P, '        await conn.execute("set role service_role")\n', "",
@@ -1828,7 +1828,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            return True",
        "test_f_base__the_credit_price_probe_requires_the_active_card"),
     _m("probe_failure_reads_ready", "a probe that hangs or fails reads unavailable (H-B4, C2)",
-       P, '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
+       "gateway/readiness.py", '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
           "                        exc_info=True)\n            return False",
        '            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,\n'
        "                        exc_info=True)\n            return True",
@@ -1902,7 +1902,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "             for name, bound in caps if False]",
        "test_catalog_truth__a_runtime_past_the_approved_release_profile_advertises_nothing"),
     _m("unapproved_card_published", "CREDIT discovery shows only the approved card (F11)",
-       M, "    if regime == CREDIT and card.rate_card_version != settings.pilot.active_rate_card_version:",
+       M, "    if served and regime == CREDIT \\\n"
+          "            and card.rate_card_version != settings.pilot.active_rate_card_version:",
        "    if False:",
        "test_catalog_truth__credit_discovery_advertises_only_the_approved_card"),
     # E3L-F1: discovery reports the listing version resolution landed on, not a constant.
@@ -2174,6 +2175,43 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_w5_f5b__the_pre_d10_door_still_answers_a_post_admission_attach_failure"),
 )
 
+# api-probe (E4C run 2, register row 94): the journal readiness probe is `ready()` - one
+# server-bounded primary-key lookup - never `usage()`'s four aggregates.
+RD = "gateway/readiness.py"
+J = "state/journal.py"
+PROBE_ASKS = "test_journal_probe__asks_the_bounded_ready_never_the_usage_aggregates"
+PROBE_FAULT = "test_probe__a_check_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread"
+READY_UNIT = "test_journal_ready__is_one_server_bounded_primary_key_lookup_on_one_connection"
+READY_PLAN = "test_journal_ready_pg__answers_on_the_migrated_schema_on_the_primary_key"
+READY_ORDER = "test_probe_bounds__a_pool_wait_plus_the_server_bound_fits_inside_the_probe_bound"
+READY_STALL = ("test_journal_ready_pg__a_stalled_journal_is_cancelled_by_the_server_"
+               "within_its_bound")
+MUTANTS += (
+    _m("journal_probe_asks_usage", "the journal probe asks ready(), never the aggregates",
+       RD, "        await stream.ready()\n", "        await stream.usage()\n", PROBE_ASKS,
+       "test_probe_wiring__the_pilot_composes_the_journal_probe_on_ready"),
+    _m("probe_fault_reads_ready", "a check that hangs or fails reads unavailable",
+       RD, "                        exc_info=True)\n            return False\n",
+       "                        exc_info=True)\n            return True\n",
+       PROBE_ASKS, PROBE_FAULT),
+    _m("ready_bound_dropped", "the probe's statement carries its own 2 s server bound",
+       J, 'READY_SQL = (f"set local statement_timeout = {READY_TIMEOUT_MS}; "\n             ',
+       "READY_SQL = (", READY_UNIT, READY_STALL),
+    _m("ready_bound_widened", "the server cancels a stalled probe at 2 s",
+       J, "READY_TIMEOUT_MS = 2000\n", "READY_TIMEOUT_MS = 20000\n", READY_UNIT, READY_STALL,
+       READY_ORDER),
+    _m("probe_bound_below_pool_wait", "a probe fails typed before its own bound fires",
+       RD, "PROBE_TIMEOUT_S = 10.0\n", "PROBE_TIMEOUT_S = 6.0\n", READY_ORDER),
+    _m("ready_bound_session_wide", "the bound is SET LOCAL: no session state on the pooler",
+       J, '"set local statement_timeout', '"set statement_timeout', READY_UNIT),
+    _m("ready_scans_the_journal", "the lookup is a primary-key descent, never a scan",
+       J, "\"where job_id = '00000000-0000-0000-0000-000000000000' limit 1\")",
+       '"limit 1")', READY_PLAN),
+    _m("ready_asks_usage", "ready() never runs journal_usage()",
+       J, "            await conn.execute(READY_SQL)\n",
+       '            await conn.execute("select infrx.journal_usage()")\n', READY_UNIT),
+)
+
 
 def _definitions() -> dict[str, str]:
     """case name -> the suite-relative file that defines it."""
@@ -2218,7 +2256,10 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 
 #: F2R item 9: the shared runner, with G's per-mutant file selection and layout.
-RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout)
+#: api-probe: the copy inherits `INFRX_D_TASK`, so `test_readiness`'s PostgreSQL cases run on
+#: the caller's task-local harness (never d1's shared port by accident).
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout,
+                env=("INFRX_D_TASK",))
 
 
 def run_mutant(mutant) -> Result:

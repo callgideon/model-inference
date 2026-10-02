@@ -29,7 +29,7 @@ SECRET = "ap02-composed-cursor-secret"
 
 def composed(**on):
     world = relay_support.World()
-    world.stream.usage = lambda: asyncio.sleep(0, {})
+    world.stream.ready = lambda: asyncio.sleep(0, True)
     config = support.settings(deployment=dataclasses.replace(support.BUILD, **on))
     return composition.create_app(config, client=support.upstream(), sb=support.supabase(),
                                   clock=world.now_s, catalog=world.catalog, stream=world.stream,
