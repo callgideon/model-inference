@@ -31,8 +31,13 @@ never runs in a consumer process.
                dry_run, and JUDGE_LIVE_BUDGET_USD): J2's `JudgeWiring` over D6J's ledger (0036)
                and T3's retention; its passes move silent `submitting` runs to `ambiguous`
                and reconcile/collect the ambiguous/submitted runs of every provider with such
-               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS);
-               `jobs["judge_report"]` is J3's report on the same ledger (WR-J3-D8-C).
+               work (WR-LSQ-C2A; 0053's listing, WR-C5-PROVIDERS), each graded with the
+               rubric its configuration pins (SR-AP08-1); `jobs["judge_report"]` is J3's report
+               on the same ledger (WR-J3-D8-C). AP-08: the START pass turns queued requests
+               into J2's `submit` once AP-07's eligible read is composed
+               (`judge.start.eligible_read`); JUDGE_PROVIDER_ALLOWLIST names the https hosts
+               honoured in live mode only (P-10; loopback otherwise); JUDGE_GOLD_SET names the
+               operator's reviewed reference set, graded after each collect pass.
 * `datasets`   LAB_S3_BUCKET, CLICKHOUSE_URL, S3_TRACE_BUCKET: N3's `lineage.reconcile` for
                every provider with a lineage, every page (WR-N3-2's pull half), and N1's
                imports from 0051's durable job queue (WR-N4-3).
@@ -306,28 +311,49 @@ def _checkpoints(mode, env, connect, objects, worker_id, registries=None, deploy
 
 
 def _judge(mode, env, connect, objects, worker_id, **_):
+    from ...judge import start
+    from ...judge.calibration import goldset
     from ...judge.cost import APPROVED_RATES
-    from ...judge.submit import HttpJudgeProvider, JudgeWiring
+    from ...judge.submit import HttpJudgeProvider, JudgeWiring, egress_hosts
     from ...lab.access import LabAccess
     from ...state.lab_access import PgAccessStore
     from ...state.lab_consent import PgJudgeLedger
+    limits, retention = _traces(mode, env)
     try:
-        provider = HttpJudgeProvider(env["JUDGE_PROVIDER_URL"])
+        provider = HttpJudgeProvider(env["JUDGE_PROVIDER_URL"], allowed_hosts=egress_hosts(
+            limits.judge_mode, env.get("JUDGE_PROVIDER_ALLOWLIST", "")))
     except errors.DomainError:
         raise RuntimeMisconfigured(mode, detail="JUDGE_PROVIDER_URL: judge egress is the "
-                                                "local fake until P-10") from None
-    limits, retention = _traces(mode, env)
+                                   "local fake, or in live mode an https host "
+                                   "JUDGE_PROVIDER_ALLOWLIST names (P-10)") from None
+    try:
+        gold = goldset.load(env["JUDGE_GOLD_SET"]) if env.get("JUDGE_GOLD_SET") else None
+    except (OSError, ValueError) as unreadable:
+        raise RuntimeMisconfigured(mode, detail=f"JUDGE_GOLD_SET is not a reviewed reference "
+                                   f"set ({type(unreadable).__name__})") from None
     ledger = PgJudgeLedger(connect)
     wiring = JudgeWiring(access=LabAccess(PgAccessStore(connect)), ledger=ledger,
                          provider=provider, retention=retention, rates=APPROVED_RATES,
                          settings=limits)
-    return {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
-                                         "judge sweep"),
-            "judge_collect": lambda: every(JUDGE_PASS_S, lambda: judge_pass(
-                wiring, partial(ledger.providers_in, JUDGE_WORK)), "judge collect")}, wiring
+    rubric_of, results_of = start.pg_rubric_of(connect), goldset.pg_results_of(connect)
+
+    async def collect() -> dict[str, int]:
+        done = await judge_pass(wiring, partial(ledger.providers_in, JUDGE_WORK), rubric_of)
+        if gold is not None:
+            await goldset.calibrate(ledger, results_of, gold)
+        return done
+
+    tasks = {"judge_sweep": lambda: every(JUDGE_PASS_S, lambda: ledger.sweep(JUDGE_SILENT_S),
+                                          "judge sweep"),
+             "judge_collect": lambda: every(JUDGE_PASS_S, collect, "judge collect")}
+    eligible = start.eligible_read(limits)
+    if eligible is not None:
+        tasks["judge_start"] = lambda: every(JUDGE_PASS_S, lambda: start.start_pass(
+            start.pg_queued(connect), wiring, eligible, rubric_of=rubric_of), "judge start")
+    return tasks, wiring
 
 
-async def judge_pass(wiring, providers) -> dict[str, int]:
+async def judge_pass(wiring, providers, rubric_of=None) -> dict[str, int]:
     """WR-LSQ-C2A: for every provider, D6J's `ambiguous` runs (`runs_in`, 0049) are looked up
     by their submit key - the provider's record moves the run to `submitted`; none leaves it
     as it is (R184/R192: never resubmitted or released by the platform) - then every
@@ -343,7 +369,9 @@ async def judge_pass(wiring, providers) -> dict[str, int]:
                     continue
                 try:
                     if state == "submitted":
-                        await submit.collect(run.run_id, wiring=wiring)
+                        graded = {} if rubric_of is None else {"rubric": await _graded(
+                            rubric_of, run.run_id)}
+                        await submit.collect(run.run_id, wiring=wiring, **graded)
                         done["collected"] += 1
                     elif (external := await wiring.provider.lookup(run.submit_key)) is None:
                         done["waiting"] += 1
@@ -354,6 +382,14 @@ async def judge_pass(wiring, providers) -> dict[str, int]:
                     log.exception("judge pass failed for one run")
                     done["failed"] += 1
     return done
+
+
+async def _graded(rubric_of, run_id: str):
+    """The rubric the run's configuration pins (SR-AP08-1); none is a refusal, never v1."""
+    rubric = await rubric_of(run_id)
+    if rubric is None:
+        raise errors.StateConflict("the run's rubric version is not gradable here")
+    return rubric
 
 
 class JudgeReport:

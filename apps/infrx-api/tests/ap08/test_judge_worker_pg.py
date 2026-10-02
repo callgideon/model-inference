@@ -153,9 +153,48 @@ async def _async(value):
     return value
 
 
+def check_results_are_graded_by_the_runs_rubric_and_calibrated_against_the_gold_set(
+        conn, fake) -> None:
+    """api-judge-2: the collect pass grades with the rubric the run's configuration pins
+    (SR-AP08-1's read), and the gold-set calibration reads only that configuration's
+    COMPLETED results under a CURRENT grant - published `insufficient` below MIN_PAIRS.
+    Failure oracle: results of an unsettled run, of another judge model or rubric version, or
+    after the grant is revoked entering a calibration; a `calibrated` claim on one pair."""
+    from infrx.judge.calibration import goldset
+    from infrx.lab.workers.__main__ import judge_pass
+    from tests.ap08.test_judge_cli_pg import answer
+    w = Worker(conn, fake)
+    connect = connector(pgharness.dsn(conn.info.dbname))
+    results_of = goldset.pg_results_of(connect)
+    run_id = w.request("6")          # its frozen sample holds the one trace with video
+    w.start_pass()
+    gold = goldset.GoldSet.model_validate({
+        "provider_org_id": NEMO, "org_id": w.grantor, "judge_model": j1.JUDGE_MODEL,
+        "rubric_version": 1, "reviewed_by": "operator@infrx.test", "review_ref": "ap8",
+        "labels": [{"sample_id": t, "verdict": "correct"} for t in TRACES]})
+    assert run(results_of(gold)) == [], "a submitted run's results are not settled"
+    sent = [i["sample_id"] for i in fake.posts[0]["items"]]
+    fake.outputs[fake.batches[fake.posts[0]["submit_key"]]] = [answer(t, t == TRACES[0])
+                                                               for t in sent]
+    done = run(judge_pass(w.wiring, lambda: _async([NEMO]), start.pg_rubric_of(connect)))
+    assert done["collected"] == 1 and w.state(run_id) == "completed"
+    rows = run(results_of(gold))
+    assert sorted(r["sample_id"] for r in rows) == sorted(sent)
+    assert run(results_of(gold.model_copy(update={"judge_model": "judge-2"}))) == []
+    assert run(results_of(gold.model_copy(update={"rubric_version": 2}))) == []
+    quality = run(goldset.calibrate(w.ledger, results_of, gold))
+    assert (quality.state, quality.kappa.n) == ("insufficient", 1)
+    shown = conn.execute("select calibration->>'state' from infrx.lab_judge_calibrations "
+                         "order by calibration_id desc limit 1").fetchone()[0]
+    assert shown == "insufficient"
+    jd.revoke(conn)
+    assert run(results_of(gold)) == [], "results after the grant was revoked"
+
+
 WORKER = (check_a_queued_run_is_frozen_reserved_and_sent_once,
           check_cancel_dry_run_budget_and_revocation_send_nothing,
-          check_an_ambiguous_send_is_quarantined_and_never_resent)
+          check_an_ambiguous_send_is_quarantined_and_never_resent,
+          check_results_are_graded_by_the_runs_rubric_and_calibrated_against_the_gold_set)
 
 
 def _with_fake(check):
