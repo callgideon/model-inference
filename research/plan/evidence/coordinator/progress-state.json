@@ -4,8 +4,8 @@
  "program_doc": "research/plan/22-consumer-v1-implementation.md",
  "integration_branch": "main",
  "base": "dff31efc",
- "main": "004c1c30 (= claude/consumer-v1 tip)",
- "integration_head": "004c1c30",
+ "main": "0bbf1a37 (= claude/consumer-v1 tip)",
+ "integration_head": "0bbf1a37",
  "deployed": {
   "as_of": "2026-10-01T22:54Z",
   "release": "e6a8b40aa2fa10360a8d17e168fb593b3ffce646",
@@ -40,11 +40,11 @@
    }
   ]
  },
- "revision": 404,
- "updated": "2026-10-02T03:14:05Z",
+ "revision": 405,
+ "updated": "2026-10-02T04:04:03Z",
  "agent_slots": {
   "total": 18,
-  "active": 17,
+  "active": 15,
   "reserved": 1,
   "note": "Wave 7 batch 2: seventeen Opus lanes dispatched 2026-10-02 from b05eb6f4 (lane-w7.js, batch 'Batch 2'); seven lanes on task-local PG keys, ten fake-only."
  },
@@ -12292,17 +12292,17 @@
    "branch": "codex/w7-api-improve-2",
    "worktree": ".claude/worktrees/codex-w7-api-improve-2",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "79bc8ff0",
    "isolation": {
     "ports": "tasklocal key ap10",
     "prefix": "infrx-ap10-*",
     "db": "infrx_ap10"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:04:03Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #91 (chained)",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 7,
@@ -12311,7 +12311,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/api-improve-2-837cbb2.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/infrx-api/infrx/lab/datasets/from_traces.py",
@@ -12519,22 +12521,22 @@
   {
    "id": "W7-ux-lab-evaluations",
    "task": "UX-08",
-   "slice": "evaluations/judge presentation (wf_3a7a91eb-818)",
+   "slice": "evaluations/judge presentation (wf_3a7a91eb-818); merge #90 integrated (0bbf1a37)",
    "agent": "opus",
    "branch": "codex/w7-ux-lab-evaluations",
    "worktree": ".claude/worktrees/codex-w7-ux-lab-evaluations",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "1c9decfe",
    "isolation": {
     "ports": "none (fake-only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "complete",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:04:03Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": null,
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -12543,7 +12545,9 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-lab-evaluations-5f44c5f.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/lab/app/(provider)/evaluations/",
@@ -12632,17 +12636,17 @@
    "branch": "codex/w7-ux-verify",
    "worktree": ".claude/worktrees/codex-w7-ux-verify",
    "base": "b05eb6f4",
-   "head": null,
+   "head": "4652847f",
    "isolation": {
     "ports": "none (fake-only)",
     "prefix": "-",
     "db": "-"
    },
-   "activity": "running",
+   "activity": "integration",
    "started": "2026-10-02T03:14:05Z",
-   "updated": "2026-10-02T03:14:05Z",
+   "updated": "2026-10-02T04:04:03Z",
    "blocker": null,
-   "next_action": "handback → coordinator merge (merge-fast.js; next n=90)",
+   "next_action": "merge #91 (chained)",
    "estimate": {
     "optimistic_h": 4,
     "likely_h": 6,
@@ -12651,12 +12655,50 @@
     "basis": "wave7-plan.md batch-2 brief estimate",
     "at": "2026-10-02T03:14:05Z"
    },
-   "evidence": [],
+   "evidence": [
+    "research/plan/evidence/w7/ux-verify-e7a0961.md"
+   ],
    "commands": [],
    "owned_paths": [
     "apps/app/tests/ux/ (suite config)",
     "apps/lab/tests/ux/ (suite config)",
     "research/plan/evidence/ux/"
+   ],
+   "wiring_requests": []
+  },
+  {
+   "id": "W7-lab-e2e-fix",
+   "task": "UX-11",
+   "slice": "register row 90: the Lab e2e gate (lab-e2e on l4) back to green on the merged tree — harness fakes for AP-10's port shapes, E2E-E under SR-AP10-1 as an honest NOT RUN, E2E-R04 conflict root cause, WR-AP10C-3 (N4-J01) (batch 2 addition)",
+   "agent": "opus",
+   "branch": "codex/w7-lab-e2e-fix",
+   "worktree": ".claude/worktrees/codex-w7-lab-e2e-fix",
+   "base": "0bbf1a37",
+   "head": null,
+   "isolation": {
+    "ports": "tasklocal key l4 (lab-e2e's own; shared with merge checks — retry when busy)",
+    "prefix": "infrx-l4-*",
+    "db": "infrx_l4"
+   },
+   "activity": "running",
+   "started": "2026-10-02T04:04:03Z",
+   "updated": "2026-10-02T04:04:03Z",
+   "blocker": null,
+   "next_action": "handback → merge",
+   "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 5,
+    "pessimistic_h": 9,
+    "confidence": "medium",
+    "basis": "three attributed causes + one journey re-point",
+    "at": "2026-10-02T04:04:03Z"
+   },
+   "evidence": [],
+   "commands": [],
+   "owned_paths": [
+    "apps/lab/tests/e2e/",
+    "apps/lab/tests/n/journey.test.ts",
+    "apps/lab/tests/n/backend.py"
    ],
    "wiring_requests": []
   }
@@ -16188,6 +16230,12 @@
    "by": "implementation coordinator (session 03)",
    "what": "rev 404: wave 7 batch 2 dispatched — seventeen lanes from b05eb6f4 (api-schema-2, api-hosting, api-publication, api-identity-2, api-artifacts-2, api-traces-2, api-judge-2, api-improve-2, api-frontends-app, api-frontends-lab, ux-lab-operate, ux-lab-requests, ux-app-2, ux-lab-evaluations, ux-lab-improve, api-lifecycle-2, ux-verify); briefs in the coordinator scratchpad wave7-plan.md §5 Batch 2.",
    "source": "scratchpad/wave7-plan.md; research/plan/consumer-v1/07-post-launch-waves.md LW7"
+  },
+  {
+   "at": "2026-10-02T04:04:03Z",
+   "by": "implementation coordinator (session 03)",
+   "what": "rev 405: merge #90 (ux-lab-evaluations) integrated at 0bbf1a37; the Lab e2e harness fixed (dead since #84) and the gate recorded RED-known (row 90) with its three causes; lane lab-e2e-fix opened; ux-verify + api-improve-2 → merge #91.",
+   "source": "research/plan/consumer-v1/10-carried-work-register.md row 90"
   }
  ],
  "history": {
