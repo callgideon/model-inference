@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import (feedback, health, ingress, jobs, lab_checkpoints,
+from infrx.gateway.routes import (console_reads, feedback, health, ingress, jobs,
+                                  lab_checkpoints,
                                   lab_control, lab_datasets, lab_evaluations, lab_pipelines,
                                   lab_releases, lab_traces, models, trace_export, uploads)
 from infrx.observe import host
@@ -218,7 +219,8 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     slash redirects) is served."""
     assert composition.ROUTERS == (health, models, ingress, uploads, jobs, feedback, trace_export,
                                    lab_control, lab_traces, lab_evaluations, lab_pipelines,
-                                   lab_releases, lab_datasets, lab_checkpoints, metrics)
+                                   lab_releases, lab_datasets, lab_checkpoints, console_reads,
+                                   metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
