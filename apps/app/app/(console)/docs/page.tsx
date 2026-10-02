@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { Snippet, type SnippetKey } from "@/components/snippet";
+import { Snippet } from "@/components/snippet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,8 +12,6 @@ import {
 } from "@/components/ui/table";
 import { displayCredit, type Credit } from "@/lib/contracts/v2/money-units";
 import { INITIAL_SIGNUP_GRANT_CREDIT } from "@/lib/contracts/v2/types";
-import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
 import { apiBaseUrl, holdCredit, loadCatalog, priceView } from "../models/catalog";
 import {
   CATALOG_EMPTY,
@@ -61,203 +59,272 @@ export default async function DocsPage() {
     );
   }
 
-  const session = await getSession();
-  const supabase = await createClient();
-  const { data: keyRows } = await supabase
-    .from("api_keys")
-    .select("id, name, prefix")
-    .eq("org_id", session.orgId)
-    .is("revoked_at", null)
-    .order("created_at", { ascending: false });
-  const keys = (keyRows ?? []) as SnippetKey[];
-
   const { baseUrl } = catalog;
   const price = priceView(model);
   const retention = model.retention;
   const code = (text: string) => <code className="font-mono text-foreground">{text}</code>;
 
+  const examples = buildExamples(model);
+  const example = (id: string) => {
+    const e = examples.find((x) => x.id === id)!;
+    return (
+      <Section key={e.id} title={e.title} id={e.id}>
+        <p>{e.blurb}</p>
+        <div className="not-prose pt-1">
+          <Snippet snippets={e.snippets} baseUrl={baseUrl} />
+        </div>
+      </Section>
+    );
+  };
+
   return (
     <>
-      <PageHeader
-        title="Docs"
-        subtitle={`How to call ${model.id} with your API key: every example below is run against the API's contract in CI.`}
-      />
+      <PageHeader title="Docs" subtitle={`How to call ${model.id} from your code.`} />
 
-      <div className="space-y-4">
-        <Section title="Quickstart">
-          <p>
-            Base URL: {code(baseUrl)}. Send your key as {code("Authorization: Bearer <key>")} on every call
-            except {code("GET /v1/models")}. Create a key on the{" "}
-            <Link href="/api-keys" className="underline underline-offset-4">
-              API Keys
-            </Link>{" "}
-            page; its secret is shown once, and we keep only a hash of it.
-          </p>
-          <p>
-            The chat route follows the OpenAI Chat Completions shape for the fields listed under Limits, so an
-            OpenAI client pointed at {code(`${baseUrl}/v1`)} works for plain and streamed chat. Other OpenAI
-            features are not served and are refused, not ignored.
-          </p>
-        </Section>
+      <div className="lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <Contents />
+        <div className="space-y-4">
+          <Section title="Quickstart" id="quickstart">
+            <p>
+              Base URL: {code(baseUrl)}. Send your key as {code("Authorization: Bearer <key>")} on every call
+              except {code("GET /v1/models")}. Create a key on the{" "}
+              <Link href="/api-keys" className="underline underline-offset-4">
+                API Keys
+              </Link>{" "}
+              page; its secret is shown once, and we keep only a hash of it.
+            </p>
+            <p>
+              Every example reads the key from {code("INFRX_API_KEY")} and never contains it. Set it in your shell
+              first, for example with {code("read -rs INFRX_API_KEY && export INFRX_API_KEY")}, which keeps it out of
+              your shell history. Never paste a key into a file you share.
+            </p>
+            <p>
+              The chat route is OpenAI-compatible Chat Completions for the fields listed under Limits, so an OpenAI
+              client pointed at {code(`${baseUrl}/v1`)} works for plain and streamed chat. Other OpenAI features are
+              not served and are refused, not ignored.
+            </p>
+            <p className="text-xs">
+              The examples are generated from the published catalog record for {code(model.model_revision)} and run in
+              CI against a test double of the API contract. That checks their syntax and requests; it is not a live
+              production check.
+            </p>
+          </Section>
+          {example("text")}
 
-        {buildExamples(model).map((example) => (
-          <Section key={example.id} title={example.title} id={example.id}>
-            <p>{example.blurb}</p>
-            <div className="not-prose pt-1">
-              <Snippet snippets={example.snippets} baseUrl={baseUrl} keys={keys} />
+          {example("video")}
+          {example("upload")}
+          {example("inline")}
+          <Section title="Prompts" id="prompts">
+            <p>Marlin was tuned on these two prompts; other phrasings work, these give the best output.</p>
+            <div className="not-prose space-y-3 pt-2">
+              <Prompt label="Dense captioning with timestamps" text={CAPTION_PROMPT} />
+              <Prompt label="Temporal grounding (replace <event>)" text={GROUNDING_PROMPT} />
             </div>
           </Section>
-        ))}
 
-        <Section title="Limits" id="limits">
-          <ul className="list-disc space-y-1 pl-5">
-            {[...videoFacts(model.capability), ...requestFacts(model.capability)].map((fact) => (
-              <li key={fact}>{fact}</li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section title="Streaming" id="streaming">
-          <p>
-            With {code('"stream": true')} the answer arrives as server-sent events: chat chunks in the OpenAI
-            shape, a final chunk carrying {code("usage")}, then {code("data: [DONE]")}. Frames named{" "}
-            {code("event: infrx.progress")} report the job&apos;s progress and carry no text; skip them if you only
-            want the answer. Each frame has an {code("id:")}; if the connection drops, the output can be replayed
-            from {code("GET /v1/jobs/{handle}/events")} with {code("Last-Event-ID")} for{" "}
-            {duration(retention.stream_journal_ttl_s)}.
-          </p>
-          <p>
-            Only the output streams. The input is always a finished video file; live video input is not
-            supported.
-          </p>
-        </Section>
-
-        <Section title="Async jobs, retries and request IDs" id="retries">
-          <p>
-            {code("POST /v1/jobs")} (or {code("Prefer: respond-async")} on the chat route) answers 202 with a{" "}
-            {code("job_handle")}, a {code("Location")} and a {code("Retry-After")} poll hint once the job is durably
-            accepted; the job runs whether or not you stay connected.
-          </p>
-          <p>
-            Send an {code("Idempotency-Key")} of your own (one stable key per item) with every request you might
-            retry. The same key with the same body and mode answers the original job ({code("idempotency_replayed")}{" "}
-            and the {code("Idempotency-Replayed")} header say so) and is never charged twice; the same key with a
-            different body or mode is {code("409 idempotency_conflict")}. A key keeps answering for{" "}
-            {duration(retention.idempotency_ttl_s)} after its job finishes.
-          </p>
-          <p>
-            A {code("429")} or {code("503")} carries {code("Retry-After")} in seconds: wait that long, then retry
-            with the same key. Every response carries an {code("Inference-Id")} header; quote it when you contact
-            support.
-          </p>
-        </Section>
-
-        <Section title="Pricing and credits" id="pricing">
-          {price.unit === "CREDIT" ? (
-            <CreditPricing
-              disclosure={chargeDisclosure(price)}
-              provisional={price.provisional}
-              version={price.version}
-              maxHold={price.maxHold}
-              exampleHold={holdCredit(model, EXAMPLE_MAX_TOKENS)}
-            />
-          ) : (
+          {example("async")}
+          <Section title="Many clips" id="datasets">
             <p>
-              This deployment is metered under legacy USD pilot accounting (price version {code(price.version)}):
-              USD {price.input} per million input tokens and USD {price.output} per million output tokens. USD is
-              never converted to or from CREDIT.
+              Submit each clip as its own job with its own stable {code("Idempotency-Key")}, keep each{" "}
+              {code("job_handle")}, poll each within a bound at the {code("Retry-After")} hint, and save each result
+              before its {code("result_expires_at")}. A retried item with the same key and body answers its original
+              job instead of starting a second one. The console does not ingest datasets for batch inference: your
+              client submits the clips.
             </p>
-          )}
-        </Section>
+          </Section>
+          {example("resume")}
 
-        <Section title="What we store" id="retention">
-          <ul className="list-disc space-y-1 pl-5">
-            {retentionFacts(retention).map((fact) => (
-              <li key={fact}>{fact}</li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section title="Keys and revocation" id="keys">
-          <p>{REVOCATION_COPY}</p>
-        </Section>
-
-        <Section title="Prompts" id="prompts">
-          <p>Marlin was tuned on these two prompts; other phrasings work, these give the best output.</p>
-          <div className="not-prose space-y-3 pt-2">
-            <Prompt label="Dense captioning with timestamps" text={CAPTION_PROMPT} />
-            <Prompt label="Temporal grounding (replace <event>)" text={GROUNDING_PROMPT} />
-          </div>
-        </Section>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Routes</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-20">Method</TableHead>
-                  <TableHead>Path</TableHead>
-                  <TableHead>What</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ROUTE_ROWS.map(([method, path, what]) => (
-                  <TableRow key={method + path}>
-                    <TableCell className="font-mono">{method}</TableCell>
-                    <TableCell className="font-mono text-xs">{path}</TableCell>
-                    <TableCell className="whitespace-normal text-muted-foreground">{what}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Error codes</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">Status</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>What to do</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ERROR_ROWS.map(([errorCode, status, fix]) => (
-                  <TableRow key={errorCode}>
-                    <TableCell className="font-mono">{status}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{errorCode}</TableCell>
-                    <TableCell className="whitespace-normal text-muted-foreground">{fix}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <p className="border-t p-4 text-xs text-muted-foreground">
-              Errors use the OpenAI shape{" "}
-              <code className="font-mono">{`{"error": {"message", "type", "code", "param"}}`}</code>. In a stream
-              that already started, a failure arrives as a final error event ({code("stream_interrupted")} or{" "}
-              {code("status_unknown")}).
+          {example("stream")}
+          <Section title="Streaming" id="streaming">
+            <p>
+              With {code('"stream": true')} the answer arrives as server-sent events: chat chunks in the OpenAI
+              shape, a final chunk carrying {code("usage")}, then {code("data: [DONE]")}. Frames named{" "}
+              {code("event: infrx.progress")} report the job&apos;s progress and carry no text; skip them if you only
+              want the answer. Each frame has an {code("id:")}; if the connection drops, the output can be replayed
+              from {code("GET /v1/jobs/{handle}/events")} with {code("Last-Event-ID")} for{" "}
+              {duration(retention.stream_journal_ttl_s)}.
             </p>
-          </CardContent>
-        </Card>
+            <p>
+              Only the output streams. The input is always a finished video file; live video input is not
+              supported.
+            </p>
+          </Section>
 
-        <Section title="Support" id="support">
-          <p>
-            Email{" "}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="underline underline-offset-4">
-              {SUPPORT_EMAIL}
-            </a>{" "}
-            with the {code("Inference-Id")} of the request. Never send your API key.
-          </p>
-        </Section>
+          <Section title="Async jobs, retries and request IDs" id="retries">
+            <p>
+              {code("POST /v1/jobs")} (or {code("Prefer: respond-async")} on the chat route) answers 202 with a{" "}
+              {code("job_handle")}, a {code("Location")} and a {code("Retry-After")} poll hint once the job is durably
+              accepted; the job runs whether or not you stay connected. Wait that long before each status read, stop
+              after a bounded number of reads, and read the result only when the job has {code("succeeded")}: a
+              failed, cancelled or expired job has no result.
+            </p>
+            <p>
+              Send an {code("Idempotency-Key")} of your own (one stable key per item) with every request you might
+              retry. The same key with the same body and mode answers the original job ({code("idempotency_replayed")}{" "}
+              and the {code("Idempotency-Replayed")} header say so) and is never charged twice; the same key with a
+              different body or mode is {code("409 idempotency_conflict")}. A key keeps answering for{" "}
+              {duration(retention.idempotency_ttl_s)} after its job finishes; after that the same key starts a new job.
+            </p>
+            <p>
+              A {code("429")} or {code("503")} carries {code("Retry-After")} in seconds: wait that long, then retry
+              with the same key. Every response carries an {code("Inference-Id")} header; quote it when you contact
+              support.
+            </p>
+          </Section>
+
+          <Section title="Limits" id="limits">
+            <ul className="list-disc space-y-1 pl-5">
+              {[...videoFacts(model.capability), ...requestFacts(model.capability)].map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
+          </Section>
+
+          <Section title="Pricing and credits" id="pricing">
+            {price.unit === "CREDIT" ? (
+              <CreditPricing
+                disclosure={chargeDisclosure(price)}
+                provisional={price.provisional}
+                version={price.version}
+                maxHold={price.maxHold}
+                exampleHold={holdCredit(model, EXAMPLE_MAX_TOKENS)}
+              />
+            ) : (
+              <p>
+                This deployment is metered under legacy USD pilot accounting (price version {code(price.version)}):
+                USD {price.input} per million input tokens and USD {price.output} per million output tokens. USD is
+                never converted to or from CREDIT.
+              </p>
+            )}
+          </Section>
+
+          <Section title="What we store" id="retention">
+            <ul className="list-disc space-y-1 pl-5">
+              {retentionFacts(retention).map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
+          </Section>
+
+          <Section title="Keys and revocation" id="keys">
+            <p>{REVOCATION_COPY}</p>
+          </Section>
+          {example("revoke")}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2>Routes</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-20">Method</TableHead>
+                    <TableHead>Path</TableHead>
+                    <TableHead>What</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ROUTE_ROWS.map(([method, path, what]) => (
+                    <TableRow key={method + path}>
+                      <TableCell className="font-mono">{method}</TableCell>
+                      <TableCell className="font-mono text-xs">{path}</TableCell>
+                      <TableCell className="whitespace-normal text-muted-foreground">{what}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card id="errors">
+            <CardHeader>
+              <CardTitle>
+                <h2>Error codes</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Status</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>What to do</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ERROR_ROWS.map(([errorCode, status, fix]) => (
+                    <TableRow key={errorCode}>
+                      <TableCell className="font-mono">{status}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{errorCode}</TableCell>
+                      <TableCell className="whitespace-normal text-muted-foreground">{fix}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <p className="border-t p-4 text-xs text-muted-foreground">
+                Errors use the OpenAI shape{" "}
+                <code className="font-mono">{`{"error": {"message", "type", "code", "param"}}`}</code>. In a stream
+                that already started, a failure arrives as a final error event ({code("stream_interrupted")} or{" "}
+                {code("status_unknown")}).
+              </p>
+            </CardContent>
+          </Card>
+
+          <Section title="Support" id="support">
+            <p>
+              Email{" "}
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="underline underline-offset-4">
+                {SUPPORT_EMAIL}
+              </a>{" "}
+              with the {code("Inference-Id")} of the request. Never send your API key.
+            </p>
+          </Section>
+        </div>
       </div>
+    </>
+  );
+}
+
+/** C-06's reading order; each entry is the anchor of its first section (existing anchors kept). */
+const CONTENTS: [string, string][] = [
+  ["quickstart", "Quickstart"],
+  ["video", "Video input"],
+  ["async", "Async and many clips"],
+  ["stream", "Streamed output"],
+  ["retries", "Results and retries"],
+  ["limits", "Limits"],
+  ["pricing", "Credits"],
+  ["retention", "Data retention"],
+  ["keys", "Keys"],
+  ["errors", "Errors and support"],
+];
+
+function Contents() {
+  const links = (
+    <ul className="space-y-1.5 text-sm">
+      {CONTENTS.map(([id, label]) => (
+        <li key={id}>
+          <a href={`#${id}`} className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            {label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <>
+      <details className="mb-4 rounded-lg border p-3 lg:hidden">
+        <summary className="cursor-pointer text-sm font-medium">Contents</summary>
+        <nav aria-label="Contents" className="pt-3">
+          {links}
+        </nav>
+      </details>
+      <nav aria-label="Contents" className="sticky top-6 hidden lg:block">
+        {links}
+      </nav>
     </>
   );
 }
