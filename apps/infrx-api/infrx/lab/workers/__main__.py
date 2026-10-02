@@ -100,6 +100,7 @@ JUDGE_BATCH = 100                     # runs per provider, state and pass (oldes
 JUDGE_WORK = ("ambiguous", "submitted")   # the states the pass works (0053's provider listing)
 LINEAGE_PASS_S = 3600.0               # the backstop behind WR-N3-2's push tombstones
 IMPORT_PASS_S = 5.0                   # 0051's import-job queue, claimed
+TRACE_DATASET_PASS_S = 5.0            # AP-10 10c: pending dataset.from_traces operations (0060)
 TEACHER_PASS_S = 60.0                 # a submitted teacher run's results, collected
 ROLLOUT_PASS_S = 30.0                 # R2's controller pass over the live releases
 ROLLOUT_STATES = ("running", "rolled_back")   # what the pass steps (R216: converge only)
@@ -415,10 +416,17 @@ def _datasets(mode, env, connect, objects, worker_id, **_):
     from ...datasets import imports
     from ...state.lab_data import PgLabDataStore, PgLabImportJobs
     jobs, store = PgLabImportJobs(connect), PgLabDataStore(connect)
+    traced = {}
+    if env.get("LAB_TRACE_DATASETS") == "1":  # AP-10 10c, OFF unless the env file says so
+        from ...state.control_ops import PgControlOps
+        from ..datasets import from_traces
+        ops, ports = PgControlOps(connect), from_traces.pg_ports(connect, objects, retention)
+        traced["trace_datasets"] = lambda: every(TRACE_DATASET_PASS_S, lambda: from_traces.work(
+            ops, ports, worker_id=worker_id), "trace datasets")
     return {"lineage_reconcile": lambda: every(LINEAGE_PASS_S, reconcile_all,
                                                "lineage reconcile"),
             "import_jobs": lambda: every(IMPORT_PASS_S, lambda: imports.work(
-                jobs, store, objects, worker_id=worker_id), "import jobs")}, None
+                jobs, store, objects, worker_id=worker_id), "import jobs"), **traced}, None
 
 
 async def rollout_pass(objects, store, releases, controller, live, reads) -> dict[str, int]:

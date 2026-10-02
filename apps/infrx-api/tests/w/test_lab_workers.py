@@ -550,6 +550,37 @@ def test_lab_workers__the_datasets_role_works_the_durable_import_job_queue(monke
     assert worker_id.startswith("lab-datasets-")
 
 
+def test_lab_workers__the_datasets_role_works_trace_dataset_operations_only_when_on(
+        monkeypatch, no_trace_stack):
+    """AP-10 10c (WR-AP10C-1): with LAB_TRACE_DATASETS=1 the datasets role also works the
+    pending `dataset.from_traces` operations every TRACE_DATASET_PASS_S - `from_traces.work`
+    over 0060's `PgControlOps` and `pg_ports` on the role's pool, its objects and T3's
+    retention, as this process's worker id; without it the role is unchanged (OFF)."""
+    from infrx.lab.datasets import from_traces
+    from infrx.state.control_ops import PgControlOps
+    seen = []
+
+    async def work(ops, ports, *, worker_id):
+        seen.append((ops, ports, worker_id))
+        return {"succeeded": 1}
+    monkeypatch.setattr(from_traces, "work", work)
+    steps = captured_steps(monkeypatch)
+    objects = InMemoryObjectStore()
+    off = lab_workers.compose("datasets", ENV["datasets"], objects=objects)
+    assert "trace_datasets" not in off.tasks
+    worker = lab_workers.compose("datasets", {**ENV["datasets"], "LAB_TRACE_DATASETS": "1"},
+                                 objects=objects)
+    assert set(worker.tasks) == {"lineage_reconcile", "import_jobs", "trace_datasets"}
+    getattr(worker.tasks["trace_datasets"](), "close")()
+    interval, step = steps["trace datasets"]
+    assert interval == lab_workers.TRACE_DATASET_PASS_S
+    assert asyncio.run(step()) == {"succeeded": 1}
+    ((ops, ports, worker_id),) = seen
+    assert type(ops) is PgControlOps and ports.objects is objects
+    assert ops._connect is ports.store._connect and worker_id.startswith("lab-datasets-")
+    assert type(ports.retention) is Retention and no_trace_stack["objects"] is objects
+
+
 # ------------------------------------------------------------------ rollout (WR-I7-1)
 def listing(provider, n, state):
     from infrx.state.lab_rollout import Release, ReleaseListing
