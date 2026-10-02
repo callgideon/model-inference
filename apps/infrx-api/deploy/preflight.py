@@ -289,6 +289,10 @@ NOT_SETTABLE = {
     "CONSOLE_DATA_USE": "mounts the grantor's data-use routes (W1 AP-07a, off by default): "
                         "enabling it needs AP-01's session actors and the E4 regression rerun, "
                         "a deploy change, not a --set",
+    "LAB_JUDGE_API": "mounts the Lab unit's judge and trace-review routes (WR-1 AP-08, off by "
+                     "default, Lab-only): enabling it needs AP-01's session actors on the unit, "
+                     "0064 applied hosted and the E4 regression rerun, a deploy change, not a "
+                     "--set; live judging waits on P-10",
 }
 
 
