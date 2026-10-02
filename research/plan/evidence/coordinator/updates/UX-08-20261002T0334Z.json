@@ -1,0 +1,38 @@
+{
+  "task": "UX-08",
+  "lane": "ux-lab-evaluations",
+  "slice": "UX-08 slices 1-3 (hub + subscriptions catalog states, stepped launch with no default protocol, readable refs, decision-first report component, judge setup under Evaluations with AP-08 record view model, 38-mutant list)",
+  "activity": "review",
+  "at": "2026-10-02T03:34:00Z",
+  "head": "5f44c5f6",
+  "base": "b05eb6f4",
+  "worktree": ".claude/worktrees/codex-w7-ux-lab-evaluations",
+  "branch": "codex/w7-ux-lab-evaluations",
+  "owned_paths": [
+    "apps/lab/app/(provider)/evaluations/",
+    "apps/lab/app/(provider)/judge/",
+    "apps/lab/tests/ux/evaluations/",
+    "research/plan/evidence/w7/ux-lab-evaluations-5f44c5f.md",
+    "research/plan/evidence/w7/ux-lab-evaluations-5f44c5f-WR-UX08-1.patch",
+    "research/plan/evidence/w7/ux-lab-evaluations-5f44c5f-WR-UX08-2.patch",
+    "research/plan/evidence/coordinator/updates/UX-08-20261002T0334Z.json"
+  ],
+  "commands": [
+    {"cmd": "node --test tests/ux/evaluations/*.test.ts (before slice 1)", "exit": 1, "summary": "red: ERR_MODULE_NOT_FOUND evaluations/view.ts"},
+    {"cmd": "node --test tests/ux/evaluations/*.test.ts", "exit": 0, "summary": "18 pass"},
+    {"cmd": "node tests/ux/evaluations/run-mutants.mjs", "exit": 0, "summary": "38 mutants, 38 killed; 18 cases all named"},
+    {"cmd": "make lab-test", "exit": 2, "summary": "304: 289 pass, 1 fail (B4-P02 -> WR-UX08-1), 14 skipped"},
+    {"cmd": "tests/b with WR-UX08-1", "exit": 0, "summary": "34 pass; B4 mutants 159/159 killed"},
+    {"cmd": "node tests/c/judge/run-mutants.mjs", "exit": 0, "summary": "72 mutants, 72 killed"},
+    {"cmd": "make lab-lint / lab-typecheck / lab-build", "exit": 0, "summary": "clean / clean / built"},
+    {"cmd": "pytest tests/integration/test_makefile_mutant_lists.py", "exit": 1, "summary": "7 failed until WR-UX08-2; 7 passed with it"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium", "basis": "all slices green; remaining = WR-UX08-1/2 at merge, WR-UX08-3 judge port swap after AP-09 Lab, review findings", "at": "2026-10-02T03:34:00Z"},
+  "blockers": ["judge records read: api-frontends-lab judge port (WR-UX08-3); packages/api-client regeneration with judge paths (WR-AP09A-1)"],
+  "wiring_requests": [
+    "WR-UX08-1: research/plan/evidence/w7/ux-lab-evaluations-5f44c5f-WR-UX08-1.patch (tests/b/pages.test.ts B4-P02/P03, tests/b/run-mutants.mjs B4-X105/X107, tests/e2e/evaluate/stack.test.ts LAUNCH metric_source, experiments/[id]/page.tsx mounts ComparisonReport); composed: tests/b 34/34, B4 mutants 159/159",
+    "WR-UX08-2: Makefile lab-mutants append `cd apps/lab && node tests/ux/evaluations/run-mutants.mjs`; composed: test_makefile_mutant_lists.py 7 passed",
+    "WR-UX08-3: judge/page.tsx JudgeRecords fed by api-frontends-lab's judge port (null on refusal); UX08-J05 + UX08-X37 updated with it"
+  ],
+  "evidence": ["research/plan/evidence/w7/ux-lab-evaluations-5f44c5f.md"]
+}
