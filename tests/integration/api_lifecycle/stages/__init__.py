@@ -2,10 +2,14 @@
 
 Each stage names the routes it drives - the mounted ones (`owner=None`) and the target ones
 of contracts.md §3-§8 with the AP package that delivers them - its predecessors, and its
-implementation. A stage whose target route is absent is BLOCKED naming that package and the
-route, never a green skip. A stage with an implementation still runs its mounted half first
-(stages 01, 08, 10, 11), so a defect there is a FAIL even while the rest waits. A later lane
-plugs in by setting the route's owner to None and giving the stage its `run`.
+implementation. A route's `owner` is the AP package that delivers it; the target serves it
+only when the run's config lists that package in `composed` (the isolated world lists what it
+composed, a live config what the target serves). A stage whose routes are not served is BLOCKED
+naming the package and the route, never a green skip. A stage with an implementation still runs
+its served half first (`Context.composed` tells it which), so a defect there is a FAIL even
+while the rest waits. A later lane plugs in by composing its package and giving the stage a
+`run`; a route the target answers with the framework's own 404/405 is BLOCKED by name too
+(`unmounted`).
 
 `accepted_operation` is R270's long-operation contract as a stage reads it (202 + Location +
 `infrx.contracts.api.OperationDoc`), for the stages AP-04/05/06 unblock.
@@ -65,13 +69,25 @@ class Stage:
     reads_only: bool = False          # selected by `inspect`
     prerequisites: tuple[str, ...] = ()   # beyond routes: "<ID> what" (P-10, a GPU target)
 
-    def missing(self) -> dict[str, list[str]]:
-        """The absent routes by owning package."""
+    def missing(self, composed=frozenset()) -> dict[str, list[str]]:
+        """The routes the target does not serve, by owning package."""
         found: dict[str, list[str]] = {}
         for route in self.routes:
-            if route.owner is not None:
+            if route.owner is not None and route.owner not in composed:
                 found.setdefault(route.owner, []).append(str(route))
         return found
+
+
+def unmounted(response) -> bool:
+    """The framework's own answer for a path or method nobody mounted (FastAPI's bare
+    `{"detail": ...}` 404/405) - never an R270 envelope, which a mounted route's 404 is."""
+    if response.status_code == 405:
+        return True
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return response.status_code == 404 and isinstance(body, dict) and set(body) == {"detail"}
 
 
 def _r(method: str, path: str, owner: str | None = None, origin: str | None = None) -> Route:
@@ -79,7 +95,7 @@ def _r(method: str, path: str, owner: str | None = None, origin: str | None = No
     return Route(method, path, owner, "lab" if lab else "gateway")
 
 
-from . import consumer  # noqa: E402  (the implementations read Blocked/Failed above)
+from . import consumer, hosting, lab  # noqa: E402  (the implementations read Blocked above)
 
 GPU = "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
 JUDGE = "P-10 an approved media-capable judge, its secret reference, payer and spend limit"
@@ -102,13 +118,14 @@ STAGES: tuple[Stage, ...] = (
            _r("POST", "/lab/v1/artifacts/uploads", "AP-04"),
            _r("POST", "/lab/v1/artifacts/uploads/{id}/complete", "AP-04"),
            _r("POST", "/lab/v1/artifacts/imports", "AP-04"),
-           _r("GET", "/lab/v1/operations/{id}", "AP-04"))),
+           _r("GET", "/lab/v1/operations/{id}", "AP-04")),
+          run=lab.s02),
     Stage("03", "GET verified artifact; create immutable serving revision",
           "Actual source commit, model/card/schema/harness/processor/runtime pins, supported "
           "hardware profile",
           (_r("GET", "/lab/v1/artifacts/{id}", "AP-04"),
            _r("POST", "/lab/v1/control/model-projects/{id}/revisions", "AP-04")),
-          needs=("02",)),
+          run=lab.s03, needs=("02",)),
     Stage("04", "POST private deployment; poll its operation and detail",
           "Isolated resource allocated; real engine reports matching identity; state is not "
           "inferred from record presence",
@@ -116,7 +133,7 @@ STAGES: tuple[Stage, ...] = (
            _r("POST", "/lab/v1/control/deployments", "AP-05"),
            _r("GET", "/lab/v1/control/deployments/{id}", "AP-05"),
            _r("GET", "/lab/v1/control/deployments/{id}/readiness", "AP-05")),
-          needs=("03",), prerequisites=(GPU,)),
+          run=hosting.s04, needs=("03",), prerequisites=(GPU,)),
     Stage("05", "Operator private rate/funding API; bounded smoke; issue provider-dev key",
           "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope "
           "correct; no public exposure",
@@ -126,12 +143,12 @@ STAGES: tuple[Stage, ...] = (
            # mounted, but a synchronous stand-in over NoEngine (503) until AP-05 05d
            _r("POST", "/lab/v1/control/deployments/{id}/smoke", "AP-05"),
            _r("POST", "/lab/v1/control/endpoints/{id}/keys", "AP-06")),
-          needs=("04",), prerequisites=(GPU,)),
+          run=hosting.s05, needs=("04",), prerequisites=(GPU,)),
     Stage("06", "Call private endpoint with finite-video fixture",
           "Real media processing and response; charge/usage receipt; no text-only substitute "
           "for modality smoke",
           (_r("POST", "/v1/chat/completions"),),
-          needs=("05",), prerequisites=(
+          run=hosting.s06, needs=("05",), prerequisites=(
               "AP-06 a provider-dev key scoped to the private endpoint (stage 05)", GPU)),
     Stage("07", "Provider administrator proposes; operator approves through API",
           "Expected listing version, approved rates/limits and candidate receipts validated; "
@@ -139,7 +156,7 @@ STAGES: tuple[Stage, ...] = (
           (_r("POST", "/lab/v1/control/proposals"),
            _r("GET", "/operator/v1/publication-proposals", "AP-06"),
            _r("POST", "/operator/v1/publication-proposals/{id}/approve", "AP-06")),
-          needs=("05",)),
+          run=hosting.s07, needs=("05",)),
     Stage("08", "GET public catalog; GET account; claim grant; create consumer A key",
           "Newly published test listing appears with truthful contract; one individual grant; "
           "one key despite retried creation",
@@ -172,40 +189,40 @@ STAGES: tuple[Stage, ...] = (
           (_r("PUT", "/console/v1/keys/{id}/capture", "AP-07"),
            _r("POST", "/console/v1/data-grants", "AP-07"),
            _r("GET", "/console/v1/data-grants", "AP-07"), _r("POST", "/v1/chat/completions")),
-          needs=("08",), prerequisites=(TRACES,)),
+          run=consumer.s12, needs=("08",), prerequisites=(TRACES,)),
     Stage("13", "Poll Lab trace list/detail for that request; inspect authorized media",
           "Same request ID/pins; real capture content/timing/usage; metadata-only and "
           "unavailable content distinguished",
           (_r("GET", "/lab/v1/traces"), _r("GET", "/lab/v1/traces/{id}")),
-          needs=("12",), prerequisites=(TRACES,)),
+          run=lab.s13, needs=("12",), prerequisites=(TRACES,)),
     Stage("14", "Create rubric/config; estimate; set budget; POST judge run; poll results",
           "Approved live adapter invoked once; video/SOP evidence available; real judge result "
           "or honest abstention; exact provider spend",
-          (_r("GET", "/lab/v1/judge/models", "AP-08"), _r("POST", "/lab/v1/judge/rubrics", "AP-08"),
+          (_r("GET", "/lab/v1/judge/models", "AP-08"), _r("GET", "/lab/v1/judge/rubrics", "AP-08"),
            _r("POST", "/lab/v1/judge/configs", "AP-08"),
            _r("POST", "/lab/v1/judge/estimates", "AP-08"),
            _r("PUT", "/lab/v1/judge/budgets/{payer_id}", "AP-08"),
            _r("POST", "/lab/v1/judge/runs", "AP-08"), _r("GET", "/lab/v1/judge/runs/{id}", "AP-08"),
            _r("GET", "/lab/v1/judge/runs/{id}/results", "AP-08")),
-          needs=("13",), prerequisites=(JUDGE,)),
+          run=lab.s14, needs=("13",), prerequisites=(JUDGE,)),
     Stage("15", "Read consumer credits and provider budget after judge",
           "Consumer not charged for provider judging; run replay does not duplicate spend; "
           "estimates separate from settled cost",
           (_r("GET", "/console/v1/credits", "AP-02"), _r("GET", "/lab/v1/judge/budgets", "AP-08")),
-          needs=("14",)),
+          run=lab.s15, needs=("14",)),
     Stage("16", "Submit human review; read review/calibration",
           "Immutable reviewed provenance; inadequate reference sample shows insufficient "
           "calibration",
           (_r("POST", "/lab/v1/traces/{id}/reviews", "AP-08"),
            _r("GET", "/lab/v1/traces/{id}/feedback", "AP-08"),
            _r("GET", "/lab/v1/judge/calibration", "AP-08")),
-          needs=("13",)),
+          run=lab.s16, needs=("13", "14")),
     Stage("17", "Revoke sharing/judging grant; retry reads and enqueue a follow-up judge",
           "Future prohibited content read/egress refused; no permanent content bypass; "
           "aggregate access follows its separate policy",
           (_r("DELETE", "/console/v1/data-grants/{id}", "AP-07"), _r("GET", "/lab/v1/traces/{id}"),
            _r("POST", "/lab/v1/judge/runs", "AP-08")),
-          needs=("12", "14"), prerequisites=(TRACES,)),
+          run=lab.s17, needs=("12", "14"), prerequisites=(TRACES,)),
     Stage("18", "Roll back/retire test listing and candidate through operator/control APIs",
           "Prior jobs keep original pins; new admissions use correct listing or refuse; "
           "task-owned resources drained and cleaned",

@@ -6,6 +6,8 @@
         [--config config.json --secrets secrets.json | --world ap11] [--only 09,10] [--out DIR]
 
 * **inspect** runs only read-only stages (01); a mutation is refused before it leaves.
+* The config's `composed` names the AP packages whose routes the target serves; a stage whose
+  routes are not served is BLOCKED naming them (stages.Stage.missing).
 * **isolated** runs every stage against the configured task-local origins; `--world ap11`
   composes them on ap11's own services (world.py: PostgreSQL 57567, Valkey 57568, MinIO
   57569, the gateway and worker processes, tests/integration/fake_vllm.py). Declared fixtures
@@ -24,7 +26,8 @@ reasons and evidence (UTC start/end, route templates, statuses, correlation and 
 ids, assertions, versions, counters). The gate is the worst selected stage (FAIL > INVALID >
 BLOCKED > NOT RUN > PASS); exit 0 / 1 / 3 / 3 / 4 as tests/integration/ENVIRONMENT.md.
 An interrupted stage (unknown outcome) is NOT RUN with a resume instruction. A stage whose
-API is not on the base is BLOCKED naming the AP package and the route. Only the lifecycle
+API is not on the base is BLOCKED naming the AP package and the route. A stage that ran on a
+stand-in (the judge's dry run) carries its `label` beside the status. Only the lifecycle
 verdict is this runner's; API-boundary, quality and operations stay NOT RUN here.
 `research/plan/api-lifecycle/probe.py` is the separate gap audit: never called from here.
 """
@@ -50,11 +53,12 @@ import httpx  # noqa: E402
 
 from api_lifecycle import stages as contracts  # noqa: E402
 from api_lifecycle.stages import Blocked, Failed  # noqa: E402
-from api_lifecycle.state import InvalidRun, Secrets, State, digest, utc_now  # noqa: E402
+from api_lifecycle.state import (InvalidRun, Secrets, State, digest, require_private,  # noqa: E402
+                                 utc_now, write_private)
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-TASK, GATE, BASE = "AP-11", "API-LIFECYCLE", "cd9f517c"
+TASK, GATE, BASE = "AP-11", "API-LIFECYCLE", "b05eb6f4"
 RUNNER = "tests/integration/api_lifecycle/runner.py"
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
 RANK = {PASS: 0, NOT_RUN: 1, BLOCKED: 2, INVALID: 3, FAIL: 4}
@@ -62,6 +66,34 @@ EXIT = {PASS: 0, FAIL: 1, BLOCKED: 3, NOT_RUN: 3, INVALID: 4}
 MODES = ("inspect", "isolated", "live", "cleanup")
 LIVE_MAX_REQUESTS = 6                 # verification.md: six accepted requests, not a load test
 ISOLATED_MAX_REQUESTS = 20
+
+
+def error_code(response: httpx.Response) -> str | None:
+    """A refusal's R270 code (`error.code`) or legacy `refusal`, for the evidence; never the
+    message, which may echo input."""
+    if response.status_code < 400:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    return str(error.get("code")) if isinstance(error, dict) else body.get("refusal")
+
+
+def minted_file(state_path: Path) -> Path:
+    """Keys this run minted through the key API (stage 08/12): 0600, beside the state file and
+    never in it - the state holds only their ids."""
+    return state_path.with_name(state_path.name + ".keys")
+
+
+def load_minted(state_path: Path, secrets: Secrets) -> None:
+    path = minted_file(state_path)
+    if path.exists():
+        require_private(path)
+        secrets.values.update(json.loads(path.read_text()))
 
 
 class Interrupted(Exception):
@@ -163,14 +195,59 @@ class Context:
             raise Blocked(f"BLOCKED[config] identity {name!r} is not configured")
         return found
 
+    def composed(self, owner: str) -> bool:
+        """Whether the target serves the AP package's routes (config `composed`)."""
+        return owner in (self.config.get("composed") or ())
+
+    def keep(self, name: str, secret: str, key_id: str) -> None:
+        """A key minted through the key API: its secret into the 0600 minted file (and the
+        redaction set) BEFORE anything else, its id into the state."""
+        state = self.session.state
+        self.session.secrets.values[name] = secret
+        minted = {k: v for k, v in self.session.secrets.values.items()
+                  if k in state.data.setdefault("minted", {}).values() or k == name}
+        write_private(minted_file(state.path), minted)
+        holder = next((i for i, found in (self.config.get("identities") or {}).items()
+                       if found.get("secret") == name), name)
+        state.data["minted"][holder] = name
+        state.data.setdefault("minted_ids", {})[holder] = key_id
+        state.save()
+
+    def pinned(self, name: str, read):
+        """A value a mutation's body depends on (a version read before a CAS write), read once
+        and kept in the state: a resume re-sends the identical request, never a fresh read's."""
+        kept = self.session.state.data.setdefault("pinned", {})
+        if name not in kept:
+            kept[name] = read()
+            self.session.state.save()
+        return kept[name]
+
+    def available(self, name: str) -> bool:
+        """Whether `name`'s credential resolves now (minted, or a declared isolated fixture)."""
+        try:
+            self.credential(name)
+        except Blocked:
+            return False
+        return True
+
+    def label(self, text: str) -> None:
+        """What this stage's PASS stands on when it is not the real thing (a dry run)."""
+        self.ev["label"] = text
+
+    def served(self, response, route: str, owner: str) -> None:
+        """A route the target answers with the framework's own 404/405 is not mounted."""
+        if contracts.unmounted(response):
+            raise Blocked(f"BLOCKED[{owner}] {route}: not mounted at the target "
+                          f"({response.status_code})")
+
     def credential(self, name: str) -> str:
         """A consumer key is either minted through the key API (AP-03, recorded in the
         state) or, in isolated mode only, a fixture the config declares by name."""
         found = self.identity(name)
         secret = found["secret"]
-        fixture = secret in (self.config.get("fixtures") or {})
-        if found.get("audience") == "consumer" \
-                and name not in self.session.state.data.get("minted", {}) and not fixture:
+        minted = name in self.session.state.data.get("minted", {})
+        fixture = not minted and secret in (self.config.get("fixtures") or {})
+        if found.get("audience") == "consumer" and not minted and not fixture:
             raise Blocked(f"BLOCKED[AP-03] {name}'s consumer key must be created through POST "
                           "/console/v1/keys (stage 08); a seeded key is only an isolated "
                           "mode's declared fixture")
@@ -210,27 +287,26 @@ class Context:
                 method, route.format(**(params or {})), params=query, json=json,
                 content=content, headers=sent)
         except httpx.TransportError as lost:
+            self.session.state.save()              # the counters, before the unknown outcome
             raise Interrupted(f"{method} {route}: {type(lost).__name__}") from None
-        finally:
-            self.session.state.save()
         self.ev["exchanges"].append({
             "method": method, "route": route, "origin": origin, "status": response.status_code,
             "request_id": response.headers.get("X-Request-Id") or sent["X-Request-Id"],
-            "inference_id": response.headers.get("X-Inference-Id"),
-            "location": response.headers.get("Location"),
+            "inference_id": response.headers.get("Inference-Id"),
+            "location": response.headers.get("Location"), "error": error_code(response),
             "ms": round((time.monotonic() - began) * 1000, 1), "at": utc_now()})
         return response
 
     def mutate(self, name: str, method: str, route: str, *, extract, reconcile=None,
                inference: bool = False, origin: str = "gateway", actor: str | None = None,
-               params: dict | None = None, json: object = None, content: bytes | None = None,
-               headers: dict | None = None) -> dict:
+               params: dict | None = None, query: dict | None = None, json: object = None,
+               content: bytes | None = None, headers: dict | None = None) -> dict:
         """One state-recorded mutation. Done: its recorded outputs (after `reconcile`, a GET,
         confirms them). Pending (outcome unknown): retried with the ORIGINAL key. New: the
         key and hash are saved, then the request is sent; the safe `extract` is recorded."""
         state = self.session.state
         request_hash = digest({"origin": origin, "method": method, "route": route,
-                               "params": params, "json": json,
+                               "params": params, "query": query, "json": json,
                                "content": hashlib.sha256(content).hexdigest() if content else None})
         entry = state.mutation(name)
         if entry is not None and entry["request_hash"] != request_hash:
@@ -247,15 +323,19 @@ class Context:
             if inference:
                 self._spend()
             entry = state.begin(name, method, route, request_hash)
-        response = self.call(method, route, origin=origin, actor=actor, params=params, json=json,
-                             content=content, headers={"Idempotency-Key": entry["key"],
-                                                       **(headers or {})})
+        response = self.call(method, route, origin=origin, actor=actor, params=params,
+                             query=query, json=json, content=content,
+                             headers={"Idempotency-Key": entry["key"], **(headers or {})})
         outputs = extract(response)
         state.finish(name, outputs)
         return outputs
 
     def key(self, name: str) -> str:
         return self.session.state.mutation(name)["key"]
+
+    def minted(self, holder: str) -> str | None:
+        """The id of the key this run minted for `holder`, if its secret was kept."""
+        return self.session.state.data.get("minted_ids", {}).get(holder)
 
     # --- assertions and outputs ------------------------------------------------------
     def check(self, name: str, ok, detail=None) -> bool:
@@ -294,7 +374,7 @@ def run_stages(session: Session, selected: set[str], results: list[dict]) -> lis
                  "selected": stage.sid in selected, "status": NOT_RUN, "reasons": [],
                  "routes": [f"{r}" + (f" [{r.owner}]" if r.owner else "") for r in stage.routes],
                  "needs": list(stage.needs), "prerequisites": list(stage.prerequisites),
-                 "resumed": False, "evidence": None}
+                 "resumed": False, "label": None, "evidence": None}
         results.append(entry)
         if not entry["selected"]:
             entry["reasons"].append(f"not selected in {session.mode} mode / --only")
@@ -305,13 +385,18 @@ def run_stages(session: Session, selected: set[str], results: list[dict]) -> lis
         recorded = session.state.data["stages"].get(stage.sid)
         if recorded is not None and recorded["status"] == PASS:
             entry.update(status=PASS, resumed=True, evidence=recorded.get("evidence"),
+                         label=(recorded.get("evidence") or {}).get("label"),
                          reasons=[f"passed at {recorded['at']}; resumed from the state file"])
             continue
-        missing = [f"BLOCKED[{owner}] {', '.join(routes)}: not on the base"
-                   for owner, routes in stage.missing().items()]
-        if stage.run is None:
+        composed = frozenset(session.config.get("composed") or ())
+        missing = [f"BLOCKED[{owner}] {', '.join(routes)}: not served by the target "
+                   "(config `composed`)" for owner, routes in stage.missing(composed).items()]
+        served = [r for r in stage.routes if r.owner is None or r.owner in composed]
+        if stage.run is None or not served:      # nothing of it is served: never called
             entry.update(status=BLOCKED, reasons=missing + [
-                f"BLOCKED[{why.split()[0]}] {why.split(' ', 1)[1]}" for why in stage.prerequisites])
+                f"BLOCKED[{why.split()[0]}] {why.split(' ', 1)[1]}" for why in stage.prerequisites]
+                + ([] if stage.run else [f"BLOCKED[AP-11] stage {stage.sid} has no runner "
+                                         "implementation yet (AP-11 11d/11e)"]))
             continue
         evidence, blocked = new_evidence(), []
         ctx = Context(session, stage.sid, evidence)
@@ -334,7 +419,8 @@ def run_stages(session: Session, selected: set[str], results: list[dict]) -> lis
             ctx.check(f"the stage completes (raised {type(bug).__name__})", False, bug)
         evidence["ended"] = utc_now()
         status = status_of([a["ok"] for a in evidence["assertions"]], blocked, missing)
-        entry.update(status=status, evidence=evidence, reasons=blocked + missing)
+        entry.update(status=status, evidence=evidence, reasons=blocked + missing,
+                     label=evidence.get("label"))
         session.state.data["stages"][stage.sid] = {     # redacted here too: no echo leaks
             "status": status, "outputs": ctx.published, "at": utc_now(),
             "evidence": session.secrets.redact(evidence)}
@@ -350,10 +436,17 @@ def cleanup(session: Session) -> list[dict]:
         if not how:
             outcome = "nothing to clean (expires by retention)"
         else:
-            answer = ctx.call(how["method"], how["route"], origin=how.get("origin", "gateway"),
-                              actor=how.get("actor"), params={"id": owned["id"]})
-            outcome = "cleaned" if answer.status_code < 300 else \
-                "gone" if answer.status_code in (404, 410) else f"failed {answer.status_code}"
+            try:
+                answer = ctx.call(how["method"], how["route"],
+                                  origin=how.get("origin", "gateway"), actor=how.get("actor"),
+                                  params={"id": owned["id"]},
+                                  headers={"Idempotency-Key": f"ap11-cleanup-{owned['id']}"})
+            except Blocked as why:                 # one row's credential, never the others
+                outcome = f"failed: {why}"
+            else:
+                outcome = "cleaned" if answer.status_code < 300 else \
+                    "gone" if answer.status_code in (404, 410) else \
+                    f"failed {answer.status_code}"
         owned["cleaned"] = outcome
         rows.append({"kind": owned["kind"], "id": owned["id"], "outcome": outcome})
     session.state.save()
@@ -404,6 +497,7 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
             config = load_config(config_path, args.mode)
             secrets = Secrets.load(secrets_path)
             state = State.open(args.state, target=config.get("target"))
+            load_minted(args.state, secrets)
             session = Session(args.mode, config, secrets, state, transport)
             if args.mode == "cleanup":
                 rows = cleanup(session)
@@ -444,7 +538,8 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
     payload = secrets.redact(payload)
     (args.out / "verdict.json").write_text(json.dumps(payload, indent=2, default=str))
     for entry in payload["stages"]:
-        print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}")
+        label = f"  [{entry['label']}]" if entry.get("label") else ""
+        print(f"{entry['status']:>8}  {entry['id']}  {entry['title']}{label}")
     for reason in payload["reasons"]:
         print(reason)
     print(f"gate {verdict} -> {args.out / 'verdict.json'}")

@@ -1,0 +1,2227 @@
+{
+  "task": "AP-11",
+  "gate": "API-LIFECYCLE",
+  "mode": "isolated",
+  "verdict": "BLOCKED",
+  "exit": 3,
+  "reasons": [],
+  "complete_lifecycle": false,
+  "verdicts": {
+    "lifecycle": "BLOCKED",
+    "api_boundary": "NOT RUN",
+    "quality": "NOT RUN",
+    "operations": "NOT RUN"
+  },
+  "label": "isolated: task-local services, a controlled engine and declared fixtures - never the real GPU, real judge or hosted gate",
+  "fixtures": {
+    "alpha_session": "world.py: a verified individual (GoTrue's sign-up and verification, by SQL) with an HS256 session of the world's GoTrue stand-in",
+    "beta_session": "world.py: a verified individual (GoTrue's sign-up and verification, by SQL) with an HS256 session of the world's GoTrue stand-in (a second tenant)",
+    "admin_session": "world.py: NemoStation administrator membership by SQL (operator onboarding) and an edge session",
+    "outsider_session": "world.py: a verified user without membership, edge session",
+    "flags": "world.py: signup_grant, credit_admission and lab_submission enabled by SQL (operator flags; no flag API)",
+    "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)",
+    "judge": "dry_run: JUDGE_MODE's default on the Lab unit; no judge worker or START job is composed, nothing is sent (live judging is P-10)",
+    "lab_unit_actors": "world.py lab_unit: AP-01's SessionActors stood in on the Lab unit, whose composition leaves actors=None on this base (WR-AP11C-2, api-identity-2)"
+  },
+  "pins": {
+    "base": "b05eb6f4",
+    "head": "7e295a2846fe3d3059e9202903b64b86794ad7d9",
+    "dirty": true,
+    "target": {
+      "release_label": "02305cf4cfecaf16b089422e8a97f013c95baa9d",
+      "migrations": "0001_init.sql..0064_judge_api.sql",
+      "migration_count": 62,
+      "postgres": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd",
+      "valkey": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1",
+      "s3": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372",
+      "engine": "fake_vllm.py",
+      "clickhouse": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146",
+      "lab_unit": "infrx.lab.control.app (LAB_JUDGE_API, LAB_ARTIFACTS)",
+      "ports": {
+        "postgres": 57567,
+        "valkey": 57568,
+        "s3": 57569,
+        "clickhouse": 57570
+      }
+    }
+  },
+  "target": "ap11-isolated-02305cf4cfec",
+  "state_file": "/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/ap11/d6/state/state.json",
+  "counters": {
+    "requests": 87,
+    "inference": 6
+  },
+  "started": "2026-10-02T04:34:57+00:00",
+  "seconds": 30.2,
+  "stages": [
+    {
+      "id": "01",
+      "title": "Auth/session APIs for each actor; workspace/account/capability reads",
+      "proves": "Correct roles and distinct audiences; fresh feature availability; no unauthorized membership/grants",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /lab/v1/control/models",
+        "GET /auth/v1/availability [AP-01]",
+        "GET /console/v1/me [AP-01]",
+        "GET /console/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces [AP-01]",
+        "GET /lab/v1/capabilities [AP-01]",
+        "GET /lab/v1/workspaces/{id}/members [AP-01]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:13.809Z",
+        "ended": "2026-10-02T04:35:14.002Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-b193260a-8937-4bba-a4cd-66938423c580",
+            "inference_id": "6e452670-1d79-4b42-96be-25c7fca32a5e",
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 8.4,
+            "at": "2026-10-02T04:35:13.818Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-9cabddb4-ee84-46d6-b0c0-3f30dcb49b7d",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 68.6,
+            "at": "2026-10-02T04:35:13.886Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-d3044cbb-aa9f-4aef-b95a-a1ec4b5ab42e",
+            "inference_id": null,
+            "location": null,
+            "error": "denied",
+            "ms": 22.3,
+            "at": "2026-10-02T04:35:13.909Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/control/models",
+            "origin": "lab",
+            "status": 401,
+            "request_id": "ap11-0fdb4d7a-680c-4359-9716-5eab249a9704",
+            "inference_id": null,
+            "location": null,
+            "error": "unauthenticated",
+            "ms": 3.2,
+            "at": "2026-10-02T04:35:13.912Z"
+          },
+          {
+            "method": "GET",
+            "route": "/auth/v1/availability",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-4a1eb5ba-a084-41b1-9667-66f249dceaa9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 24.3,
+            "at": "2026-10-02T04:35:13.936Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-98bca7e6-18b2-4e14-b4ba-23c33ba448cb",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 8.3,
+            "at": "2026-10-02T04:35:13.945Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-b0617db8-45da-48d7-8ccb-a8cf8ee8e494",
+            "inference_id": null,
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 13.0,
+            "at": "2026-10-02T04:35:13.958Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/capabilities",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-978d894b-31a3-4144-8311-358cd2242f80",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.5,
+            "at": "2026-10-02T04:35:13.965Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-605a5803-e2be-46a7-844b-b2a73671df55",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 5.9,
+            "at": "2026-10-02T04:35:13.971Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/capabilities",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-8ed0151c-6d2c-4bdf-a31f-02c5d3ad5f54",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.9,
+            "at": "2026-10-02T04:35:13.976Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces/{id}/members",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-e9094a56-c9cb-4bd3-b843-d504f04bc588",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 5.8,
+            "at": "2026-10-02T04:35:13.982Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-4aa0d608-8d72-4be0-b6cd-c2e7ebb0a3dc",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 5.1,
+            "at": "2026-10-02T04:35:13.987Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-7838c183-c007-49aa-8cf5-77d8807bb9bd",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 4.5,
+            "at": "2026-10-02T04:35:13.992Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/capabilities",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-2d0b39ca-bb6c-4dc1-8e08-7604af274d3c",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 4.6,
+            "at": "2026-10-02T04:35:13.997Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/workspaces/{id}/members",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-8e34a5c3-7c16-4275-9843-10a31515222e",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 4.9,
+            "at": "2026-10-02T04:35:14.002Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "a missing key is refused 401",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "a member session reads its workspace",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "a non-member session is refused",
+            "ok": true,
+            "detail": "403"
+          },
+          {
+            "name": "a forged session is refused 401",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "auth availability is a fresh read",
+            "ok": true,
+            "detail": "{'sign_in': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T04:35:13.936189+00:00'}, 'sign_up': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T04:35:13.936189+00:00'}, 'recovery': {'state': 'configured', 'reason': None, 'verified_at': '2026-10-02T04:35:13.93618"
+          },
+          {
+            "name": "a consumer session reads its own account as a session",
+            "ok": true,
+            "detail": "{'actor': {'audience': 'session', 'user_id': '31082b1b-42c5-4613-9c08-11700043b239', 'org_id': '9741db4d-e518-4227-97a3-967870321afd', 'provider_org_id': None, 'role': None, 'operator': False}, 'state': 'onboarding', 'suspended': False, 'signup_grant': {'state': 'not_granted', 'amount': None, 'grant"
+          },
+          {
+            "name": "a key is never a web session (401)",
+            "ok": true,
+            "detail": "401"
+          },
+          {
+            "name": "the account's actions are the server's: no operator console for a consumer",
+            "ok": true,
+            "detail": "{'create_key': False, 'revoke_key': False, 'claim_signup_grant': True, 'operator_console': False}"
+          },
+          {
+            "name": "the administrator's workspace and role",
+            "ok": true,
+            "detail": "{'b0000001-0000-4000-8000-000000000001': 'administrator'}"
+          },
+          {
+            "name": "the administrator's capabilities include member management",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the member list names the administrator only by membership",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "outsider holds no workspace",
+            "ok": true,
+            "detail": "[]"
+          },
+          {
+            "name": "consumer_a_web holds no workspace",
+            "ok": true,
+            "detail": "[]"
+          },
+          {
+            "name": "an outsider has no capabilities there",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "an outsider cannot list the members",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 15,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "admin_session",
+          "outsider_session",
+          "alpha_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "02",
+      "title": "POST model project; start pinned import or upload parts/complete",
+      "proves": "Empty workspace succeeds; manifest hashes cover all actual model files; operation completes once",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-04] POST /lab/v1/control/model-projects, POST /lab/v1/artifacts/uploads, POST /lab/v1/artifacts/uploads/{id}/complete, POST /lab/v1/artifacts/imports, GET /lab/v1/operations/{id}: not served by the target (config `composed`)"
+      ],
+      "routes": [
+        "POST /lab/v1/control/model-projects [AP-04]",
+        "POST /lab/v1/artifacts/uploads [AP-04]",
+        "POST /lab/v1/artifacts/uploads/{id}/complete [AP-04]",
+        "POST /lab/v1/artifacts/imports [AP-04]",
+        "GET /lab/v1/operations/{id} [AP-04]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    },
+    {
+      "id": "03",
+      "title": "GET verified artifact; create immutable serving revision",
+      "proves": "Actual source commit, model/card/schema/harness/processor/runtime pins, supported hardware profile",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-04] GET /lab/v1/artifacts/{id}, POST /lab/v1/control/model-projects/{id}/revisions: not served by the target (config `composed`)"
+      ],
+      "routes": [
+        "GET /lab/v1/artifacts/{id} [AP-04]",
+        "POST /lab/v1/control/model-projects/{id}/revisions [AP-04]"
+      ],
+      "needs": [
+        "02"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    },
+    {
+      "id": "04",
+      "title": "POST private deployment; poll its operation and detail",
+      "proves": "Isolated resource allocated; real engine reports matching identity; state is not inferred from record presence",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-05] GET /lab/v1/hosting-profiles, POST /lab/v1/control/deployments, GET /lab/v1/control/deployments/{id}, GET /lab/v1/control/deployments/{id}/readiness: not served by the target (config `composed`)",
+        "BLOCKED[GPU-TARGET] an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "routes": [
+        "GET /lab/v1/hosting-profiles [AP-05]",
+        "POST /lab/v1/control/deployments [AP-05]",
+        "GET /lab/v1/control/deployments/{id} [AP-05]",
+        "GET /lab/v1/control/deployments/{id}/readiness [AP-05]"
+      ],
+      "needs": [
+        "03"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    },
+    {
+      "id": "05",
+      "title": "Operator private rate/funding API; bounded smoke; issue provider-dev key",
+      "proves": "Approved private CREDIT meter; exact readiness receipt; key audience/endpoint scope correct; no public exposure",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] POST /operator/v1/deployments/{id}/dev-rate, POST /operator/v1/dev-wallet-grants, GET /lab/v1/control/dev-wallet, POST /lab/v1/control/endpoints/{id}/keys: not served by the target (config `composed`)",
+        "BLOCKED[AP-05] POST /lab/v1/control/deployments/{id}/smoke: not served by the target (config `composed`)",
+        "BLOCKED[GPU-TARGET] an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "routes": [
+        "POST /operator/v1/deployments/{id}/dev-rate [AP-06]",
+        "POST /operator/v1/dev-wallet-grants [AP-06]",
+        "GET /lab/v1/control/dev-wallet [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/smoke [AP-05]",
+        "POST /lab/v1/control/endpoints/{id}/keys [AP-06]"
+      ],
+      "needs": [
+        "04"
+      ],
+      "prerequisites": [
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    },
+    {
+      "id": "06",
+      "title": "Call private endpoint with finite-video fixture",
+      "proves": "Real media processing and response; charge/usage receipt; no text-only substitute for modality smoke",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 04 to pass first (it is not run)"
+      ],
+      "routes": [
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [
+        "AP-06 a provider-dev key scoped to the private endpoint (stage 05)",
+        "GPU-TARGET an isolated GPU target and resource budget (verification.md prerequisite 3)"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:14.007Z",
+        "ended": "2026-10-02T04:35:14.007Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "07",
+      "title": "Provider administrator proposes; operator approves through API",
+      "proves": "Expected listing version, approved rates/limits and candidate receipts validated; decision audited",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[stage] needs stage 04 to pass first (it is not run)",
+        "BLOCKED[AP-06] GET /operator/v1/publication-proposals, POST /operator/v1/publication-proposals/{id}/approve: not served by the target (config `composed`)"
+      ],
+      "routes": [
+        "POST /lab/v1/control/proposals",
+        "GET /operator/v1/publication-proposals [AP-06]",
+        "POST /operator/v1/publication-proposals/{id}/approve [AP-06]"
+      ],
+      "needs": [
+        "05"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:14.013Z",
+        "ended": "2026-10-02T04:35:14.013Z",
+        "exchanges": [],
+        "assertions": [],
+        "versions": {},
+        "counters": {
+          "requests": 0,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "08",
+      "title": "GET public catalog; GET account; claim grant; create consumer A key",
+      "proves": "Newly published test listing appears with truthful contract; one individual grant; one key despite retried creation",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/models",
+        "GET /console/v1/me [AP-01]",
+        "POST /console/v1/signup-grant/claim [AP-03]",
+        "POST /console/v1/keys [AP-03]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:14.019Z",
+        "ended": "2026-10-02T04:35:14.283Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/models",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-c401ffaf-bd4b-4dfc-b9f0-c647fbb54e67",
+            "inference_id": "a0487bce-f8cc-409e-b9bf-6b66289deb99",
+            "location": null,
+            "error": null,
+            "ms": 10.4,
+            "at": "2026-10-02T04:35:14.029Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-7f19cfac-d8b2-4af9-870a-68c433364e27",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 22.3,
+            "at": "2026-10-02T04:35:14.059Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-b1e0e465-67ef-4305-abb7-46bc82c16b07",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 10.2,
+            "at": "2026-10-02T04:35:14.076Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-9e903416-4496-4619-8aa7-9ba202e3199b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.0,
+            "at": "2026-10-02T04:35:14.083Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-85cf6020-8034-4f57-9103-da6c5ea92f02",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 13.9,
+            "at": "2026-10-02T04:35:14.105Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-0c8aba74-951c-4e82-9605-ec1fb90d25c3",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.4,
+            "at": "2026-10-02T04:35:14.128Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-c679eb63-6f38-4311-ac18-57107428a335",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 17.7,
+            "at": "2026-10-02T04:35:14.146Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-b858d13b-6eb5-437e-81af-367112db6d2a",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 16.8,
+            "at": "2026-10-02T04:35:14.174Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/signup-grant/claim",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-ac8fe5a1-4397-4878-a187-61598b7e5cc1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 8.8,
+            "at": "2026-10-02T04:35:14.188Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-78abfb44-f086-437e-baa7-ea461c7fd8d2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 6.2,
+            "at": "2026-10-02T04:35:14.194Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-3b88d020-91d1-4730-921f-2ce4ac85437b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 12.9,
+            "at": "2026-10-02T04:35:14.214Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-df99ba55-6ce2-4a79-8640-d92a5cb80a6b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.6,
+            "at": "2026-10-02T04:35:14.237Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-d1886da7-08cd-4978-9e41-ce29f313db70",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 17.8,
+            "at": "2026-10-02T04:35:14.255Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-dee02196-2120-4506-96fd-0b219c4e3e32",
+            "inference_id": "d22745de-883c-4272-8af2-aacb316a4030",
+            "location": null,
+            "error": "not_found",
+            "ms": 12.3,
+            "at": "2026-10-02T04:35:14.274Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 401,
+            "request_id": "ap11-deebaaf1-7bf5-4f8c-8fe3-24ce975d5f51",
+            "inference_id": null,
+            "location": null,
+            "error": "invalid_api_key",
+            "ms": 2.4,
+            "at": "2026-10-02T04:35:14.277Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/me",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-99a6c4ed-fc29-48f3-a57a-9ab245f634df",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 5.7,
+            "at": "2026-10-02T04:35:14.283Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the catalog lists the model under test",
+            "ok": true,
+            "detail": "['nemostation/marlin-2b']"
+          },
+          {
+            "name": "consumer_a's signup grant is claimed",
+            "ok": true,
+            "detail": "{'http': 200, 'status': 'granted', 'credit': {'amount': '10000.00000000', 'unit': 'CREDIT'}}"
+          },
+          {
+            "name": "consumer_a: a second claim replays, never a second grant",
+            "ok": true,
+            "detail": "replayed"
+          },
+          {
+            "name": "consumer_a: one individual grant in CREDIT on the account",
+            "ok": true,
+            "detail": "{'state': 'granted', 'amount': {'amount': '10000.00000000', 'unit': 'CREDIT'}, 'granted_at': '2026-10-02T04:35:14.043509Z'}"
+          },
+          {
+            "name": "consumer_a's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': 'a9794f85-f00d-419b-9a06-bcd45125f4e2', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_a: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_a: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "consumer_b's signup grant is claimed",
+            "ok": true,
+            "detail": "{'http': 200, 'status': 'granted', 'credit': {'amount': '10000.00000000', 'unit': 'CREDIT'}}"
+          },
+          {
+            "name": "consumer_b: a second claim replays, never a second grant",
+            "ok": true,
+            "detail": "replayed"
+          },
+          {
+            "name": "consumer_b: one individual grant in CREDIT on the account",
+            "ok": true,
+            "detail": "{'state': 'granted', 'amount': {'amount': '10000.00000000', 'unit': 'CREDIT'}, 'granted_at': '2026-10-02T04:35:14.162552Z'}"
+          },
+          {
+            "name": "consumer_b's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': 'b5728849-4fb1-4c08-abdc-04c762ba794e', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_b: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_b: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "a valid consumer key is authenticated",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "a consumer key is never a web session (401)",
+            "ok": true,
+            "detail": "401"
+          }
+        ],
+        "versions": {
+          "listing": {
+            "id": "nemostation/marlin-2b",
+            "created": 1788220800,
+            "owned_by": "nemostation",
+            "listing_version": 1
+          }
+        },
+        "counters": {
+          "requests": 16,
+          "inference": 0
+        },
+        "owned": [
+          {
+            "kind": "key",
+            "id": "a9794f85-f00d-419b-9a06-bcd45125f4e2"
+          },
+          {
+            "kind": "key",
+            "id": "b5728849-4fb1-4c08-abdc-04c762ba794e"
+          }
+        ],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "09",
+      "title": "Allocate consumer upload; PUT bytes; complete; submit async video job",
+      "proves": "Upload not mistaken for model artifact; stable idempotency; result references the requested published serving version",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /v1/uploads",
+        "PUT /v1/uploads/{handle}",
+        "POST /v1/uploads/{handle}/complete",
+        "POST /v1/jobs"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:14.288Z",
+        "ended": "2026-10-02T04:35:14.528Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/uploads",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-073bb596-1171-4417-9a47-bb50d9b985f1",
+            "inference_id": "4ec48d99-53db-4687-be3e-848b5d376620",
+            "location": null,
+            "error": null,
+            "ms": 7.8,
+            "at": "2026-10-02T04:35:14.305Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/v1/uploads/{handle}",
+            "origin": "gateway",
+            "status": 204,
+            "request_id": "ap11-dc428435-0199-4dea-966b-63b071a7ff9e",
+            "inference_id": "f880f3ad-f47a-4c85-8c86-aebaaafcd0f7",
+            "location": null,
+            "error": null,
+            "ms": 25.4,
+            "at": "2026-10-02T04:35:14.350Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/uploads/{handle}/complete",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-142f3784-e750-4bd9-9cd6-28e61886981d",
+            "inference_id": "76b6bc7e-30b7-45b3-b75e-819167459358",
+            "location": null,
+            "error": null,
+            "ms": 31.4,
+            "at": "2026-10-02T04:35:14.396Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-6a5dc055-4030-43fe-964c-c33efa8d9ab5",
+            "inference_id": "b17f8483-c367-4128-a358-d500e5b2b258",
+            "location": "/v1/jobs/job_d80709e3d6fd40378b0759f654fea824",
+            "error": null,
+            "ms": 67.0,
+            "at": "2026-10-02T04:35:14.482Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 202,
+            "request_id": "ap11-df060d91-a897-4e12-95ce-9ff38cddf8c2",
+            "inference_id": "b17f8483-c367-4128-a358-d500e5b2b258",
+            "location": "/v1/jobs/job_d80709e3d6fd40378b0759f654fea824",
+            "error": null,
+            "ms": 14.3,
+            "at": "2026-10-02T04:35:14.515Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/jobs",
+            "origin": "gateway",
+            "status": 409,
+            "request_id": "ap11-5fcf0de3-f1bd-4242-af23-4a4534175c70",
+            "inference_id": "d5f8c97d-f8b7-4f74-a8ba-821b972cc4d3",
+            "location": null,
+            "error": "idempotency_conflict",
+            "ms": 7.6,
+            "at": "2026-10-02T04:35:14.528Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the upload ticket is issued 201",
+            "ok": true,
+            "detail": "201"
+          },
+          {
+            "name": "the bytes are stored 204",
+            "ok": true,
+            "detail": "204"
+          },
+          {
+            "name": "the upload completes 200",
+            "ok": true,
+            "detail": "{'status': 200, 'state': 'finalized', 'fields': ['media', 'state', 'upload_handle']}"
+          },
+          {
+            "name": "the upload is consumer media, not a model artifact",
+            "ok": true,
+            "detail": "['media', 'state', 'upload_handle']"
+          },
+          {
+            "name": "the job is accepted 202",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a replay returns the same job",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "a changed body under the key is 409",
+            "ok": true,
+            "detail": "409"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 6,
+          "inference": 3
+        },
+        "owned": [
+          {
+            "kind": "upload",
+            "id": "upl_ZtceyC6qbBChLakPDZj2NyR2d4EeaanyFMT1GLKq3bo"
+          },
+          {
+            "kind": "job",
+            "id": "job_d80709e3d6fd40378b0759f654fea824"
+          }
+        ],
+        "fixtures": [],
+        "resumed": []
+      }
+    },
+    {
+      "id": "10",
+      "title": "Poll status/result and console request/ledger APIs",
+      "proves": "Terminal result and one exact CREDIT settlement; reserve released correctly; request/deployment/listing/rate pins agree",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /v1/jobs/{handle}",
+        "GET /v1/jobs/{handle}/result",
+        "GET /console/v1/requests/{id} [AP-02]",
+        "GET /console/v1/credit-ledger [AP-02]"
+      ],
+      "needs": [
+        "09"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:14.535Z",
+        "ended": "2026-10-02T04:35:15.130Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-71e52a69-e527-44e7-9967-9b76183c2238",
+            "inference_id": "b17f8483-c367-4128-a358-d500e5b2b258",
+            "location": null,
+            "error": null,
+            "ms": 4.2,
+            "at": "2026-10-02T04:35:14.540Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-77173644-bd4a-4ef4-9519-f1ba98ff372a",
+            "inference_id": "b17f8483-c367-4128-a358-d500e5b2b258",
+            "location": null,
+            "error": null,
+            "ms": 4.5,
+            "at": "2026-10-02T04:35:15.044Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}/result",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-1bef4279-9993-4601-a9c4-e32a887a4fe1",
+            "inference_id": "b17f8483-c367-4128-a358-d500e5b2b258",
+            "location": null,
+            "error": null,
+            "ms": 5.7,
+            "at": "2026-10-02T04:35:15.050Z"
+          },
+          {
+            "method": "GET",
+            "route": "/v1/jobs/{handle}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-4b731349-9b09-47be-907d-9ac8c53f58de",
+            "inference_id": "aa5be253-d62d-4b81-8342-c287e7ffa4a6",
+            "location": null,
+            "error": "not_found",
+            "ms": 18.1,
+            "at": "2026-10-02T04:35:15.068Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-92fe60e4-64ba-4866-86f1-c072c0940dd9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 20.7,
+            "at": "2026-10-02T04:35:15.089Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/credit-ledger",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-e0d71095-0098-4dc0-83a5-92b0964a33b5",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 21.1,
+            "at": "2026-10-02T04:35:15.110Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-9da2e7b8-26a4-42fb-988a-f7e05bee845f",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 20.1,
+            "at": "2026-10-02T04:35:15.130Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the job succeeded",
+            "ok": true,
+            "detail": "succeeded"
+          },
+          {
+            "name": "the result names the model under test",
+            "ok": true,
+            "detail": "nemostation/marlin-2b"
+          },
+          {
+            "name": "the result reports usage",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "consumer B cannot read A's job",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "the console reads the request",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the console's pins agree with the call",
+            "ok": true,
+            "detail": "{'requested_model': 'nemostation/marlin-2b', 'model_revision': 'nemostation/marlin-2b@2026-09-01', 'state': 'succeeded'}"
+          },
+          {
+            "name": "one CREDIT settlement, the reserve released",
+            "ok": true,
+            "detail": "{'settlement_state': 'settled', 'hold_state': 'settled'}"
+          },
+          {
+            "name": "the ledger holds exactly that one debit for the request",
+            "ok": true,
+            "detail": "[('inference_debit', '-0.54080000')]"
+          },
+          {
+            "name": "consumer B's console cannot read A's request",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 7,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "11",
+      "title": "Repeat bounded sync and SSE calls to cover supported modes",
+      "proves": "Correct sync behavior, stream journal/disconnect rules; no implicit async conversion; exact usage/settlement per request",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /v1/chat/completions",
+        "GET /console/v1/requests/{id} [AP-02]"
+      ],
+      "needs": [],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:15.137Z",
+        "ended": "2026-10-02T04:35:15.633Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-204e2eeb-77c5-4274-9251-da00960c118f",
+            "inference_id": "ccbf274d-0203-4acb-8dbc-e4921411812c",
+            "location": null,
+            "error": null,
+            "ms": 197.9,
+            "at": "2026-10-02T04:35:15.352Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-559addc3-e697-4b80-bad6-aa6f10c47d04",
+            "inference_id": "4fa1baa8-76df-42e1-8fa7-c99c4c300abd",
+            "location": null,
+            "error": null,
+            "ms": 190.5,
+            "at": "2026-10-02T04:35:15.566Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-98c861d1-75d1-4a83-bc13-3d8af50ae6f4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 24.7,
+            "at": "2026-10-02T04:35:15.598Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/credit-ledger",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-7b8624d7-ea9e-42d9-8913-96c5a9f14021",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 17.2,
+            "at": "2026-10-02T04:35:15.615Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/requests/{id}",
+            "origin": "gateway",
+            "status": 404,
+            "request_id": "ap11-3d15418f-881b-4790-8b62-67d6134b8fea",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 17.5,
+            "at": "2026-10-02T04:35:15.633Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "sync answers 200 in-line, never 202",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the answer names its request (Inference-Id)",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "sync names the model and reports usage",
+            "ok": true,
+            "detail": "{'status': 200, 'object': 'chat.completion', 'model': 'nemostation/marlin-2b', 'usage': True, 'request_id': 'ccbf274d-0203-4acb-8dbc-e4921411812c'}"
+          },
+          {
+            "name": "SSE is an event stream",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE ends with [DONE]",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "SSE carries content for the model",
+            "ok": true,
+            "detail": "{'status': 200, 'event_stream': True, 'done': True, 'content': True, 'models': ['nemostation/marlin-2b']}"
+          },
+          {
+            "name": "the console reads the request",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "the console's pins agree with the call",
+            "ok": true,
+            "detail": "{'requested_model': 'nemostation/marlin-2b', 'model_revision': 'nemostation/marlin-2b@2026-09-01', 'state': 'succeeded'}"
+          },
+          {
+            "name": "one CREDIT settlement, the reserve released",
+            "ok": true,
+            "detail": "{'settlement_state': 'settled', 'hold_state': 'settled'}"
+          },
+          {
+            "name": "the ledger holds exactly that one debit for the request",
+            "ok": true,
+            "detail": "[('inference_debit', '-0.54080000')]"
+          },
+          {
+            "name": "consumer B's console cannot read A's request",
+            "ok": true,
+            "detail": "404"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 5,
+          "inference": 2
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "beta_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "12",
+      "title": "Enable capture and scoped sharing/external_judging grants for test key/data; submit one captured request",
+      "proves": "Permission persisted through API; prior uncaptured request stays uncaptured; use remaining request budget",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "PUT /console/v1/keys/{id}/capture [AP-07]",
+        "POST /console/v1/data-grants [AP-07]",
+        "GET /console/v1/data-grants [AP-07]",
+        "POST /v1/chat/completions"
+      ],
+      "needs": [
+        "08"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:15.640Z",
+        "ended": "2026-10-02T04:35:16.031Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-89a76045-723b-4ef6-a0fe-fcdb877b52e1",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 10.1,
+            "at": "2026-10-02T04:35:15.658Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-a33a86df-a046-4d0a-89ba-9a577f392216",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 8.0,
+            "at": "2026-10-02T04:35:15.685Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/keys",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-300d3c6c-e8a3-4349-a7ea-c68c66274fa4",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 20.1,
+            "at": "2026-10-02T04:35:15.705Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-use",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-6b208efd-4820-4a84-85a6-d9261b86c04c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 11.6,
+            "at": "2026-10-02T04:35:15.724Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/console/v1/keys/{id}/capture",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-cb7271aa-4c1a-4306-93ac-233571be3e0c",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 12.6,
+            "at": "2026-10-02T04:35:15.749Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-b82ce598-dced-44bd-bc0f-fccfea8ad35e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.0,
+            "at": "2026-10-02T04:35:15.764Z"
+          },
+          {
+            "method": "POST",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 201,
+            "request_id": "ap11-07c27f28-0b24-43e4-83a3-fc6f0ea43431",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 11.4,
+            "at": "2026-10-02T04:35:15.788Z"
+          },
+          {
+            "method": "GET",
+            "route": "/console/v1/data-grants",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-e1045a61-db8b-4ea0-a32c-90c2bb319355",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 7.1,
+            "at": "2026-10-02T04:35:15.810Z"
+          },
+          {
+            "method": "POST",
+            "route": "/v1/chat/completions",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-d3dfe1f4-36b7-4c08-a603-85143659de2b",
+            "inference_id": "e3c4b59b-4d21-4e5c-a92d-c594b70cbc62",
+            "location": null,
+            "error": null,
+            "ms": 204.8,
+            "at": "2026-10-02T04:35:16.024Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "consumer_a_capture's key is created",
+            "ok": true,
+            "detail": "{'status': 201, 'key_id': 'c41bd8c5-2bb7-472f-af16-0f234a357399', 'secret_returned': True}"
+          },
+          {
+            "name": "consumer_a_capture: a retried creation is the same key, its secret never re-revealed",
+            "ok": true,
+            "detail": "{'replayed': True, 'secret_returned': False}"
+          },
+          {
+            "name": "consumer_a_capture: one live key despite the retried creation",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "capture is enabled through the API",
+            "ok": true,
+            "detail": "200"
+          },
+          {
+            "name": "only the test key captures; the earlier key stays uncaptured",
+            "ok": true,
+            "detail": "{'a9794f85-f00d-419b-9a06-bcd45125f4e2': 'off', 'c41bd8c5-2bb7-472f-af16-0f234a357399': 'full'}"
+          },
+          {
+            "name": "the grant is written",
+            "ok": true,
+            "detail": "{'status': 201, 'grant_id': '2aca2e69-6dd4-4381-99d2-7eecca59a2ab', 'version': 1, 'state': 'active'}"
+          },
+          {
+            "name": "the grant is persisted with exactly the purposes asked",
+            "ok": true,
+            "detail": "[{'grant_id': '2aca2e69-6dd4-4381-99d2-7eecca59a2ab', 'version': 1, 'provider_org_id': 'b0000001-0000-4000-8000-000000000001', 'model_ids': ['d0000001-0000-4000-8000-000000000001'], 'categories': ['request_content', 'response_content', 'feedback'], 'purposes': ['provider_sharing', 'external_judging'"
+          },
+          {
+            "name": "the captured request is answered in-line",
+            "ok": true,
+            "detail": "{'status': 200, 'request_id': 'e3c4b59b-4d21-4e5c-a92d-c594b70cbc62'}"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 9,
+          "inference": 1
+        },
+        "owned": [
+          {
+            "kind": "key",
+            "id": "c41bd8c5-2bb7-472f-af16-0f234a357399"
+          },
+          {
+            "kind": "data_grant",
+            "id": "2aca2e69-6dd4-4381-99d2-7eecca59a2ab"
+          }
+        ],
+        "fixtures": [
+          "alpha_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "13",
+      "title": "Poll Lab trace list/detail for that request; inspect authorized media",
+      "proves": "Same request ID/pins; real capture content/timing/usage; metadata-only and unavailable content distinguished",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /lab/v1/traces",
+        "GET /lab/v1/traces/{id}"
+      ],
+      "needs": [
+        "12"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:16.037Z",
+        "ended": "2026-10-02T04:35:24.474Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-84129220-05e3-479b-b75a-9e8d1efb784b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 39.4,
+            "at": "2026-10-02T04:35:16.076Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-27ad887e-f530-4ee1-9172-98f68d3540b8",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 37.4,
+            "at": "2026-10-02T04:35:18.114Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-1819736e-3f66-4e4d-84c9-069e92cfc674",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 38.0,
+            "at": "2026-10-02T04:35:20.152Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-7f504ee3-bf87-4d23-817d-31191d3d4869",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 36.5,
+            "at": "2026-10-02T04:35:22.189Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-b3a17b3a-e3cb-4ca9-9dd4-2e4e5c8ff207",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 99.6,
+            "at": "2026-10-02T04:35:24.288Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-30bf1803-fe19-40c8-a108-c3f4e2a204d0",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 115.3,
+            "at": "2026-10-02T04:35:24.404Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 404,
+            "request_id": "ap11-5de04d9e-bc48-4e3a-a8a0-d45025d68f9a",
+            "inference_id": null,
+            "location": null,
+            "error": "not_found",
+            "ms": 42.6,
+            "at": "2026-10-02T04:35:24.446Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-98d58875-9cb9-43ca-9937-13352466a8df",
+            "inference_id": null,
+            "location": null,
+            "error": "denied",
+            "ms": 27.1,
+            "at": "2026-10-02T04:35:24.474Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the captured request is listed in the Lab",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "same request id and pins as the call",
+            "ok": true,
+            "detail": "{'serving_version_id': 'd0000003-0000-4000-8000-000000000003', 'model_revision': 'nemostation/marlin-2b', 'price_version': 'rc_marlin2b_2026_09_provisional', 'model_id': 'd0000001-0000-4000-8000-000000000001'}"
+          },
+          {
+            "name": "the authorized content is the request's real capture",
+            "ok": true,
+            "detail": "content"
+          },
+          {
+            "name": "timing is measured or labelled unavailable, never zero",
+            "ok": true,
+            "detail": "186"
+          },
+          {
+            "name": "the uncaptured earlier request has no content in the Lab",
+            "ok": true,
+            "detail": "404"
+          },
+          {
+            "name": "an outsider cannot read the trace",
+            "ok": true,
+            "detail": "403"
+          }
+        ],
+        "versions": {
+          "trace": {
+            "mode": "full",
+            "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "price_version": "rc_marlin2b_2026_09_provisional"
+          }
+        },
+        "counters": {
+          "requests": 8,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "admin_session",
+          "outsider_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "14",
+      "title": "Create rubric/config; estimate; set budget; POST judge run; poll results",
+      "proves": "Approved live adapter invoked once; video/SOP evidence available; real judge result or honest abstention; exact provider spend",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /lab/v1/judge/models [AP-08]",
+        "GET /lab/v1/judge/rubrics [AP-08]",
+        "POST /lab/v1/judge/configs [AP-08]",
+        "POST /lab/v1/judge/estimates [AP-08]",
+        "PUT /lab/v1/judge/budgets/{payer_id} [AP-08]",
+        "POST /lab/v1/judge/runs [AP-08]",
+        "GET /lab/v1/judge/runs/{id} [AP-08]",
+        "GET /lab/v1/judge/runs/{id}/results [AP-08]"
+      ],
+      "needs": [
+        "13"
+      ],
+      "prerequisites": [
+        "P-10 an approved media-capable judge, its secret reference, payer and spend limit"
+      ],
+      "resumed": false,
+      "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)",
+      "evidence": {
+        "started": "2026-10-02T04:35:24.481Z",
+        "ended": "2026-10-02T04:35:24.820Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/console/v1/credits",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-0d5dbc6e-6e4d-4ee2-a2b6-df70b76d47ec",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 23.2,
+            "at": "2026-10-02T04:35:24.504Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/models",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-3574f786-663f-4ece-8772-f1c6cee84568",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 14.8,
+            "at": "2026-10-02T04:35:24.519Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/rubrics",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-40a547c7-c573-47c1-9fc2-3fec85a94670",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 14.1,
+            "at": "2026-10-02T04:35:24.533Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/configs",
+            "origin": "lab",
+            "status": 201,
+            "request_id": "ap11-8156a289-bd8b-4c92-84f7-e226d302405f",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 30.9,
+            "at": "2026-10-02T04:35:24.569Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/estimates",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d254c073-5bb2-49d7-89a5-d28884029a67",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 33.4,
+            "at": "2026-10-02T04:35:24.608Z"
+          },
+          {
+            "method": "PUT",
+            "route": "/lab/v1/judge/budgets/{payer}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-0e8b082a-1b56-41ed-8036-aca4977ba598",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 40.0,
+            "at": "2026-10-02T04:35:24.653Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/runs",
+            "origin": "lab",
+            "status": 202,
+            "request_id": "ap11-1c5dfccf-fad4-4a19-9f55-a53cd6f95727",
+            "inference_id": null,
+            "location": "/lab/v1/judge/runs/5c831730-7e79-56dc-9110-0f6ee26986b1?provider_org_id=b0000001-0000-4000-8000-000000000001",
+            "error": null,
+            "ms": 48.4,
+            "at": "2026-10-02T04:35:24.714Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/runs",
+            "origin": "lab",
+            "status": 202,
+            "request_id": "ap11-80d336a9-281b-47c2-9dce-d14514ca8692",
+            "inference_id": null,
+            "location": "/lab/v1/judge/runs/5c831730-7e79-56dc-9110-0f6ee26986b1?provider_org_id=b0000001-0000-4000-8000-000000000001",
+            "error": null,
+            "ms": 42.0,
+            "at": "2026-10-02T04:35:24.764Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/runs/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-d5c85292-6d97-4a56-ac6b-80a36bb07f04",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 28.6,
+            "at": "2026-10-02T04:35:24.792Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/runs/{id}/results",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-995ad1de-e111-40d6-9b38-99c7a3cafebf",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 27.4,
+            "at": "2026-10-02T04:35:24.820Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the judge models are truthful: none listed means unavailable",
+            "ok": true,
+            "detail": "unavailable"
+          },
+          {
+            "name": "a reviewed rubric version with criteria and an output schema",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "the judge configuration is created",
+            "ok": true,
+            "detail": "{'status': 201, 'config_id': '25448c4b-1c06-5b9c-b882-01d960c3e935'}"
+          },
+          {
+            "name": "the estimate is a report, never an authority to spend",
+            "ok": true,
+            "detail": "False"
+          },
+          {
+            "name": "the PROVIDER_USD budget is set",
+            "ok": true,
+            "detail": "{'status': 200, 'limit': {'amount': '1.00000000', 'unit': 'PROVIDER_USD'}}"
+          },
+          {
+            "name": "a replayed run request is the same run",
+            "ok": true,
+            "detail": "202"
+          },
+          {
+            "name": "dry run: the run is durable and sends nothing, spends nothing",
+            "ok": true,
+            "detail": "{'domain_state': 'queued', 'sent': 0, 'settled': None}"
+          },
+          {
+            "name": "dry run: no result is ever scored",
+            "ok": true,
+            "detail": "0"
+          }
+        ],
+        "versions": {
+          "judge": {
+            "mode": "dry_run",
+            "judge_model": "ap11-judge",
+            "rubric_version": 1
+          }
+        },
+        "counters": {
+          "requests": 10,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "admin_session"
+        ],
+        "resumed": [],
+        "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)"
+      }
+    },
+    {
+      "id": "15",
+      "title": "Read consumer credits and provider budget after judge",
+      "proves": "Consumer not charged for provider judging; run replay does not duplicate spend; estimates separate from settled cost",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "GET /console/v1/credits [AP-02]",
+        "GET /lab/v1/judge/budgets [AP-08]"
+      ],
+      "needs": [
+        "14"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)",
+      "evidence": {
+        "started": "2026-10-02T04:35:24.834Z",
+        "ended": "2026-10-02T04:35:24.948Z",
+        "exchanges": [
+          {
+            "method": "GET",
+            "route": "/console/v1/credits",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-5e863776-8074-4616-8e87-e2fc4c96bdc9",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 19.8,
+            "at": "2026-10-02T04:35:24.854Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/budgets",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-8a261413-fbe0-43a0-859d-e4c53bba2af2",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 27.8,
+            "at": "2026-10-02T04:35:24.882Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/runs",
+            "origin": "lab",
+            "status": 202,
+            "request_id": "ap11-f9b6f0d8-8a24-49fc-9242-dbc6b367d977",
+            "inference_id": null,
+            "location": "/lab/v1/judge/runs/5c831730-7e79-56dc-9110-0f6ee26986b1?provider_org_id=b0000001-0000-4000-8000-000000000001",
+            "error": null,
+            "ms": 38.8,
+            "at": "2026-10-02T04:35:24.921Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/budgets",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-34970289-eccf-41ab-bf27-170542a859d7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 26.7,
+            "at": "2026-10-02T04:35:24.948Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the consumer is not charged for the provider's judging",
+            "ok": true,
+            "detail": "{'available': '9997.83680000', 'ledger_total': '9997.83680000'}"
+          },
+          {
+            "name": "the payer's budget is read",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "spend is PROVIDER_USD, reserved and settled kept apart",
+            "ok": true,
+            "detail": null
+          },
+          {
+            "name": "dry run: nothing reserved, nothing settled",
+            "ok": true,
+            "detail": "{'reserved': '0.00000000', 'settled': '0.00000000'}"
+          },
+          {
+            "name": "a replayed run never duplicates spend",
+            "ok": true,
+            "detail": null
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 4,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "admin_session"
+        ],
+        "resumed": [],
+        "label": "dry-run: the judge run was accepted and accounted through the API; nothing was sent to a judge, nothing spent, no result scored (JUDGE_MODE=dry_run; a live judge is P-10)"
+      }
+    },
+    {
+      "id": "16",
+      "title": "Submit human review; read review/calibration",
+      "proves": "Immutable reviewed provenance; inadequate reference sample shows insufficient calibration",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "POST /lab/v1/traces/{id}/reviews [AP-08]",
+        "GET /lab/v1/traces/{id}/feedback [AP-08]",
+        "GET /lab/v1/judge/calibration [AP-08]"
+      ],
+      "needs": [
+        "13",
+        "14"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:24.956Z",
+        "ended": "2026-10-02T04:35:25.105Z",
+        "exchanges": [
+          {
+            "method": "POST",
+            "route": "/lab/v1/traces/{id}/reviews",
+            "origin": "lab",
+            "status": 201,
+            "request_id": "ap11-9ae28c12-b0c4-488e-b45d-4e966792c29e",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 30.6,
+            "at": "2026-10-02T04:35:24.997Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/traces/{id}/reviews",
+            "origin": "lab",
+            "status": 201,
+            "request_id": "ap11-540fefc9-838c-49dc-8d94-39158a828ebf",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 27.9,
+            "at": "2026-10-02T04:35:25.034Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}/feedback",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-71c03082-8fe2-47c5-b6c3-71605a766372",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 41.0,
+            "at": "2026-10-02T04:35:25.075Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/judge/calibration",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-c3d5ef9a-1d10-4634-af36-c6544102f965",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 30.1,
+            "at": "2026-10-02T04:35:25.105Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the human review is stored",
+            "ok": true,
+            "detail": "{'status': 201, 'review_id': 'd8a0d161-e488-5266-8642-c7a05d3afa04', 'provenance': 'human', 'verdict': 'pass'}"
+          },
+          {
+            "name": "the review is immutable: a replay is the same review",
+            "ok": true,
+            "detail": "d8a0d161-e488-5266-8642-c7a05d3afa04"
+          },
+          {
+            "name": "the review is read back once, provenance human, apart from customer signals",
+            "ok": true,
+            "detail": "1"
+          },
+          {
+            "name": "an inadequate reference sample is never calibrated",
+            "ok": true,
+            "detail": "{'state': 'uncalibrated', 'labels': 0, 'required': 30}"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 4,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "admin_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "17",
+      "title": "Revoke sharing/judging grant; retry reads and enqueue a follow-up judge",
+      "proves": "Future prohibited content read/egress refused; no permanent content bypass; aggregate access follows its separate policy",
+      "selected": true,
+      "status": "PASS",
+      "reasons": [],
+      "routes": [
+        "DELETE /console/v1/data-grants/{id} [AP-07]",
+        "GET /lab/v1/traces/{id}",
+        "POST /lab/v1/judge/runs [AP-08]"
+      ],
+      "needs": [
+        "12",
+        "14"
+      ],
+      "prerequisites": [
+        "AP-07 trace storage composed (TRACE_PUMPS, ClickHouse, LAB_TRACES) for the run"
+      ],
+      "resumed": false,
+      "label": null,
+      "evidence": {
+        "started": "2026-10-02T04:35:25.113Z",
+        "ended": "2026-10-02T04:35:25.276Z",
+        "exchanges": [
+          {
+            "method": "DELETE",
+            "route": "/console/v1/data-grants/{id}",
+            "origin": "gateway",
+            "status": 200,
+            "request_id": "ap11-3c197645-e3bb-40cb-8730-eed8caebf3e7",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 9.5,
+            "at": "2026-10-02T04:35:25.130Z"
+          },
+          {
+            "method": "GET",
+            "route": "/lab/v1/traces/{id}",
+            "origin": "lab",
+            "status": 200,
+            "request_id": "ap11-1c9fc44e-ecd0-47b0-bdb9-c8e1c08ed54b",
+            "inference_id": null,
+            "location": null,
+            "error": null,
+            "ms": 104.9,
+            "at": "2026-10-02T04:35:25.243Z"
+          },
+          {
+            "method": "POST",
+            "route": "/lab/v1/judge/runs",
+            "origin": "lab",
+            "status": 403,
+            "request_id": "ap11-473bb71d-dd19-4a9e-a168-076ea6c0dcf8",
+            "inference_id": null,
+            "location": null,
+            "error": "forbidden",
+            "ms": 32.8,
+            "at": "2026-10-02T04:35:25.276Z"
+          }
+        ],
+        "assertions": [
+          {
+            "name": "the grant is revoked through the API",
+            "ok": true,
+            "detail": "{'status': 200, 'state': 'revoked'}"
+          },
+          {
+            "name": "the trace's content is no longer readable; its metadata follows its own policy",
+            "ok": true,
+            "detail": "{'access': 'metadata', 'access_state': 'revoked'}"
+          },
+          {
+            "name": "a follow-up judge run is refused without a current grant",
+            "ok": true,
+            "detail": "403"
+          }
+        ],
+        "versions": {},
+        "counters": {
+          "requests": 3,
+          "inference": 0
+        },
+        "owned": [],
+        "fixtures": [
+          "alpha_session",
+          "admin_session"
+        ],
+        "resumed": []
+      }
+    },
+    {
+      "id": "18",
+      "title": "Roll back/retire test listing and candidate through operator/control APIs",
+      "proves": "Prior jobs keep original pins; new admissions use correct listing or refuse; task-owned resources drained and cleaned",
+      "selected": true,
+      "status": "BLOCKED",
+      "reasons": [
+        "BLOCKED[AP-06] POST /operator/v1/listings/{model_id}/rollback: not served by the target (config `composed`)",
+        "BLOCKED[AP-05] POST /lab/v1/control/deployments/{id}/retire, POST /lab/v1/operations/{id}/cancel: not served by the target (config `composed`)",
+        "BLOCKED[AP-11] stage 18 has no runner implementation yet (AP-11 11d/11e)"
+      ],
+      "routes": [
+        "POST /operator/v1/listings/{model_id}/rollback [AP-06]",
+        "POST /lab/v1/control/deployments/{id}/retire [AP-05]",
+        "POST /lab/v1/operations/{id}/cancel [AP-05]"
+      ],
+      "needs": [
+        "07"
+      ],
+      "prerequisites": [],
+      "resumed": false,
+      "label": null,
+      "evidence": null
+    }
+  ],
+  "reproduce": "apps/infrx-api/.venv/bin/python tests/integration/api_lifecycle/runner.py --mode isolated --state <state> --world ap11"
+}

@@ -6,18 +6,29 @@
   PROVISIONAL Marlin seed (P-01: a label, never a price).
 * Valkey on 57568 (`infrx-ap11-valkey`) and MinIO on 57569 (`infrx-ap11-s3`), E2's pinned
   digests, labelled with this checkout; only containers carrying the label are ever removed.
-* tests/integration/fake_vllm.py (the controlled engine), the gateway and the worker as
-  their own processes (backend/pilotbox.py's PilotBox, unchanged) with LAB_CONTROL on, and a
-  loopback edge standing in for the Supabase origin the gateway asks: GoTrue's
-  `GET /auth/v1/user` over HS256 sessions this world signs, and PostgREST's
-  `/api_keys?key_hash=eq.` read/touch over the database (no PostgREST port is on ap11's key).
-  Host processes bind loopback ports the kernel assigns, never another lane's.
+* ClickHouse (`infrx-ap11-clickhouse`, the E2 digest) with the three trace schemas, ONLY when
+  ap11's tasklocal key names a `clickhouse` port (WR-AP11C-1); without it the world composes
+  no trace storage and says so (config `traces`/`traces_missing`).
+* tests/integration/fake_vllm.py (the controlled engine), the gateway and the worker as their
+  own processes (backend/pilotbox.py's PilotBox) with the wave-7 switches on - IDENTITY_API,
+  AUTH_FACADE, CONSOLE_READS, CONSOLE_ACTIONS_API, CONSOLE_DATA_USE, and TRACE_PUMPS with the
+  trace storage - and the Lab control unit (`infrx.lab.control.app`, the box's
+  infrx-lab-control) as a third process with LAB_JUDGE_API (and LAB_ARTIFACTS, composed once
+  api-artifacts-2's composition is on the base: the world probes the unit and lists AP-04 in
+  `composed` only when it answers). A loopback edge stands in for the Supabase origin: GoTrue's
+  `GET /auth/v1/user` over HS256 sessions this world signs and `GET /auth/v1/settings`, and
+  PostgREST's `/api_keys?key_hash=eq.` read/touch over the database (no PostgREST port is on
+  ap11's key). Host processes bind loopback ports the kernel assigns, never another lane's.
 
-FIXTURES, declared in the config and named in the verdict - each stands in for an API that is
-not on the base, never for one that is: two verified individuals with A1's grant and one
-consumer key each (SQL: AP-03's grant/key APIs are absent), the seeded Marlin listing (stage
-07's publication is AP-06), a provider administrator and an outsider with their sessions
-(AP-01's onboarding is absent). Nothing here is real-GPU, real-judge or hosted evidence.
+FIXTURES, declared in the config and named in the verdict - each stands in for something no
+API on the base provides, never for an API that is: the individuals' verified sign-up and the
+identity-provider sessions (GoTrue's own flow; the auth facade forwards to it), the operator's
+two feature flags (no flag API), the NemoStation administrator membership (operator
+onboarding), the seeded Marlin listing (stage 07's publication is AP-06), and - while
+`lab/control/app.py` composes `actors=None` - AP-01's SessionActors on the Lab unit (the
+judge/review family answers 503 without it; api-identity-2 composes it, WR-AP11C-2). Keys,
+grants, data use, judge and reviews go through their APIs. Nothing here is real-GPU,
+real-judge or hosted evidence.
 """
 from __future__ import annotations
 
@@ -51,7 +62,15 @@ VALKEY_IMAGE = ("valkey/valkey@sha256:"
                 "d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1")
 MINIO_IMAGE = ("pgsty/minio@sha256:"
                "b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372")
+CLICKHOUSE_IMAGE = ("clickhouse/clickhouse-server@sha256:"
+                    "87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146")
 S3_USER, S3_PASSWORD, BUCKET = "infrxap11minio", "infrx-ap11-local-secret", "infrx-ap11"
+TRACE_BUCKET, CH_USER, CH_PASSWORD, CH_DATABASE = ("infrx-ap11-traces", "infrx_ap11",
+                                                  "infrx-ap11-local", "infrx_ap11")
+MODEL_UUID = "d0000001-0000-4000-8000-000000000001"         # the seed's Marlin model
+STAND_IN_ENV = "INFRX_AP11_STAND_IN"                        # where lab_unit marks a stand-in
+NO_CLICKHOUSE = ("WR-AP11C-1: tasklocal key ap11 names no ClickHouse port, so the world "
+                 "composes no trace storage")
 MODEL = "nemostation/marlin-2b"
 CARD = "rc_marlin2b_2026_09_provisional"
 PROVIDER = "b0000001-0000-4000-8000-000000000001"           # the seed's NemoStation
@@ -145,34 +164,21 @@ def database():
     return pg, pg.dsn(), [f.name for f in files]
 
 
-def key_secret() -> str:
-    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    return "sk-infrx-" + "".join(secrets.choice(alphabet) for _ in range(40))
-
-
 def individuals(pg, names=("alpha", "beta")) -> dict[str, str]:
-    """FIXTURE: verified individuals, A1's grant, one consumer key each; name -> key."""
+    """FIXTURE: verified individuals (GoTrue's sign-up and verification) and the operator's
+    flags (the signup grant, credit admission, the Lab's judge submissions); name -> user.
+    Their grant and keys are the API's (stage 08)."""
     found = {}
     with pg.connect(pg.DATABASE) as conn:
-        conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'ap11', "
-                     "reason = 'ap11 isolated world' where name = any(%s)",
-                     (["signup_grant", "credit_admission"],))
+        for flag in ("signup_grant", "credit_admission", "lab_submission"):  # absent = off
+            conn.execute("insert into infrx.feature_flags (name, enabled, updated_by, reason) "
+                         "values (%s, true, 'ap11', 'ap11 isolated world') on conflict (name) "
+                         "do update set enabled = true, updated_by = 'ap11', "
+                         "reason = 'ap11 isolated world'", (flag,))
         for name in names:
-            user = str(uuid.uuid4())
+            found[name] = str(uuid.uuid4())
             conn.execute("insert into auth.users (id, email, email_confirmed_at) values "
-                         "(%s, %s, now())", (user, f"{name}@ap11.invalid"))
-            org, = conn.execute("select org_id from public.org_members where user_id = %s",
-                                (user,)).fetchone()
-            status, = conn.execute("select status from public.claim_signup_grant(%s, '', null)",
-                                   (user,)).fetchone()
-            if status != "granted":
-                raise Blocked(f"BLOCKED[stack] the fixture grant for {name} was {status}")
-            secret = key_secret()
-            conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, "
-                         "key_hash, audience) values (%s, %s, %s, %s, %s, %s, 'consumer')",
-                         (str(uuid.uuid4()), org, user, f"ap11 {name}", secret[:12],
-                          hashlib.sha256(secret.encode()).hexdigest()))
-            found[name] = secret
+                         "(%s, %s, now())", (found[name], f"{name}@ap11.invalid"))
     return found
 
 
@@ -242,6 +248,8 @@ def edge(pg, secret: str):
 
         def do_GET(self):  # noqa: N802
             url = urlsplit(self.path)
+            if url.path == "/auth/v1/settings":         # the auth facade's availability read
+                return self._send(200, {"external": {"email": True}, "disable_signup": False})
             if url.path == "/auth/v1/user":
                 token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
                 found = claims(token, secret)
@@ -291,10 +299,97 @@ def _box_class():
     pilotbox = _load("ap11_pilotbox", INTEGRATION / "backend" / "pilotbox.py")
 
     class Box(pilotbox.PilotBox):
+        """PilotBox's gateway and worker, plus the Lab control unit as role `lab` on its own
+        environment (the box's infrx-lab-control: never the runtime's settings)."""
+
+        lab_env: dict[str, str] = {}
+        lab_port = 0
+
+        def command(self, role: str) -> tuple[list[str], str]:
+            if role != "lab":
+                return super().command(role)
+            return ([sys.executable, "-m", "uvicorn", "--factory", "api_lifecycle.world:lab_unit",
+                     "--host", "127.0.0.1", "--port", str(self.lab_port), "--log-level",
+                     "warning"], f"http://127.0.0.1:{self.lab_port}/readyz")
+
+        def start(self, role: str, timeout: float = 60.0) -> None:
+            if role != "lab":
+                return super().start(role, timeout)
+            self.starts.setdefault("lab", 0)
+            saved, self.env = self.env, self.lab_env
+            try:
+                super().start(role, timeout)
+            finally:
+                self.env = saved
+
         def close(self) -> None:          # the Valkey and the bucket go with their containers
             for role in list(self.processes):
                 self.stop(role)
     return pilotbox, Box
+
+
+def lab_unit():
+    """`uvicorn --factory` target for the world's Lab unit: `infrx.lab.control.app` as the
+    box runs it, except that while its composition leaves `actors=None` (this base) AP-01's
+    SessionActors - the gateway's own composition, on the unit's login - is stood in, and the
+    stand-in is marked for the config (a declared fixture, WR-AP11C-2)."""
+    import httpx
+
+    from infrx.console.session import PgIdentity, SessionActors
+    from infrx.gateway.lab_auth import GoTrueSessions
+    from infrx.lab.control import app as unit
+    from infrx.state.jobstore import connector
+    composed = unit._compose
+
+    def with_actors(lab, store):
+        rt, control, traces = composed(lab, store)
+        if getattr(rt, "actors", None) is None:
+            sessions = GoTrueSessions(httpx.AsyncClient(base_url=lab[unit.SUPABASE_URL],
+                                                        timeout=httpx.Timeout(5, connect=2)),
+                                      lab[unit.SUPABASE_KEY])
+            rt.actors = SessionActors(sessions, PgIdentity(connector(lab[unit.DATABASE_URL],
+                                                                     set_role=False)))
+            Path(os.environ[STAND_IN_ENV]).write_text("SessionActors stood in")
+        return rt, control, traces
+    unit._compose = with_actors
+    return unit.create_app()
+
+
+def trace_storage(stack: contextlib.ExitStack) -> str | None:
+    """ClickHouse on ap11's own port with the three trace schemas: its URL, or None when the
+    key names no ClickHouse port (WR-AP11C-1)."""
+    spec = services().get("clickhouse")
+    if spec is None:
+        return None
+    import clickhouse_connect
+
+    from infrx.traces import feedback, ship
+    from infrx.traces.retention import policy
+    port = stack.enter_context(container(
+        "clickhouse", CLICKHOUSE_IMAGE, 8123,
+        env=("-e", f"CLICKHOUSE_USER={CH_USER}", "-e", f"CLICKHOUSE_PASSWORD={CH_PASSWORD}",
+             "-e", "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1")))
+    connect = lambda database="default": clickhouse_connect.get_client(  # noqa: E731
+        host="127.0.0.1", port=port, username=CH_USER, password=CH_PASSWORD, database=database)
+    _wait(lambda: connect().command("SELECT 1") == 1, "clickhouse", timeout=90)
+    connect().command(f"CREATE DATABASE IF NOT EXISTS {CH_DATABASE}")
+    client = connect(CH_DATABASE)
+    for schema in (ship.shipper.SCHEMA, feedback.projector.SCHEMA, policy.SCHEMA):
+        for statement in (part.strip() for part in schema.read_text().split(";")):
+            if statement and not all(line.strip().startswith("--") or not line.strip()
+                                     for line in statement.splitlines()):
+                client.command(statement)
+    return f"http://{CH_USER}:{CH_PASSWORD}@127.0.0.1:{port}/{CH_DATABASE}"
+
+
+def toy_artifact(root: Path) -> Path:
+    """Stage 02's upload: a small safetensors-shaped directory. It verifies byte for byte; a
+    serving revision of it is the API's actionable `unsupported` (stage 03 says so)."""
+    root.mkdir()
+    (root / "config.json").write_text(json.dumps({"architectures": ["Ap11Toy"]}))
+    (root / "tokenizer.json").write_text(json.dumps({"version": "1.0", "model": {}}))
+    (root / "model.safetensors").write_bytes(b"\x08\x00\x00\x00\x00\x00\x00\x00{}")
+    return root
 
 
 @contextlib.contextmanager
@@ -332,10 +427,12 @@ def compose(out: Path):
         s3_env = {"AWS_ACCESS_KEY_ID": S3_USER, "AWS_SECRET" "_ACCESS_KEY": S3_PASSWORD,
                   "AWS_DEFAULT_REGION": "us-east-1", "AWS_EC2_METADATA_DISABLED": "true",
                   "AWS_CONFIG_FILE": os.devnull, "AWS_SHARED_CREDENTIALS_FILE": os.devnull}
-        _bucket(s3_port, s3_env)
+        _bucket(s3_port, s3_env, BUCKET)
+        _bucket(s3_port, s3_env, TRACE_BUCKET)
         _wait(lambda: _ping_valkey(valkey_port), "valkey")
-        keys, users = individuals(pg), lab_users(pg)
-        jwt_secret = secrets.token_hex(24)
+        clickhouse = trace_storage(stack)
+        people, users = individuals(pg), lab_users(pg)
+        jwt_secret, anon = secrets.token_hex(24), secrets.token_hex(16)
         edge_url = stack.enter_context(edge(pg, jwt_secret))
         sys.path.insert(0, str(INTEGRATION))
         import fake_vllm
@@ -346,58 +443,101 @@ def compose(out: Path):
         engine.control(prompt_tokens=pilotbox.ENGINE_PROMPT_TOKENS)
         (work / "cache").mkdir()
         release = secrets.token_hex(20)        # a commit-shaped label of this world's own
+        s3 = {"S3_ENDPOINT_URL": f"http://127.0.0.1:{s3_port}", **s3_env}
+        traces = {} if clickhouse is None else {
+            "CLICKHOUSE_URL": clickhouse, "S3_TRACE_BUCKET": TRACE_BUCKET}
         env = {"INFRX_MODE": "pilot", "DATABASE_URL": dsn, "S3_MEDIA_BUCKET": BUCKET,
-               "S3_MEDIA_PREFIX": f"test/{TASK}/{release[:12]}/",
-               "S3_ENDPOINT_URL": f"http://127.0.0.1:{s3_port}", **s3_env,
+               "S3_MEDIA_PREFIX": f"test/{TASK}/{release[:12]}/", **s3,
                "VALKEY_URL": f"valkey://127.0.0.1:{valkey_port}/0", "ACCOUNTING_REGIME": "credit",
                "ACTIVE_RATE_CARD_VERSION": CARD, "MODEL_ID": MODEL,
                "PROCESSING_CACHE_DIR": str(work / "cache"), "USAGE_LOG": str(work / "usage.jsonl"),
-               "INFRX_RELEASE_SHA": release, "INFRX_IMAGE": "sha256:" + hashlib.sha256(release.encode()).hexdigest(),
+               "INFRX_RELEASE_SHA": release,
+               "INFRX_IMAGE": "sha256:" + hashlib.sha256(release.encode()).hexdigest(),
                "SUPABASE_URL": edge_url, "SUPABASE_SERVICE" "_ROLE_KEY": secrets.token_hex(16),
-               "LAB_CONTROL": "1"}
+               # the wave-7 web API on the gateway (each default OFF in production)
+               "IDENTITY_API": "1", "AUTH_FACADE": "1", "SUPABASE_ANON_KEY": anon,
+               "CONSOLE_READS": "1", "CONSOLE_DATABASE_URL": dsn,
+               "CONSOLE_CURSOR_SECRET": secrets.token_hex(24), "CONSOLE_ACTIONS_API": "1",
+               "CONSOLE_DATA_USE": "1",
+               **({} if clickhouse is None else {"TRACE_PUMPS": "1", **traces,
+                                                 "TRACE_SPOOL_DIR": str(work / "spool")})}
         box = Box(env, engine.base_url, work, free_port())
         stack.callback(box.close)
+        box.lab_port, stand_in = free_port(), work / "lab-stand-in"
+        box.lab_env = {**{k: v for k, v in box.env.items() if k in os.environ}, **s3, **traces,
+                       "PYTHONUNBUFFERED": "1",     # `api_lifecycle.world:lab_unit` importable
+                       "PYTHONPATH": os.pathsep.join((box.env["PYTHONPATH"], str(INTEGRATION))),
+                       "INFRX_LAB_DATABASE_URL": dsn, "INFRX_LAB_SUPABASE_URL": edge_url,
+                       "INFRX_LAB_SUPABASE_ANON_KEY": anon, "LAB_JUDGE_API": "1",
+                       "LAB_ARTIFACTS": "1", STAND_IN_ENV: str(stand_in)}
         box.start("worker")
         box.start("gateway")
-        clip = work / "clip.mp4"
+        box.start("lab")
+        lab_url = f"http://127.0.0.1:{box.lab_port}"
+        composed = ["AP-01", "AP-02", "AP-03", "AP-07", "AP-08"]
+        import httpx
+        from api_lifecycle.stages import unmounted
+        probe = httpx.get(f"{lab_url}/lab/v1/operations/{uuid.uuid4()}", timeout=5)
+        if not unmounted(probe):                # api-artifacts-2's LAB_ARTIFACTS is composed
+            composed.insert(3, "AP-04")
+        clip, artifact = work / "clip.mp4", toy_artifact(work / "artifact")
         clip.write_bytes(pilotbox.clip())
         sessions = {"admin_session": session(users["admin"], jwt_secret),
-                    "outsider_session": session(users["outsider"], jwt_secret)}
+                    "outsider_session": session(users["outsider"], jwt_secret),
+                    "alpha_session": session(people["alpha"], jwt_secret),
+                    "beta_session": session(people["beta"], jwt_secret)}
+        identity = ("world.py: a verified individual (GoTrue's sign-up and verification, by "
+                    "SQL) with an HS256 session of the world's GoTrue stand-in")
+        fixtures = {
+            "alpha_session": identity, "beta_session": identity + " (a second tenant)",
+            "admin_session": "world.py: NemoStation administrator membership by SQL (operator "
+                             "onboarding) and an edge session",
+            "outsider_session": "world.py: a verified user without membership, edge session",
+            "flags": "world.py: signup_grant, credit_admission and lab_submission enabled by "
+                     "SQL (operator flags; no flag API)",
+            "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)",
+            "judge": "dry_run: JUDGE_MODE's default on the Lab unit; no judge worker or START "
+                     "job is composed, nothing is sent (live judging is P-10)"}
+        if stand_in.exists():
+            fixtures["lab_unit_actors"] = (
+                "world.py lab_unit: AP-01's SessionActors stood in on the Lab unit, whose "
+                "composition leaves actors=None on this base (WR-AP11C-2, api-identity-2)")
         config = {
-            "target": f"ap11-isolated-{release[:12]}", "model": MODEL,
-            "origins": {"gateway": box.url, "lab": box.url},
+            "target": f"ap11-isolated-{release[:12]}", "model": MODEL, "model_uuid": MODEL_UUID,
+            "origins": {"gateway": box.url, "lab": lab_url}, "composed": composed,
+            "traces": clickhouse is not None,
+            "traces_missing": None if clickhouse is not None else NO_CLICKHOUSE,
+            "judge": "dry_run",
             "identities": {
                 "consumer_a": {"audience": "consumer", "secret": "consumer_a_key"},
                 "consumer_b": {"audience": "consumer", "secret": "consumer_b_key"},
+                "consumer_a_capture": {"audience": "consumer", "secret": "consumer_a_capture_key"},
+                "consumer_a_web": {"audience": "session", "secret": "alpha_session"},
+                "consumer_b_web": {"audience": "session", "secret": "beta_session"},
                 "provider_admin": {"audience": "session", "secret": "admin_session",
                                    "provider_org_id": PROVIDER},
                 "outsider": {"audience": "session", "secret": "outsider_session",
                              "provider_org_id": PROVIDER}},
-            "fixtures": {
-                "consumer_a_key": "world.py: verified individual + A1 grant + consumer key by "
-                                  "SQL (AP-03's grant/key APIs absent)",
-                "consumer_b_key": "world.py: as consumer_a_key, a second tenant",
-                "admin_session": "world.py: NemoStation administrator membership by SQL and an "
-                                 "HS256 session of the world's edge (AP-01 onboarding absent)",
-                "outsider_session": "world.py: a verified user without membership, edge session",
-                "listing": "the PROVISIONAL Marlin seed (stage 07's publication is AP-06)"},
+            "fixtures": fixtures, "artifact": {"dir": str(artifact)},
             "media": {"clip": str(clip), "mime": "video/mp4"}, "poll_timeout_s": 120,
+            "trace_timeout_s": 90,
             "pins": {"release_label": release, "migrations": f"{applied[0]}..{applied[-1]}",
                      "migration_count": len(applied), "postgres": pg.IMAGE,
                      "valkey": VALKEY_IMAGE, "s3": MINIO_IMAGE, "engine": "fake_vllm.py",
+                     "clickhouse": CLICKHOUSE_IMAGE if clickhouse else None,
+                     "lab_unit": "infrx.lab.control.app (LAB_JUDGE_API, LAB_ARTIFACTS)",
                      "ports": {s: v.host_port for s, v in services().items()}}}
         config_path, secrets_path = work / "config.json", work / "secrets.json"
         config_path.write_text(json.dumps(config, indent=1))
         fd = os.open(secrets_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as sink:
-            json.dump({"consumer_a_key": keys["alpha"], "consumer_b_key": keys["beta"],
-                       **sessions}, sink)
+            json.dump(sessions, sink)
         out.mkdir(parents=True, exist_ok=True)
         (out / "world-config.json").write_text(json.dumps(config, indent=1))
         yield config_path, secrets_path
-        for role in ("gateway", "worker"):
-            shutil.copy2(work / f"{role}-1.log", out / f"{role}.log") \
-                if (work / f"{role}-1.log").exists() else None
+        for role in ("gateway", "worker", "lab"):
+            if (work / f"{role}-1.log").exists():
+                shutil.copy2(work / f"{role}-1.log", out / f"{role}.log")
 
 
 def _ping_valkey(port: int) -> bool:
@@ -406,7 +546,7 @@ def _ping_valkey(port: int) -> bool:
         return conn.recv(16).startswith(b"+PONG")
 
 
-def _bucket(port: int, env: dict) -> None:
+def _bucket(port: int, env: dict, name: str) -> None:
     import boto3
     from botocore.config import Config
     client = boto3.client("s3", endpoint_url=f"http://127.0.0.1:{port}",
@@ -415,4 +555,4 @@ def _bucket(port: int, env: dict) -> None:
                           region_name="us-east-1", config=Config(retries={"max_attempts": 1}))
     _wait(lambda: client.list_buckets() is not None, "minio")
     with contextlib.suppress(client.exceptions.BucketAlreadyOwnedByYou):
-        client.create_bucket(Bucket=BUCKET)
+        client.create_bucket(Bucket=name)
