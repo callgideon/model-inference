@@ -26,7 +26,7 @@ import {
 
 const WALLET = "a1000000-0000-4000-8000-00000000000a";
 
-function wallet(total: string, reserved: string, available?: string): CreditWallet {
+function wallet(total: string, reserved: string, available?: string, spent: string | null = "12.34567900"): CreditWallet {
   const units = (v: string) => BigInt(v.replace(".", ""));
   const fmt = (u: bigint) => {
     const neg = u < BigInt(0);
@@ -35,10 +35,10 @@ function wallet(total: string, reserved: string, available?: string): CreditWall
   };
   return {
     walletId: WALLET,
-    orgId: "0a000000-0000-4000-8000-0000000000aa",
     ledgerTotal: total as Credit,
     reservedTotal: reserved as Credit,
     available: (available ?? fmt(units(total) - units(reserved))) as Credit,
+    spent: spent as Credit | null,
     signupGrantedAt: "2026-09-20T12:00:00.000000Z",
   };
 }
@@ -53,7 +53,7 @@ const T = {
   figures: "U1R-B01 available, reserved and spent are exact credits from their own fields, never dollars",
   identity: "U1R-B02 available = balance - reserved, and a wallet that disagrees is flagged",
   states: "U1R-B03 no wallet, zero/negative, low and funded funds are four different states",
-  failed: "U1R-B04 a failed wallet read is an error, never a zero, and a failed spent read is 'unavailable'",
+  failed: "U1R-B04 a failed wallet read is an error, never a zero, and a spent the API cannot state is 'unavailable'",
   grant: "U1R-B05 the grant is one-time 10,000 credits, with no refill, expiry or payment offered",
   ledger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, no principal is shown",
   legacy: "U1R-B07 legacy USD is a separate USD section when history exists, and an error is not an empty history",
@@ -62,7 +62,7 @@ const T = {
 };
 
 test(T.figures, () => {
-  const state = creditCardState(ok(wallet("9987.65432100", "12.00000001")), ok("10000.00000000" as Credit));
+  const state = creditCardState(ok(wallet("9987.65432100", "12.00000001")));
   assert.equal(state.kind, "ready");
   if (state.kind !== "ready") return;
   const byLabel = Object.fromEntries(state.value.figures.map((f) => [f.label, f.value]));
@@ -80,8 +80,8 @@ test(T.figures, () => {
 });
 
 test(T.identity, () => {
-  const good = creditCardState(ok(wallet("100.00000000", "0.00000001")), ok("100.00000000" as Credit));
-  const bad = creditCardState(ok(wallet("100.00000000", "0.00000001", "100.00000000")), ok("100.00000000" as Credit));
+  const good = creditCardState(ok(wallet("100.00000000", "0.00000001")));
+  const bad = creditCardState(ok(wallet("100.00000000", "0.00000001", "100.00000000")));
   assert.ok(good.kind === "ready" && good.value.reconciles);
   assert.ok(bad.kind === "ready" && !bad.value.reconciles);
 });
@@ -103,28 +103,24 @@ test(T.states, () => {
   assert.ok(none.kind === "no_wallet");
   assert.match(none.guidance, /verif/i);
   // A new account with no wallet has no figures at all — not three zeroes.
-  const card = creditCardState(ok(null), null);
+  const card = creditCardState(ok(null));
   assert.ok(card.kind === "ready" && card.value.figures.length === 0 && card.value.state.kind === "no_wallet");
 });
 
 test(T.failed, () => {
-  const failed = creditCardState(down(), null);
+  const failed = creditCardState(down());
   assert.equal(failed.kind, "error");
   if (failed.kind === "error") assert.equal(failed.recovery, "retry");
-  const partial = creditCardState(ok(wallet("10.00000000", "1.00000000")), down());
+  // The API could not state spent (null): only "Spent" is unavailable, never a zero.
+  const partial = creditCardState(ok(wallet("10.00000000", "1.00000000", undefined, null)));
   assert.ok(partial.kind === "ready");
   if (partial.kind !== "ready") return;
   const spent = partial.value.figures.find((f) => f.label === "Spent");
   assert.equal(spent?.value, "Unavailable");
-  const unbounded = creditCardState(ok(wallet("10.00000000", "1.00000000")), ok(null));
-  assert.ok(unbounded.kind === "ready");
-  if (unbounded.kind === "ready") {
-    assert.equal(unbounded.value.figures.find((f) => f.label === "Spent")?.value, "Unavailable");
-  }
 });
 
 test(T.grant, () => {
-  const card = creditCardState(ok(wallet("10000.00000000", "0.00000000")), ok("10000.00000000" as Credit));
+  const card = creditCardState(ok(wallet("10000.00000000", "0.00000000")));
   assert.ok(card.kind === "ready");
   if (card.kind !== "ready") return;
   assert.match(card.value.grant, /one-time/i);
@@ -135,7 +131,7 @@ test(T.grant, () => {
   assert.doesNotMatch(everything, /add credits|add card|top.?up|\bbuy\b|purchase|invoice|checkout|pay now|monthly|renews|requests? included/i);
   assert.match(CREDITS_NOTICE, /not refilled/);
   assert.match(CREDITS_NOTICE, /does not expire/);
-  const ungranted = creditCardState(ok({ ...wallet("0.00000000", "0.00000000"), signupGrantedAt: null }), ok("0.00000000" as Credit));
+  const ungranted = creditCardState(ok({ ...wallet("0.00000000", "0.00000000"), signupGrantedAt: null }));
   assert.ok(ungranted.kind === "ready" && /not received/i.test(ungranted.value.grant));
 });
 
@@ -182,7 +178,6 @@ test(T.page, () => {
   const first = creditsPageModel({
     state: { cursor: null, trail: [] },
     wallet: ok(wallet("98.00000000", "0.00000000")),
-    creditsIn: ok("100.00000000" as Credit),
     ledger: ok(page),
     legacy: ok<LegacyUsd>({ balance: "0.00000000" as never, entryCount: 0, rolloutHold: false }),
   });
@@ -195,20 +190,19 @@ test(T.page, () => {
   const second = creditsPageModel({
     state: { cursor: "C2", trail: [] },
     wallet: ok(wallet("98.00000000", "0.00000000")),
-    creditsIn: ok("100.00000000" as Credit),
     ledger: ok({ items: [e(3)], next_cursor: null }),
     legacy: null,
   });
   assert.ok(second.ledger.kind === "ready" && second.ledger.value.previousHref === "/billing" && second.ledger.value.nextHref === null);
   // No wallet: no ledger was read, and that is "empty", not an error and not rows of zeroes.
-  const fresh = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(null), creditsIn: null, ledger: null, legacy: null });
+  const fresh = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(null), ledger: null, legacy: null });
   assert.equal(fresh.ledger.kind, "empty");
   // A failed wallet read means the ledger was never read: that is the wallet's error, not "no entries".
-  const blind = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: down(), creditsIn: null, ledger: null, legacy: null });
+  const blind = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: down(), ledger: null, legacy: null });
   assert.ok(blind.ledger.kind === "error" && blind.ledger.recovery === "retry");
   assert.equal(blind.legacy.kind, "empty", "legacy history is not claimed either way when unreadable");
   // A failed ledger read is an error with its recovery, never an empty ledger.
-  const broken = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(wallet("1.00000000", "0.00000000")), creditsIn: ok("1.00000000" as Credit), ledger: down(), legacy: null });
+  const broken = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(wallet("1.00000000", "0.00000000")), ledger: down(), legacy: null });
   assert.ok(broken.ledger.kind === "error" && broken.ledger.recovery === "retry");
 });
 

@@ -1,28 +1,32 @@
 /**
- * A2: the decisions behind public signup, verification, sign-in and recovery, as pure functions.
+ * A2 over infrx-api (AP-09 09b): the decisions behind public signup, verification, sign-in and
+ * recovery, as pure functions over the generated client.
  *
- * Nothing here imports Next or Supabase, so `node --test` runs it (tests/a). The route, the pages
- * and the server action are thin wiring around it:
+ * Every identity-provider call is the auth facade's (`/auth/v1/*`): it holds the enumeration-safe
+ * outcomes (an existing address signs up as `sent`, an unknown one recovers as `sent`, a wrong
+ * password reads like an unknown address) and answers each failure as one fixed code. Nothing here
+ * imports Next or an SDK, so `node --test` runs it (tests/a). The route, the pages and the server
+ * actions (`./session.ts`, `./auth-actions.ts`) are thin wiring around it:
  *
- * - `completeCallback` — what an email link does: verify, then claim the one-time grant for the
- *   user the AUTH SERVER verified (never an id from the URL), then land on onboarding. A claim that
- *   fails does not block sign-in; onboarding offers the retry.
- * - `claimOutcome` / `walletBalance` — what `claim_signup_grant` (A1, 0015) and
- *   `console_wallet_summary` (0008) mean for the page. An error or an inexact figure is
- *   `unavailable`, never a guessed credit or a confirmed zero.
- * - `authFailure` / `FAILURE_COPY` / `loginNotice` — fixed copy for every auth failure. The raw
- *   server text is never shown, and "no such account" reads exactly like "wrong password".
+ * - `completeCallback` — what an email link does: the facade verifies it, the App stores the
+ *   session, then claims the one-time grant (`POST /console/v1/signup-grant/claim`, as the verified
+ *   session - never an id from the URL), then lands. A claim that fails does not block sign-in;
+ *   onboarding offers the retry.
+ * - `claimOutcome` / `walletBalance` — what the grant claim and `/console/v1/credits` mean for the
+ *   page. An error or an inexact figure is `unavailable`, never a guessed credit or a confirmed zero.
+ * - `facadeFailure` / `FAILURE_COPY` / `loginNotice` — fixed copy for every auth failure. The raw
+ *   server text is never shown.
  */
 
+import type { components } from "@infrx/api-client/consumer";
+import type { ApiError, Result as ApiResult } from "@infrx/api-client/transport";
+import type { ConsumerApi } from "../../lib/api/index.ts";
 import { parseCredit, type Credit } from "../../lib/contracts/v2/money-units.ts";
+
+type S = components["schemas"];
 
 /** Where a verified email link lands by default: the onboarding page with the balance. */
 export const AFTER_VERIFY = "/welcome";
-/** Recorded as `signup_entitlements.campaign_version` (audit metadata only; R71). */
-export const SIGNUP_CAMPAIGN = "consumer-v1";
-/** A1's eligibility operation (0015) and the named arguments grant.ts sends (tests/a pin both to 0015). */
-export const CLAIM_RPC = "claim_signup_grant";
-export const claimArgs = (userId: string) => ({ p_user_id: userId, p_campaign_version: SIGNUP_CAMPAIGN });
 /** Client-side hint only; the auth service's own policy is the authority (P-05). */
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -64,56 +68,28 @@ export const FAILURE_COPY: Readonly<Record<AuthFailure, string>> = Object.freeze
   unavailable: "Something went wrong on our side. Try again in a moment.",
 });
 
-export type AuthErrorLike = { code?: string | null; status?: number | null; name?: string | null; message?: string | null };
-
-const BY_CODE: Readonly<Record<string, AuthFailure>> = Object.freeze({
-  invalid_credentials: "invalid_credentials",
-  user_not_found: "invalid_credentials",
-  email_not_confirmed: "email_not_confirmed",
-  over_request_rate_limit: "rate_limited",
-  over_email_send_rate_limit: "rate_limited",
-  weak_password: "weak_password",
-  same_password: "same_password",
-  email_address_invalid: "invalid_email",
-  validation_failed: "invalid_email",
-  signup_disabled: "signup_closed",
-  email_provider_disabled: "signup_closed",
-  email_address_not_authorized: "email_unavailable",
-  otp_expired: "link_expired",
-  flow_state_expired: "link_expired",
-  flow_state_not_found: "link_expired",
-  session_not_found: "link_expired",
-  session_expired: "link_expired",
-});
-
-/** The fixed failure an auth error stands for. Unknown errors are `unavailable`, never their text. */
-export function authFailure(error: AuthErrorLike): AuthFailure {
-  if (error.code && Object.hasOwn(BY_CODE, error.code)) return BY_CODE[error.code];
+/**
+ * The facade's failure as the App's fixed failure. The facade answers one of these codes already;
+ * a session that ended (`unauthenticated`, a recovery link used up) is `link_expired`, a bare 429 is
+ * rate limited, and anything else - an outage, an unreadable answer - is `unavailable`.
+ */
+export function facadeFailure(error: ApiError): AuthFailure {
+  const code = error.kind === "error" ? error.code : null;
+  if (code === "unauthenticated") return "link_expired";
+  if (code !== null && Object.hasOwn(FAILURE_COPY, code)) return code as AuthFailure;
   if (error.status === 429) return "rate_limited";
-  if (error.name === "AuthSessionMissingError") return "link_expired";
   return "unavailable";
 }
 
-/**
- * The signup answer. An address that already has an account is `sent`, exactly like a new one: the
- * owner gets the usual email from the auth service, and nobody learns whether it was registered.
- */
-export function signupSettled(error: AuthErrorLike | null | undefined): "sent" | AuthFailure {
-  if (!error) return "sent";
-  if (error.code === "user_already_exists" || error.code === "email_exists") return "sent";
-  return authFailure(error);
-}
-
-/** The same for resend/reset: unknown addresses read as sent. */
-export function emailSettled(error: AuthErrorLike | null | undefined): "sent" | AuthFailure {
-  if (!error) return "sent";
-  const failure = authFailure(error);
-  return failure === "invalid_credentials" ? "sent" : failure;
+/** An email-sending call's answer: `sent` (for any address: the facade is enumeration-safe), or why not. */
+export function settled(answer: ApiResult<unknown>): "sent" | AuthFailure {
+  return answer.ok ? "sent" : facadeFailure(answer.error);
 }
 
 const NOTICES: Readonly<Record<string, string>> = Object.freeze({
   link_expired: FAILURE_COPY.link_expired,
   link_invalid: "This link is not valid. Sign in, or request a new link.",
+  session_ended: "Your session has ended. Sign in again.",
 });
 
 /** The login page's `?error=` notice: a known code's fixed copy, or nothing. */
@@ -130,30 +106,23 @@ export type OnboardingState =
   | { kind: "unavailable" }
   | { kind: "signed_out" };
 
-type PgFailure = { code?: string | null; message?: string | null } | null | undefined;
-
-const one = (data: unknown): Record<string, unknown> | null => {
-  if (Array.isArray(data)) return data.length === 1 && data[0] && typeof data[0] === "object" ? data[0] : null;
-  return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
-};
-
 /**
- * What one `claim_signup_grant` answer means. `granted` and `replayed` are the same credit (only the
- * first is announced as new); every denial is its own state; anything else — an error, the feature
- * off (55000), no row, several rows, an unknown status, an amount that is not an exact decimal
- * string — is `unavailable`, so the page offers a retry instead of guessing.
+ * What one grant claim answer means. `granted` and `replayed` are the same credit (only the first
+ * is announced as new); every denial is its own state; anything else — a failed call, the feature
+ * off, an unknown status, an amount that is not an exact CREDIT decimal — is `unavailable`, so the
+ * page offers a retry instead of guessing.
  */
-export function claimOutcome(data: unknown, error: PgFailure): OnboardingState {
-  if (error) return { kind: "unavailable" };
-  const row = one(data);
-  if (row === null) return { kind: "unavailable" };
-  switch (row.status) {
+export function claimOutcome(answer: ApiResult<S["GrantClaim"]>): OnboardingState {
+  if (!answer.ok) return { kind: "unavailable" };
+  const { status, credit, granted_at: grantedAt } = answer.data;
+  switch (status) {
     case "granted":
     case "replayed": {
       try {
-        const amount = parseCredit(row.amount);
-        if (amount !== row.amount || typeof row.granted_at !== "string") return { kind: "unavailable" };
-        return { kind: "credited", first: row.status === "granted", amount, grantedAt: row.granted_at };
+        if (credit?.unit !== "CREDIT" || typeof grantedAt !== "string") return { kind: "unavailable" };
+        const amount = parseCredit(credit.amount);
+        if (amount !== credit.amount) return { kind: "unavailable" };
+        return { kind: "credited", first: status === "granted", amount, grantedAt };
       } catch {
         return { kind: "unavailable" };
       }
@@ -163,9 +132,21 @@ export function claimOutcome(data: unknown, error: PgFailure): OnboardingState {
     case "identity_reused":
     case "rollout_hold":
     case "retired":
-      return { kind: "held", reason: row.status };
+      return { kind: "held", reason: status };
     default:
       return { kind: "unavailable" };
+  }
+}
+
+/**
+ * The one grant claim, as the session `api` carries (A1's eligibility operation behind
+ * `POST /console/v1/signup-grant/claim`, idempotent per individual, R71). Never throws.
+ */
+export async function claimGrant(api: ConsumerApi): Promise<OnboardingState> {
+  try {
+    return claimOutcome(await api.call("post", "/console/v1/signup-grant/claim"));
+  } catch {
+    return { kind: "unavailable" };
   }
 }
 
@@ -206,34 +187,28 @@ export type WalletView =
   | { kind: "unavailable" };
 
 /**
- * `console_wallet_summary(user)` for the onboarding page. No wallet (`wallet_id` null) is
- * `not_issued` — the grant has not landed — never a confirmed zero balance. A failed or inexact read
- * is `unavailable`.
+ * `/console/v1/credits` for the onboarding page. No wallet (`wallet_id` null) is `not_issued` —
+ * the grant has not landed — never a confirmed zero balance. A failed or inexact read is
+ * `unavailable`.
  */
-export function walletBalance(data: unknown, error: PgFailure): WalletView {
-  if (error) return { kind: "unavailable" };
-  const row = one(data);
-  if (row === null || row.unit !== "CREDIT") return { kind: "unavailable" };
-  if (row.wallet_id === null) return { kind: "not_issued" };
-  if (typeof row.wallet_id !== "string") return { kind: "unavailable" };
+export function walletBalance(answer: ApiResult<S["Credits"]>): WalletView {
+  if (!answer.ok) return { kind: "unavailable" };
+  const { wallet_id: walletId, available: money, signup_granted_at: grantedAt } = answer.data;
+  if (walletId === null) return { kind: "not_issued" };
+  if (typeof walletId !== "string" || money?.unit !== "CREDIT") return { kind: "unavailable" };
   try {
-    const available = parseCredit(row.available);
-    if (available !== row.available) return { kind: "unavailable" };
-    return {
-      kind: "available",
-      available,
-      grantedAt: typeof row.signup_granted_at === "string" ? row.signup_granted_at : null,
-    };
+    const available = parseCredit(money.amount);
+    if (available !== money.amount) return { kind: "unavailable" };
+    return { kind: "available", available, grantedAt: typeof grantedAt === "string" ? grantedAt : null };
   } catch {
     return { kind: "unavailable" };
   }
 }
 
-/** /welcome's read (`console_wallet_summary`, injected): `walletBalance`, and a throw is `unavailable`. */
-export async function welcomeWallet(read: () => PromiseLike<{ data: unknown; error: PgFailure }>): Promise<WalletView> {
+/** /welcome's read: `walletBalance`, and a throw is `unavailable`. */
+export async function welcomeWallet(api: ConsumerApi): Promise<WalletView> {
   try {
-    const { data, error } = await read();
-    return walletBalance(data, error);
+    return walletBalance(await api.call("get", "/console/v1/credits"));
   } catch {
     return { kind: "unavailable" };
   }
@@ -241,14 +216,13 @@ export async function welcomeWallet(read: () => PromiseLike<{ data: unknown; err
 
 // ------------------------------------------------------------------------ the callback ---
 
-type Outcome = { error: AuthErrorLike | null };
-
 export type CallbackPorts = {
-  exchangeCode(code: string): Promise<Outcome>;
-  verifyOtp(tokenHash: string, type: EmailLinkType): Promise<Outcome>;
-  /** The user the auth server verified for the new session (`getUser()`), or null. */
-  verifiedUserId(): Promise<string | null>;
-  claim(userId: string): Promise<OnboardingState>;
+  /** `GET /auth/v1/callback` with the link's parameters (and the PKCE verifier the App kept). */
+  land(params: URLSearchParams): Promise<ApiResult<S["Landing"]>>;
+  /** Keep the new session (the App's cookie). */
+  store(session: S["Session"]): Promise<void>;
+  /** The grant claim as that new session. */
+  claim(session: S["Session"]): Promise<OnboardingState>;
 };
 
 export const EMAIL_LINK_TYPES = ["signup", "email", "magiclink", "recovery", "invite", "email_change"] as const;
@@ -258,36 +232,30 @@ const LINK_EXPIRED = "/login?error=link_expired";
 const LINK_INVALID = "/login?error=link_invalid";
 
 /**
- * The email-link callback, as the path to redirect to. The provider's `error_description` is free
- * text anyone can put in a link, so only the `error_code` is read, and only as a fixed code.
+ * The email-link callback, as the path to redirect to. The facade verifies the link and reads only
+ * a fixed `error_code`; the App keeps the session, claims the grant (idempotent, R71 - its failure
+ * is the onboarding retry, not a failed sign-in) and lands on the facade's same-site path.
  */
 export async function completeCallback(params: URLSearchParams, ports: CallbackPorts): Promise<string> {
-  if (params.get("error") || params.get("error_code")) {
-    return authFailure({ code: params.get("error_code") }) === "link_expired" ? LINK_EXPIRED : LINK_INVALID;
-  }
-  const code = params.get("code");
-  const tokenHash = params.get("token_hash");
-  const type = params.get("type");
-  const isType = (value: string | null): value is EmailLinkType =>
-    value !== null && (EMAIL_LINK_TYPES as readonly string[]).includes(value);
-
-  let outcome: Outcome;
+  let answer: ApiResult<S["Landing"]>;
   try {
-    if (code) outcome = await ports.exchangeCode(code);
-    else if (tokenHash && isType(type)) outcome = await ports.verifyOtp(tokenHash, type);
-    else return LINK_INVALID;
+    answer = await ports.land(params);
   } catch {
     return LINK_INVALID;
   }
-  if (outcome.error) return authFailure(outcome.error) === "link_expired" ? LINK_EXPIRED : LINK_INVALID;
-
-  const userId = await ports.verifiedUserId().catch(() => null);
-  if (!userId) return LINK_INVALID;
-  // Idempotent (R71): every callback, sign-in and retry resolves to the one grant. Its failure is
-  // the onboarding page's retry, not a failed sign-in.
-  await ports.claim(userId).catch(() => null);
-
-  return type === "recovery" ? "/update-password" : safeNext(params.get("next"), AFTER_VERIFY);
+  if (!answer.ok) {
+    const code = answer.error.kind === "error" ? answer.error.code : null;
+    return code === "link_expired" ? LINK_EXPIRED : LINK_INVALID;
+  }
+  const { session, redirect } = answer.data;
+  if (typeof session?.access_token !== "string" || session.access_token === "") return LINK_INVALID;
+  try {
+    await ports.store(session);
+  } catch {
+    return LINK_INVALID;
+  }
+  await ports.claim(session).catch(() => null);
+  return safeNext(redirect, AFTER_VERIFY);
 }
 
 /** The `emailRedirectTo` for signup/resend links (the auth service's redirect allowlist, P-05). */
@@ -297,34 +265,51 @@ export const resetRedirect = (origin: string) => `${origin}/auth/callback?next=/
 
 // --------------------------------------------------------------------- the email forms ---
 
-type AuthAnswer = PromiseLike<{ error: AuthErrorLike | null }>;
+/** The PKCE challenge and the CAPTCHA token an email-sending form forwards (both optional). */
+export type EmailExtras = { codeChallenge?: string | null; captchaToken?: string | null };
 
-/** The slice of the browser auth client (supabase-js `auth`) the email forms use. */
-export type EmailAuth = {
-  signUp(credentials: { email: string; password: string; options: { emailRedirectTo: string } }): AuthAnswer;
-  resend(credentials: { type: "signup"; email: string; options: { emailRedirectTo: string } }): AuthAnswer;
-  resetPasswordForEmail(email: string, options: { redirectTo: string }): AuthAnswer;
-};
+const extras = (e: EmailExtras) => ({
+  ...(e.codeChallenge ? { code_challenge: e.codeChallenge } : {}),
+  ...(e.captchaToken ? { captcha_token: e.captchaToken } : {}),
+});
 
-/** The call's error; a throw (no answer) is a status-0 outage. */
-async function errorOf(call: () => AuthAnswer): Promise<AuthErrorLike | null> {
+async function settle(call: () => Promise<ApiResult<unknown>>): Promise<"sent" | AuthFailure> {
   try {
-    return (await call()).error;
+    return settled(await call());
   } catch {
-    return { status: 0 };
+    return "unavailable";
   }
 }
 
-export async function requestSignup(auth: EmailAuth, email: string, password: string, origin: string) {
-  return signupSettled(await errorOf(() => auth.signUp({ email, password, options: { emailRedirectTo: verifyRedirect(origin) } })));
+export function requestSignup(api: ConsumerApi, email: string, password: string, origin: string, more: EmailExtras = {}) {
+  return settle(() => api.call("post", "/auth/v1/sign-up", { body: { email, password, redirect_to: verifyRedirect(origin), ...extras(more) } }));
 }
 
-export async function requestResend(auth: EmailAuth, email: string, origin: string) {
-  return emailSettled(
-    await errorOf(() => auth.resend({ type: "signup", email, options: { emailRedirectTo: verifyRedirect(origin) } })),
-  );
+export function requestReset(api: ConsumerApi, email: string, origin: string, more: EmailExtras = {}) {
+  return settle(() => api.call("post", "/auth/v1/recovery", { body: { email, redirect_to: resetRedirect(origin), ...extras(more) } }));
 }
 
-export async function requestReset(auth: EmailAuth, email: string, origin: string) {
-  return emailSettled(await errorOf(() => auth.resetPasswordForEmail(email, { redirectTo: resetRedirect(origin) })));
+/**
+ * Resending the verification email has no facade route yet (wiring request WR-AP09-RESEND):
+ * honest unavailable copy, never a "sent" that sent nothing.
+ */
+export const RESEND_UNAVAILABLE =
+  "Resending the verification email is not available right now. Open the newest link we sent, or contact hello@callbill.ai.";
+
+// ------------------------------------------------------------------------------- CAPTCHA ---
+
+export type CaptchaGate = "off" | "unconfigured";
+
+/**
+ * LR-02, the form half: when the auth service requires a challenge (`captcha_required` from
+ * `GET /auth/v1/availability`), a form without a configured challenge widget says so and sends
+ * nothing; a token the widget leaves in the form (`captcha_token`) is forwarded as-is.
+ * ponytail: no widget is pinned yet (coordinator wiring: the hosted provider's widget + its site
+ * key in the P-05 checklist), so "required" is always "unconfigured" here; add "ready" with it.
+ */
+export function captchaGate(availability: ApiResult<S["AuthAvailability"]> | null): CaptchaGate {
+  return availability?.ok === true && availability.data.captcha_required ? "unconfigured" : "off";
 }
+
+export const CAPTCHA_UNAVAILABLE =
+  "This form needs a verification challenge that is not set up yet, so it cannot be sent right now. Try again later.";

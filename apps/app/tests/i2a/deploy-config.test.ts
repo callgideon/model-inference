@@ -33,9 +33,7 @@ const PRODUCTION = Object.freeze({
   NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-publishable",
   NEXT_PUBLIC_APP_URL: PRODUCTION_ORIGIN,
-  SUPABASE_SERVICE_ROLE_KEY: SECRET,
   INFRX_API_BASE_URL: "https://api.example.test",
-  CONSOLE_CURSOR_SECRET: CURSOR,
 });
 
 const PREVIEW = Object.freeze({
@@ -43,7 +41,6 @@ const PREVIEW = Object.freeze({
   NODE_ENV: "production",
   NEXT_PUBLIC_SUPABASE_URL: STAGING_SUPABASE,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-publishable",
-  SUPABASE_SERVICE_ROLE_KEY: SECRET,
 });
 
 type Env = Record<string, string | undefined>;
@@ -70,20 +67,20 @@ test("I2A-ENV-01 a complete production configuration starts", () => {
 });
 
 test("I2A-ENV-02 production missing any required server-only variable fails closed, naming it", () => {
-  // Catches: production starting without the service key, API origin or cursor secret and failing
-  // later on a user's request (or signing cursors with nothing).
+  // Catches: production starting without the API origin and failing later on a user's request.
+  // AP-09: the App holds no service key and no cursor secret any more (every read and write is
+  // infrx-api's), so neither is required - and an old deploy still setting them changes nothing.
   const required = VARIABLES.filter((v) => v.exposure === "server" && v.required.includes("production"));
-  assert.deepEqual(
-    required.map((v) => v.name).sort(),
-    ["CONSOLE_CURSOR_SECRET", "INFRX_API_BASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
-  );
+  assert.deepEqual(required.map((v) => v.name).sort(), ["INFRX_API_BASE_URL"]);
+  assert.ok(!VARIABLES.some((v) => ["SUPABASE_SERVICE_ROLE_KEY", "CONSOLE_CURSOR_SECRET"].includes(v.name)));
   for (const { name } of required) {
     for (const missing of [undefined, "", "   "]) {
       assert.match(refusal({ ...PRODUCTION, [name]: missing }), new RegExp(name), `${name}=${JSON.stringify(missing)} was accepted`);
     }
   }
+  // AP-09: nothing reads the Supabase project variables any more (the facade is infrx-api's).
   for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]) {
-    assert.match(refusal({ ...PRODUCTION, [name]: undefined }), new RegExp(name));
+    assert.equal(assertDeployEnv({ ...PRODUCTION, [name]: undefined }), "production", name);
   }
   // Fix round (1-I2A-R2): nothing reads NEXT_PUBLIC_APP_URL, so its absence must not take
   // production down (every request 500); a value that is set is still checked (I2A-ENV-04).
@@ -103,8 +100,6 @@ test("I2A-ENV-03 the production API origin is https with no path, credentials, q
     assert.match(refusal({ ...PRODUCTION, INFRX_API_BASE_URL: bad }), /INFRX_API_BASE_URL/, bad);
   }
   assert.equal(assertDeployEnv({ ...PRODUCTION, INFRX_API_BASE_URL: "https://api.example.test/" }), "production");
-  // The cursor secret keeps the fail-closed length lib/services/server.ts enforces.
-  assert.match(refusal({ ...PRODUCTION, CONSOLE_CURSOR_SECRET: "short" }), /CONSOLE_CURSOR_SECRET/);
 });
 
 test("I2A-ENV-04 production is bound to the production project and the production origin", () => {
@@ -122,7 +117,6 @@ test("I2A-ENV-05 a preview carrying production credentials is refused", () => {
   // Coordinator wiring (verification F2 / I2A-R4): a trailing-dot or upper-cased spelling of the production host is the same project.
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL.replace(".supabase.co", ".supabase.co.") }), /production/i);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL.toUpperCase() }), /production/i);
-  assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: undefined }), /production/i);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_APP_URL: PRODUCTION_ORIGIN }), /NEXT_PUBLIC_APP_URL/);
   assert.match(refusal({ ...PREVIEW, NEXT_PUBLIC_APP_URL: "https://infrx-app-x-someoneelse.vercel.app" }), /NEXT_PUBLIC_APP_URL/);
   assert.equal(assertDeployEnv({ ...PREVIEW, NEXT_PUBLIC_APP_URL: PREVIEW_ORIGIN }), "preview");
@@ -140,7 +134,7 @@ test("I2A-ENV-06 the environment is stated, never guessed", () => {
 
 test("I2A-ENV-07 the matrix: public names are NEXT_PUBLIC_, server-only names are not", () => {
   // Catches: a server-only secret given a NEXT_PUBLIC_ name (Next would inline it into every bundle).
-  assert.ok(VARIABLES.length >= 6);
+  assert.ok(VARIABLES.length >= 4);
   for (const v of VARIABLES) {
     assert.equal(v.name.startsWith("NEXT_PUBLIC_"), v.exposure === "public", v.name);
     for (const e of v.required) assert.ok(ENVIRONMENTS.includes(e));

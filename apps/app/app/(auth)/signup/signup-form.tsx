@@ -5,8 +5,8 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, MIN_PASSWORD_LENGTH, requestSignup } from "../flow";
+import { signUp } from "../auth-actions";
+import { CAPTCHA_UNAVAILABLE, FAILURE_COPY, MIN_PASSWORD_LENGTH, type CaptchaGate } from "../flow";
 import { ResendForm } from "../verify-email/resend-form";
 
 /**
@@ -14,7 +14,7 @@ import { ResendForm } from "../verify-email/resend-form";
  * your email" answer — including one that already has an account — so the form cannot be used to
  * learn who is registered. The grant happens after verification, on the server (the callback).
  */
-export function SignupForm() {
+export function SignupForm({ gate }: { gate: CaptchaGate }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -30,10 +30,10 @@ export function SignupForm() {
     const email = String(form.get("email")).trim();
     setPending(true);
     setError(null);
-    const settled = await requestSignup(createClient().auth, email, String(form.get("password")), window.location.origin);
+    const settled = await signUp(form).catch(() => "unavailable" as const);
     setPending(false);
     if (settled === "sent") setSentTo(email);
-    else setError(FAILURE_COPY[settled]);
+    else setError(settled === "captcha_unconfigured" ? CAPTCHA_UNAVAILABLE : FAILURE_COPY[settled]);
   }
 
   if (sentTo) {
@@ -47,8 +47,17 @@ export function SignupForm() {
             We sent a verification link to {sentTo}. Open it on this device to finish creating your account.
           </p>
         </div>
-        <ResendForm email={sentTo} />
+        <ResendForm />
       </div>
+    );
+  }
+
+  // LR-02: a challenge the auth service requires but this App cannot show yet is said up front.
+  if (gate === "unconfigured") {
+    return (
+      <p role="status" className="rounded-lg border bg-muted/40 p-3 text-center text-sm">
+        {CAPTCHA_UNAVAILABLE}
+      </p>
     );
   }
 

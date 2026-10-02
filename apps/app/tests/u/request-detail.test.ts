@@ -1,9 +1,9 @@
 // node --test "tests/**/*.test.ts"
 //
 // U4: the owned request detail and its result lifecycle (USER-RESULTS, RESULT-EXPIRY,
-// CONSOLE-TENANT). The reads (`usage/[requestId]/request-reads.ts`) run against a recording double
-// of the supabase-js calls they make; the view model (`request-view-model.ts`) is pure. The same
-// reads run against real PostgreSQL as the browser principal in `request-pg.test.ts`.
+// CONSOLE-TENANT). The reads (`usage/[requestId]/request-reads.ts`) run through the generated client
+// over a recording `fetch` (AP-09: `GET /console/v1/requests/{id}[/result]`); the view model
+// (`request-view-model.ts`) is pure. tests/ap02 proves the API's answers on real PostgreSQL.
 //
 // Failure oracles, one per seam: a read that trusts a caller-named or malformed id, a result served
 // for a request the API would withhold, a refusal shown as "not ready" (or a zero), a response a
@@ -15,16 +15,9 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import type { Answer, ConsumerJob, CreditClient } from "../../app/(console)/billing/credit-reads.ts";
-import { defaultCreditFixture } from "../../app/(console)/billing/credit-fixture.ts";
-import {
-  fixtureRequestReads,
-  postgrestRequestReads,
-  requestSource,
-  resultResponse,
-  type RequestSource,
-  type ResultRead,
-} from "../../app/(console)/usage/[requestId]/request-reads.ts";
+import { answer, defaultWorld, envelope, fakeConsoleApi, recordingApi, type Sent } from "../../lib/api/fake.ts";
+import { jobOf, type ConsumerJob } from "../../app/(console)/billing/credit-reads.ts";
+import { apiRequestReads, resultResponse, type ResultRead } from "../../app/(console)/usage/[requestId]/request-reads.ts";
 import {
   MAX_POLLS,
   RETRY_GUIDANCE,
@@ -68,14 +61,13 @@ function fakeTimers(start = 0) {
   return { schedule, now: () => clock, set: (at: number) => (clock = at), live, fire };
 }
 
-const USER = "c1000000-0000-4000-8000-000000000001";
 const ID = "b1000000-0000-4000-8000-000000000001";
+const fixtureJobs = defaultWorld().requests.map(jobOf);
 
-/** A `consumer_jobs` row as PostgREST renders it (0021): money as text, instants `+00:00`. */
+/** A request summary as infrx-api renders it: money as `{amount, unit}`, instants `+00:00`. */
 function row(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     request_id: ID,
-    job_handle: "job_1",
     created_at: "2026-09-20T11:00:00+00:00",
     requested_model: "nemostation/marlin-2b",
     model_revision: "nemostation/marlin-2b@2026-09-01",
@@ -87,46 +79,33 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
     usage_certainty: "authoritative",
     prompt_tokens: 1200,
     completion_tokens: 340,
-    unit: "CREDIT",
-    hold: "5.00000000",
+    hold: { amount: "5.00000000", unit: "CREDIT" },
     hold_state: "settled",
-    charged: "1.23456789",
-    result_available: true,
+    charged: { amount: "1.23456789", unit: "CREDIT" },
+    result_access: "available",
     result_expires_at: "2026-09-21T11:00:05+00:00",
-    settled_at: "2026-09-20T11:00:05+00:00",
-    cursor: `2026-09-20 11:00:00+00|${ID}`,
     ...over,
   };
 }
 
-/** Records every rpc; answers from `script` by function name, in order. */
-function recording(script: Record<string, (Answer | Error)[]>) {
-  const calls: { fn: string; args: Record<string, unknown> }[] = [];
-  const client = {
-    from() {
-      throw new Error("the request reads use only the consumer RPCs");
-    },
-    rpc(fn: string, args: Record<string, unknown>) {
-      calls.push({ fn, args });
-      const answer = script[fn]?.shift();
-      if (answer === undefined) return Promise.reject(new Error(`unscripted call to ${fn}`));
-      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-    },
-  } as unknown as CreditClient;
-  return { client, calls };
+/** Answers each request from `script` by route (the summary, or its `/result`), in order. */
+function recording(script: { job?: (Response | Error)[]; result?: (Response | Error)[] }) {
+  return recordingApi((sent: Sent) => {
+    const queue = sent.path.endsWith("/result") ? script.result : script.job;
+    const next = queue?.shift();
+    if (next === undefined) throw new Error(`unscripted call to ${sent.path}`);
+    if (next instanceof Error) throw next;
+    return next;
+  });
 }
 
-const ok = (data: unknown): Answer => ({ data, error: null });
-const err = (code: string, message: string): Answer => ({ data: null, error: { code, message } });
-
 function job(over: Partial<ConsumerJob> = {}): ConsumerJob {
-  const base = defaultCreditFixture().jobs[0];
-  return { ...base, ...over };
+  return { ...fixtureJobs[0], ...over };
 }
 
 const T = {
-  job: "U4-R01 the job read asks consumer_jobs for exactly this request, as the session's own user",
-  foreign: "U4-R02 a foreign, unknown, mismatched or malformed id is 'not found', and a malformed one never reaches the database",
+  job: "U4-R01 the job read asks the API for exactly this request (canonical id), as the session",
+  foreign: "U4-R02 a foreign, unknown, mismatched or malformed id is 'not found', and a malformed one never reaches the API",
   jobErrors: "U4-R03 a failed job read is a typed failure, never an empty 'not found'",
   gate: "U4-R04 the result is served only when the API would serve it: the job read gates the content read",
   result: "U4-R05 each content refusal keeps its meaning: not found, not ready, expired, signed out, unavailable",
@@ -143,107 +122,102 @@ const T = {
   reads: "U4-V11 the result is read on mount and again on a back/forward restore (content hidden first); navigation aborts it",
   fetch: "U4-V12 the browser's result fetch is same-origin and no-store, and an abandoned read shows nothing",
   retry: "U4-V08 no control submits another inference; retry guidance says a rerun is a new, separately charged request",
-  source: "U4-G01 the request fixture is reachable only through the development preview gate",
+  source: "U4-G01 the request fake is reachable only through the development preview gate",
   surface: "U4-S01 content stays out of the page payload, browser storage and logs; the route answers no-store",
   wiring: "U4-S02 the client components run the tested drivers, no fetch bypasses them, and the page mounts the poller only when it polls",
 };
 
 test(T.job, async () => {
-  const { client, calls } = recording({ consumer_jobs: [ok([row()])] });
-  const read = await postgrestRequestReads(client, USER).job(ID.toUpperCase());
+  const { api, sent } = recording({ job: [answer(200, row())] });
+  const read = await apiRequestReads(api).job(ID.toUpperCase());
   assert.equal(read.ok, true);
   assert.equal(read.ok && read.value?.requestId, ID);
   assert.equal(read.ok && read.value?.charged, "1.23456789");
-  assert.deepEqual(calls, [{ fn: "consumer_jobs", args: { p_after: null, p_limit: 2, p_request_id: ID } }]);
+  assert.deepEqual(sent.map((s) => `${s.method} ${s.path}`), [`GET /console/v1/requests/${ID}`]);
 });
 
 test(T.foreign, async () => {
-  // Another tenant's id and an unknown one answer the same: consumer_jobs returns no row.
-  const empty = recording({ consumer_jobs: [ok([])] });
-  assert.deepEqual(await postgrestRequestReads(empty.client, USER).job(ID), { ok: true, value: null });
+  // Another tenant's id and an unknown one answer the same: the API's 404.
+  const empty = recording({ job: [answer(404, envelope("not_found"))] });
+  assert.deepEqual(await apiRequestReads(empty.api).job(ID), { ok: true, value: null });
 
-  // A row for a different request is never shown as this one.
-  const other = "b1000000-0000-4000-8000-000000000002";
-  const mismatched = recording({ consumer_jobs: [ok([row({ request_id: other })])] });
-  assert.deepEqual(await postgrestRequestReads(mismatched.client, USER).job(ID), { ok: true, value: null });
+  // A summary for a different request is never shown as this one.
+  const mismatched = recording({ job: [answer(200, row({ request_id: "b1000000-0000-4000-8000-000000000002" }))] });
+  assert.deepEqual(await apiRequestReads(mismatched.api).job(ID), { ok: true, value: null });
 
   for (const bad of ["", "abc", `${ID}x`, `${ID}' or '1'='1`, "../billing", ID.replaceAll("-", "")]) {
     const none = recording({});
-    const reads = postgrestRequestReads(none.client, USER);
+    const reads = apiRequestReads(none.api);
     assert.deepEqual(await reads.job(bad), { ok: true, value: null }, bad);
     assert.deepEqual(await reads.result(bad), { state: "not_found" }, bad);
-    assert.equal(none.calls.length, 0, `${bad} reached the database`);
+    assert.equal(none.sent.length, 0, `${bad} reached the API`);
   }
 });
 
 test(T.jobErrors, async () => {
-  const cases: [Answer | Error, string][] = [
+  const cases: [Response | Error, string][] = [
     [new Error("socket hang up"), "dependency_unavailable"],
-    [err("PGRST301", "JWT expired"), "dependency_unavailable"],
-    [err("42501", "not signed in"), "forbidden"],
-    [ok([row({ charged: 1.23456789 })]), "internal_error"], // money through a double is refused
-    [ok([row({ unit: "USD" })]), "internal_error"], // a CREDIT job relabelled USD
+    [answer(503, envelope("dependency_unavailable")), "dependency_unavailable"],
+    [answer(401, envelope("invalid_api_key")), "forbidden"],
+    [answer(200, row({ charged: { amount: "1.234567891", unit: "CREDIT" } })), "internal_error"], // inexact money is refused
+    [answer(200, row({ charged: { amount: "1.23456789", unit: "USD" } })), "internal_error"], // a CREDIT request relabelled USD
   ];
-  for (const [answer, code] of cases) {
-    const { client } = recording({ consumer_jobs: [answer] });
-    const read = await postgrestRequestReads(client, USER).job(ID);
+  for (const [reply, code] of cases) {
+    const read = await apiRequestReads(recording({ job: [reply] }).api).job(ID);
     assert.equal(read.ok, false);
     assert.equal(!read.ok && read.error.code, code);
   }
 });
 
 test(T.gate, async () => {
-  // Available: the job read, then the content read.
-  const ready = recording({ consumer_jobs: [ok([row()])], consumer_job_result: [ok("a sop verdict")] });
-  assert.deepEqual(await postgrestRequestReads(ready.client, USER).result(ID), { state: "ready", text: "a sop verdict" });
-  assert.deepEqual(ready.calls.map((c) => c.fn), ["consumer_jobs", "consumer_job_result"]);
-  assert.deepEqual(ready.calls[1].args, { p_request_id: ID });
+  // Available: the summary read, then the content read.
+  const ready = recording({ job: [answer(200, row())], result: [answer(200, { request_id: ID, text: "a sop verdict", expires_at: null })] });
+  assert.deepEqual(await apiRequestReads(ready.api).result(ID), { state: "ready", text: "a sop verdict" });
+  assert.deepEqual(ready.sent.map((s) => s.path), [`/console/v1/requests/${ID}`, `/console/v1/requests/${ID}/result`]);
 
   // The API withholds these (F2C.b read_outcome), so the content read is never made.
   const withheld: [Record<string, unknown>, ResultRead][] = [
-    [{ state: "running", outcome_cause: null, settlement_state: null, usage_certainty: null, prompt_tokens: null, completion_tokens: null, hold_state: "held", charged: null, result_available: false, result_expires_at: null }, { state: "pending" }],
-    [{ settlement_state: "held_unknown", usage_certainty: "unknown", prompt_tokens: null, completion_tokens: null, hold_state: "unknown", charged: null, result_available: false }, { state: "withheld" }],
-    [{ result_available: false }, { state: "expired" }],
-    [{ result_available: false, result_expires_at: null }, { state: "unavailable" }],
-    [{ state: "failed", outcome_cause: "engine_error", settlement_state: "released_platform_absorbed", charged: null, result_available: false, result_expires_at: null }, { state: "no_result" }],
+    [{ state: "running", outcome_cause: null, settlement_state: null, usage_certainty: null, prompt_tokens: null, completion_tokens: null, hold_state: "held", charged: null, result_access: "pending", result_expires_at: null }, { state: "pending" }],
+    [{ settlement_state: "held_unknown", usage_certainty: "unknown", prompt_tokens: null, completion_tokens: null, hold_state: "unknown", charged: null, result_access: "held_unknown" }, { state: "withheld" }],
+    [{ result_access: "expired" }, { state: "expired" }],
+    [{ result_access: "unavailable", result_expires_at: null }, { state: "unavailable" }],
+    [{ state: "failed", outcome_cause: "engine_error", settlement_state: "released_platform_absorbed", charged: null, result_access: "no_result", result_expires_at: null }, { state: "no_result" }],
   ];
   for (const [over, expected] of withheld) {
-    const { client, calls } = recording({ consumer_jobs: [ok([row(over)])] });
-    assert.deepEqual(await postgrestRequestReads(client, USER).result(ID), expected, JSON.stringify(over));
-    assert.deepEqual(calls.map((c) => c.fn), ["consumer_jobs"], `content was read for ${expected.state}`);
+    const { api, sent } = recording({ job: [answer(200, row(over))] });
+    assert.deepEqual(await apiRequestReads(api).result(ID), expected, JSON.stringify(over));
+    assert.equal(sent.length, 1, `content was read for ${expected.state}`);
   }
 
-  const foreign = recording({ consumer_jobs: [ok([])] });
-  assert.deepEqual(await postgrestRequestReads(foreign.client, USER).result(ID), { state: "not_found" });
-  assert.equal(foreign.calls.length, 1);
+  const foreign = recording({ job: [answer(404, envelope("not_found"))] });
+  assert.deepEqual(await apiRequestReads(foreign.api).result(ID), { state: "not_found" });
+  assert.equal(foreign.sent.length, 1);
 
-  const down = recording({ consumer_jobs: [new Error("ECONNRESET")] });
-  assert.deepEqual(await postgrestRequestReads(down.client, USER).result(ID), { state: "unavailable" });
+  const down = recording({ job: [new Error("ECONNRESET")] });
+  assert.deepEqual(await apiRequestReads(down.api).result(ID), { state: "unavailable" });
 
-  // consumer_jobs' only 42501 is "not signed in" (or anon, which holds no EXECUTE): the session ended.
-  const signedOut = recording({ consumer_jobs: [err("42501", "not signed in")] });
-  assert.deepEqual(await postgrestRequestReads(signedOut.client, USER).result(ID), { state: "signed_out" });
+  // A session the API refuses has ended: the reader signs in again.
+  const signedOut = recording({ job: [answer(401, envelope("invalid_api_key"))] });
+  assert.deepEqual(await apiRequestReads(signedOut.api).result(ID), { state: "signed_out" });
 });
 
 test(T.result, async () => {
-  // Between the two reads the job may expire, or the session may end: the content read decides.
-  const cases: [Answer | Error, ResultRead][] = [
-    [err("P0001", "not_found: no result for request x"), { state: "not_found" }],
-    [err("P0001", "result_pending: the job has no committed outcome yet"), { state: "pending" }],
-    [err("P0001", "result_expired: the result expired at 2026-09-21 11:00:05+00"), { state: "expired" }],
-    [err("42501", "not signed in"), { state: "signed_out" }],
-    [err("PGRST301", "JWT expired"), { state: "signed_out" }],
-    [err("PGRST303", "JWT claims check failed"), { state: "signed_out" }],
-    [err("P0001", "something_else: detail"), { state: "unavailable" }],
-    [err("57014", "canceling statement due to statement timeout"), { state: "unavailable" }],
+  // Between the two reads the request may expire, or the session may end: the content read decides.
+  const cases: [Response | Error, ResultRead][] = [
+    [answer(404, envelope("not_found")), { state: "not_found" }],
+    [answer(409, envelope("result_pending")), { state: "pending" }],
+    [answer(410, envelope("result_expired")), { state: "expired" }],
+    [answer(401, envelope("invalid_api_key")), { state: "signed_out" }],
+    [answer(422, envelope("something_else")), { state: "unavailable" }],
+    [answer(503, envelope("dependency_unavailable")), { state: "unavailable" }],
     [new Error("fetch failed"), { state: "unavailable" }],
-    [ok(null), { state: "unavailable" }],
-    [ok({ text: "x" }), { state: "unavailable" }],
-    [ok(""), { state: "ready", text: "" }],
+    [answer(200, null), { state: "unavailable" }],
+    [answer(200, { request_id: ID, text: 7 }), { state: "unavailable" }],
+    [answer(200, { request_id: ID, text: "", expires_at: null }), { state: "ready", text: "" }],
   ];
-  for (const [answer, expected] of cases) {
-    const { client } = recording({ consumer_jobs: [ok([row()])], consumer_job_result: [answer] });
-    assert.deepEqual(await postgrestRequestReads(client, USER).result(ID), expected, JSON.stringify(answer));
+  for (const [reply, expected] of cases) {
+    const { api } = recording({ job: [answer(200, row())], result: [reply] });
+    assert.deepEqual(await apiRequestReads(api).result(ID), expected, String(expected.state));
   }
 });
 
@@ -270,7 +244,7 @@ test(T.response, async () => {
 });
 
 test(T.access, () => {
-  const jobs = defaultCreditFixture().jobs;
+  const jobs = fixtureJobs;
   const byId = (n: number) => jobs.find((j) => j.requestId.endsWith(`${n}`)) as ConsumerJob;
   assert.equal(resultAccessOf(byId(1)), "available");
   assert.equal(resultAccessOf(byId(2)), "unavailable", "a success with no persisted expiry is never available");
@@ -301,11 +275,11 @@ test(T.detail, () => {
   assert.equal(running.kind === "ready" && running.value.charge.amount, null, "a hold is not a charge");
   assert.equal(running.kind === "ready" && running.value.charge.held, "5.00 credits");
 
-  const unknown = requestDetailModel({ ok: true, value: defaultCreditFixture().jobs[3] });
+  const unknown = requestDetailModel({ ok: true, value: fixtureJobs[3] });
   assert.equal(unknown.kind === "ready" && unknown.value.charge.amount, null, "unknown usage is never a zero charge");
   assert.equal(unknown.kind === "ready" && unknown.value.charge.label, "Awaiting reconciliation");
 
-  const legacy = requestDetailModel({ ok: true, value: defaultCreditFixture().jobs[7] });
+  const legacy = requestDetailModel({ ok: true, value: fixtureJobs[7] });
   assert.equal(legacy.kind === "ready" && legacy.value.charge.amount, "$0.0001966 USD");
   assert.equal(legacy.kind === "ready" && legacy.value.unit, "legacy USD");
 
@@ -377,7 +351,7 @@ test(T.poll, () => {
   assert.equal(poll({ ok: true, value: job({ state: "queued", outcomeCause: null, settlementState: null, resultAvailable: false }) }), true);
   assert.equal(poll({ ok: true, value: job({ state: "running", outcomeCause: null, settlementState: null, resultAvailable: false }) }), true);
   assert.equal(poll({ ok: true, value: job() }), false, "a finished request is not polled");
-  assert.equal(poll({ ok: true, value: defaultCreditFixture().jobs[3] }), false, "held_unknown is finished; reconciliation takes hours");
+  assert.equal(poll({ ok: true, value: fixtureJobs[3] }), false, "held_unknown is finished; reconciliation takes hours");
   assert.equal(poll({ ok: false, error: { code: "dependency_unavailable", message: "x" } }), true, "an outage is retried with backoff");
   assert.equal(poll({ ok: false, error: { code: "forbidden", message: "x" } }), false, "a refusal is not retried");
   assert.equal(poll({ ok: true, value: null }), false, "not found is not polled");
@@ -413,36 +387,29 @@ test(T.retry, () => {
   assert.match(RETRY_GUIDANCE, /charged separately/i);
   assert.match(RETRY_GUIDANCE, /Idempotency-Key/);
   assert.match(RETRY_GUIDANCE, /24 hours/);
-  // Nothing in the detail route can submit inference: no POST, no /v1 call, no server action.
+  // Nothing in the detail route can submit inference: no POST, no inference /v1 call, no server action;
+  // its API calls are reads (AP-09: `/console/v1/*` GETs only).
   for (const file of ["page.tsx", "result-panel.tsx", "status-poller.tsx", "result/route.ts", "request-reads.ts", "request-view-model.ts"]) {
     const source = route(file);
-    assert.doesNotMatch(source, /method:\s*["']POST|\/v1\/|use server|chat\/completions|export (async )?function (POST|PUT|PATCH|DELETE)/, file);
+    assert.doesNotMatch(source, /method:\s*["']POST|["'`]\/v1\/|\.call\(\s*["'](post|put|patch|delete)["']|use server|chat\/completions|export (async )?function (POST|PUT|PATCH|DELETE)/, file);
   }
   const all = ["page.tsx", "result-panel.tsx", "request-view-model.ts"].map(route).join("\n");
   assert.doesNotMatch(all, /120[- ]second|120 ?s\b|zero[- ]data[- ]retention|\bZDR\b|never stores?/i, "no retention claims");
 });
 
 test(T.source, async () => {
-  let calls = 0;
-  const real: RequestSource = { reads: fixtureRequestReads(), preview: false };
-  const pick = (env: Record<string, string>) => requestSource(async () => ((calls += 1), real), env);
-  assert.equal((await pick({ NODE_ENV: "production", INFRX_CONSOLE_PREVIEW: "1" }))?.preview, false, "production opt-in");
-  assert.ok((await pick({ NODE_ENV: "development" })) === real, "development without opt-in");
-  assert.equal(calls, 2);
-  const preview = (await pick({ NODE_ENV: "development", INFRX_CONSOLE_PREVIEW: "1" })) as RequestSource;
-  assert.equal(preview.preview, true);
-  assert.equal(calls, 2, "the real session is not opened for the preview");
-  // The fixture's reads follow the same rules as the real ones.
-  const demo = await preview.reads.result(ID);
+  // The preview's reads are the production adapter over the client fake; the gate is apiSource's.
+  const preview = apiRequestReads(fakeConsoleApi());
+  const demo = await preview.result(ID);
   assert.equal(demo.state, "ready");
-  assert.match(demo.state === "ready" ? demo.text : "", /^Demo result/, "fixture content says it is a demo");
-  assert.deepEqual(await preview.reads.result("b1000000-0000-4000-8000-000000000003"), { state: "pending" });
-  assert.deepEqual(await preview.reads.result("b1000000-0000-4000-8000-000000000002"), { state: "unavailable" });
-  assert.deepEqual(await preview.reads.job("nope"), { ok: true, value: null });
-  // The glue routes through the gate and names no fixture itself.
+  assert.match(demo.state === "ready" ? demo.text : "", /^Demo result/, "fake content says it is a demo");
+  assert.deepEqual(await preview.result("b1000000-0000-4000-8000-000000000003"), { state: "pending" });
+  assert.deepEqual(await preview.result("b1000000-0000-4000-8000-000000000002"), { state: "unavailable" });
+  assert.deepEqual(await preview.job("nope"), { ok: true, value: null });
+  // The glue routes through apiSource (the one gate) and names no fake itself; no session is signed out.
   const glue = route("request-context.ts");
-  assert.match(glue, /return requestSource\(async \(\) => \{/);
-  assert.doesNotMatch(glue, /fixtureRequestReads|previewAllowed|defaultCreditFixture/);
+  assert.match(glue, /const \{ api, preview \} = await apiSource\(\);\n  if \(!preview && \(await accessToken\(\)\) === null\) return null;/);
+  assert.doesNotMatch(glue, /fakeConsole|previewAllowed|defaultWorld/);
 });
 
 test(T.surface, () => {

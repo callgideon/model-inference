@@ -1,57 +1,26 @@
 /**
- * The consumer CREDIT reads the Usage and Credits pages render (U1R), over PostgREST.
+ * The consumer CREDIT reads the Usage and Credits pages render (U1R), over infrx-api (AP-09 09a).
  *
- * Every read goes through the signed-in user's own Supabase session (anon key + user JWT, RLS on):
- * no service key, no caller-supplied tenant. The relations are D1R/D10's consumer read surface:
+ * Every read is a `/console/v1/*` route through the generated client as the signed-in user (no
+ * service key, no caller-supplied tenant): `credits` (the wallet, with the API's own `spent`),
+ * `credit-ledger`, `legacy-statement`, `requests` (narrowed by model, key and the half-open window
+ * [from, to)) and `keys`. The API pages with its opaque cursors and states every figure; this
+ * module only checks each document is exactly what the contract says.
  *
- * - `console_credit_wallets` (0008): the caller's consumer wallet, filtered by `owner_user_id` — an
- *   operator session sees every wallet through the view, so the filter is what scopes it;
- * - `consumer_credit_ledger` (0024): the caller's own ledger through the JWT subject, one range of
- *   `credit_ledger_wallet_created_idx` stopped by its LIMIT, on D10's opaque cursor;
- * - `console_credit_ledger` (0008): the wallet's grant and adjustments for "Spent", through 0024's
- *   partial index `credit_ledger_wallet_credits_in_idx`;
- * - `consumer_jobs` (0021/0024): the caller's jobs through the JWT subject, keyset-paged on
- *   `jobs_org_created_idx`, money as text in each job's own unit, optionally narrowed by model,
- *   key and the half-open window [from, to);
- * - `api_keys` (0001, RLS): the personal organization's key names, for the key filter;
- * - `console_legacy_usd_statement` (0008): the historical USD balance, its own unit.
- *
- * Nothing here throws and nothing here guesses: an error, a transport failure or a row that is not
- * exactly what the relation promises is a typed failure the page renders as unavailable, never a
- * zero or a plausible balance. Money stays a decimal string from the row to the screen.
+ * Nothing here throws and nothing here guesses: an error, a transport failure or a document that
+ * is not exact is a typed failure the page renders as unavailable, never a zero or a plausible
+ * balance. Money stays a decimal string from the wire to the screen; nothing is derived here.
  *
  * Pure `.ts` with relative imports (R48): the client is injected, so `node --test` loads this.
  */
 
-import {
-  parseCredit,
-  parseUsd,
-  subCredit,
-  totalCredit,
-  unitOfRegime,
-  type AccountingRegime,
-  type Credit,
-  type Usd,
-} from "../../../lib/contracts/v2/money-units.ts";
-import { MAX_PAGE_LIMIT, type ErrorCode, type Page, type Result } from "../../../lib/contracts/types.ts";
+import type { components } from "@infrx/api-client/consumer";
+import type { ConsumerApi } from "../../../lib/api/index.ts";
+import { amountIn, credit, fail, instant, Malformed, optionalInstant, read, usd } from "../../../lib/api/result.ts";
+import { unitOfRegime, type AccountingRegime, type Credit, type Usd } from "../../../lib/contracts/v2/money-units.ts";
+import { MAX_PAGE_LIMIT, type Page, type Result } from "../../../lib/contracts/types.ts";
 
-// ---------------------------------------------------------------------------
-// The slice of supabase-js this adapter calls. `lib/supabase/server.ts`'s client satisfies it.
-// ---------------------------------------------------------------------------
-
-export type Answer = { data: unknown; error: { code?: string | null; message?: string | null } | null };
-
-export interface Filter extends PromiseLike<Answer> {
-  eq(column: string, value: string): Filter;
-  neq(column: string, value: string): Filter;
-  order(column: string, options: { ascending: boolean }): Filter;
-  limit(count: number): Filter;
-}
-
-export interface CreditClient {
-  from(relation: string): { select(columns: string): Filter };
-  rpc(fn: string, args: Record<string, unknown>): PromiseLike<Answer>;
-}
+type S = components["schemas"];
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -59,12 +28,12 @@ export interface CreditClient {
 
 export type CreditWallet = {
   walletId: string;
-  /** The wallet's personal organization (R66): the tenant the legacy statement is read for. */
-  orgId: string;
   ledgerTotal: Credit;
   reservedTotal: Credit;
-  /** As the database computed it; the view model checks it against total - reserved. */
+  /** As the API stated it; the view model checks it against total - reserved. */
   available: Credit;
+  /** What settled requests have drawn, as the API states it; null when it cannot say (never a guess). */
+  spent: Credit | null;
   /** When the one-time signup grant landed, or null when it has not. */
   signupGrantedAt: string | null;
 };
@@ -124,285 +93,118 @@ export type KeyOption = { id: string; name: string; prefix: string };
 export interface CreditReads {
   /** The caller's consumer wallet; `null` when none exists yet (no grant). */
   wallet(): Promise<Result<CreditWallet | null>>;
-  /** The caller's own ledger: the database takes the wallet from the JWT, never an argument. */
+  /** The caller's own ledger: the API takes the wallet from the session, never an argument. */
   ledger(page: PageRequest): Promise<Result<Page<CreditLedgerEntry>>>;
-  /** Σ of the non-debit entries (grant + adjustments); `null` past `CREDITS_IN_BOUND` entries. */
-  creditsIn(walletId: string): Promise<Result<Credit | null>>;
-  legacyUsd(orgId: string): Promise<Result<LegacyUsd>>;
+  legacyUsd(): Promise<Result<LegacyUsd>>;
   jobs(page: JobsRequest): Promise<Result<Page<ConsumerJob>>>;
-  /** The personal organization's keys (revoked ones too: their requests are still listed). */
-  keys(orgId: string): Promise<Result<KeyOption[]>>;
+  /** The caller's own keys (revoked ones too: their requests are still listed). */
+  keys(): Promise<Result<KeyOption[]>>;
 }
 
 /** How many keys the filter offers; a consumer has a handful. */
 export const KEYS_BOUND = 100;
 
-/**
- * How many grant/adjustment entries `creditsIn` will sum. A consumer wallet has one signup grant and
- * the rare operator adjustment, so this is never reached in practice; past it, "spent" is shown as
- * unavailable rather than computed from a partial sum.
- *
- * Spent is derived as Σ(non-debit) − ledger_total; 0024's partial index
- * `credit_ledger_wallet_credits_in_idx` (U1R WR-3(b)) serves the read, so it no longer filters every
- * entry of the wallet by kind.
- */
-export const CREDITS_IN_BOUND = 100;
 
 // ---------------------------------------------------------------------------
-// Row readers: fail closed. Anything not exactly as promised throws, and `guard` maps it.
+// Document readers: fail closed. Anything not exactly as promised throws, and `read` maps it.
 // ---------------------------------------------------------------------------
-
-class Malformed extends Error {}
-
-function field(row: unknown, name: string): unknown {
-  if (typeof row !== "object" || row === null || !Object.hasOwn(row, name)) {
-    throw new Malformed(`the read did not return ${name}`);
-  }
-  return (row as Record<string, unknown>)[name];
-}
-
-function text(row: unknown, name: string): string {
-  const value = field(row, name);
-  if (typeof value !== "string") throw new Malformed(`${name} must be text`);
-  return value;
-}
-
-function optionalText(row: unknown, name: string): string | null {
-  return field(row, name) === null ? null : text(row, name);
-}
-
-/** PostgREST renders `timestamptz` as `…+00:00`; the DTO carries one comparable form. */
-const INSTANT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:Z|\+00:00)$/;
-
-function instant(row: unknown, name: string): string {
-  const match = INSTANT.exec(text(row, name));
-  if (match === null) throw new Malformed(`${name} must be a UTC timestamp`);
-  return `${match[1]}.${(match[2] ?? "").padEnd(6, "0")}Z`;
-}
-
-function optionalInstant(row: unknown, name: string): string | null {
-  return field(row, name) === null ? null : instant(row, name);
-}
-
-/** Money is text (R59-9): a JSON number already went through a double and is refused. */
-function credit(row: unknown, name: string): Credit {
-  return parseCredit(text(row, name));
-}
-
-function optionalInteger(row: unknown, name: string): number | null {
-  const value = field(row, name);
-  if (value === null) return null;
-  if (!Number.isSafeInteger(value)) throw new Malformed(`${name} must be an integer`);
-  return value as number;
-}
-
-function flag(row: unknown, name: string): boolean {
-  const value = field(row, name);
-  if (typeof value !== "boolean") throw new Malformed(`${name} must be a boolean`);
-  return value;
-}
-
-function rows(data: unknown): unknown[] {
-  if (!Array.isArray(data)) throw new Malformed("the read did not return rows");
-  return data;
-}
 
 const HOLD_STATES: readonly HoldState[] = ["held", "settled", "released", "unknown"];
 
-function walletOf(row: unknown): CreditWallet {
+function walletOf(c: S["Credits"]): CreditWallet | null {
+  if (c.wallet_id === null) return null;
   return {
-    walletId: text(row, "wallet_id"),
-    orgId: text(row, "org_id"),
-    ledgerTotal: credit(row, "ledger_total"),
-    reservedTotal: credit(row, "reserved_total"),
-    available: credit(row, "available"),
-    signupGrantedAt: optionalInstant(row, "signup_granted_at"),
+    walletId: c.wallet_id,
+    ledgerTotal: credit(c.ledger_total),
+    reservedTotal: credit(c.reserved_total),
+    available: credit(c.available),
+    spent: c.spent === null ? null : credit(c.spent),
+    signupGrantedAt: optionalInstant(c.signup_granted_at),
   };
 }
 
-function entryOf(row: unknown): CreditLedgerEntry {
-  if (text(row, "unit") !== "CREDIT") throw new Malformed("a CREDIT ledger entry must be CREDIT");
+function entryOf(e: S["LedgerEntry"]): CreditLedgerEntry {
   return {
-    id: text(row, "entry_id"),
-    createdAt: instant(row, "created_at"),
-    kind: text(row, "kind"),
-    amount: credit(row, "amount"),
-    requestId: optionalText(row, "request_id"),
-    reason: text(row, "reason"),
+    id: e.entry_id,
+    createdAt: instant(e.created_at),
+    kind: e.kind,
+    amount: credit(e.amount),
+    requestId: e.request_id,
+    reason: e.reason,
   };
 }
 
-function jobOf(row: unknown): ConsumerJob {
-  const regime = text(row, "accounting_regime");
-  const unit = unitOfRegime(regime);
-  // The unit is stated twice, by the regime and by the row; they must agree (no relabelling).
-  if (text(row, "unit") !== unit) throw new Malformed(`a ${regime} job cannot be denominated otherwise`);
-  const exact = (name: string): string | null => {
-    const value = optionalText(row, name);
-    if (value === null) return null;
-    return unit === "CREDIT" ? parseCredit(value) : parseUsd(value);
-  };
-  const holdState = optionalText(row, "hold_state");
-  if (holdState !== null && !(HOLD_STATES as readonly string[]).includes(holdState)) {
+export function jobOf(r: S["RequestSummary"]): ConsumerJob {
+  const regime = r.accounting_regime;
+  // The unit is the regime's; an amount in any other unit is refused, never relabelled.
+  const unit = unitOfRegime(regime) as "CREDIT" | "USD";
+  if (r.hold_state !== null && !(HOLD_STATES as readonly string[]).includes(r.hold_state)) {
     throw new Malformed("hold_state is outside its vocabulary");
   }
   return {
-    requestId: text(row, "request_id"),
-    createdAt: instant(row, "created_at"),
-    requestedModel: text(row, "requested_model"),
-    modelRevision: text(row, "model_revision"),
-    executionMode: text(row, "execution_mode"),
-    state: text(row, "state"),
-    outcomeCause: optionalText(row, "outcome_cause"),
+    requestId: r.request_id,
+    createdAt: instant(r.created_at),
+    requestedModel: r.requested_model,
+    modelRevision: r.model_revision,
+    executionMode: r.execution_mode,
+    state: r.state,
+    outcomeCause: r.outcome_cause,
     regime: regime as AccountingRegime,
-    unit: unit as "CREDIT" | "USD",
-    settlementState: optionalText(row, "settlement_state"),
-    usageCertainty: optionalText(row, "usage_certainty"),
-    promptTokens: optionalInteger(row, "prompt_tokens"),
-    completionTokens: optionalInteger(row, "completion_tokens"),
-    hold: exact("hold"),
-    holdState: holdState as HoldState | null,
-    charged: exact("charged"),
-    resultAvailable: flag(row, "result_available"),
-    resultExpiresAt: optionalInstant(row, "result_expires_at"),
+    unit,
+    settlementState: r.settlement_state,
+    usageCertainty: r.usage_certainty,
+    promptTokens: r.prompt_tokens,
+    completionTokens: r.completion_tokens,
+    hold: amountIn(r.hold, unit),
+    holdState: r.hold_state as HoldState | null,
+    charged: amountIn(r.charged, unit),
+    resultAvailable: r.result_access === "available",
+    resultExpiresAt: optionalInstant(r.result_expires_at),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Errors: a code the page can explain, a message that carries no internals.
-// ---------------------------------------------------------------------------
-
-function fail<T>(code: ErrorCode, message: string): Result<T> {
-  return { ok: false, error: { code, message } };
+/** A page as the API takes it: 1..100 rows, refused before the call; the cursor passed back as given. */
+function pageQuery(page: PageRequest): { limit: number; cursor?: string } | null {
+  if (!Number.isInteger(page.limit) || page.limit < 1 || page.limit > MAX_PAGE_LIMIT) return null;
+  return page.cursor ? { limit: page.limit, cursor: page.cursor } : { limit: page.limit };
 }
 
-function refusal<T>(error: NonNullable<Answer["error"]>): Result<T> {
-  if (error.code === "42501") return fail("forbidden", "This account cannot read that.");
-  if (error.code === "P0001" && (error.message ?? "").startsWith("invalid_cursor")) {
-    return fail("invalid_cursor", "This page link is no longer valid.");
-  }
-  // Everything else — PostgREST down, a JWT expired, a function missing — is "not now".
-  return fail("dependency_unavailable", "Account data is unavailable right now.");
+const BAD_PAGE = `A page holds 1 to ${MAX_PAGE_LIMIT} rows.`;
+const pageOf = <W, T>(map: (w: W) => T) => (p: { data: W[]; next_cursor?: string | null }): Page<T> => ({
+  items: p.data.map(map),
+  next_cursor: p.next_cursor ?? null,
+});
+
+/** Only the filters that are set, each to its own query parameter. */
+function jobFilters(page: JobsRequest): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (page.model) query.model = page.model;
+  if (page.keyId) query.key_id = page.keyId;
+  if (page.from) query.from = page.from;
+  if (page.to) query.to = page.to;
+  return query;
 }
 
-async function read<T>(query: PromiseLike<Answer>, map: (data: unknown) => T): Promise<Result<T>> {
-  let answer: Answer;
-  try {
-    answer = await query;
-  } catch {
-    return fail("dependency_unavailable", "Account data is unavailable right now.");
-  }
-  if (answer.error !== null && answer.error !== undefined) return refusal(answer.error);
-  try {
-    return { ok: true, value: map(answer.data) };
-  } catch {
-    return fail("internal_error", "Account data could not be read exactly.");
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Keyset pages
-// ---------------------------------------------------------------------------
-
-/**
- * One page of a D10 `consumer_*` read, on C0's rule (R146): a limit outside 1..100 is refused before
- * the call; otherwise `limit + 1` rows are asked, clamped to 0024's cap of 100, and the extra row only
- * decides whether there is a next page - at the cap a full page carries a cursor (the next page may
- * be empty). The next page resumes from D10's opaque cursor on the last row shown: a bound
- * parameter, never spliced into a filter; a malformed one is D10's `invalid_cursor`.
- */
-async function rpcPage<T>(
-  page: PageRequest,
-  call: (ask: number) => PromiseLike<Answer>,
-  parse: (row: unknown) => T,
-): Promise<Result<Page<T>>> {
-  const { limit } = page;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
-    return fail("invalid_request", `A page holds 1 to ${MAX_PAGE_LIMIT} rows.`);
-  }
-  const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);
-  return read(call(ask), (data) => {
-    const found = rows(data);
-    const cursors = found.map((row) => text(row, "cursor"));
-    const items = found.map(parse);
-    const shown = items.slice(0, limit);
-    const more = items.length > limit || (ask === limit && items.length === limit);
-    return { items: shown, next_cursor: more && shown.length > 0 ? cursors[shown.length - 1] : null };
-  });
-}
-
-/** Only the filters that are set; the RPC's named parameters, each to its own. */
-function jobFilterArgs(page: JobsRequest): Record<string, string> {
-  const args: Record<string, string> = {};
-  if (page.model) args.p_model = page.model;
-  if (page.keyId) args.p_key_id = page.keyId;
-  if (page.from) args.p_from = page.from;
-  if (page.to) args.p_to = page.to;
-  return args;
-}
-
-export function postgrestCreditReads(client: CreditClient, userId: string): CreditReads {
+export function apiCreditReads(api: ConsumerApi): CreditReads {
   return {
-    wallet: () =>
-      read(
-        client
-          .from("console_credit_wallets")
-          .select("wallet_id, org_id, ledger_total, reserved_total, available, signup_granted_at")
-          .eq("owner_user_id", userId)
-          .eq("kind", "consumer")
-          .limit(2),
-        (data) => {
-          const found = rows(data);
-          if (found.length > 1) throw new Malformed("more than one consumer wallet");
-          return found.length === 0 ? null : walletOf(found[0]);
-        },
-      ),
+    wallet: () => read(api.call("get", "/console/v1/credits"), walletOf),
 
-    // C0 WR-5 / U1R WR-3(c) (0024): O(limit) however deep the cursor; no actor column at all.
-    ledger: (page) =>
-      rpcPage(page, (ask) => client.rpc("consumer_credit_ledger", { p_after: page.cursor, p_limit: ask }), entryOf),
+    async ledger(page) {
+      const query = pageQuery(page);
+      if (query === null) return fail("invalid_request", BAD_PAGE);
+      return read(api.call("get", "/console/v1/credit-ledger", { query }), pageOf(entryOf));
+    },
 
-    creditsIn: (walletId) =>
-      read(
-        client
-          .from("console_credit_ledger")
-          .select("amount")
-          .eq("wallet_id", walletId)
-          .neq("kind", "inference_debit")
-          .limit(CREDITS_IN_BOUND + 1),
-        (data) => {
-          const found = rows(data);
-          return found.length > CREDITS_IN_BOUND ? null : totalCredit(found.map((r) => credit(r, "amount")));
-        },
-      ),
+    legacyUsd: () =>
+      read(api.call("get", "/console/v1/legacy-statement"), (s) => ({ balance: usd(s.balance), entryCount: s.entry_count, rolloutHold: s.rollout_hold })),
 
-    legacyUsd: (orgId) =>
-      read(client.rpc("console_legacy_usd_statement", { p_org: orgId }), (data) => {
-        const [row, ...rest] = rows(data);
-        if (row === undefined || rest.length > 0) throw new Malformed("one statement row expected");
-        if (text(row, "unit") !== "USD") throw new Malformed("the legacy statement is USD");
-        const entryCount = optionalInteger(row, "entry_count");
-        if (entryCount === null || entryCount < 0) throw new Malformed("entry_count");
-        return { balance: parseUsd(text(row, "balance")), entryCount, rolloutHold: flag(row, "rollout_hold") };
-      }),
+    async jobs(page) {
+      const query = pageQuery(page);
+      if (query === null) return fail("invalid_request", BAD_PAGE);
+      return read(api.call("get", "/console/v1/requests", { query: { ...query, ...jobFilters(page) } }), pageOf(jobOf));
+    },
 
-    jobs: (page) =>
-      rpcPage(page, (ask) => client.rpc("consumer_jobs", { p_after: page.cursor, p_limit: ask, ...jobFilterArgs(page) }), jobOf),
-
-    keys: (orgId) =>
-      read(
-        client
-          .from("api_keys")
-          .select("id, name, prefix")
-          .eq("org_id", orgId)
-          .order("created_at", { ascending: false })
-          .limit(KEYS_BOUND),
-        (data) => rows(data).map((row) => ({ id: text(row, "id"), name: text(row, "name"), prefix: text(row, "prefix") })),
-      ),
+    keys: () =>
+      read(api.call("get", "/console/v1/keys", { query: { limit: KEYS_BOUND } }), (p) => p.data.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix }))),
   };
-}
-
-/** Spent = what came in (grant + adjustments) minus what is left on the ledger. Exact. */
-export function spentCredit(wallet: CreditWallet, creditsIn: Credit | null): Credit | null {
-  return creditsIn === null ? null : subCredit(creditsIn, wallet.ledgerTotal);
 }

@@ -448,8 +448,10 @@ def adapters(world: dict) -> int:
             json.dump({**world, "url": base, "jwt_secret": JWT_SECRET}, handle)
         env = {**os.environ, "INFRX_C3F_STACK": handle.name}
         codes = [subprocess.run(("node", "--test", test), cwd=root, env=env).returncode
-                 for root, test in ((APP, "tests/c/feedback/feedback-postgrest.test.ts"),
-                                    (LAB, "tests/c/review/review-postgrest.test.ts"),
+                 # AP-09: the App no longer calls the 0038 doors (its feedback is
+                 # POST /console/v1/requests/{id}/feedback); the SQL checks above still prove them,
+                 # and the Lab's adapters run here until api-frontends-lab moves them to the API.
+                 for root, test in ((LAB, "tests/c/review/review-postgrest.test.ts"),
                                     (LAB, "tests/v/detail/feedback-postgrest.test.ts"))]
         os.unlink(handle.name)
         return max(codes)

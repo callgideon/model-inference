@@ -117,7 +117,7 @@ test("the walker actually finds client modules and can follow an import", () => 
   const resolved = importsOf(clients[0]).map((specifier) => resolveImport(clients[0], specifier));
   assert.ok(resolved.some((file) => file !== null), "the resolver must resolve at least one local import");
   // And the detector is not simply always-true.
-  assert.ok(!isClientModule(join(appRoot, "lib", "services", "query.ts")), "a server module is not a client one");
+  assert.ok(!isClientModule(join(appRoot, "lib", "services", "console.ts")), "a server module is not a client one");
   // The action boundary is recognised, and only there: a server-only service module is not one.
   assert.ok(isServerActionModule(join(appRoot, "app", "actions.ts")), "app/actions.ts is a server action module");
   assert.ok(!isServerActionModule(join(appRoot, "lib", "services", "actions.ts")), "the adapter is not an action module");
@@ -132,7 +132,7 @@ test("no client component reaches lib/services, however indirectly", () => {
   assert.deepEqual(
     offenders,
     [],
-    `a client bundle would carry the console's SQL, its query plans and the name of the cursor secret:\n${offenders.join("\n")}`,
+    `a client bundle would carry the console's server-side adapters:\n${offenders.join("\n")}`,
   );
 });
 
@@ -178,8 +178,11 @@ test("every case in this track asserts success through a helper, never as a bare
 });
 
 test("the server-only modules carry their run-time guard as well", () => {
-  for (const name of ["query.ts", "console.ts", "cursor.ts", "server.ts", "credits.ts"]) {
-    const source = readFileSync(join(SERVER_ONLY, name), "utf8");
+  // AP-09: the SQL, cursor and credit modules are gone (the API owns them); what is left server-only
+  // is the action adapter and the request's API client (which carries the session cookie).
+  for (const file of [join(SERVER_ONLY, "actions.ts"), join(appRoot, "lib", "api", "server.ts")]) {
+    const name = relative(appRoot, file);
+    const source = readFileSync(file, "utf8");
     assert.match(
       source,
       /typeof window !== "undefined"/,

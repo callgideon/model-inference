@@ -79,6 +79,8 @@ test("no new route handler: the console adds no UI inference endpoint", () => {
     "app/api/client-errors/route.ts",
     "app/api/version/route.ts",
     "app/auth/callback/route.ts",
+    // AP-09: clears an ended session's cookie and redirects to sign-in; no inference.
+    "app/auth/expired/route.ts",
   ]);
 });
 

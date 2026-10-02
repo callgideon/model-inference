@@ -6,8 +6,8 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, requestReset } from "../flow";
+import { recover } from "../auth-actions";
+import { CAPTCHA_UNAVAILABLE, FAILURE_COPY } from "../flow";
 
 export default function ForgotPasswordPage() {
   const [pending, setPending] = useState(false);
@@ -16,15 +16,15 @@ export default function ForgotPasswordPage() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const email = String(new FormData(event.currentTarget).get("email"));
+    const form = new FormData(event.currentTarget);
     setPending(true);
     setError(null);
-    // The same message whether or not the address has an account; only a rate limit or an
-    // outage is reported, because "sent" would then be untrue.
-    const settled = await requestReset(createClient().auth, email, window.location.origin);
+    // The same message whether or not the address has an account (the facade's rule); only a rate
+    // limit, an outage or a missing challenge is reported, because "sent" would then be untrue.
+    const settled = await recover(form).catch(() => "unavailable" as const);
     setPending(false);
     if (settled === "sent") setSent(true);
-    else setError(FAILURE_COPY[settled]);
+    else setError(settled === "captcha_unconfigured" ? CAPTCHA_UNAVAILABLE : FAILURE_COPY[settled]);
   }
 
   return (

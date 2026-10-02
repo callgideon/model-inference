@@ -15,7 +15,8 @@ import { credits } from "../../lib/format.ts";
 import { totalCredit, type Credit } from "../../lib/contracts/v2/money-units.ts";
 import type { Result, Page } from "../../lib/contracts/types.ts";
 import type { ConsumerJob } from "../../app/(console)/billing/credit-reads.ts";
-import { defaultCreditFixture, fixtureCreditReads } from "../../app/(console)/billing/credit-fixture.ts";
+import { defaultWorld, fakeConsoleApi } from "../../lib/api/fake.ts";
+import { apiCreditReads, jobOf } from "../../app/(console)/billing/credit-reads.ts";
 import {
   DEFAULT_JOB_RANGE,
   JOB_PAGE_SIZE,
@@ -66,7 +67,10 @@ registerHooks({
 });
 
 const NOW = new Date("2026-09-20T12:00:00.000Z");
-const fixture = defaultCreditFixture();
+// The client fake's default world (AP-09: the preview's data are the API's documents), read through
+// the production adapter: what the pages render is what the API would answer.
+const world = defaultWorld();
+const fixture = { jobs: world.requests.map(jobOf), ledger: world.ledger, reservedTotal: world.credits.reserved_total.amount as Credit };
 const byN = (n: number) => fixture.jobs.find((j) => j.requestId.endsWith(`0${n}`))!;
 
 const T = {
@@ -176,12 +180,12 @@ test(T.window, () => {
   for (const key of ["all", "", "x", `${KEY}'`, KEY.toUpperCase()]) assert.equal(parseJobFilters({ key }).keyId, null, key);
   for (const model of ["", "   ", "m".repeat(201)]) assert.equal(parseJobFilters({ model }).model, null);
   assert.equal(parseJobFilters({ model: ["a", "b"] }).model, "b", "a repeated parameter: the last one");
-  // The fixture applies the window as consumer_jobs does: at its start in, at its end out.
-  const start = { ...byN(8), createdAt: "2026-09-19T12:00:00.000000Z" };
-  const end = { ...byN(1), createdAt: "2026-09-20T12:00:00.000000Z" };
-  const reads = fixtureCreditReads({ ...fixture, jobs: [start, end] });
+  // The fake applies the window as the API does: at its start in, at its end out.
+  const start = { ...world.requests[7], created_at: "2026-09-19T12:00:00.000000Z" };
+  const end = { ...world.requests[0], created_at: "2026-09-20T12:00:00.000000Z" };
+  const reads = apiCreditReads(fakeConsoleApi({ ...defaultWorld(), requests: [start, end] }));
   return reads.jobs(jobsPageRequest(parseJobFilters({ range: "24h" }), NOW)).then((got) => {
-    assert.deepEqual(got.ok && got.value.items.map((j) => j.requestId), [start.requestId]);
+    assert.deepEqual(got.ok && got.value.items.map((j) => j.requestId), [start.request_id]);
   });
 });
 
@@ -245,7 +249,7 @@ test(T.states, () => {
 });
 
 test(T.walk, async () => {
-  const reads = fixtureCreditReads(fixture);
+  const reads = apiCreditReads(fakeConsoleApi());
   for (const limit of [1, 2, 3, 100]) {
     let filters = parseJobFilters({});
     const seen: string[] = [];
@@ -267,10 +271,10 @@ test(T.walk, async () => {
     }
     assert.equal(seen.length, fixture.jobs.length, `limit ${limit}: a job was lost or repeated`);
     assert.equal(new Set(seen).size, seen.length, `limit ${limit}: a job was repeated`);
-    const wallet = fixture.wallet!;
-    const debits = fixture.ledger.filter((e) => e.kind === "inference_debit").map((e) => e.amount);
-    // Σ charged over the walk = −Σ debits on the ledger; Σ holds over the walk = reserved.
+    const debits = fixture.ledger.filter((e) => e.kind === "inference_debit").map((e) => e.amount.amount as Credit);
+    // The fake's world reconciles (as the API's must): Σ charged over the walk = −Σ debits on the
+    // ledger; Σ holds over the walk = reserved. Test-side arithmetic only; the App derives nothing.
     assert.equal(credits(totalCredit(charged)), credits(totalCredit(debits).replace("-", "") as Credit));
-    assert.equal(totalCredit(held), wallet.reservedTotal);
+    assert.equal(totalCredit(held), fixture.reservedTotal);
   }
 });

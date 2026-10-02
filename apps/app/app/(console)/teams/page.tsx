@@ -11,24 +11,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { providerRoute } from "@/lib/services/console";
+import { apiSource } from "@/lib/api/server";
 import { getSession } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Teams · infrx" };
 
 export default async function TeamsPage() {
   const session = await getSession();
   providerRoute(session, notFound);
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("org_members")
-    .select("role, profiles(email)")
-    .eq("org_id", session.orgId);
-
-  const members = (data ?? []).map((m) => ({
-    role: m.role as string,
-    email: (m.profiles as unknown as { email: string } | null)?.email ?? "—",
-  }));
+  // The personal organization's members, as infrx-api reads them for this session (`/console/v1/account/members`).
+  const answer = await (await apiSource()).api.call("get", "/console/v1/account/members", { query: { limit: 100 } });
+  const members = answer.ok ? answer.data.data.map((m) => ({ role: m.role, email: m.email ?? "—" })) : null;
 
   return (
     <>
@@ -41,8 +34,13 @@ export default async function TeamsPage() {
         <CardContent className="space-y-4">
           <div>
             <div className="text-xs text-muted-foreground">Organization</div>
-            <div className="font-heading text-base font-medium">{session.orgName}</div>
+            <div className="font-heading text-base font-medium">Personal</div>
           </div>
+          {members === null ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Members could not be loaded right now. Reload to try again.
+            </p>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -61,6 +59,7 @@ export default async function TeamsPage() {
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </>
