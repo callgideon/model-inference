@@ -11,6 +11,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@infrx/api-client':
+        specifier: link:../../packages/api-client
+        version: link:../../packages/api-client
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.116.0)

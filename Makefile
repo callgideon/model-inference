@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local
+.PHONY: integration consumer-local backend-certify app-e2e backend-local check api-env api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants bench-test console-c0-real console-pg console-c3a-real console-u3-real console-c3f-real lab-test lab-lint lab-typecheck lab-build lab-mutants lab-e2e lab-operate lab-evaluate lab-observe lab-rollout lab-improve lab-compositions lab-local api-client-test api-client-mutants
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -184,7 +184,14 @@ lab-mutants:
 	cd apps/lab && node tests/e2e/run-mutants.mjs
 	cd apps/lab && node tests/l/shared/run-mutants.mjs
 
-check: api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants
+# packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
+api-client-test:
+	cd packages/api-client && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test
+
+api-client-mutants:
+	cd packages/api-client && pnpm test:mutants
+
+check: api-test api-lint api-typecheck api-mutants console-test console-lint console-typecheck console-mutants console-built bench-test lab-test lab-lint lab-typecheck lab-build lab-mutants api-client-test
 
 # Real service evidence is separate from unit checks; Docker absence must fail visibly.
 # Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"
