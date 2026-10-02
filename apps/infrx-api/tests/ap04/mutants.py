@@ -63,6 +63,8 @@ PROFILE = c("the_profile_is_the_measured_marlin_serving_version")
 ADOPT = c("an_operator_adopts_existing_bytes_keeping_the_production_identity")
 ADOPT_NO = c("adoption_refuses_non_operators_foreign_resources_and_other_bytes")
 OPS = c("the_memory_operations_replay_and_cancel_by_the_protocol")
+UNWIRED = c("nothing_mounts_while_the_surface_is_unwired")
+RP = "gateway/routes/lab_model_projects.py"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- 04a: projects, idempotency, doors, pages, the envelope ---------------------------
@@ -101,6 +103,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "except ZeroDivisionError as refused:", ENVELOPE),
     _m("refusal_echoes_input", "a refusal names the field and never echoes the input",
        RA, 'message=str(e["msg"])[:300]', 'message=str(e.get("input"))[:300]', ENVELOPE),
+    _m("artifact_routes_mount_unwired", "default OFF: no artifact route without the surface",
+       RA, "    if a is None:\n        return\n", "    if False:\n        return\n", UNWIRED),
+    _m("project_routes_mount_unwired", "default OFF: no project route without the surface",
+       RP, "    if a is None:\n        return\n", "    if False:\n        return\n", UNWIRED),
     # --- 04b: uploads -----------------------------------------------------------------------
     _m("unsafe_path_accepted", "no path escapes its prefix or hides a segment",
        M, "    if len(path) > 512 or not all(SEGMENT.match(s) for s in segments):\n",
@@ -234,7 +240,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        S, "    if isinstance(failed, pg.UniqueViolation):\n",
        "    if isinstance(failed, ZeroDivisionError):\n", SLUG),
 )
-FAKE_ONLY = (OPS, PROFILE)
+FAKE_ONLY = (OPS, PROFILE, UNWIRED)
 
 
 def case_names() -> set[str]:

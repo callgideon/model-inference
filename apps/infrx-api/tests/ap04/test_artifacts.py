@@ -545,3 +545,21 @@ def test_ap04__the_memory_operations_replay_and_cancel_by_the_protocol() -> None
         run(ops.start(**start, input_hash="h2"))
     assert run(ops.cancel(first.doc.operation_id)).doc.state == "cancelled"
     assert run(ops.lease(first.doc.operation_id, "w", 60)) is None
+
+
+def test_ap04__nothing_mounts_while_the_surface_is_unwired() -> None:
+    """Default OFF: a runtime without `lab_artifacts` (the switch off) mounts no AP-04 route."""
+    import types
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from infrx.gateway.routes import lab_artifacts, lab_model_projects
+    app = FastAPI()
+    for module in (lab_model_projects, lab_artifacts):
+        module.register(app, types.SimpleNamespace(actors=None, lab_artifacts=None))
+    client = TestClient(app, raise_server_exceptions=False)
+    answers = {path: client.request(method, path).status_code for method, path in (
+        ("GET", PROJECTS), ("POST", UPLOADS), ("POST", "/lab/v1/artifacts/imports"),
+        ("POST", "/operator/v1/artifacts/adopt"))}
+    assert set(answers.values()) == {404}, answers
