@@ -1,0 +1,106 @@
+diff --git a/apps/lab/app/(provider)/experiments/[id]/page.tsx b/apps/lab/app/(provider)/experiments/[id]/page.tsx
+index 0ad1959a..36ec169e 100644
+--- a/apps/lab/app/(provider)/experiments/[id]/page.tsx
++++ b/apps/lab/app/(provider)/experiments/[id]/page.tsx
+@@ -2,6 +2,7 @@ import { requireProviderWorkspace } from "@/lib/auth/guard";
+ import { evaluationPort, isPreview } from "@/lib/services/evaluation/port";
+ import { comparison, REFUSAL_COPY, runRow } from "@/lib/services/evaluation/view";
+ import { RunsTable } from "../../evaluations/runs";
++import { ComparisonReport } from "../../evaluations/report";
+ import { PreviewNote } from "@/components/preview-note";
+ 
+ export const metadata = { title: "Experiment · infrx Lab" };
+@@ -31,34 +32,7 @@ export default async function ExperimentPage({ params }: PageProps<"/experiments
+         <p>Pending: B2 compares the runs once both have ended.</p>
+       ) : (
+         <>
+-          <p role="status">{c.outcome}</p>
+-          <ul>{c.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+-          <p>{`${c.pairing} · ${c.basis} · ${c.confidence} · ${c.paired}`}</p>
+-          <table>
+-            <thead>
+-              <tr><th>Estimate</th><th>Cases</th><th>Candidate − baseline</th><th>Interval</th><th>Margin</th><th>Verdict</th><th /></tr>
+-            </thead>
+-            <tbody>
+-              {c.estimates.map((r) => (
+-                <tr key={r.name}><td>{r.name}</td><td>{r.paired}</td><td>{r.diff}</td><td>{r.interval}</td><td>{r.margin}</td><td>{r.verdict}</td><td>{r.improved}</td></tr>
+-              ))}
+-            </tbody>
+-          </table>
+-          <table>
+-            <thead>
+-              <tr><th>Run</th><th>Mean over all cases</th><th>Missing</th><th>Errored</th><th>Not comparable</th><th>Cost</th><th>Latency</th></tr>
+-            </thead>
+-            <tbody>
+-              {c.runs.map((r) => (
+-                <tr key={r.name}>
+-                  <td>{r.name}</td><td>{r.mean}</td><td>{r.missing}</td><td>{r.errors}</td><td>{r.notComparable}</td>
+-                  <td>{r.costs.map((x) => <div key={x}>{x}</div>)}</td><td>{r.latency}</td>
+-                </tr>
+-              ))}
+-            </tbody>
+-          </table>
+-          <p>Cost difference, per unit: {c.costDelta.join(" · ")}</p>
+-          <dl>{c.identity.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
++          <ComparisonReport report={e.report!} />
+           <p><a href={`/experiments/${e.experiment_id}/report`} download>Export the report (JSON)</a></p>
+         </>
+       )}
+diff --git a/apps/lab/tests/b/pages.test.ts b/apps/lab/tests/b/pages.test.ts
+index f431ccea..f5789c61 100644
+--- a/apps/lab/tests/b/pages.test.ts
++++ b/apps/lab/tests/b/pages.test.ts
+@@ -28,12 +28,12 @@ test("B4-P01 each page reads the evaluation records as the session's workspace a
+ });
+ 
+ test("B4-P02 launch and subscribe forms are shown only to a role that runs evaluations and carry a fresh record id", () => {
+-  assert.match(read(EVALS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+<form action=\{launchExperiment\}>/);
++  assert.match(read(EVALS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+launch\.kind === "unavailable" \? [\s\S]*?\) : \(\n\s+<form action=\{launchExperiment\}>/);
+   assert.match(read(EVALS), /<input type="hidden" name="experiment_id" value=\{crypto\.randomUUID\(\)\} \/>/);
+-  assert.match(read(CHECKPOINTS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+<form action=\{subscribeCheckpoints\}>/);
++  assert.match(read(CHECKPOINTS), /\{holds\(workspace\.role, "run_evaluation"\) && \(\n\s+offered\.kind === "unavailable" \? [\s\S]*?\) : \(\n\s+<form action=\{subscribeCheckpoints\}>/);
+   assert.match(read(CHECKPOINTS), /<input type="hidden" name="subscription_id" value=\{crypto\.randomUUID\(\)\} \/>/);
+   assert.match(read(RUNS), /\{r\.cancel && \(\n\s+<form action=\{cancelRun\}>/);
+-  assert.match(read(EVALS), /<select name="harness_ref" required>\{c\.harnesses\.map/, "H1 revisions are picked, never typed");
++  assert.match(read(EVALS), /<select name="harness_ref" required>\{launch\.catalog\.harnesses\.map/, "H1 revisions are picked, never typed");
+ });
+ 
+ test("B4-P03 an experiment is found only among the workspace's own, compared only through B2's report, exported only once it exists", () => {
+@@ -43,7 +43,7 @@ test("B4-P03 an experiment is found only among the workspace's own, compared onl
+   assert.match(page, /\{c === null \? \(\n\s+<p>Pending: B2 compares the runs once both have ended\.<\/p>/);
+   assert.equal(page.split("/report`").length - 1, 1, "one export link, inside the report branch");
+   assert.ok(page.indexOf("/report`") > page.indexOf("{c === null ?"));
+-  assert.match(page, /<p role="status">\{c\.outcome\}<\/p>/);
++  assert.match(page, /<ComparisonReport report=\{e\.report!\} \/>/, "UX-08: B2's report, decision first (evaluations/report.tsx)");
+ });
+ 
+ test("B4-P04 the preview stand-in is labelled on every page only when it is on", () => {
+diff --git a/apps/lab/tests/b/run-mutants.mjs b/apps/lab/tests/b/run-mutants.mjs
+index 0c1451b3..a33ee044 100644
+--- a/apps/lab/tests/b/run-mutants.mjs
++++ b/apps/lab/tests/b/run-mutants.mjs
+@@ -176,9 +176,9 @@ const MUTANTS = [
+   m("B4-X102", "a page reads records as a fixed provider", EVALS, "port.runs(workspace)", 'port.runs({ ...workspace, providerId: "11111111-1111-4111-8111-111111111111" })', [C.p01]),
+   m("B4-X103", "a page shows ?refused= raw", CHECKPOINTS, "const refused = refusalCopy((await searchParams).refused);", 'const refused = String((await searchParams).refused ?? "") || null;', [C.p01]),
+   m("B4-X104", "a page claims success on its own", EVALS, "<h1>Evaluations</h1>", "<h1>Evaluations</h1>\n      <p>Launched successfully.</p>", [C.p01]),
+-  m("B4-X105", "the launch form is shown to a viewer", EVALS, '{holds(workspace.role, "run_evaluation") && (\n        <form action={launchExperiment}>', "{(\n        <form action={launchExperiment}>", [C.p02]),
++  m("B4-X105", "the launch form is shown to a viewer", EVALS, '{holds(workspace.role, "run_evaluation") && (\n        launch.kind', "{(\n        launch.kind", [C.p02]),
+   m("B4-X106", "the launch form carries a fixed id", EVALS, 'name="experiment_id" value={crypto.randomUUID()}', 'name="experiment_id" value="00000000-0000-4000-8000-000000000000"', [C.p02]),
+-  m("B4-X107", "the subscribe form is shown to a viewer", CHECKPOINTS, '{holds(workspace.role, "run_evaluation") && (\n        <form action={subscribeCheckpoints}>', "{(\n        <form action={subscribeCheckpoints}>", [C.p02]),
++  m("B4-X107", "the subscribe form is shown to a viewer", CHECKPOINTS, '{holds(workspace.role, "run_evaluation") && (\n        offered.kind', "{(\n        offered.kind", [C.p02]),
+   m("B4-X108", "cancel is rendered on every row", RUNS, "{r.cancel && (", "{(", [C.p02]),
+   m("B4-X109", "the harness is typed, not picked", EVALS, '<select name="harness_ref" required>', '<input name="harness_ref" required /><select name="unused">', [C.p02]),
+   m("B4-X110", "a deep link shows the first experiment", EXPERIMENT, "list.value.find((x) => x.experiment_id === id)", "list.value[0]", [C.p03]),
+diff --git a/apps/lab/tests/e2e/evaluate/stack.test.ts b/apps/lab/tests/e2e/evaluate/stack.test.ts
+index 7f5d513e..b4cdb16e 100644
+--- a/apps/lab/tests/e2e/evaluate/stack.test.ts
++++ b/apps/lab/tests/e2e/evaluate/stack.test.ts
+@@ -12,7 +12,7 @@ import { REPORTS } from "../../b/real.ts";
+ import { door, form, forms, record, SKIP, stack, type Browser } from "../harness.ts";
+ 
+ type World = { A: string; B: string; dataset: string; servings: [string, string]; users: Record<string, string>; composed: Record<string, boolean>; stand_ins: string[] };
+-const LAUNCH = { seed: "7", max_cases: "3", run_limit: "10", confidence: "0.95", margin: "0.05", min_cases: "2", slices: "safety 0 2" };
++const LAUNCH = { seed: "7", max_cases: "3", run_limit: "10", metric_source: "deterministic_metric", confidence: "0.95", margin: "0.05", min_cases: "2", slices: "safety 0 2" };
+ 
+ test("E2E-E j10 the provider UI launches, compares and cancels", { skip: SKIP }, async (t) => {
+   const s = await stack<World>("evaluate");
