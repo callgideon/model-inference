@@ -15,6 +15,8 @@ import type { Publication } from "./port.ts";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
 export type Status = { tone: Tone; text: string };
+/** Evidence: a short badge label (a badge does not wrap) and the full sentence. */
+export type Proof = Status & { label: string };
 
 export const NO_MEASUREMENT = "No measurement yet";
 export const STALE_FENCE = "If a newer policy revision exists, the evidence you reviewed has changed: review the release again before proposing.";
@@ -33,17 +35,19 @@ const LABEL: Record<ProposalKind, string> = { expand: "Propose expansion", rollb
 const VERB: Record<ProposalKind, string> = { expand: "expanding", rollback: "rolling back" };
 
 /** The candidate's serving evidence: the latest observation, never the release's state or an approval. */
-function proof(r: Release): Status {
+function proof(r: Release): Proof {
   const live = r.progress;
   if (live === null) {
-    return { tone: "neutral", text: r.refused === "unit_refused" ? "Not available: progress settled in another unit" : `${NO_MEASUREMENT}: nothing shows the candidate serving` };
+    return r.refused === "unit_refused"
+      ? { tone: "neutral", label: "Progress unavailable", text: "Not available: progress settled in another unit" }
+      : { tone: "neutral", label: NO_MEASUREMENT, text: `${NO_MEASUREMENT}: nothing shows the candidate serving` };
   }
   return live.candidateHealthy
-    ? { tone: "success", text: `Candidate healthy in the observation through ${live.observedUntil}` }
-    : { tone: "danger", text: `Candidate unhealthy in the observation through ${live.observedUntil}` };
+    ? { tone: "success", label: "Candidate healthy", text: `Candidate healthy in the observation through ${live.observedUntil}` }
+    : { tone: "danger", label: "Candidate unhealthy", text: `Candidate unhealthy in the observation through ${live.observedUntil}` };
 }
 
-export type ReleaseView = ReleaseRow & { observed: string; proof: Status; proposals: { kind: ProposalKind; label: string; summary: string }[] };
+export type ReleaseView = ReleaseRow & { observed: string; proof: Proof; proposals: { kind: ProposalKind; label: string; summary: string }[] };
 
 export function releaseViews(role: Role, records: Records): ReleaseView[] {
   const rows = releaseRows(role, records);
@@ -63,15 +67,15 @@ type S = components["schemas"];
 const notFound = (e: ApiError) => (e.kind === "error" || e.kind === "refusal") && e.status === 404;
 
 /** AP-05's readiness of one revision; an unmounted hosting service (LAB_HOSTING off) is "can't be checked", never a row. */
-export function readinessStatus(r: Result<S["ReadinessDoc"]> | undefined): Status {
+export function readinessStatus(r: Result<S["ReadinessDoc"]> | undefined): Proof {
   if (r === undefined || !r.ok) {
     return r !== undefined && notFound(r.error)
-      ? { tone: "neutral", text: "No serving proof recorded for this revision" }
-      : { tone: "neutral", text: "Serving proof can't be checked right now" };
+      ? { tone: "neutral", label: "No serving proof recorded", text: "No serving proof recorded for this revision" }
+      : { tone: "neutral", label: "Serving proof unknown", text: "Serving proof can't be checked right now" };
   }
   return r.data.ready
-    ? { tone: "success", text: `Serving proof current: identity, smoke and health checks passed (checked ${r.data.checked_at})` }
-    : { tone: "warning", text: `No current serving proof: ${r.data.reasons.join(", ")}` };
+    ? { tone: "success", label: "Serving proof current", text: `Serving proof current: identity, smoke and health checks passed (checked ${r.data.checked_at})` }
+    : { tone: "warning", label: "No current serving proof", text: `No current serving proof: ${r.data.reasons.join(", ")}` };
 }
 
 const REQUEST: Record<S["Proposal"]["state"], Status> = {
@@ -80,7 +84,7 @@ const REQUEST: Record<S["Proposal"]["state"], Status> = {
   rejected: { tone: "warning", text: "Rejected by an operator" },
 };
 
-export type PublicationRow = { id: string; title: string; revision: string; requested: string; decided: string; request: Status; proof: Status; caveat: string | null; listed: string | null };
+export type PublicationRow = { id: string; title: string; revision: string; requested: string; decided: string; request: Status; proof: Proof; caveat: string | null; listed: string | null };
 
 export function publicationRows({ proposals, deployments, readiness }: Publication): PublicationRow[] {
   if (!proposals.ok) return [];

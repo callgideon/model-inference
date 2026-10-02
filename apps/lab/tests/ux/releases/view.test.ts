@@ -33,10 +33,10 @@ test("UX10-V02 the current serving proof is the latest observation only: an appr
   assert.notEqual(approved.proof.tone, "success");
   assert.match(approved.proof.text, /^No measurement yet/);
   const healthy = releaseViews(ADMIN, records([release({ state: "approved", verdict: EXPAND })]))[0];
-  assert.deepEqual(healthy.proof, { tone: "success", text: `Candidate healthy in the observation through ${T}` });
+  assert.deepEqual(healthy.proof, { tone: "success", label: "Candidate healthy", text: `Candidate healthy in the observation through ${T}` });
   const sick = release();
   sick.progress!.candidateHealthy = false;
-  assert.deepEqual(releaseViews(ADMIN, records([sick]))[0].proof, { tone: "danger", text: `Candidate unhealthy in the observation through ${T}` });
+  assert.deepEqual(releaseViews(ADMIN, records([sick]))[0].proof, { tone: "danger", label: "Candidate unhealthy", text: `Candidate unhealthy in the observation through ${T}` });
 });
 
 test("UX10-V03 a proposal summary names the policy and the revision the server loaded, and says an operator decides", () => {
@@ -78,11 +78,11 @@ test("UX10-S01 a refused read is denied only for 403/denied; anything else is un
 });
 
 test("UX10-U01 readiness: ready is proof with its time; not ready names the reasons; none recorded and unreachable differ", () => {
-  assert.deepEqual(readinessStatus(ok(ready())), { tone: "success", text: `Serving proof current: identity, smoke and health checks passed (checked ${AT})` });
-  assert.deepEqual(readinessStatus(ok(ready({ ready: false, reasons: ["health_expired", "expired"] }))), { tone: "warning", text: "No current serving proof: health_expired, expired" });
-  assert.deepEqual(readinessStatus(NOT_FOUND), { tone: "neutral", text: "No serving proof recorded for this revision" });
+  assert.deepEqual(readinessStatus(ok(ready())), { tone: "success", label: "Serving proof current", text: `Serving proof current: identity, smoke and health checks passed (checked ${AT})` });
+  assert.deepEqual(readinessStatus(ok(ready({ ready: false, reasons: ["health_expired", "expired"] }))), { tone: "warning", label: "No current serving proof", text: "No current serving proof: health_expired, expired" });
+  assert.deepEqual(readinessStatus(NOT_FOUND), { tone: "neutral", label: "No serving proof recorded", text: "No serving proof recorded for this revision" });
   for (const r of [UNMOUNTED, DOWN, DENIED, undefined]) {
-    assert.deepEqual(readinessStatus(r), { tone: "neutral", text: "Serving proof can't be checked right now" }, JSON.stringify(r));
+    assert.deepEqual(readinessStatus(r), { tone: "neutral", label: "Serving proof unknown", text: "Serving proof can't be checked right now" }, JSON.stringify(r));
   }
 });
 
@@ -116,7 +116,7 @@ test("UX10-U03 the reads go through the generated client as the workspace: one r
   const answer = (url: string): unknown =>
     url.includes("/readiness") ? ready() : url.includes("/proposals") ? { data: [pub(), pub({ proposal_id: "pp2", kind: "rollback" }), pub({ proposal_id: "pp3", deployment_revision_id: DEP2 })] } : { data: [dep()] };
   const fetch = (async (url: string) => { seen.push(url); return new Response(JSON.stringify(answer(url)), { status: 200 }); }) as unknown as typeof globalThis.fetch;
-  const got = await readPublication({ providerId: A, role: ADMIN }, labApi({ baseUrl: "http://api.test", fetch }));
+  const got = await readPublication({ providerId: A }, labApi({ baseUrl: "http://api.test", fetch }));
   assert.ok(got.proposals.ok && got.deployments.ok);
   assert.deepEqual(Object.keys(got.readiness).sort(), [DEP, DEP2].sort());
   const q = `provider_org_id=${A}`;
@@ -126,9 +126,9 @@ test("UX10-U03 the reads go through the generated client as the workspace: one r
     `http://api.test/lab/v1/control/deployments?${q}`,
     `http://api.test/lab/v1/control/proposals?${q}`,
   ].sort());
-  const none = await readPublication({ providerId: A, role: ADMIN }, null);
+  const none = await readPublication({ providerId: A }, null);
   assert.deepEqual(none, { proposals: DOWN_UNCONFIGURED, deployments: DOWN_UNCONFIGURED, readiness: {} }, "no API configured: unavailable, nothing sent");
-  const refused = await readPublication({ providerId: A, role: ADMIN }, labApi({ baseUrl: "http://api.test", fetch: (async () => new Response('{"refusal":"denied"}', { status: 403 })) as unknown as typeof globalThis.fetch }));
+  const refused = await readPublication({ providerId: A }, labApi({ baseUrl: "http://api.test", fetch: (async () => new Response('{"refusal":"denied"}', { status: 403 })) as unknown as typeof globalThis.fetch }));
   assert.deepEqual(refused.readiness, {}, "no request listed: no readiness read");
 });
 const DOWN_UNCONFIGURED = { ok: false, requestId: "", error: { kind: "unavailable", status: null, reason: "network" } };

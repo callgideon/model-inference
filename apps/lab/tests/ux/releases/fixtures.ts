@@ -22,12 +22,13 @@ export const ready = (over: Partial<S["ReadinessDoc"]> = {}): S["ReadinessDoc"] 
   deployment_revision_id: DEP, serving_version_id: "sv-1", state: "ready_private", ready: true, reasons: [], checked_at: AT, ...over,
 });
 
+type Failed = Extract<Result<never>, { ok: false }>;
 export const ok = <T>(data: T): Result<T> => ({ ok: true, status: 200, data, requestId: "r", location: null });
 /** The Lab unit without LAB_HOSTING: FastAPI's own 404 `{"detail": "Not Found"}`, which the transport reads as malformed. */
-export const UNMOUNTED: Result<never> = { ok: false, requestId: "r", error: { kind: "unavailable", status: 404, reason: "malformed" } };
-export const NOT_FOUND: Result<never> = {
+export const UNMOUNTED: Failed = { ok: false, requestId: "r", error: { kind: "unavailable", status: 404, reason: "malformed" } };
+export const NOT_FOUND: Failed = {
   ok: false, requestId: "r",
   error: { kind: "error", status: 404, code: "not_found", message: "no such deployment", requestId: "r", retryable: false, fieldErrors: [], operationId: null, resourceId: null },
 };
-export const DENIED: Result<never> = { ok: false, requestId: "r", error: { kind: "refusal", status: 403, reason: "denied" } };
-export const DOWN: Result<never> = { ok: false, requestId: "r", error: { kind: "unavailable", status: null, reason: "network" } };
+export const DENIED: Failed = { ok: false, requestId: "r", error: { kind: "refusal", status: 403, reason: "denied" } };
+export const DOWN: Failed = { ok: false, requestId: "r", error: { kind: "unavailable", status: null, reason: "network" } };
