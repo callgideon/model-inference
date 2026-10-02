@@ -423,7 +423,7 @@
       "id": "CAPTCHA-IGNORED",
       "what": "a required challenge is ignored (the form submits nothing usable)",
       "file": "app/(auth)/flow.ts",
-      "find": "  return availability?.ok === true && availability.data.captcha_required ? \"unconfigured\" : \"off\";",
+      "find": "  return availability?.ok === true && availability.data.captcha.required ? \"unconfigured\" : \"off\";",
       "replace": "  return \"off\";",
       "cases": [
         "LR02-FORM-01 a required challenge with no widget configured closes the email forms honestly; otherwise they are open"
@@ -433,8 +433,8 @@
       "id": "CAPTCHA-ALWAYS",
       "what": "an unknown requirement closes the forms",
       "file": "app/(auth)/flow.ts",
-      "find": "  return availability?.ok === true && availability.data.captcha_required ? \"unconfigured\" : \"off\";",
-      "replace": "  return availability?.ok === true && !availability.data.captcha_required ? \"off\" : \"unconfigured\";",
+      "find": "  return availability?.ok === true && availability.data.captcha.required ? \"unconfigured\" : \"off\";",
+      "replace": "  return availability?.ok === true && !availability.data.captcha.required ? \"off\" : \"unconfigured\";",
       "cases": [
         "LR02-FORM-01 a required challenge with no widget configured closes the email forms honestly; otherwise they are open"
       ]

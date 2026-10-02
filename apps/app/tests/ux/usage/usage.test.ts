@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { defaultCreditFixture } from "../../../app/(console)/billing/credit-fixture.ts";
-import type { ConsumerJob } from "../../../app/(console)/billing/credit-reads.ts";
+import { apiCreditReads, jobOf, type ConsumerJob } from "../../../app/(console)/billing/credit-reads.ts";
+import { defaultWorld, fakeConsoleApi } from "../../../lib/fake-api.ts";
 import {
   copyText,
   pollsFor,
@@ -31,7 +31,14 @@ import { render, text } from "./render.ts";
 
 const APP = new URL("../../../", import.meta.url).pathname;
 const source = (path: string) => readFileSync(APP + path, "utf8");
-const job = (over: Partial<ConsumerJob> = {}): ConsumerJob => ({ ...defaultCreditFixture().jobs[0], ...over });
+// AP-09: the preview's data are the client fake's API documents, read through the production adapter.
+const world = defaultWorld();
+const reads = apiCreditReads(fakeConsoleApi(world));
+const [walletRead, ledgerRead] = [await reads.wallet(), await reads.ledger({ limit: 100, cursor: null })];
+if (!walletRead.ok || !ledgerRead.ok) throw new Error("the client fake's wallet or ledger did not read");
+const fixture = { jobs: world.requests.map(jobOf), wallet: walletRead.value, ledger: ledgerRead.value.items };
+const grantEntry = fixture.ledger.find((e) => e.kind === "signup_grant")!;
+const job = (over: Partial<ConsumerJob> = {}): ConsumerJob => ({ ...fixture.jobs[0], ...over });
 const DELETION = /\b(remov|delet|purg|eras|destroy)/i;
 
 test("UXU-01 result notes say when the result stops being readable, never that content is removed or deleted", () => {
@@ -216,7 +223,6 @@ test("UXU-05 Copy request ID and Copy result report a blocked clipboard instead 
 // ---------------------------------------------------------------------------------------------------
 
 const USAGE = "app/(console)/usage/page.tsx";
-const fixture = defaultCreditFixture();
 const page = <T,>(items: T[]) => ({ ok: true as const, value: { items, next_cursor: null } });
 const cells = (html: string) => [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((cell) => text(cell[1])));
 
@@ -226,18 +232,18 @@ test("UXU-06 Usage puts requests first and keeps credits a compact summary that 
   before(usage, "<RequestsTable", "<CreditSummary");
   assert.doesNotMatch(usage, /<CreditBalanceCard/, "the full card lives on Credits");
 
-  const ready = text(await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }, null), href: "/usage" }));
+  const ready = text(await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }), href: "/usage" }));
   assert.match(ready, /9,982\.67777779 credits/);
   assert.match(ready, /10\.00 credits/);
   const failedHtml = await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", {
-    card: creditCardState({ ok: false, error: { code: "dependency_unavailable", message: "x" } }, null),
+    card: creditCardState({ ok: false, error: { code: "dependency_unavailable", message: "x" } }),
     href: "/usage?range=24h",
   });
   const failed = text(failedHtml);
   assert.match(failed, /Credits unavailable/);
   assert.doesNotMatch(failed, /\d+(\.\d+)? credits/, "no figure when the wallet could not be read");
   assert.match(failedHtml, /<a [^>]*href="\/usage\?range=24h"[^>]*>Try again<\/a>/);
-  for (const html of [failedHtml, await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }, null), href: "/usage" })]) {
+  for (const html of [failedHtml, await render("app/(console)/usage/credit-summary.tsx", "CreditSummary", { card: creditCardState({ ok: true, value: fixture.wallet }), href: "/usage" })]) {
     assert.match(html, /<a [^>]*href="\/billing"[^>]*>View credits<\/a>/);
   }
 });
@@ -288,7 +294,7 @@ test("UXU-08 a request row keeps execution and money apart: status is the reques
 
 test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart, states the one-time grant and names every ledger event", () => {
   const wallet = fixture.wallet!;
-  const card = creditCardState({ ok: true, value: wallet }, { ok: true, value: "9995.00000000" as Credit });
+  const card = creditCardState({ ok: true, value: wallet });
   assert.ok(card.kind === "ready");
   assert.deepEqual(
     card.value.figures.map((f) => [f.label, f.value, f.emphasis]),
@@ -300,17 +306,17 @@ test("UXU-09 Credits leads with Available to use, keeps reserve and spend apart,
     ],
   );
   assert.equal(card.value.grant, "10,000 promotional credits, granted once after verification. Received 2026-09-20 09:00 UTC.");
-  const pending = creditCardState({ ok: true, value: { ...wallet, signupGrantedAt: null } }, null);
+  const pending = creditCardState({ ok: true, value: { ...wallet, signupGrantedAt: null } });
   assert.ok(pending.kind === "ready");
   assert.equal(pending.value.grant, "10,000 promotional credits, granted once after verification. Not received yet.");
   const said = [CREDITS_NOTICE, card.value.grant, pending.value.grant, ...[null, wallet, { ...wallet, available: "0.00000000" }].flatMap((w) => Object.values(creditAccountState(w as never)))].join(" ");
   assert.doesNotMatch(said, /\$|top[- ]?up|subscri|monthly|resets?\b|buy|purchase/i, "no paid path, refill or dollar value");
 
-  const grant = ledgerEntryView({ ...fixture.ledger[0], kind: "signup_grant" });
+  const grant = ledgerEntryView({ ...grantEntry, kind: "signup_grant" });
   assert.deepEqual([grant.kind, grant.code, grant.amount], ["Promotional credit grant", "signup_grant", "+10,000.00 credits"]);
-  const debit = ledgerEntryView({ ...fixture.ledger[0], kind: "inference_debit", amount: "-0.00000001" as Credit });
+  const debit = ledgerEntryView({ ...grantEntry, kind: "inference_debit", amount: "-0.00000001" as Credit });
   assert.deepEqual([debit.kind, debit.amount], ["Request charge", "-0.00000001 credits"]);
-  const novel = ledgerEntryView({ ...fixture.ledger[0], kind: "novel_kind" });
+  const novel = ledgerEntryView({ ...grantEntry, kind: "novel_kind" });
   assert.deepEqual([novel.kind, novel.code], ["Other", "novel_kind"], "an unknown event is neutral, with its raw code");
   assert.match(source("app/(console)/billing/page.tsx"), /<span className="block font-mono text-xs text-muted-foreground">\{row\.code\}<\/span>/);
 });

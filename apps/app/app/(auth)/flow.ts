@@ -288,14 +288,14 @@ export function requestResend(api: ConsumerApi, email: string, origin: string, m
 export type CaptchaGate = "off" | "unconfigured";
 
 /**
- * LR-02, the form half: when the auth service requires a challenge (`captcha_required` from
+ * LR-02, the form half: when the auth service requires a challenge (`captcha.required` from
  * `GET /auth/v1/availability`), a form without a configured challenge widget says so and sends
  * nothing; a token the widget leaves in the form (`captcha_token`) is forwarded as-is.
  * ponytail: no widget is pinned yet (coordinator wiring: the hosted provider's widget + its site
  * key in the P-05 checklist), so "required" is always "unconfigured" here; add "ready" with it.
  */
 export function captchaGate(availability: ApiResult<S["AuthAvailability"]> | null): CaptchaGate {
-  return availability?.ok === true && availability.data.captcha_required ? "unconfigured" : "off";
+  return availability?.ok === true && availability.data.captcha.required ? "unconfigured" : "off";
 }
 
 export const CAPTCHA_UNAVAILABLE =

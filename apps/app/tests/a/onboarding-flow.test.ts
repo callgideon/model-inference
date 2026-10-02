@@ -363,7 +363,7 @@ test("A2-EMAIL-03 resend sends one facade request with the verify link (PKCE, CA
 test("LR02-FORM-01 a required challenge with no widget configured closes the email forms honestly; otherwise they are open", () => {
   const availability = (captcha: boolean) =>
     ok({
-      captcha_required: captcha,
+      captcha: { required: captcha, state: { state: "configured" as const } },
       sign_in: { state: "configured" as const }, sign_up: { state: "configured" as const },
       recovery: { state: "configured" as const }, signup_grant: { state: "configured" as const },
     });
