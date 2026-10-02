@@ -99,8 +99,11 @@ export async function html(element: ReactElement, path = "/overview"): Promise<s
   register();
   (globalThis as { __operatePath?: string }).__operatePath = path;
   const { renderToStaticMarkup } = (await import(require.resolve("react-dom/server"))) as typeof import("react-dom/server");
-  return renderToStaticMarkup(element);
+  return renderToStaticMarkup(element).replaceAll("&#x27;", "'"); // readable apostrophes; still valid HTML
 }
+
+/** The page's own content: what the provider layout's <main> holds (the shell's forms excluded). */
+export const mainOf = (markup: string): string => /<main\b[^>]*>([\s\S]*)<\/main>/.exec(markup)?.[1] ?? "";
 
 /** A whole document: the Lab's root class, lab.css and the lane's module CSS (class names unhashed). */
 export function page(body: string): string {
