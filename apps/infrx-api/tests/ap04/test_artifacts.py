@@ -300,6 +300,26 @@ def test_ap04__a_worker_killed_while_hashing_is_fenced_out(world) -> None:
     assert w.call("GET", f"/lab/v1/artifacts/{op['resource_id']}").status_code == 200
 
 
+def test_ap04__a_verification_longer_than_its_lease_keeps_it_by_heartbeat(world) -> None:
+    """Every phase renews the worker's own lease (0060's same-owner renewal under the same
+    fence): files that together outlast the 600 s lease still verify in one pass, never
+    refused as a stale fence mid-way (the real Marlin shards are ~5 GB each)."""
+    w = world
+    files = marlin_files()
+    up = open_upload(w, files, project(w)["project_id"])
+    for path, blob in files.items():
+        put(w, up["upload_id"], path, blob)
+    op = complete(w, up).json()
+    digest = w.objects.digest
+
+    async def slow(key):
+        w.advance(400)                       # each file takes most of the lease
+        return await digest(key)
+    w.objects.digest = slow
+    assert w.worker("slow") == 1
+    assert operation(w, op["operation_id"])["state"] == "succeeded"
+
+
 def test_ap04__a_retry_after_the_artifact_write_keeps_one_artifact(world) -> None:
     """The process dies after the artifact row and before the session moves: the rerun under
     a new fence finds the same artifact id and finishes once."""

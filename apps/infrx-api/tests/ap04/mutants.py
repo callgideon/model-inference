@@ -32,6 +32,7 @@ V = "lab/artifacts/verify.py"
 M = "lab/artifacts/manifest.py"
 S = "lab/artifacts/store.py"
 RA = "gateway/routes/lab_artifacts.py"
+CO = "lab/artifacts/compose.py"
 
 
 def c(name: str) -> str:
@@ -51,6 +52,7 @@ EXPIRES = c("an_interrupted_upload_expires_cleanly")
 DUPLICATE = c("a_duplicate_completion_returns_the_one_operation")
 FENCED = c("a_worker_killed_while_hashing_is_fenced_out")
 RETRY = c("a_retry_after_the_artifact_write_keeps_one_artifact")
+HEARTBEAT = c("a_verification_longer_than_its_lease_keeps_it_by_heartbeat")
 CAS = c("a_session_moves_only_from_the_state_it_was_read_in")
 OP_SCOPE = c("an_operation_is_read_only_inside_its_workspace")
 IMPORT = c("a_pinned_import_fetches_and_verifies_every_file")
@@ -147,11 +149,27 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("fake_update_not_cas", "an intake row moves only from the state it was read in",
        S, 'if stored is None or getattr(stored, "state") != expected_state:',
        "if stored is None:", CAS),
-    _m("live_lease_taken", "a live lease is never taken over",
-       S, "op.lease_until is not None and op.lease_until > now):", "False):", FENCED),
-    _m("stale_fence_writes", "a superseded worker's writes are refused",
-       S, "if fence != op.fence or op.doc.state in api.TERMINAL_STATES:",
-       "if op.doc.state in api.TERMINAL_STATES:", FENCED),
+    # --- WR-AP04-2: AP-04's operations over 0060 (`compose.DurableOps`) -------------------
+    _m("live_lease_refusal_raised", "a lease another worker holds is skipped, not a crash",
+       CO, "        except errors.Conflict:\n            return None\n",
+       "        except ZeroDivisionError:\n            return None\n", FENCED),
+    _m("stale_advance_untyped", "a superseded worker's phase write is stale_lease",
+       CO, "return _op(await self.ops.advance(operation_id, fence, phase))\n"
+           "        except errors.Conflict:",
+       "return _op(await self.ops.advance(operation_id, fence, phase))\n"
+       "        except ZeroDivisionError:", FENCED),
+    _m("stale_finish_untyped", "a superseded worker's finish is stale_lease",
+       CO, "return _op(await self.ops.finish(operation_id, fence, state, error))\n"
+           "        except errors.Conflict:",
+       "return _op(await self.ops.finish(operation_id, fence, state, error))\n"
+       "        except ZeroDivisionError:", FENCED),
+    _m("no_heartbeat", "every phase renews the worker's own lease",
+       CO, "            if (operation_id, fence) in self.held:\n", "            if False:\n",
+       HEARTBEAT),
+    _m("system_read_scoped", "the system reads any operation; the route scopes it",
+       CO, "_op(await self.ops.get(operation_id, SYSTEM))",
+       '_op(await self.ops.get(operation_id, api.Actor(audience="session", user_id="x")))',
+       OP_SCOPE),
     _m("operation_read_across_workspaces", "an operation is read only in its workspace",
        RA, "if op is None or op.actor.provider_org_id != actor.provider_org_id:",
        "if op is None:", OP_SCOPE),

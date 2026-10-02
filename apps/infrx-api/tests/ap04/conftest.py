@@ -2,10 +2,14 @@
 
 - `fake`: L3's LAB-PUBLISH fake world (`tests/l/control/worlds.py`: providers A = NemoStation
   with the seeded Marlin serving version and B, their members, an operator), the fake row
-  store, process-memory objects and operations;
+  store, process-memory objects and 0060's `FakeControlOps` on the world clock;
 - `pg` (marked `pg`, only on `INFRX_D_TASK=ap4`): the same world on the task-local
-  PostgreSQL (port 57554, every migration including 0061; the AP-04 store connects as the
-  Lab control login `infrx_lab_control`) and real bytes on the lane's MinIO (57555).
+  PostgreSQL (port 57554, every migration including 0060 and 0061; the AP-04 store and
+  0060's `PgControlOps` connect as the Lab control login `infrx_lab_control`) and real bytes
+  on the lane's MinIO (57555).
+
+Both worlds run AP-04's operations through `compose.DurableOps` (WR-AP04-2), the adapter the
+Lab unit and the `artifacts` worker role compose.
 
 The source repository is a local stub (an httpx MockTransport serving a tiny Marlin-shaped
 repository at one commit; its config, generation and processor files are the measured Marlin
@@ -34,7 +38,9 @@ from infrx.contracts.tasklocal import local_services
 from infrx.gateway.routes import lab_artifacts, lab_model_projects
 from infrx.lab.artifacts import ArtifactWorker, LabArtifacts
 from infrx.lab.artifacts.imports import HubSource
-from infrx.lab.artifacts.store import FakeArtifactStore, MemoryControlOps, MemoryObjects
+from infrx.lab.artifacts.compose import DurableOps
+from infrx.lab.artifacts.store import FakeArtifactStore, MemoryObjects
+from infrx.state.control_ops import FakeControlOps
 
 from tests.d import pgharness
 from tests.l.control import worlds as l3
@@ -142,10 +148,10 @@ def actors(w) -> dict[str, api.Actor]:
 class World:
     """One case's world: the app, its stores and helpers over HTTP."""
 
-    def __init__(self, w, store, objects, s3_put) -> None:
+    def __init__(self, w, store, objects, s3_put, ops) -> None:
         self.w, self.store, self.objects, self.s3_put = w, store, objects, s3_put
         self.A, self.B = w.A, w.B
-        self.ops = MemoryControlOps(store.db_now)
+        self.ops = DurableOps(ops)
         self.stub = Stub(marlin_files())
         self.secret = {"value": TOKEN}
         self.artifacts = LabArtifacts.compose(
@@ -214,7 +220,7 @@ def fake_world():
     w = l3.FakeWorld()
     c = w.control_store
     store = FakeArtifactStore(clock=w.store.db_now, slugs=dict(c.slugs), models=c.models)
-    return World(w, store, MemoryObjects(), None)
+    return World(w, store, MemoryObjects(), None, FakeControlOps(now=w.now))
 
 
 def _docker(*args: str) -> subprocess.CompletedProcess:
@@ -280,6 +286,7 @@ def login_dsn(database: str) -> str:
 def pg_world(pg_template, minio):
     from infrx.lab.artifacts.store import PgArtifactStore, S3Objects
     from infrx.media.s3 import S3ObjectStore
+    from infrx.state.control_ops import PgControlOps
     from infrx.state.jobstore import connector
     pgharness.assert_ours("copy a database in")
     from psycopg import sql
@@ -290,14 +297,15 @@ def pg_world(pg_template, minio):
             sql.Identifier(CASE), sql.Identifier(pg_template)))
     with pgharness.connect(CASE) as conn:
         w = l3.PgWorld(conn, pgharness.dsn(CASE))
-        store = PgArtifactStore(connector(login_dsn(CASE), set_role=False))
+        login = connector(login_dsn(CASE), set_role=False)
+        store = PgArtifactStore(login)
         objects = S3Objects(S3ObjectStore.connect(
             BUCKET, f"{S3.object_prefix}{uuid.uuid4().hex}/", f"http://127.0.0.1:{S3.host_port}"))
 
         def s3_put(url: str, blob: bytes) -> None:
             assert httpx.put(url, content=blob, timeout=30).status_code == 200
 
-        yield World(w, store, objects, s3_put)
+        yield World(w, store, objects, s3_put, PgControlOps(login))
 
 
 @pytest.fixture(params=["fake", pytest.param("pg", marks=pytest.mark.pg)])
