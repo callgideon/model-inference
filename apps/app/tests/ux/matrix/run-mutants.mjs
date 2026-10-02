@@ -26,12 +26,13 @@ const C = {
   m02: "UXV-M02 a requested real part whose port is closed is BLOCKED naming it, not run and never FAIL; a reachable one is judged by its cases",
   m03: "UXV-M03 a part whose every case is NOT RUN is BLOCKED with the cases' own reasons, once each; one ran case is judged",
   m04: "UXV-M04 directives: each SKIP or TODO case's reason by name, nested ones included; a plain ok has none",
-  m05: "UXV-M05 the final matrix: UX-10 and row 98 stay BLOCKED until they merge; every real part runs on its own key and never the E3A suite",
+  m05: "UXV-M05 the final matrix: UX-10 and row 98 run their suites now they merged; every real part runs on its own key and never the E3A suite",
   m06: "UXV-M06 a case its suite marks TODO FAIL[...] is a known product defect: FAIL with its reason while it fails, PASS once fixed, never BLOCKED",
   a01: "UXV-A01 the probe reports each planted defect: low-contrast text, an unnamed button, a sideways overflow, a sliding, a slid and a moving box; an inactive control, a hidden spinner and a fade are exempt",
   a02: "UXV-A02 at 200% zoom (640×400 CSS px) the shell never scrolls sideways; Tab reaches every control in view, uncovered and with a focus indicator; the menu opens and closes by keyboard",
   a03: "UXV-A03 every control is named and all text meets AA contrast, at 1440 px and with the 390 px menu open",
   a04: "UXV-A04 reduced motion: opening and closing the mobile menu moves nothing",
+  a05: "UXV-A05 reduced motion: the App's dialog and dropdown menu popups, as committed, move nothing",
 };
 
 const MUTANTS = [
@@ -50,7 +51,7 @@ const MUTANTS = [
   m("UXV-X11", "UX-10's part is declared blocked forever", J, '"app": "lab", "paths": ["tests/ux/releases"]', '"blocked": "batch 3"', [C.m05], RUNNER),
   m("UXV-X12", "a real part runs on d1", J, '"INFRX_D_TASK": "lab-v1m"', '"INFRX_D_TASK": "d1"', [C.m05], RUNNER),
   m("UXV-X13", "a directory part loses its journey narrowing", J, ', "match": "^UX06-"', "", [C.m05], RUNNER),
-  m("UXV-X14", "row 98 reads as unblocked", J, '"lane": "lab-judge-runs (row 98', '"lane": "lab-judge (row 98', [C.m05], RUNNER),
+  m("UXV-X14", "row 98 reads as blocked again", J, '"paths": ["tests/c/judge/runs.test.ts"]', '"blocked": "row 98"', [C.m05], RUNNER),
   m("UXV-X15", "sideways overflow is never reported", P, "overflow: document.documentElement.scrollWidth > window.innerWidth", "overflow: false", [C.a01], A11Y),
   m("UXV-X16", "an unnamed control is never reported", P, 'controls.filter((el) => name(el) === "")', "controls.filter(() => false)", [C.a01], A11Y),
   m("UXV-X17", "contrast is judged at 1:1", P, "const need = large ? 3 : 4.5;", "const need = 1;", [C.a01], A11Y),
@@ -60,8 +61,8 @@ const MUTANTS = [
   m("UXV-X21", "a hidden pending spinner counts as motion", P, '!el || el.closest("[role=status], [aria-busy=true], [aria-hidden=true]") !== null', "!el", [C.a01], A11Y),
   m("UXV-X22", "an opacity fade counts as motion", P, "const MOVES = /^(transform|", "const MOVES = /^(opacity|transform|", [C.a01], A11Y),
   m("UXV-X23", "the menu button loses its accessible name", "components/sidebar.tsx", '<Button variant="ghost" size="icon-sm" aria-label="Open menu" />', '<Button variant="ghost" size="icon-sm" />', [C.a02, C.a03], A11Y),
-  m("UXV-X24", "the menu slides in under reduced motion", "components/sidebar.tsx", '<Dialog.Popup className="fixed inset-y-0 left-0 z-50', '<Dialog.Popup style={{ animation: "enter 400ms", ["--tw-enter-translate-x" as string]: "-100%" }} className="fixed inset-y-0 left-0 z-50', [C.a04], A11Y),
   m("UXV-X25", "the focus ring is removed from the App's buttons", "components/ui/button.tsx", "focus-visible:ring-3 ", "", [C.a02], A11Y),
+  m("UXV-X28", "the reduced-motion rule lets animations run", "app/globals.css", "    animation-duration: 0.01ms !important;\n", "", [C.a04, C.a05], A11Y),
 ];
 
 function failed(out) {

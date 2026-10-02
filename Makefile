@@ -121,6 +121,7 @@ console-mutants:
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
 	cd apps/app && node tests/a/run-catalog-mutants.mjs
+	cd apps/app && node tests/ux/matrix/run-mutants.mjs
 	cd apps/app && node tests/c/feedback/run-mutants.mjs
 	cd apps/app && node tests/ux/run-mutants.mjs
 	cd apps/app && node tests/ux/first-call/run-mutants.mjs
@@ -205,6 +206,7 @@ lab-mutants:
 	cd apps/lab && node tests/ux/requests/run-mutants.mjs
 	cd apps/lab && node tests/ux/evaluations/run-mutants.mjs
 	cd apps/lab && node tests/ux/releases/run-mutants.mjs
+	cd apps/lab && node tests/ux/matrix/run-mutants.mjs
 
 # packages/api-client: the generated OpenAPI clients + transport (AP-00 00c).
 api-client-test:

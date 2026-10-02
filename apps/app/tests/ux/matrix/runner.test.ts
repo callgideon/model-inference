@@ -56,11 +56,12 @@ test("UXV-M04 directives: each SKIP or TODO case's reason by name, nested ones i
 });
 
 type Part = { name: string; app?: string; paths?: string[]; match?: string; lane: string; blocked?: string; real?: { env: Record<string, string>; needs: string } };
-test("UXV-M05 the final matrix: UX-10 and row 98 stay BLOCKED until they merge; every real part runs on its own key and never the E3A suite", () => {
+test("UXV-M05 the final matrix: UX-10 and row 98 run their suites now they merged; every real part runs on its own key and never the E3A suite", () => {
   const parts: Part[] = readMatrix().journeys.flatMap((j: { parts: Part[] }) => j.parts);
   const releases = parts.find((p) => p.lane.startsWith("ux-lab-releases"));
   assert.deepEqual([releases?.app, releases?.paths], ["lab", ["tests/ux/releases"]], "UX-10 unblocks itself when its suite lands");
-  assert.ok(parts.some((p) => p.lane.startsWith("lab-judge-runs") && p.blocked), "row 98 is BLOCKED[lab-judge-runs]");
+  const judge = parts.find((p) => p.lane.startsWith("lab-judge-runs"));
+  assert.deepEqual([judge?.app, judge?.paths, judge?.blocked], ["lab", ["tests/c/judge/runs.test.ts"], undefined], "row 98 runs its suite");
   const reals = parts.filter((p) => p.real);
   assert.ok(reals.length >= 4, "lab-e2e and the V1M stack are matrix parts");
   for (const p of reals) {

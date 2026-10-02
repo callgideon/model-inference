@@ -95,7 +95,7 @@
       "parts": [
         { "name": "fixture frozen suite → inconclusive report", "app": "lab", "paths": ["tests/ux/evaluations"], "lane": "ux-lab-evaluations (UX-08)", "match": "^UX08-(C02|D0[12]|R01|T0[1-3]|P0[2-4]|J0[1-4]) " },
         { "name": "launch, cancel and compare on the real routes (lab-e2e E02-E05)", "app": "lab", "paths": ["tests/e2e/observe/stack.test.ts", "tests/e2e/evaluate/stack.test.ts", "tests/e2e/improve/stack.test.ts", "tests/e2e/rollout/stack.test.ts"], "match": "^E2E-E0[2-5] ", "lane": "api-improve-3 (AP-10: the Catalog port over 0066's lab_eval_catalog, WR-UXVF-1) + the lab-e2e journey composition (WR-UXVF-2)", "real": {"env": {"LAB_E2E_REAL": "1", "LAB_E2E_BUILT": "1", "INFRX_D_TASK": "l4"}, "needs": "Docker, task-local key l4 (PG 57503), a Lab production build", "prepare": ["pnpm", "build"]} },
-        { "name": "judge runs on the request page (register row 98)", "blocked": "lib/services/judge/runs.ts answers unavailable until row 98 maps GET /lab/v1/traces/{request_id}/judge-runs through the generated client; re-point this part at its suite when it merges", "lane": "lab-judge-runs (row 98, UX-08/AP-09 09c follow-up)" }
+        { "name": "judge runs on the request page (register row 98)", "app": "lab", "paths": ["tests/c/judge/runs.test.ts"], "lane": "lab-judge-runs (row 98, UX-08/AP-09 09c follow-up)", "match": "^J3L-R0[1-4] " }
       ]
     },
     {
