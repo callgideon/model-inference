@@ -1,0 +1,195 @@
+diff --git a/apps/infrx-api/deploy/preflight.py b/apps/infrx-api/deploy/preflight.py
+index 43d99732..6e22a79a 100644
+--- a/apps/infrx-api/deploy/preflight.py
++++ b/apps/infrx-api/deploy/preflight.py
+@@ -304,6 +304,10 @@ NOT_SETTABLE = {
+                          "secret store with the deploy change, never an argument",
+     "AUTH_CAPTCHA_REQUIRED": "reports the hosted CAPTCHA policy (LR-02), the operator's "
+                              "decision recorded with the deploy change, not a --set",
++    "AUTH_CAPTCHA_PROVIDER": "the hosted CAPTCHA provider (LR-02, WR-AP01-3), recorded with "
++                             "the deploy change that enables it, not a --set",
++    "AUTH_CAPTCHA_SITE_KEY": "the hosted CAPTCHA's public site key (LR-02, WR-AP01-3), recorded "
++                             "with the deploy change that enables it, not a --set",
+ }
+ 
+ 
+diff --git a/apps/infrx-api/infrx/config.py b/apps/infrx-api/infrx/config.py
+index 85464cc4..8bae4b41 100644
+--- a/apps/infrx-api/infrx/config.py
++++ b/apps/infrx-api/infrx/config.py
+@@ -449,6 +449,11 @@ class DeploymentSettings:
+     auth_facade: bool = False
+     supabase_anon_key: str = field(default="", repr=False)
+     auth_captcha_required: bool = False
++    # AP-01 (WR-AP01-3, LR-02): the hosted bot protection's public half - its provider
++    # (`hcaptcha` | `turnstile`) and site key, the widget the App's forms render from
++    # `/auth/v1/availability`. Unset: a required challenge closes the password doors honestly.
++    auth_captcha_provider: str = ""
++    auth_captcha_site_key: str = ""
+     # M6 wiring 1 + E3C F-4: the worker's housekeeping (`python -m infrx.worker` is the one
+     # process that runs it; gateways run none). P-25 (decided 2026-09-25,
+     # research/plan/15-pending-inputs.md, "Decisions 2026-09-25"):
+diff --git a/apps/infrx-api/infrx/gateway/pilot.py b/apps/infrx-api/infrx/gateway/pilot.py
+index 2ea6ee61..49510e11 100644
+--- a/apps/infrx-api/infrx/gateway/pilot.py
++++ b/apps/infrx-api/infrx/gateway/pilot.py
+@@ -334,7 +334,9 @@ def _auth_facade(rt):
+     return AuthFacade(httpx.AsyncClient(base_url=rt.settings.supabase_url,
+                                         timeout=httpx.Timeout(10, connect=2)),
+                       deployment.supabase_anon_key, origins=_web_origins(deployment),
+-                      captcha_required=deployment.auth_captcha_required)
++                      captcha_required=deployment.auth_captcha_required,
++                      captcha_provider=deployment.auth_captcha_provider,
++                      captcha_site_key=deployment.auth_captcha_site_key)
+ 
+ 
+ def _pg_feedback(connect):
+diff --git a/apps/infrx-api/infrx/lab/control/app.py b/apps/infrx-api/infrx/lab/control/app.py
+index d12ff176..3c544d3e 100644
+--- a/apps/infrx-api/infrx/lab/control/app.py
++++ b/apps/infrx-api/infrx/lab/control/app.py
+@@ -95,7 +95,18 @@ def _compose(lab: dict[str, str], store):
+         from ..judge_api.doors import SessionDoors
+         from ..judge_api.service import JudgeApi
+         judge = JudgeApi(SessionDoors(connect))
+-    return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=None,
++    # WR-AP01-2 (AP-01): the unit's own session actors over 0065's identity functions on this
++    # login (no API-key door), only with IDENTITY_API (default off): they mount the workspaces,
++    # members, capabilities and console account routes and open LAB_JUDGE_API's doors.
++    actors = identity = None
++    if settings.deployment is not None and settings.deployment.identity_api:
++        from ...console.session import SessionActors
++        from ...state.identity import PgIdentity
++        identity = PgIdentity(connect)
++        actors = SessionActors(sessions, identity, origins=tuple(
++            o.strip() for o in settings.deployment.web_origins.split(",") if o.strip()))
++    return SimpleNamespace(settings=settings, clock=time.time, lab_judge=judge, actors=actors,
++                           identity=identity, lab_access=access if actors else None,
+                            **_families(settings, lab, connect)), control, traces
+ 
+ 
+@@ -129,13 +140,13 @@ def create_app() -> FastAPI:
+             return JSONResponse({"status": "unavailable"}, status_code=503)
+         return {"status": "ready"}
+ 
+-    from ...gateway.routes import (lab_checkpoints, lab_control, lab_datasets, lab_evaluations,
+-                                   lab_judge, lab_pipelines, lab_releases, lab_reviews,
+-                                   lab_traces)
++    from ...gateway.routes import (console_me, lab_checkpoints, lab_control, lab_datasets,
++                                   lab_evaluations, lab_judge, lab_pipelines, lab_releases,
++                                   lab_reviews, lab_traces, lab_workspaces)
+     rt, control, traces = _compose(lab, store)
+     lab_control.register(app, rt, control)
+     lab_traces.register(app, rt, traces)
+     for family in (lab_datasets, lab_evaluations, lab_pipelines, lab_releases, lab_checkpoints,
+-                   lab_judge, lab_reviews):
++                   lab_judge, lab_reviews, lab_workspaces, console_me):
+         family.register(app, rt)
+     return app
+diff --git a/apps/infrx-api/tests/ap01/test_composed.py b/apps/infrx-api/tests/ap01/test_composed.py
+index f97f98d0..335ac6c1 100644
+--- a/apps/infrx-api/tests/ap01/test_composed.py
++++ b/apps/infrx-api/tests/ap01/test_composed.py
+@@ -84,10 +84,12 @@ def test_wr_ap01__the_auth_facade_needs_the_publishable_key():
+     with pytest.raises(RuntimeMisconfigured, match="SUPABASE_ANON_KEY"):
+         composed(auth_facade=True)
+     rt = composed(auth_facade=True, supabase_anon_key="anon-publishable",
+-                  auth_captcha_required=True, web_origins="https://app.example")
++                  auth_captcha_required=True, web_origins="https://app.example",
++                  auth_captcha_provider="turnstile", auth_captcha_site_key="0x4AAA-site")
+     assert isinstance(rt.auth_facade, AuthFacade)
+     assert rt.auth_facade.apikey == "anon-publishable" != rt.settings.supabase_key
+     assert rt.auth_facade.captcha_required and rt.auth_facade.origins == ("https://app.example",)
++    assert rt.auth_facade.captcha_widget == ("turnstile", "0x4AAA-site")      # WR-AP01-3
+     assert {"/auth/v1/sign-in", "/auth/v1/availability"} <= paths(rt)
+     assert "anon-publishable" not in repr(rt.settings.deployment)
+ 
+diff --git a/apps/infrx-api/tests/ap01/test_composed_lab_unit.py b/apps/infrx-api/tests/ap01/test_composed_lab_unit.py
+new file mode 100644
+index 00000000..15944967
+--- /dev/null
++++ b/apps/infrx-api/tests/ap01/test_composed_lab_unit.py
+@@ -0,0 +1,69 @@
++#!/usr/bin/env python3
++"""WR-AP01-2: the Lab control unit (`infrx.lab.control.app`) mounts `lab_workspaces` over its
++own `SessionActors` + `state.identity.PgIdentity` (0065's functions) on ITS login, only with
++`IDENTITY_API`; off (the default) nothing new mounts and `rt.actors` stays None.
++
++    uv run --frozen pytest -q tests/ap01/test_composed_lab_unit.py
++
++Nothing is dialled: the unit's connector records `(dsn, set_role)` and refuses each connection,
++and the session verifier accepts one token (the `tests/i/lab_control` fakes). Failure oracles:
++the routes mounted with the switch off; the identity store built on the runtime's
++`DATABASE_URL` or with `set role`; the unit's actors carrying an API-key door; a foreign
++browser origin accepted on a member mutation; `/lab/v1/capabilities` reporting the unit's
++mounted families as disabled.
++"""
++from __future__ import annotations
++
++import pytest
++
++from infrx.console.session import SessionActors
++from infrx.state.identity import PgIdentity
++from tests.i.lab_control.test_control_routes import LAB_DSN, TOKEN, client, unit  # noqa: F401
++
++WORKSPACES = "/lab/v1/workspaces"
++SESSION = {"authorization": f"Bearer {TOKEN}"}
++
++
++def test_wr_ap01_2__off_by_default_the_unit_mounts_no_identity_route(unit):  # noqa: F811
++    c = client()
++    assert c.get(WORKSPACES, headers=SESSION).status_code == 404
++
++
++def test_wr_ap01_2__identity_api_mounts_workspaces_on_the_lab_login(unit, monkeypatch):  # noqa: F811
++    monkeypatch.setenv("IDENTITY_API", "1")
++    monkeypatch.setenv("WEB_ORIGINS", "https://lab.example")
++    from infrx.lab.control import app as control_app
++    captured = {}
++    compose = control_app._compose
++
++    def spy(lab, store):
++        rt, control, traces = compose(lab, store)
++        captured["rt"] = rt
++        return rt, control, traces
++    monkeypatch.setattr(control_app, "_compose", spy)
++    c = client()
++    rt = captured["rt"]
++    assert isinstance(rt.actors, SessionActors) and isinstance(rt.identity, PgIdentity)
++    assert rt.actors.keys is None and rt.actors.origins == ("https://lab.example",)
++    assert c.get(WORKSPACES).status_code == 401                      # mounted, behind the session
++    before = len(unit)
++    answer = c.get(WORKSPACES, headers=SESSION)
++    assert answer.status_code == 503, answer.text                    # its store, typed
++    assert len(unit) > before and set(unit) == {(LAB_DSN, False)}, set(unit)
++    foreign = c.post(f"{WORKSPACES}/a0000000-0000-4000-8000-000000000001/members",
++                     json={"email": "x@example.com", "role": "viewer"},
++                     headers={**SESSION, "origin": "https://evil.example",
++                              "idempotency-key": "k"})
++    assert foreign.status_code == 403
++
++
++@pytest.mark.parametrize("family", ["control", "evaluations", "pipelines", "releases",
++                                    "datasets"])
++def test_wr_ap01_2__the_units_capabilities_read_its_mounted_families(unit, monkeypatch, family):  # noqa: F811
++    """The unit's families are forced on (no `LAB_*` switch): `/lab/v1/capabilities` reads
++    the route table, so each mounted family is `configured` there."""
++    from infrx.gateway.routes import lab_workspaces
++    monkeypatch.setenv("IDENTITY_API", "1")
++    c = client()
++    paths = {getattr(r, "path", None) for r in c.app.routes}
++    assert dict(lab_workspaces.FEATURES)[family] in paths
+diff --git a/apps/infrx-api/tests/contracts/test_config_and_imports.py b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+index 0a9e73a7..6a880140 100644
+--- a/apps/infrx-api/tests/contracts/test_config_and_imports.py
++++ b/apps/infrx-api/tests/contracts/test_config_and_imports.py
+@@ -595,6 +595,9 @@ DEPLOYMENT_EXPECTED = {
+     "AUTH_FACADE": False,
+     "SUPABASE_ANON_KEY": "",
+     "AUTH_CAPTCHA_REQUIRED": False,
++    # WR-AP01-3 (AP-01, LR-02): the CAPTCHA widget's public provider and site key (unset)
++    "AUTH_CAPTCHA_PROVIDER": "",
++    "AUTH_CAPTCHA_SITE_KEY": "",
+ }
+ 
+ # Everything except the text values (the secret, the accounting regime) and the switch.
