@@ -14,11 +14,10 @@ const { registerHooks } = nodeModule as unknown as {
 type World = { token: string | null; clients: unknown[][] };
 const world: World = ((globalThis as unknown as { labSession: World }).labSession = { token: null, clients: [] });
 const FAKES: Record<string, string> = {
-  "next/headers": `export async function cookies() { return { getAll: () => [{ name: "${AUTH_COOKIE}", value: "c" }] }; }`,
-  "@supabase/ssr": `export function createServerClient(...args) {
-    const w = globalThis.labSession;
-    w.clients.push(args);
-    return { auth: { getSession: async () => ({ data: { session: w.token === null ? null : { access_token: w.token } } }) } };
+  // AP-09: the session token is the Lab session cookie itself (lib/auth/session.ts).
+  "next/headers": `export async function cookies() {
+    const t = globalThis.labSession.token;
+    return { get: (name) => (name === "${AUTH_COOKIE}" && t !== null ? { name, value: t } : undefined) };
   }`,
 };
 registerHooks({
@@ -30,7 +29,7 @@ registerHooks({
 const { datasetsPort } = await import("../../lib/services/datasets/server.ts");
 
 const A = "a0000001-0000-4000-8000-000000000001";
-const ENV = { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", LAB_DATASETS_API_URL: "https://api.example" };
+const ENV = { LAB_API_URL: "https://api.example" };
 
 function answering(status: number, body: unknown) {
   const sent: { url: string; auth: string | null }[] = [];
@@ -57,12 +56,10 @@ test("N4-W01 the datasets port reads its backend as the session's own access tok
   const denied = await withEnv(ENV, async () => (await datasetsPort()).versions(A));
   assert.equal(denied.ok, false);
   assert.deepEqual(sent, [{ url: `https://api.example/lab/v1/providers/${A}/datasets/versions`, auth: "Bearer eyJ0.session.sig" }]);
-  const [url, key, options] = world.clients[0] as [string, string, { cookieOptions: { name: string }; cookies: { getAll(): unknown[] } }];
-  assert.deepEqual([url, key, options.cookieOptions?.name, options.cookies.getAll()], [ENV.NEXT_PUBLIC_SUPABASE_URL, "anon", AUTH_COOKIE, [{ name: AUTH_COOKIE, value: "c" }]]);
   world.token = null;
   assert.deepEqual(await withEnv(ENV, async () => (await datasetsPort()).versions(A)), { ok: false, error: "unavailable", detail: "the session has no token" });
   world.token = "eyJ0.session.sig";
-  for (const env of [{ ...ENV, LAB_DATASETS_API_URL: undefined }, { ...ENV, NEXT_PUBLIC_SUPABASE_ANON_KEY: undefined }]) {
+  for (const env of [{ ...ENV, LAB_API_URL: undefined }, { ...ENV, NODE_ENV: "production" }]) {
     assert.deepEqual(await withEnv(env, async () => (await datasetsPort()).versions(A)), { ok: false, error: "unavailable", detail: "the datasets service is not configured" });
   }
   assert.equal(sent.length, 1);

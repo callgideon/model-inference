@@ -184,8 +184,7 @@ export async function stack<W>(suite: string, env: Record<string, string> = {}):
       cwd: lab, stdio: ["ignore", "pipe", "inherit"],
       env: {
         ...process.env, NODE_ENV: "production", NEXT_PUBLIC_LAB_URL: ORIGIN,
-        NEXT_PUBLIC_SUPABASE_URL: apiUrl, NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
-        LAB_TRACES_API_URL: apiUrl, LAB_EVALS_API_URL: apiUrl, LAB_PIPELINES_API_URL: apiUrl, LAB_RELEASES_API_URL: apiUrl,
+        LAB_API_URL: apiUrl, // AP-09: every family, the sign-in and the memberships
         ...env,
       },
     });

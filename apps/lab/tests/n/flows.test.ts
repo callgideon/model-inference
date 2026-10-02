@@ -7,8 +7,8 @@ import type { Membership } from "../../lib/auth/access.ts";
 import { deriveVersion, exportVersion, MAX_UPLOAD_BYTES, PREVIEW_BYTES, previewImport, requeueImport, startImport } from "../../lib/services/datasets/flows.ts";
 import { fail, recordingPort } from "./fake.ts";
 
-const DEV: Membership = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "Acme", role: "developer" };
-const VIEWER: Membership = { ...DEV, role: "viewer" };
+const DEV: Membership = { providerId: "11111111-1111-4111-8111-111111111111", providerName: "Acme", role: "developer", capabilities: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"] };
+const VIEWER: Membership = { ...DEV, role: "viewer", capabilities: ["read_aggregate_health"] };
 const SPEC = JSON.stringify({ format: "infrx.dataset_import.1" });
 const UUID = "22222222-2222-4222-8222-222222222222";
 

@@ -40,7 +40,7 @@ const C = {
   h02: "L4-H02 the route's refusals are the port's reasons; anything else, or no answer, is unavailable",
   h03: "L4-H03 one unreadable model, deployment, proposal or aggregate fails the whole answer closed",
   h04: "L4-H04 without a session token, or when reading it fails, nothing is sent and every call is unavailable",
-  h05: "L4-H05 controlPort() is the HTTP adapter only with LAB_CONTROL_URL and a Lab config, carrying the session's own token",
+  h05: "L4-H05 controlPort() is the HTTP adapter only with LAB_API_URL and a Lab config, carrying the session's own token",
 };
 
 const MUTANTS = [
@@ -79,7 +79,7 @@ const MUTANTS = [
   m("L4-X31", "a published revision carries no rate card", FAKE, "rateCardVersion: `rc-${this.cards}`", "rateCardVersion: null", [C.j01]),
   m("L4-X32", "register acts as the form's provider", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, providerId: String(data.get("providerId")) },', [C.a01]),
   m("L4-X33", "the actor's role is not the session's", ACTIONS, "controlPort().register(w,", 'controlPort().register({ ...w, role: "administrator" as const },', [C.a01]),
-  m("L4-X34", "the capability check is skipped", COMMON, '!holds(w.role, capability) ? "denied" : ', "", [C.a02]),
+  m("L4-X34", "the capability check is skipped", COMMON, '!holds(w, capability) ? "denied" : ', "", [C.a02]),
   m("L4-X35", "malformed input reaches the control service", COMMON, ' : !valid ? "invalid"', "", [C.a03]),
   m("L4-X36", "any artifact reference passes the shape check", SHAPES, "DIGEST_RE = /^sha256:[0-9a-f]{64}$/;", "DIGEST_RE = /./;", [C.a03]),
   m("L4-X37", "any model name passes the shape check", ACTIONS, "const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;", "const NAME = /./;", [C.a03]),
@@ -123,9 +123,7 @@ const MUTANTS = [
   m("L4-X74", "smoke is a read", HTTP, "post(actor, `deployments/", "get(actor, `deployments/", [C.h01]),
   m("L4-X75", "a trailing slash on the base URL doubles", TRANSPORT, "baseUrl.replace(/\\/+$/, \"\")", "baseUrl", [C.h01]),
   m("L4-X86", "a 410 reads as gone in a family that has no gone", TRANSPORT, "422: \"invalid\" }", "422: \"invalid\", 410: \"gone\" }", [C.h02]),
-  m("L4-X76", "the adapter runs without LAB_CONTROL_URL", SERVER, "if (!baseUrl || config === null) return null;\n  return httpControl({ baseUrl,", "if (config === null) return null;\n  return httpControl({ baseUrl: baseUrl ?? \"\",", [C.h05]),
-  m("L4-X77", "the adapter carries a fixed credential, not the session's", SERVER, "token: sessionToken(config)", 'token: async () => "service"', [C.h05]),
-  m("L4-X87", "the control adapter reads another family's old name", SERVER, "labApiUrl(env, \"control\")", "labApiUrl(env, \"traces\")", [C.h05]),
+  m("L4-X77", "the adapter carries a fixed credential, not the session's", SERVER, "token: sessionToken", 'token: async () => "service"', [C.h05]),
   m("L4-X78", "controlPort() never uses the adapter", PORT, "labControl, UNAVAILABLE)", "() => null, UNAVAILABLE)", [C.h05]),
   m("L4-X79", "a repeated proposal is a conflict (the pre-R214 fake)", FAKE, "return ok(strip(open));", 'return no("conflict");', [C.j02]),
   m("L4-X80", "a provider rollback is refused as a conflict, not invalid", FAKE, 'return no("invalid"); // a rollback', 'return no("conflict"); // a rollback', [C.j01, C.j02]),

@@ -1,9 +1,9 @@
 // V3: the judge runs of one request, as J2 records them (codex/w5-judge 16660999: dry run or live, the
 // external_run state, the PROVIDER_USD hold) with J3's calibration of that judge configuration.
-// WR-V3-1 / WR-J3-2: the session adapter over lab_judge_runs (SR-J3-1); until that RPC exists it fails
-// closed (unavailable). Tests drive fake.ts.
+// AP-09 09c: the Lab's judge-runs port (lib/services/judge/runs.ts); unavailable until the API serves a
+// request's runs (WR-AP09L-3). Tests drive fake.ts.
 import type { Actor, Result } from "../detail/port.ts";
-import { rpcJudgePort } from "../../../lib/services/judge/runs.ts";
+import { judgeRunsPort } from "../../../lib/services/judge/runs.ts";
 
 export type Score = { criterion: string; score: number | null; max: number; requiresMedia: boolean };
 /** J3: agreement with operator labels only (C3F provenance), with its interval; `required` is J3's minimum. */
@@ -33,9 +33,7 @@ export interface JudgePort {
   runs(actor: Actor, requestId: string): Promise<Result<JudgeRun[], JudgeRefusal>>;
 }
 
-/** The wiring seam for WR-V3-1 (WR-J3-2): session.ts's sessionJudgePort() (= rpcJudgePort(session)), never a fake.
- * session.ts is loaded lazily: it pulls next/headers, which only resolves inside Next; a load failure is
- * `unavailable` (rpcJudgePort catches it), so node tests import this module and the read still fails closed. */
+/** The wiring seam for WR-V3-1: the Lab's judge-runs port, never a fake. */
 export function judgePort(): JudgePort {
-  return rpcJudgePort(async () => (await import("../../../lib/services/judge/session.ts")).session());
+  return judgeRunsPort();
 }

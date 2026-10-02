@@ -3,10 +3,12 @@
 
 export const ROLES = ["viewer", "developer", "administrator"] as const;
 export type Role = (typeof ROLES)[number];
-export type Membership = { providerId: string; providerName: string; role: Role };
+/** A provider membership as GET /lab/v1/workspaces answers it: `capabilities` is the API's set for it. */
+export type Membership = { providerId: string; providerName: string; role: Role; capabilities: readonly Capability[] };
 /** Who a port call acts as: always the session's workspace (lib/auth/guard.ts), never a form value. A
- * Membership is one, so pages and actions pass the workspace itself (LAB-08: replaces four copies). */
-export type Actor = Pick<Membership, "providerId" | "role">;
+ * Membership is one, so pages and actions pass the workspace itself (LAB-08: replaces four copies).
+ * A fake's actor may omit the API's capability set; holds() then answers from the contract table. */
+export type Actor = Pick<Membership, "providerId" | "role"> & Partial<Pick<Membership, "capabilities">>;
 
 /**
  * contracts/v2 ROLE_CAPABILITIES (apps/app/lib/contracts/v2/types.ts PROVIDER_CAPABILITIES and
@@ -28,9 +30,13 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
   developer: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation"],
   administrator: ["read_aggregate_health", "manage_dev_deployment", "run_evaluation", "propose_publication", "manage_members"],
 });
-export const holds = (role: Role, capability: Capability): boolean => ROLE_CAPABILITIES[role].includes(capability);
-/** The L2 read of the signed-in user's own provider memberships; `ok: false` is a failed read. */
-export type MembershipRead = { ok: true; memberships: Membership[] } | { ok: false };
+/** AP-09: a workspace (or a port's actor) answers from the API's capability set for it; a bare role
+ *  (presentation that has only the role) from the contract table above. */
+export const holds = (who: Role | Actor, capability: Capability): boolean =>
+  (typeof who === "string" ? ROLE_CAPABILITIES[who] : (who.capabilities ?? ROLE_CAPABILITIES[who.role])).includes(capability);
+/** The read of the signed-in user's own provider memberships: a refused session is signed-out, any
+ *  other failure unavailable. */
+export type MembershipRead = { ok: true; memberships: Membership[] } | { ok: false; reason: "signed-out" | "unavailable" };
 
 export type Access =
   | { kind: "signed-out" }
@@ -53,19 +59,20 @@ export const SIGN_IN_COPY: Record<"failed" | "unavailable", string> = {
 
 /** A signed-in user's access. `selected` is the preference cookie: honoured only for a membership. */
 export function providerAccess(read: MembershipRead, selected: string | undefined): Access {
-  if (!read.ok) return { kind: "unavailable" };
+  if (!read.ok) return { kind: read.reason };
   const workspaces = read.memberships;
   if (workspaces.length === 0) return { kind: "denied" };
   const workspace = workspaces.length === 1 ? workspaces[0] : workspaces.find((m) => m.providerId === selected);
   return workspace === undefined ? { kind: "select", workspaces } : { kind: "ready", workspace, workspaces };
 }
 
+/** `signedIn`: the request carries a session token; the API judges whether it is still good. */
 export async function resolveAccess(deps: {
-  userId: () => Promise<string | null>;
+  signedIn: boolean;
   memberships: () => Promise<MembershipRead>;
   selected: string | undefined;
 }): Promise<Access> {
-  if ((await deps.userId()) === null) return { kind: "signed-out" };
+  if (!deps.signedIn) return { kind: "signed-out" };
   return providerAccess(await deps.memberships(), deps.selected);
 }
 

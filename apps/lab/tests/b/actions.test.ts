@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import * as nodeModule from "node:module";
 import test from "node:test";
+import { ROLE_CAPABILITIES, type Role } from "../../lib/auth/access.ts";
 import type { FakeEvaluation } from "../../lib/services/evaluation/fake.ts";
 import { REPORTS, same } from "./real.ts";
 
@@ -13,16 +14,12 @@ const { registerHooks } = nodeModule as unknown as {
   registerHooks(hooks: { resolve(specifier: string, context: object, next: Resolve): Resolved }): void;
 };
 const P = "11111111-1111-4111-8111-111111111111";
-const A = { provider_org_id: P, provider_name: "Acme", role: "developer" };
+const A = { provider_org_id: P, provider_name: "Acme", role: "developer", capabilities: ROLE_CAPABILITIES.developer };
 type World = { rows: unknown[] };
 const world: World = ((globalThis as unknown as { labEval: World }).labEval = { rows: [A] });
 const FAKES: Record<string, string> = {
   "next/headers": `export async function cookies() {
-    return { getAll: () => [], get: () => undefined, set: () => {} };
-  }`,
-  "@supabase/ssr": `export function createServerClient() {
-    return { auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
-             rpc: async () => ({ data: globalThis.labEval.rows, error: null }) };
+    return { getAll: () => [], get: (name) => (name === "infrx-lab-session" ? { name, value: "t" } : undefined), set: () => {} };
   }`,
 };
 registerHooks({
@@ -32,7 +29,9 @@ registerHooks({
     return next(specifier === "next/navigation" ? "next/navigation.js" : specifier, context);
   },
 });
-Object.assign(process.env, { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon", LAB_EVALS_PREVIEW: "1" });
+// AP-09: the guard reads memberships from GET /lab/v1/workspaces; this fake API answers the rows.
+globalThis.fetch = (async () => new Response(JSON.stringify({ data: world.rows }))) as typeof fetch;
+Object.assign(process.env, { LAB_API_URL: "https://lab-control.example", LAB_EVALS_PREVIEW: "1" });
 const { launchExperiment, cancelRun, subscribeCheckpoints } = await import("../../lib/services/evaluation/actions.ts");
 const { GET } = await import("../../app/(provider)/experiments/[id]/report/route.ts");
 const { evaluationPort } = await import("../../lib/services/evaluation/port.ts");
@@ -56,7 +55,7 @@ const landing = (run: Promise<unknown>) =>
       return digest.startsWith("NEXT_REDIRECT;") ? digest.split(";")[2] : `404:${digest.includes(";404")}`;
     },
   );
-const as = (role: string, provider = P) => (world.rows = [{ ...A, role, provider_org_id: provider }]);
+const as = (role: string, provider = P) => (world.rows = [{ ...A, role, provider_org_id: provider, capabilities: ROLE_CAPABILITIES[role as Role] }]);
 let n = 0;
 const id = () => `aaaaaaaa-aaaa-4aaa-8aaa-${String(++n).padStart(12, "0")}`;
 const LAUNCH = () => ({
@@ -74,7 +73,7 @@ test("B4-A01 a launch runs as the session's provider and role and sends the pars
   const before = port.calls.length;
   const fields = LAUNCH();
   assert.equal(await landing(launchExperiment(form({ ...fields, providerId: "22222222-2222-4222-8222-222222222222", role: "administrator" }))), `/experiments/${fields.experiment_id}`);
-  same(port.calls.slice(before), [["launch", { providerId: P, providerName: "Acme", role: "developer" }, {
+  same(port.calls.slice(before), [["launch", { providerId: P, providerName: "Acme", role: "developer", capabilities: ROLE_CAPABILITIES.developer }, {
     experiment_id: fields.experiment_id, dataset_ref: ref("dataset", 1), harness_ref: ref("harness", 2), evaluator_ref: ref("evaluator", 5),
     baseline_serving_ref: ref("serving", 3), candidate_serving_ref: ref("serving", 4), seed: 7, max_cases: 40,
     run_limit: { unit: "CREDIT", value: "10.00000000" },
@@ -83,7 +82,7 @@ test("B4-A01 a launch runs as the session's provider and role and sends the pars
   }]]);
   const sub = SUB();
   assert.equal(await landing(subscribeCheckpoints(form(sub))), "/evaluations/checkpoints");
-  assert.deepEqual(port.calls.at(-1)!.slice(0, 2), ["subscribe", { providerId: P, providerName: "Acme", role: "developer" }]);
+  assert.deepEqual(port.calls.at(-1)!.slice(0, 2), ["subscribe", { providerId: P, providerName: "Acme", role: "developer", capabilities: ROLE_CAPABILITIES.developer }]);
   assert.deepEqual((port.calls.at(-1)![2] as { limit: unknown; max_active: number }).limit, { unit: "CREDIT", value: "20.50000000" });
 });
 
